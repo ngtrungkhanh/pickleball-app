@@ -408,18 +408,22 @@ export async function updateFineAction(formData: FormData) {
 
 export async function rebuildStatsAction() {
   try {
-    const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
+    const lose_money = parseInt(await getConfigValue('lose_money', '5000')) || 5000;
     
-    // 1. Fetch all matches
+    // 1. Fetch all existing players to avoid foreign key errors
+    const { rows: players } = await sql`SELECT id FROM players`;
+    const validPlayerIds = new Set(players.map(p => p.id));
+    
+    // 2. Fetch all matches
     const { rows: matches } = await sql`SELECT * FROM matches`;
     
-    // 2. Calculate everything in memory to avoid DB roundtrips
+    // 3. Calculate in memory
     const statsMap = new Map<string, { wins: number; losses: number; money: number }>();
     
     for (const m of matches) {
       const season = m.season || 'Season 1';
-      const winners = [m.win_1, m.win_2].filter(Boolean);
-      const losers = [m.lose_1, m.lose_2].filter(Boolean);
+      const winners = [m.win_1, m.win_2].filter(pid => pid && validPlayerIds.has(pid));
+      const losers = [m.lose_1, m.lose_2].filter(pid => pid && validPlayerIds.has(pid));
 
       winners.forEach(pid => {
         const key = `${pid}:${season}`;
@@ -437,15 +441,19 @@ export async function rebuildStatsAction() {
       });
     }
 
-    // 3. Clear and Bulk Insert
-    await sql`TRUNCATE player_stats`;
+    // 4. Clear and Insert safely
+    await sql`DELETE FROM player_stats`;
     
     for (const [key, s] of statsMap.entries()) {
       const [playerId, season] = key.split(':');
-      await sql`
-        INSERT INTO player_stats (player_id, season, wins, losses, total, money)
-        VALUES (${playerId}, ${season}, ${s.wins}, ${s.losses}, ${s.wins + s.losses}, ${s.money})
-      `;
+      try {
+        await sql`
+          INSERT INTO player_stats (player_id, season, wins, losses, total, money)
+          VALUES (${playerId}, ${season}, ${s.wins}, ${s.losses}, ${s.wins + s.losses}, ${s.money})
+        `;
+      } catch (e) {
+        console.error(`Skipping stats for ${playerId}:`, e);
+      }
     }
     
     await logAudit('REBUILD_STATS', `Rebuilt player_stats from ${matches.length} matches`);
@@ -454,7 +462,7 @@ export async function rebuildStatsAction() {
     return { success: true };
   } catch (error) {
     console.error('Rebuild failed:', error);
-    return { error: 'Lỗi khi đồng bộ lại số liệu.' };
+    return { error: 'Lỗi khi đồng bộ lại số liệu. Vui lòng kiểm tra console hoặc logs.' };
   }
 }
 
