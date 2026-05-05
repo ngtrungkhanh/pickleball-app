@@ -104,9 +104,48 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
   const [lose2, setLose2] = useState('');
   const [ws, setWs] = useState(11);
   const [ls, setLs] = useState(5);
+  const [clientId, setClientId] = useState('SYSTEM');
+  const [nickname, setNickname] = useState('');
+  const [isEditingNick, setIsEditingNick] = useState(false);
+  const [deviceInfo, setDeviceInfo] = useState('');
 
   const active = players.filter(p => p.active);
   const reset = () => { setWin1(''); setWin2(''); setLose1(''); setLose2(''); setWs(11); setLs(5); };
+
+  // Task 21: Auto-generate unique Device ID, retrieve Nickname, and detect hardware specs
+  useEffect(() => {
+    try {
+      let id = localStorage.getItem('pickleball_client_id');
+      if (!id) {
+        id = 'USR-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+        localStorage.setItem('pickleball_client_id', id);
+      }
+      setClientId(id);
+
+      const nick = localStorage.getItem('pickleball_client_nickname') || '';
+      setNickname(nick);
+
+      // Detect OS
+      const ua = navigator.userAgent;
+      let dev = 'Device';
+      if (/android/i.test(ua)) dev = 'Android';
+      else if (/iPad|iPhone|iPod/.test(ua)) dev = 'iPhone/iPad';
+      else if (/Macintosh/i.test(ua)) dev = 'MacBook';
+      else if (/Windows/i.test(ua)) dev = 'Windows PC';
+      else if (/Linux/i.test(ua)) dev = 'Linux PC';
+
+      // Detect Browser
+      let browser = 'Browser';
+      if (ua.indexOf('Chrome') > -1) browser = 'Chrome';
+      else if (ua.indexOf('Safari') > -1) browser = 'Safari';
+      else if (ua.indexOf('Firefox') > -1) browser = 'Firefox';
+      else if (ua.indexOf('Edge') > -1) browser = 'Edge';
+
+      setDeviceInfo(`${dev} - ${browser}`);
+    } catch {}
+  }, []);
+
+  const fullIdentity = `${clientId}${nickname ? ` (${nickname})` : ''} [${deviceInfo || 'Unknown'}]`;
 
   useEffect(() => {
     try {
@@ -118,6 +157,8 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
       if ((Date.now() - timestamp) / 60000 < 60) {
         const fd = new FormData();
         Object.entries(match).forEach(([k, v]) => { if (v) fd.append(k, String(v)); });
+        // Ensure created_by is appended with full identity
+        if (!fd.get('created_by')) fd.append('created_by', fullIdentity);
         setSync('syncing');
         start(async () => {
           const r = await addMatchAction(fd);
@@ -126,7 +167,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
         });
       } else clearPending();
     } catch {}
-  }, []);
+  }, [fullIdentity]);
 
   const doSync = (fd: FormData) => {
     setSync('syncing');
@@ -138,6 +179,14 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
     });
   };
 
+  const saveNickname = (newNick: string) => {
+    try {
+      localStorage.setItem('pickleball_client_nickname', newNick);
+      setNickname(newNick);
+      setIsEditingNick(false);
+    } catch {}
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!win1 || !lose1) return alert('Vui lòng chọn ít nhất Người thắng 1 và Người thua 1');
@@ -145,7 +194,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
       return alert('Trận đấu này dường như đã được ghi trong 15 phút gần đây!');
     }
 
-    onAddMatch?.({ id: 'TMP-' + Date.now(), date: new Date().toISOString(), win_1: win1, win_2: win2 || null, lose_1: lose1, lose_2: lose2 || null, win_score: ws, lose_score: ls, season: activeSeason });
+    onAddMatch?.({ id: 'TMP-' + Date.now(), date: new Date().toISOString(), win_1: win1, win_2: win2 || null, lose_1: lose1, lose_2: lose2 || null, win_score: ws, lose_score: ls, season: activeSeason, created_by: fullIdentity });
     saveRecentLocal([win1, win2, lose1, lose2]);
     setUi('saved');
     setTimeout(() => { reset(); setUi('idle'); }, 1000);
@@ -156,6 +205,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
     fd.append('win_score', String(ws));
     fd.append('lose_score', String(ls));
     fd.append('season', activeSeason);
+    fd.append('created_by', fullIdentity);
     doSync(fd);
   };
 
@@ -214,7 +264,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
 
         </div>
 
-        <div className="flex justify-center">
+        <div className="flex flex-col items-center gap-4">
           <button
             type="submit"
             disabled={ui === 'saved'}
@@ -227,6 +277,38 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
           >
             {ui === 'saved' ? <><CheckCircle2 className="w-5 h-5" /> Đã lưu</> : <><Send className="w-5 h-5" /> Ghi kết quả</>}
           </button>
+
+          {/* Device identity and Nickname editor */}
+          <div className="text-center text-white/20 text-[10px] font-bold tracking-widest uppercase mt-2">
+            {isEditingNick ? (
+              <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 animate-in fade-in duration-200">
+                <input
+                  type="text"
+                  placeholder="Đặt tên thiết bị (VD: ĐT của Chung)..."
+                  defaultValue={nickname}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      saveNickname(e.currentTarget.value.trim());
+                    }
+                  }}
+                  className="bg-transparent border-none text-white/80 focus:outline-none text-[10px] w-48 text-center"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsEditingNick(false)}
+                  className="text-red-400 hover:text-red-300 px-1 font-black"
+                >
+                  Hủy
+                </button>
+              </div>
+            ) : (
+              <span className="flex items-center gap-2 cursor-pointer hover:text-white/40 transition-colors" onClick={() => setIsEditingNick(true)}>
+                <span>📱 Thiết bị: <span className="text-white/40">{clientId}</span> {nickname ? `(${nickname})` : '[Đặt biệt danh]'}</span>
+              </span>
+            )}
+          </div>
         </div>
       </form>
     </>

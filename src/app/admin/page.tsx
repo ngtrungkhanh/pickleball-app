@@ -1,12 +1,12 @@
 'use client';
 import { useState, useEffect, useTransition } from 'react';
-import { 
-  ShieldCheck, 
-  History, 
-  RotateCcw, 
-  Database, 
-  Trash2, 
-  CheckCircle2, 
+import {
+  ShieldCheck,
+  History,
+  RotateCcw,
+  Database,
+  Trash2,
+  CheckCircle2,
   AlertCircle,
   Clock,
   User,
@@ -14,10 +14,10 @@ import {
   Search,
   RefreshCw
 } from 'lucide-react';
-import { 
-  getAuditLogs, 
-  getArchives, 
-  restoreFromArchive, 
+import {
+  getAuditLogs,
+  getArchives,
+  restoreFromArchive,
   rebuildStatsAction,
   verifyAdminAction,
   updatePlayerAction,
@@ -38,13 +38,13 @@ export default function AdminPage() {
   const [pass, setPass] = useState('');
   const [isAuth, setIsAuth] = useState(false);
   const [activeTab, setActiveTab] = useState(adminTabs[0]);
-  
+
   const [logs, setLogs] = useState<any[]>([]);
   const [archives, setArchives] = useState<any[]>([]);
   const [players, setPlayers] = useState<any[]>([]);
   const [seasons, setSeasons] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
-  
+
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [isPending, startTransition] = useTransition();
@@ -82,7 +82,7 @@ export default function AdminPage() {
     console.log('Admin: Loading all data...');
     try {
       const [l, a, p, s, m] = await Promise.all([
-        getAuditLogs(), 
+        getAuditLogs(),
         getArchives(),
         getPlayersAction(),
         getSeasonsAction(),
@@ -185,7 +185,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white font-sans p-4 sm:p-8">
       <div className="max-w-7xl mx-auto space-y-8">
-        
+
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pb-8 border-b border-white/5">
           <div className="flex items-center gap-5">
@@ -197,7 +197,7 @@ export default function AdminPage() {
               <p className="text-xs font-bold text-white/20 uppercase tracking-widest mt-1">Quản trị hệ thống Pickleball</p>
             </div>
           </div>
-          
+
           <div className="flex gap-3">
             <button onClick={onBackup} className="px-5 py-3 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
               <Database className="w-4 h-4" /> Sao lưu dữ liệu
@@ -251,9 +251,9 @@ export default function AdminPage() {
                   ) : (
                     logs.map((log) => (
                       <div key={log.id} className="p-5 hover:bg-white/[0.02] flex items-start gap-4">
-                        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", 
-                          log.action_type.includes('ADD') ? "bg-green-500/10 text-green-400" : 
-                          log.action_type.includes('DELETE') ? "bg-red-500/10 text-red-400" : "bg-blue-500/10 text-blue-400")}>
+                        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                          log.action_type.includes('ADD') ? "bg-green-500/10 text-green-400" :
+                            log.action_type.includes('DELETE') ? "bg-red-500/10 text-red-400" : "bg-blue-500/10 text-blue-400")}>
                           {log.action_type.includes('ADD') ? <CheckCircle2 className="w-4 h-4" /> : <Database className="w-4 h-4" />}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -268,7 +268,7 @@ export default function AdminPage() {
                   )}
                 </div>
               </div>
-              
+
               <div className="space-y-6">
                 <div className="bg-slate-900/50 border border-white/5 rounded-3xl overflow-hidden">
                   <div className="px-6 py-5 border-b border-white/5 flex items-center gap-3">
@@ -320,7 +320,7 @@ export default function AdminPage() {
                         <td className="px-6 py-4"><span className="bg-white/5 px-2 py-1 rounded-lg font-black text-xs">{m.win_score}-{m.lose_score}</span></td>
                         <td className="px-6 py-4 text-sm font-bold text-white/60 truncate max-w-[150px]">{m.lose_1}{m.lose_2 ? ` / ${m.lose_2}` : ''}</td>
                         <td className="px-6 py-4 text-right">
-                          <button onClick={() => { if(confirm('Xóa trận này?')) deleteMatchAction(m.id).then(loadData) }} className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-all"><Trash2 className="w-4 h-4" /></button>
+                          <button onClick={() => { if (confirm('Xóa trận này?')) deleteMatchAction(m.id).then(loadData) }} className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-all"><Trash2 className="w-4 h-4" /></button>
                         </td>
                       </tr>
                     ))}
@@ -343,14 +343,14 @@ export default function AdminPage() {
                       <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">{p.id}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button 
+                      <button
                         onClick={() => onTogglePlayer(p.id, p.active)}
-                        className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", 
-                        p.active ? "bg-green-500/10 text-green-400 hover:bg-green-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20")}
+                        className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                          p.active ? "bg-green-500/10 text-green-400 hover:bg-green-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20")}
                       >
                         {p.active ? 'Active' : 'Inactive'}
                       </button>
-                      <button onClick={() => { if(confirm('Xóa vĩnh viễn thành viên này?')) deletePlayerAction(new FormData()).then(loadData) }} className="p-2 hover:bg-red-500/20 text-white/20 hover:text-red-400 transition-all">
+                      <button onClick={() => { if (confirm('Xóa vĩnh viễn thành viên này?')) deletePlayerAction(new FormData()).then(loadData) }} className="p-2 hover:bg-red-500/20 text-white/20 hover:text-red-400 transition-all">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>

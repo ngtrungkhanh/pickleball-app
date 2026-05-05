@@ -24,9 +24,18 @@ export async function GET(request: Request) {
         lose_2 VARCHAR(10) REFERENCES players(id),
         win_score INT NOT NULL,
         lose_score INT NOT NULL,
-        season VARCHAR(50) NOT NULL
+        season VARCHAR(50) NOT NULL,
+        created_by VARCHAR(50) DEFAULT 'SYSTEM'
       );
     `;
+
+    // Alter matches table to add created_by if it doesn't exist or increase its length
+    try {
+      await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS created_by VARCHAR(50) DEFAULT 'SYSTEM';`;
+      await sql`ALTER TABLE matches ALTER COLUMN created_by TYPE VARCHAR(50);`;
+    } catch (err) {
+      console.warn('created_by column update failed', err);
+    }
 
     // 3. Create config table
     await sql`

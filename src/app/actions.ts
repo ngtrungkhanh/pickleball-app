@@ -66,6 +66,7 @@ export async function addMatchAction(formData: FormData) {
   const win_score = parseInt(formData.get('win_score') as string);
   const lose_score = parseInt(formData.get('lose_score') as string);
   const season = (formData.get('season') as string) || await getConfigValue('active_season', 'Season 1');
+  const created_by = (formData.get('created_by') as string) || 'SYSTEM';
 
   try {
     const { rows: existing } = await sql`
@@ -84,8 +85,8 @@ export async function addMatchAction(formData: FormData) {
 
   try {
     await sql`
-      INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season)
-      VALUES (${id}, NOW(), ${win_1}, ${win_2}, ${lose_1}, ${lose_2}, ${win_score}, ${lose_score}, ${season})
+      INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by)
+      VALUES (${id}, NOW(), ${win_1}, ${win_2}, ${lose_1}, ${lose_2}, ${win_score}, ${lose_score}, ${season}, ${created_by})
     `;
 
     const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
@@ -98,7 +99,7 @@ export async function addMatchAction(formData: FormData) {
     await updatePlayerStatsIncremental(lose_1, season, 0, 1, lose_money);
     if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 1, lose_money);
 
-    await logAudit('ADD_MATCH', `Match ${id}: ${win_1}${win_2 ? '/' + win_2 : ''} beat ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
+    await logAudit('ADD_MATCH', `Match ${id} by ${created_by}: ${win_1}${win_2 ? '/' + win_2 : ''} beat ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
 
     revalidatePath('/');
     revalidatePath('/history');
