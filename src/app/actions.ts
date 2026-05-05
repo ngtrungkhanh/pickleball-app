@@ -478,3 +478,35 @@ export async function restoreFromArchive(archiveId: number) {
     return { error: 'Lỗi khi khôi phục dữ liệu' };
   }
 }
+
+export async function verifyAdminAction(pass: string) {
+  const adminPass = process.env.ADMIN_PASS || 'khanh'; // Fallback to 'khanh' if env not set
+  if (pass === adminPass) {
+    return { success: true };
+  }
+  return { success: false, error: 'Mật khẩu sai' };
+}
+
+export async function getMatchesAfterAction(lastId: string) {
+  try {
+    // If no lastId, return nothing (safety) or all (initial sync)
+    if (!lastId) {
+      const { rows } = await sql`SELECT * FROM matches ORDER BY date ASC`;
+      return rows;
+    }
+    
+    // Fetch only matches created after the current lastId
+    // We use the date of the lastId to find newer ones
+    const { rows: lastMatch } = await sql`SELECT date FROM matches WHERE id = ${lastId} LIMIT 1`;
+    if (lastMatch.length === 0) {
+      const { rows } = await sql`SELECT * FROM matches ORDER BY date ASC`;
+      return rows;
+    }
+    
+    const { rows } = await sql`SELECT * FROM matches WHERE date > ${lastMatch[0].date} ORDER BY date ASC`;
+    return rows;
+  } catch (error) {
+    console.error('Fetch incremental matches failed:', error);
+    return [];
+  }
+}

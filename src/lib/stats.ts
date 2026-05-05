@@ -1,4 +1,4 @@
-export function calculateLeaderboard(players: any[], matches: any[], loseMoney: number = 5000) {
+export function calculateLeaderboard(players: any[], matches: any[], loseMoney: number = 5000, precalculatedStats?: any[]) {
   const stats = players.map(p => ({
     ...p,
     wins: 0,
@@ -10,23 +10,37 @@ export function calculateLeaderboard(players: any[], matches: any[], loseMoney: 
 
   const statsMap = new Map(stats.map(s => [s.id, s]));
 
-  matches.forEach(m => {
-    [m.win_1, m.win_2].forEach(id => {
-      if (id && statsMap.has(id)) {
-        const s = statsMap.get(id)!;
-        s.wins++;
-        s.total++;
+  if (precalculatedStats && precalculatedStats.length > 0) {
+    // Use pre-calculated stats from database
+    precalculatedStats.forEach(ps => {
+      if (statsMap.has(ps.player_id)) {
+        const s = statsMap.get(ps.player_id)!;
+        s.wins = Number(ps.wins);
+        s.losses = Number(ps.losses);
+        s.total = Number(ps.total);
+        s.money = Number(ps.money);
       }
     });
-    [m.lose_1, m.lose_2].forEach(id => {
-      if (id && statsMap.has(id)) {
-        const s = statsMap.get(id)!;
-        s.losses++;
-        s.total++;
-        s.money += loseMoney;
-      }
+  } else {
+    // Fallback to calculating from raw matches
+    matches.forEach(m => {
+      [m.win_1, m.win_2].forEach(id => {
+        if (id && statsMap.has(id)) {
+          const s = statsMap.get(id)!;
+          s.wins++;
+          s.total++;
+        }
+      });
+      [m.lose_1, m.lose_2].forEach(id => {
+        if (id && statsMap.has(id)) {
+          const s = statsMap.get(id)!;
+          s.losses++;
+          s.total++;
+          s.money += loseMoney;
+        }
+      });
     });
-  });
+  }
 
   stats.forEach(s => {
     s.winRate = s.total > 0 ? (s.wins / s.total) * 100 : 0;

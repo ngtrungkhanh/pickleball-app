@@ -29,11 +29,13 @@ function getEditModeSnapshot() {
 export default function Dashboard({
   initialPlayers,
   initialMatches,
+  initialStats = [],
   initialConfig = {},
   initialSeasons = [],
 }: {
   initialPlayers: Player[],
   initialMatches: Match[],
+  initialStats?: any[],
   initialConfig?: Record<string, string>,
   initialSeasons?: Season[],
 }) {
@@ -91,6 +93,7 @@ export default function Dashboard({
         key={activeSeason}
         players={initialPlayers}
         matches={matches}
+        initialStats={initialStats}
         seasons={initialSeasons}
         activeSeason={activeSeason}
         loseMoney={loseMoney}

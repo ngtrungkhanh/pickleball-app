@@ -1,11 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Search } from 'lucide-react';
+import { ArrowLeft, Search, RefreshCw, Database } from 'lucide-react';
 import { buildElo, buildOpponentRows, buildPartnerRows, getName, getPlayerAnalysis } from '@/lib/analytics';
 import { calculateLeaderboard } from '@/lib/stats';
 import { cn } from '@/lib/utils';
+import { getLocalMatches, saveMatchesLocal, getLastMatchId } from '@/lib/db';
+import { getMatchesAfterAction } from '@/app/actions';
 
 type Player = { id: string; name: string; active?: boolean };
 type Match = {
@@ -22,17 +24,57 @@ type Match = {
 
 const tabs = ['Tổng quan', 'Player', 'Partner', 'Opponent', 'Trend', 'Match history'];
 
-export function AnalysisCenter({ players, matches, loseMoney = 5000 }: { players: Player[]; matches: Match[]; loseMoney?: number }) {
+export function AnalysisCenter({ players, matches: initialMatches, loseMoney = 5000 }: { players: Player[]; matches: Match[]; loseMoney?: number }) {
   const [tab, setTab] = useState(tabs[0]);
   const [playerId, setPlayerId] = useState(players[0]?.id || '');
   const [query, setQuery] = useState('');
-  const board = useMemo(() => calculateLeaderboard(players, matches, loseMoney), [players, matches, loseMoney]);
-  const elo = useMemo(() => buildElo(players, matches), [players, matches]);
-  const partnerRows = useMemo(() => buildPartnerRows(players, matches), [players, matches]);
-  const opponentRows = useMemo(() => buildOpponentRows(players, matches), [players, matches]);
-  const analysis = useMemo(() => getPlayerAnalysis(playerId, players, matches), [playerId, players, matches]);
+  
+  const [localMatches, setLocalMatches] = useState<Match[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  const filteredHistory = matches.filter(m => {
+  // Task 18: Smart Sync Logic
+  useEffect(() => {
+    const sync = async () => {
+      setIsSyncing(true);
+      try {
+        // 1. Get current local matches
+        let existing = await getLocalMatches();
+        
+        // 2. If empty, seed with initialMatches from server
+        if (existing.length === 0 && initialMatches.length > 0) {
+          await saveMatchesLocal(initialMatches);
+          existing = initialMatches;
+        }
+
+        // 3. Check for even newer matches from server
+        const lastId = existing.length > 0 ? existing[0].id : null;
+        const newMatches = await getMatchesAfterAction(lastId as string);
+        
+        if (newMatches && newMatches.length > 0) {
+          await saveMatchesLocal(newMatches);
+          existing = await getLocalMatches();
+        }
+        
+        setLocalMatches(existing);
+      } catch (err) {
+        console.error('Sync failed:', err);
+        setLocalMatches(initialMatches); // Fallback
+      }
+      setIsSyncing(false);
+    };
+
+    sync();
+  }, [initialMatches]);
+
+  const activeMatches = localMatches.length > 0 ? localMatches : initialMatches;
+
+  const board = useMemo(() => calculateLeaderboard(players, activeMatches, loseMoney), [players, activeMatches, loseMoney]);
+  const elo = useMemo(() => buildElo(players, activeMatches), [players, activeMatches]);
+  const partnerRows = useMemo(() => buildPartnerRows(players, activeMatches), [players, activeMatches]);
+  const opponentRows = useMemo(() => buildOpponentRows(players, activeMatches), [players, activeMatches]);
+  const analysis = useMemo(() => getPlayerAnalysis(playerId, players, activeMatches), [playerId, players, activeMatches]);
+
+  const filteredHistory = activeMatches.filter(m => {
     if (!query.trim()) return true;
     const text = [m.season, getName(players, m.win_1), getName(players, m.win_2), getName(players, m.lose_1), getName(players, m.lose_2)]
       .join(' ')
@@ -47,7 +89,15 @@ export function AnalysisCenter({ players, matches, loseMoney = 5000 }: { players
           <ArrowLeft className="w-4 h-4" />
           Dashboard
         </Link>
-        <h1 className="text-2xl sm:text-4xl font-black text-white">Trung tâm phân tích</h1>
+        <div className="flex flex-col items-end">
+          <h1 className="text-2xl sm:text-4xl font-black text-white">Trung tâm phân tích</h1>
+          <div className="flex items-center gap-2 mt-1">
+            <div className={cn("flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest", 
+              isSyncing ? "bg-primary/10 text-primary animate-pulse" : "bg-white/5 text-white/30")}>
+              {isSyncing ? <><RefreshCw className="w-3 h-3 animate-spin" /> Syncing...</> : <><Database className="w-3 h-3" /> {activeMatches.length} matches cached</>}
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -64,7 +114,7 @@ export function AnalysisCenter({ players, matches, loseMoney = 5000 }: { players
 
       {tab === 'Tổng quan' && (
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          <Stat label="Tổng trận" value={matches.length} />
+          <Stat label="Tổng trận" value={activeMatches.length} />
           <Stat label="Thành viên" value={players.length} />
           <Stat label="Top BXH" value={board[0]?.name || '--'} />
           <Stat label="ELO cao nhất" value={`${[...elo.rating.entries()].sort((a, b) => b[1] - a[1])[0]?.[1] ?? 1000}`} />
