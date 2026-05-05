@@ -1,3 +1,19 @@
+'use client';
+import { useState, useEffect, useTransition } from 'react';
+import { 
+  ShieldCheck, 
+  History, 
+  RotateCcw, 
+  Database, 
+  Trash2, 
+  CheckCircle2, 
+  AlertCircle,
+  Clock,
+  User,
+  ArrowLeft,
+  Search,
+  RefreshCw
+} from 'lucide-react';
 import { 
   getAuditLogs, 
   getArchives, 
