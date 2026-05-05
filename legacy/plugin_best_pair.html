@@ -1,0 +1,89 @@
+<script>
+(function(){
+  registerAnalysisPlugin({
+    id: "best-pair",
+    title: "C\u1eb7p \u0111\u00f4i m\u1ea1nh nh\u1ea5t",
+    icon: "\u25c6",
+    order: 20,
+    render: render
+  });
+
+  function render(container, context){
+    const matches = context.matches || [];
+    const pairMap = {};
+    const memberWinMap = {};
+
+    (context.allPlayers || context.players || []).forEach(p=>{
+      memberWinMap[p.id] = 0;
+    });
+
+    matches.forEach(m=>{
+      [m.win1,m.win2].forEach(id=>{
+        if(memberWinMap[id] !== undefined){
+          memberWinMap[id]++;
+        }
+      });
+
+      const winKey = normalizePairLocal(m.win1, m.win2);
+      const loseKey = normalizePairLocal(m.lose1, m.lose2);
+
+      if(!pairMap[winKey]){
+        pairMap[winKey] = {
+          ids:winKey.split("|"),
+          played:0,
+          win:0,
+          lose:0,
+          latestWin:0
+        };
+      }
+
+      if(!pairMap[loseKey]){
+        pairMap[loseKey] = {
+          ids:loseKey.split("|"),
+          played:0,
+          win:0,
+          lose:0,
+          latestWin:0
+        };
+      }
+
+      pairMap[winKey].played++;
+      pairMap[winKey].win++;
+      pairMap[winKey].latestWin = Math.max(pairMap[winKey].latestWin, Number(m.dateValue || 0));
+
+      pairMap[loseKey].played++;
+      pairMap[loseKey].lose++;
+    });
+
+    const arr = Object.values(pairMap)
+      .filter(x => x.played >= 2 && x.win > 0)
+      .map(x=>{
+        x.rate = x.played ? (x.win / x.played) * 100 : 0;
+        x.memberWins = x.ids.reduce((sum,id)=>sum + (Number(memberWinMap[id]) || 0), 0);
+        x.name = x.ids.map(id=>getPlayerDisplayName(id)).join(" + ");
+        return x;
+      })
+      .sort((a,b)=>
+        b.win-a.win ||
+        b.rate-a.rate ||
+        b.memberWins-a.memberWins ||
+        b.latestWin-a.latestWin
+      );
+
+    if(!arr.length){
+      container.innerHTML = '<div class="analysis-empty">C\u1ea7n \u00edt nh\u1ea5t 2 tr\u1eadn/c\u1eb7p v\u00e0 c\u00f3 \u00edt nh\u1ea5t 1 tr\u1eadn th\u1eafng.</div>';
+      return;
+    }
+
+    const p = arr[0];
+
+    container.innerHTML = `
+      <div class="analysis-best-pair-box plugin-best-pair-box">
+        <div class="analysis-stats-name">&#129351; ${escapeHtml(p.name)}</div>
+        <div class="analysis-stats-sub">${p.win} th\u1eafng / ${p.played} tr\u1eadn &middot; T\u1ef7 l\u1ec7 ${p.rate.toFixed(1)}%</div>
+        <div class="analysis-stats-sub">T\u1ed5ng th\u1eafng c\u00e1 nh\u00e2n: ${p.memberWins}</div>
+      </div>
+    `;
+  }
+})();
+</script>

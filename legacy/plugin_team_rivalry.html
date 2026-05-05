@@ -1,0 +1,65 @@
+<script>
+(function(){
+  registerAnalysisPlugin({
+    id: "team-rivalry",
+    title: "K\u00e8o \u0111\u1ea5u l\u1eb7p l\u1ea1i",
+    icon: "VS",
+    order: 30,
+    render: render
+  });
+
+  function render(container, context){
+    const matches = context.matches || [];
+    const map = {};
+
+    matches.forEach(m=>{
+      const teamA = normalizePairLocal(m.win1, m.win2);
+      const teamB = normalizePairLocal(m.lose1, m.lose2);
+
+      const key = [teamA, teamB].sort().join(" VS ");
+
+      if(!map[key]){
+        map[key] = {
+          teamA: teamA,
+          teamB: teamB,
+          count:0
+        };
+      }
+
+      map[key].count++;
+    });
+
+    const arr = Object.values(map)
+      .filter(x=>x.count >= 2)
+      .sort((a,b)=>b.count-a.count)
+      .slice(0,1);
+
+    if(!arr.length){
+      container.innerHTML = '<div class="analysis-empty">Ch\u01b0a c\u00f3 k\u00e8o \u0111\u1ea5u \u0111\u1ed9i n\u00e0o l\u1eb7p l\u1ea1i.</div>';
+      return;
+    }
+
+    const x = arr[0];
+
+    const nameA = x.teamA.split("|").map(id=>getPlayerDisplayName(id)).join(" + ");
+    const nameB = x.teamB.split("|").map(id=>getPlayerDisplayName(id)).join(" + ");
+
+    container.innerHTML = `
+      <div class="analysis-team-vs-box plugin-team-rivalry-box">
+        <div class="analysis-team-vs-side">
+          <div class="analysis-stats-name">${escapeHtml(nameA)}</div>
+        </div>
+
+        <div class="analysis-team-vs-mid">
+          <div class="analysis-vs-badge">VS</div>
+          <div class="analysis-stats-count">${x.count} l\u1ea7n</div>
+        </div>
+
+        <div class="analysis-team-vs-side">
+          <div class="analysis-stats-name">${escapeHtml(nameB)}</div>
+        </div>
+      </div>
+    `;
+  }
+})();
+</script>

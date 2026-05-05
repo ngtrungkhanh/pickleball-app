@@ -1,0 +1,145 @@
+<script>
+(function(){
+  window.ANALYSIS_PLUGINS = window.ANALYSIS_PLUGINS || [];
+  window.analysisActivePluginId = window.analysisActivePluginId || "";
+
+  window.registerAnalysisPlugin = function(plugin){
+    if(!plugin || !plugin.id || typeof plugin.render !== "function"){
+      console.warn("Invalid analysis plugin:", plugin);
+      return;
+    }
+
+    const exists = window.ANALYSIS_PLUGINS.some(item => item.id === plugin.id);
+    if(exists){
+      console.warn("Duplicate analysis plugin ignored:", plugin.id);
+      return;
+    }
+
+    window.ANALYSIS_PLUGINS.push(plugin);
+    window.ANALYSIS_PLUGINS.sort((a,b)=>
+      (Number(a.order) || 999) - (Number(b.order) || 999) ||
+      String(a.title || "").localeCompare(String(b.title || ""))
+    );
+  };
+
+  window.openAnalysisCenter = function(){
+    if(isButtonLocked || !appCache) return;
+
+    const modal = document.getElementById("statsModal");
+    if(modal){
+      modal.style.display = "block";
+      window.renderAnalysisCenter();
+    }
+  };
+
+  window.closeAnalysisCenter = function(){
+    const modal = document.getElementById("statsModal");
+    if(modal) modal.style.display = "none";
+  };
+
+  window.renderAnalysisCenter = function(){
+    if(!appCache) return;
+
+    const box = document.getElementById("advancedStatsBox");
+    if(!box) return;
+
+    const plugins = window.ANALYSIS_PLUGINS || [];
+
+    if(!plugins.length){
+      box.innerHTML = '<div class="analysis-empty">Ch\u01b0a c\u00f3 plugin ph\u00e2n t\u00edch n\u00e0o.</div>';
+      return;
+    }
+
+    if(!window.analysisActivePluginId || !plugins.some(plugin => plugin.id === window.analysisActivePluginId)){
+      window.analysisActivePluginId = plugins[0].id;
+    }
+
+    box.innerHTML = `
+      <div class="analysis-tabs" id="analysisPluginTabs"></div>
+      <div class="analysis-plugin-host" id="analysisPluginHost"></div>
+    `;
+
+    renderAnalysisTabs(plugins);
+    renderActiveAnalysisPlugin();
+  };
+
+  window.openAdvancedStats = function(){
+    window.openAnalysisCenter();
+  };
+
+  window.closeAdvancedStats = function(){
+    window.closeAnalysisCenter();
+  };
+
+  window.renderAdvancedStats = function(){
+    window.renderAnalysisCenter();
+  };
+
+  window.selectAnalysisPlugin = function(pluginId){
+    window.analysisActivePluginId = pluginId;
+    renderAnalysisTabs(window.ANALYSIS_PLUGINS || []);
+    renderActiveAnalysisPlugin();
+  };
+
+  function getAnalysisPluginContext(){
+    return {
+      appData: cloneData(appCache),
+      currentSeason: currentViewSeason,
+      matches: cloneData(getSeasonMatches()),
+      players: cloneData(appCache.players || []),
+      allPlayers: cloneData(appCache.allPlayers || appCache.players || [])
+    };
+  }
+
+  function renderAnalysisTabs(plugins){
+    const tabs = document.getElementById("analysisPluginTabs");
+    if(!tabs) return;
+
+    tabs.innerHTML = plugins.map(plugin=>{
+      const active = plugin.id === window.analysisActivePluginId ? "active" : "";
+      const icon = plugin.icon ? `<span class="analysis-tab-icon">${escapeHtml(plugin.icon)}</span>` : "";
+
+      return `
+        <button class="analysis-tab ${active}" onclick="selectAnalysisPlugin('${jsString(plugin.id)}')">
+          ${icon}<span>${escapeHtml(plugin.title || plugin.id)}</span>
+        </button>
+      `;
+    }).join("");
+  }
+
+  function renderActiveAnalysisPlugin(){
+    const host = document.getElementById("analysisPluginHost");
+    if(!host) return;
+
+    const plugin = (window.ANALYSIS_PLUGINS || []).find(item => item.id === window.analysisActivePluginId);
+    if(!plugin){
+      host.innerHTML = '<div class="analysis-empty">Plugin kh\u00f4ng t\u1ed3n t\u1ea1i.</div>';
+      return;
+    }
+
+    const safePluginId = safeId(plugin.id || "plugin");
+    const title = plugin.title || "Plugin";
+
+    host.innerHTML = `
+      <div id="analysis-plugin-${safePluginId}" class="analysis-plugin analysis-plugin-${safePluginId}">
+        <div class="analysis-plugin-panel">
+          <div class="analysis-plugin-head">
+            <h4>${escapeHtml(title)}</h4>
+          </div>
+          <div class="analysis-plugin-body" id="analysis-plugin-body-${safePluginId}"></div>
+        </div>
+      </div>
+    `;
+
+    const body = document.getElementById("analysis-plugin-body-" + safePluginId);
+    if(!body) return;
+
+    try{
+      plugin.render(body, getAnalysisPluginContext());
+    }catch(e){
+      console.warn("Analysis plugin error:", plugin.id, e);
+      body.innerHTML = '<div class="analysis-empty">Plugin n\u00e0y \u0111ang l\u1ed7i v\u00e0 \u0111\u00e3 \u0111\u01b0\u1ee3c b\u1ecf qua.</div>';
+    }
+  }
+})();
+</script>

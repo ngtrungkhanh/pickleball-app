@@ -1,0 +1,2662 @@
+<script>
+let appCache = null;
+let allPlayers = [];
+let currentViewSeason = "Season 1";
+let isButtonLocked = false;
+let isSyncing = false;
+let pendingDeleteId = null;
+let expandedRankingPlayerId = "";
+
+let syncHideTimer = null;
+let syncStartedAt = 0;
+let didFullSyncFallback = false;
+
+const SYNC_MIN_VISIBLE_MS = 900;
+
+const CACHE_KEY = "pickleball_app_cache_v5";
+const DELETED_SEASONS_CACHE_KEY = "pickleball_deleted_seasons_cache_v5";
+const PENDING_QUEUE_KEY = "pickleball_pending_queue_v5";
+const PENDING_MATCHES_KEY = "pendingSyncMatches";
+const PENDING_DELETES_KEY = "pendingSyncDeletes";
+const ALL_SEASONS_KEY = "__ALL_SEASONS__";
+
+const CACHE_FRESH_MS = 3 * 60 * 1000;
+const CACHE_STALE_MS = 15 * 60 * 1000;
+
+const ACTIVE_RECHECK_MS = 10 * 60 * 1000;
+const RESUME_LOG_CHECK_THROTTLE_MS = 30 * 1000;
+let lastActiveCheckAt = Date.now();
+let lastContinuousCheckAt = Date.now();
+let lastHiddenAt = 0;
+let retryQueueRunning = false;
+let scoreInputsTouched = false;
+const IS_READ_ONLY = window.APP_READ_ONLY === true || window.APP_MODE === "view";
+
+
+/* INIT */
+function initApp(){
+  bindMobileShellClass();
+  applyReadOnlyMode();
+  bindActiveRecheckEvents();
+  bindScoreInputs();
+  setInterval(function(){
+    const now = Date.now();
+    if(now - lastContinuousCheckAt >= ACTIVE_RECHECK_MS){
+      lastContinuousCheckAt = now;
+      checkServerLogAndRefresh(false);
+    }
+  }, 60 * 1000);
+  loadLocalCacheFirst();
+}
+
+function bindMobileShellClass(){
+  const apply = function(){
+    const screenShortSide = Math.min(Number(screen.width || 0), Number(screen.height || 0));
+    const screenLongSide = Math.max(Number(screen.width || 0), Number(screen.height || 0));
+    const coarsePointer = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+    const mobileAgent = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(navigator.userAgent || "");
+    const narrowViewport = Number(window.innerWidth || 0) <= 1023;
+    const mobileScreen = screenShortSide > 0 && screenShortSide <= 900 && screenLongSide <= 1600;
+    const isMobileShell = narrowViewport || mobileAgent || mobileScreen || coarsePointer;
+
+    document.documentElement.classList.toggle("is-mobile-shell", isMobileShell);
+    document.body.classList.toggle("is-mobile-shell", isMobileShell);
+    document.documentElement.classList.toggle("is-desktop-shell", !isMobileShell);
+    document.body.classList.toggle("is-desktop-shell", !isMobileShell);
+
+    const isTouchScoreShell = isMobileShell || coarsePointer || mobileAgent || mobileScreen;
+    document.documentElement.classList.toggle("score-touch-shell", isTouchScoreShell);
+    document.body.classList.toggle("score-touch-shell", isTouchScoreShell);
+  };
+
+  apply();
+  window.addEventListener("resize", apply);
+  window.addEventListener("orientationchange", apply);
+}
+
+function bindActiveRecheckEvents(){
+  document.addEventListener("visibilitychange", function(){
+    if(document.hidden){
+      lastHiddenAt = Date.now();
+    }else{
+      checkLogWhenActiveAgain(true);
+    }
+  });
+
+  window.addEventListener("focus", function(){
+    checkLogWhenActiveAgain(true);
+  });
+
+  window.addEventListener("pageshow", function(){
+    checkLogWhenActiveAgain(true);
+  });
+
+  window.addEventListener("online", function(){
+    if(!IS_READ_ONLY) retryPendingQueue();
+    checkLogWhenActiveAgain(true);
+  });
+}
+
+function applyReadOnlyMode(){
+  const submitCard = document.getElementById("submitBtn")?.closest(".card");
+  if(submitCard) submitCard.classList.add("edit-only");
+
+  document.documentElement.classList.toggle("read-only-mode", IS_READ_ONLY);
+  document.body.classList.toggle("read-only-mode", IS_READ_ONLY);
+
+  if(!IS_READ_ONLY) return;
+
+  clearPendingQueue();
+  document.querySelectorAll("input, select, textarea, button").forEach(function(el){
+    if(el.closest(".read-allow")) return;
+    if(el.id === "seasonTitleBtn" || el.id === "mobileSeasonTitleBtn") return;
+    if(el.classList.contains("mini-btn")) return;
+    el.disabled = true;
+  });
+}
+
+function canEdit(){
+  if(!IS_READ_ONLY) return true;
+  alert("Link này chỉ xem dữ liệu, không thể chỉnh sửa.");
+  return false;
+}
+
+function bindScoreInputs(){
+  bindScoreDoubleTapGuard();
+
+  ["winScore", "loseScore"].forEach(function(id){
+    const input = document.getElementById(id);
+    if(!input) return;
+
+    input.addEventListener("focus", function(){
+      lockViewportScaleForScore();
+      setTimeout(function(){ input.select(); }, 0);
+    });
+
+    input.addEventListener("click", function(){
+      input.select();
+    });
+
+    input.addEventListener("input", function(){
+      scoreInputsTouched = true;
+    });
+
+    input.addEventListener("keydown", function(e){
+      if(e.key === "Enter"){
+        e.preventDefault();
+        input.blur();
+        const submit = document.getElementById("submitBtn");
+        if(submit) submit.focus({preventScroll:false});
+      }
+    });
+
+    input.addEventListener("change", function(){
+      normalizeScoreInput(input);
+    });
+
+    input.addEventListener("blur", function(){
+      normalizeScoreInput(input);
+      resetViewportAfterScoreInput();
+    });
+  });
+}
+
+function bindScoreDoubleTapGuard(){
+  const box = document.querySelector(".score-inputs");
+  if(!box || box.dataset.doubleTapGuardBound === "1") return;
+
+  box.dataset.doubleTapGuardBound = "1";
+  let lastTapAt = 0;
+
+  box.addEventListener("touchend", function(e){
+    const now = Date.now();
+    if(now - lastTapAt < 320){
+      e.preventDefault();
+    }
+    lastTapAt = now;
+  }, {passive:false});
+}
+
+function lockViewportScaleForScore(){
+  const meta = document.querySelector('meta[name="viewport"]');
+  if(meta){
+    meta.setAttribute("content", "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no");
+  }
+}
+
+function resetViewportAfterScoreInput(){
+  lockViewportScaleForScore();
+  setTimeout(function(){
+    try{
+      window.scrollTo(window.scrollX || 0, window.scrollY || 0);
+    }catch(e){}
+  }, 60);
+}
+
+function adjustScore(inputId, delta){
+  const input = document.getElementById(inputId);
+  if(!input) return;
+
+  scoreInputsTouched = true;
+
+  if(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("score-input")){
+    document.activeElement.blur();
+  }
+
+  const current = Number(input.value);
+  const next = Math.max(0, (Number.isFinite(current) ? current : 0) + Number(delta || 0));
+  input.value = String(next);
+}
+
+function normalizeScoreInput(input){
+  if(!input) return;
+  const value = Number(input.value);
+  input.value = String(Math.max(0, Number.isFinite(value) ? Math.floor(value) : 0));
+}
+
+function getSmartDefaultScore(){
+  const fallback = {winScore:11, loseScore:5};
+  if(!appCache || !Array.isArray(appCache.matches)) return fallback;
+
+  const season = appCache.currentSeason || currentViewSeason || "Season 1";
+  const recent = sortMatchesNewestFirstLocal(
+    (appCache.matches || []).filter(m => String(m.season || "Season 1") === String(season))
+  ).slice(0, 50);
+
+  if(recent.length < 5) return fallback;
+
+  const winScores = recent.map(m => Number(m.winScore)).filter(Number.isFinite);
+  const loseScores = recent.map(m => Number(m.loseScore)).filter(Number.isFinite);
+
+  return {
+    winScore: clampScoreDefault(medianNumberLocal(winScores), fallback.winScore),
+    loseScore: clampScoreDefault(medianNumberLocal(loseScores), fallback.loseScore)
+  };
+}
+
+function applySmartDefaultScore(options = {}){
+  if(options.onlyIfPristine && scoreInputsTouched) return;
+
+  const score = getSmartDefaultScore();
+  const win = document.getElementById("winScore");
+  const lose = document.getElementById("loseScore");
+
+  if(win) win.value = String(score.winScore);
+  if(lose) lose.value = String(score.loseScore);
+  scoreInputsTouched = false;
+}
+
+function medianNumberLocal(values){
+  const arr = (values || []).filter(Number.isFinite).sort((a,b)=>a-b);
+  if(!arr.length) return NaN;
+
+  const mid = Math.floor(arr.length / 2);
+  if(arr.length % 2) return arr[mid];
+  return Math.round((arr[mid - 1] + arr[mid]) / 2);
+}
+
+function clampScoreDefault(value, fallback){
+  const n = Number(value);
+  if(!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(30, Math.round(n)));
+}
+
+function checkLogWhenActiveAgain(fromResume){
+  const now = Date.now();
+  const inactiveLongEnough = lastHiddenAt && now - lastHiddenAt >= RESUME_LOG_CHECK_THROTTLE_MS;
+  const throttleMs = (fromResume || inactiveLongEnough) ? RESUME_LOG_CHECK_THROTTLE_MS : ACTIVE_RECHECK_MS;
+
+  if(now - lastActiveCheckAt < throttleMs){
+    return;
+  }
+
+  lastActiveCheckAt = now;
+  if(!IS_READ_ONLY) retryPendingQueue();
+  checkServerLogAndRefresh(false);
+}
+
+function loadLocalCacheFirst(){
+  const cached = localStorage.getItem(CACHE_KEY);
+
+  if(cached){
+    try{
+      const payload = JSON.parse(cached);
+      const age = Date.now() - Number(payload.cachedAt || 0);
+
+      applyData(payload.data, false, {preserveViewSeason:true});
+
+      if(age >= CACHE_STALE_MS){
+        showSync("ĐANG CẬP NHẬT DỮ LIỆU...");
+      }
+
+      // Reload/mở app: luôn check LOG sau khi hiển thị cache.
+      lastActiveCheckAt = Date.now();
+      if(!IS_READ_ONLY) retryPendingQueue();
+      checkServerLogAndRefresh(age >= CACHE_STALE_MS);
+      return;
+
+    }catch(e){
+      localStorage.removeItem(CACHE_KEY);
+    }
+  }
+
+  showSync("ĐANG TẢI DỮ LIỆU...");
+  loadApp();
+}
+
+function loadApp(){
+  google.script.run
+    .withSuccessHandler(function(data){
+      applyData(data, true);
+      if(!IS_READ_ONLY) retryPendingQueue();
+      hideSync();
+    })
+    .withFailureHandler(function(err){
+      showSyncError("ĐỒNG BỘ LỖI");
+      alert("Lỗi tải dữ liệu: " + getErrorMessage(err));
+    })
+    .getAppData(IS_READ_ONLY);
+}
+
+function applyData(data, saveCache = true, options = {}){
+  if(!data) return;
+
+  const oldViewSeason = currentViewSeason;
+
+  appCache = data;
+  allPlayers = data.players || [];
+
+  const seasons = data.seasons || [];
+  const serverCurrentSeason = data.currentSeason || "Season 1";
+
+  if(options.preserveViewSeason && oldViewSeason && (oldViewSeason === ALL_SEASONS_KEY || seasons.includes(oldViewSeason))){
+    currentViewSeason = oldViewSeason;
+  }else{
+    currentViewSeason = serverCurrentSeason;
+  }
+
+  dedupeMatchesLocal();
+
+  renderSeasonTitle();
+  renderPlayersSelect();
+  renderSeasonSummary();
+  renderRanking();
+  renderHistory();
+  applySmartDefaultScore({onlyIfPristine:true});
+
+  if(document.getElementById("statsModal")?.style.display === "block"){
+    renderAdvancedStats();
+  }
+
+  if(document.getElementById("historyModal")?.style.display === "block"){
+    renderFullHistory();
+  }
+
+  if(saveCache){
+    saveLocalCache();
+  }
+}
+
+function applyDataParts(data, saveCache = true, options = {}){
+  if(!data) return;
+  if(!appCache || !data.partial){
+    applyData(data, saveCache, options);
+    return;
+  }
+
+  const oldViewSeason = currentViewSeason;
+
+  if(Object.prototype.hasOwnProperty.call(data, "appName")) appCache.appName = data.appName;
+  if(Object.prototype.hasOwnProperty.call(data, "currentSeason")) appCache.currentSeason = data.currentSeason;
+  if(Object.prototype.hasOwnProperty.call(data, "seasons")) appCache.seasons = data.seasons || [];
+  if(Object.prototype.hasOwnProperty.call(data, "players")){
+    appCache.players = data.players || [];
+    allPlayers = appCache.players;
+  }
+  if(Object.prototype.hasOwnProperty.call(data, "allPlayers")) appCache.allPlayers = data.allPlayers || [];
+  if(Object.prototype.hasOwnProperty.call(data, "matches")) appCache.matches = data.matches || [];
+  if(Object.prototype.hasOwnProperty.call(data, "loseMoney")) appCache.loseMoney = data.loseMoney;
+  if(data.log) appCache.log = normalizeLog(data.log);
+
+  const seasons = appCache.seasons || [];
+  if(options.preserveViewSeason && oldViewSeason && (oldViewSeason === ALL_SEASONS_KEY || seasons.includes(oldViewSeason))){
+    currentViewSeason = oldViewSeason;
+  }else if(!currentViewSeason || (currentViewSeason !== ALL_SEASONS_KEY && !seasons.includes(currentViewSeason))){
+    currentViewSeason = appCache.currentSeason || seasons[0] || "Season 1";
+  }
+
+  dedupeMatchesLocal();
+  renderCurrentView();
+  applySmartDefaultScore({onlyIfPristine:true});
+
+  if(saveCache){
+    saveLocalCache();
+  }
+}
+
+function renderCurrentView(){
+  renderSeasonTitle();
+  renderPlayersSelect();
+  renderSeasonSummary();
+  renderRanking();
+  renderHistory();
+
+  if(document.getElementById("statsModal")?.style.display === "block"){
+    renderAdvancedStats();
+  }
+
+  if(document.getElementById("historyModal")?.style.display === "block"){
+    renderFullHistory();
+  }
+
+  if(document.getElementById("playerModal")?.style.display === "block"){
+    openPlayerSetting();
+  }
+
+  if(document.getElementById("seasonManageModal")?.style.display === "block"){
+    openSeasonSetting();
+  }
+}
+
+function normalizeLog(log){
+  log = log || {};
+  const last = String(log.lastUpdated || "");
+  const globalVersion = String(log.globalVersion || log.dataVersion || last || "");
+  return {
+    lastUpdated: last,
+    lastAction: String(log.lastAction || ""),
+    globalVersion: globalVersion,
+    dataVersion: String(log.dataVersion || globalVersion),
+    matchesVersion: String(log.matchesVersion || globalVersion),
+    playersVersion: String(log.playersVersion || globalVersion),
+    settingsVersion: String(log.settingsVersion || globalVersion),
+    configVersion: String(log.configVersion || globalVersion),
+    seasonsVersion: String(log.seasonsVersion || globalVersion)
+  };
+}
+
+function saveLocalCache(){
+  if(!appCache) return;
+
+  try{
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      cachedAt: Date.now(),
+      data: appCache
+    }));
+  }catch(e){
+    console.warn("Không lưu được local cache", e);
+  }
+}
+
+function checkServerLogAndRefresh(forceShow){
+  if(forceShow){
+    showSync("ĐANG CẬP NHẬT DỮ LIỆU...");
+  }
+
+  google.script.run
+    .withSuccessHandler(function(serverLiteLog){
+      const localLog = normalizeLog(appCache && appCache.log);
+      const serverLite = normalizeLog(serverLiteLog);
+
+      if(localLog.globalVersion && serverLite.globalVersion && localLog.globalVersion === serverLite.globalVersion){
+        if(!IS_READ_ONLY) retryPendingQueue();
+        hideSync();
+        return;
+      }
+
+      syncChangedParts(forceShow);
+    })
+    .withFailureHandler(function(err){
+      hideSync();
+      console.warn("Không check được LOG:", getErrorMessage(err));
+    })
+    .getLogInfoLite(IS_READ_ONLY);
+}
+
+function syncChangedParts(forceShow){
+  if(forceShow){
+    showSync("ĐANG CẬP NHẬT DỮ LIỆU...");
+  }
+
+  google.script.run
+    .withSuccessHandler(function(serverLog){
+      const localLog = normalizeLog(appCache && appCache.log);
+      const sheetLog = normalizeLog(serverLog);
+      const parts = [];
+
+      if(!localLog.matchesVersion || localLog.matchesVersion !== sheetLog.matchesVersion) parts.push("matches");
+      if(!localLog.playersVersion || localLog.playersVersion !== sheetLog.playersVersion) parts.push("players");
+      if(!localLog.settingsVersion || localLog.settingsVersion !== sheetLog.settingsVersion) parts.push("settings");
+      if(!localLog.configVersion || localLog.configVersion !== sheetLog.configVersion) parts.push("config");
+      if(!localLog.seasonsVersion || localLog.seasonsVersion !== sheetLog.seasonsVersion) parts.push("seasons");
+
+      if(!parts.length){
+        if(appCache) appCache.log = sheetLog;
+        saveLocalCache();
+        if(!IS_READ_ONLY) retryPendingQueue();
+        hideSync();
+        return;
+      }
+
+      showSync("ĐANG ĐỒNG BỘ: " + parts.join(", ").toUpperCase());
+
+      google.script.run
+        .withSuccessHandler(function(data){
+          applyDataParts(data, true, {preserveViewSeason:true});
+          if(!IS_READ_ONLY) retryPendingQueue();
+          hideSync();
+        })
+        .withFailureHandler(function(err){
+          fallbackFullSyncOnce(err);
+        })
+        .getDataParts(parts, IS_READ_ONLY);
+    })
+    .withFailureHandler(function(err){
+      fallbackFullSyncOnce(err);
+    })
+    .getLogInfo(IS_READ_ONLY);
+}
+
+function fallbackFullSyncOnce(err){
+  if(didFullSyncFallback){
+    hideSync();
+    console.warn("Không sync được dữ liệu mới:", getErrorMessage(err));
+    return;
+  }
+
+  didFullSyncFallback = true;
+  showSync("ĐANG TẢI LẠI DỮ LIỆU...");
+
+  google.script.run
+    .withSuccessHandler(function(data){
+      applyData(data, true, {preserveViewSeason:true});
+      if(!IS_READ_ONLY) retryPendingQueue();
+      hideSync();
+    })
+    .withFailureHandler(function(fullErr){
+      hideSync();
+      console.warn("Không tải lại được dữ liệu:", getErrorMessage(fullErr));
+    })
+    .getAppData(IS_READ_ONLY);
+}
+
+/* SYNC STATUS */
+function showSync(text){
+  isSyncing = true;
+  syncStartedAt = Date.now();
+
+  if(syncHideTimer){
+    clearTimeout(syncHideTimer);
+    syncHideTimer = null;
+  }
+
+  const sync = document.getElementById("syncStatus");
+  if(sync){
+    sync.innerText = text || "ĐANG ĐỒNG BỘ...";
+    sync.classList.add("show");
+    sync.classList.remove("error");
+  }
+}
+
+function hideSync(){
+  const elapsed = Date.now() - syncStartedAt;
+  const remain = Math.max(0, SYNC_MIN_VISIBLE_MS - elapsed);
+
+  if(syncHideTimer){
+    clearTimeout(syncHideTimer);
+  }
+
+  syncHideTimer = setTimeout(function(){
+    isSyncing = false;
+
+    const sync = document.getElementById("syncStatus");
+    if(sync){
+      sync.classList.remove("show");
+      sync.classList.remove("error");
+    }
+
+    syncHideTimer = null;
+  }, remain);
+}
+
+function showSyncError(text){
+  isSyncing = false;
+
+  if(syncHideTimer){
+    clearTimeout(syncHideTimer);
+    syncHideTimer = null;
+  }
+
+  const sync = document.getElementById("syncStatus");
+  if(sync){
+    sync.innerText = text || "ĐỒNG BỘ LỖI";
+    sync.classList.add("show");
+    sync.classList.add("error");
+
+    setTimeout(function(){
+      sync.classList.remove("show");
+      sync.classList.remove("error");
+    }, 2500);
+  }
+}
+
+/* BUTTON LOCK */
+function lockButtons(text){
+  isButtonLocked = true;
+
+  const submitBtn = document.getElementById("submitBtn");
+  if(submitBtn){
+    submitBtn.disabled = true;
+    submitBtn.innerText = text || "ĐANG XỬ LÝ...";
+  }
+
+  document.querySelectorAll(".delete-btn").forEach(btn=>{
+    btn.disabled = true;
+    btn.innerText = (btn.classList.contains("recent-delete-btn") || btn.classList.contains("history-delete-x")) ? "…" : "ĐANG XỬ LÝ...";
+  });
+
+  const confirmBtn = document.getElementById("confirmDeleteBtn");
+  if(confirmBtn){
+    confirmBtn.disabled = true;
+    confirmBtn.innerText = "ĐANG XÓA...";
+  }
+
+  document.querySelectorAll(".season-action-btn").forEach(btn=>{
+    btn.disabled = true;
+  });
+
+  document.querySelectorAll(".setting-save-btn").forEach(btn=>{
+    btn.disabled = true;
+  });
+}
+
+function unlockButtons(){
+  isButtonLocked = false;
+
+  const submitBtn = document.getElementById("submitBtn");
+  if(submitBtn){
+    submitBtn.disabled = false;
+    submitBtn.innerText = "CẬP NHẬT KẾT QUẢ";
+  }
+
+  document.querySelectorAll(".delete-btn").forEach(btn=>{
+    btn.disabled = false;
+    btn.innerText = (btn.classList.contains("recent-delete-btn") || btn.classList.contains("history-delete-x")) ? "×" : "XÓA TRẬN";
+  });
+
+  const confirmBtn = document.getElementById("confirmDeleteBtn");
+  if(confirmBtn){
+    confirmBtn.disabled = false;
+    confirmBtn.innerText = "XÓA TRẬN";
+  }
+
+  document.querySelectorAll(".season-action-btn").forEach(btn=>{
+    btn.disabled = false;
+  });
+
+  document.querySelectorAll(".setting-save-btn").forEach(btn=>{
+    btn.disabled = false;
+  });
+}
+
+function lockBriefly(text, ms, btn){
+  if(btn){
+    const oldText = btn.innerText;
+    btn.disabled = true;
+    if(text) btn.innerText = text;
+    setTimeout(function(){
+      btn.disabled = false;
+      btn.innerText = oldText;
+    }, ms || 900);
+    return;
+  }
+
+  lockButtons(text);
+  setTimeout(unlockButtons, ms || 900);
+}
+
+/* SEASON */
+function renderSeasonTitle(){
+  const el = document.getElementById("seasonTitleBtn");
+  if(el){
+    el.innerText = getSeasonDisplayName(currentViewSeason).toUpperCase();
+  }
+
+  const mobileEl = document.getElementById("mobileSeasonTitleBtn");
+  if(mobileEl){
+    mobileEl.innerText = getSeasonDisplayName(currentViewSeason).toUpperCase();
+  }
+
+  const wrap = document.querySelector(".season-center-wrap");
+  if(!wrap) return;
+
+  let sub = document.getElementById("seasonStartText");
+  if(!sub){
+    sub = document.createElement("div");
+    sub.id = "seasonStartText";
+    sub.className = "season-start-text";
+    wrap.appendChild(sub);
+  }
+
+  const matches = getSeasonMatches();
+  const startDate = getSeasonStartDateLocal(matches);
+  if(isAllSeasonsView()){
+    sub.innerText = matches.length
+      ? "(Gộp " + matches.length + " trận từ tất cả season)"
+      : "(Chưa có dữ liệu tổng hợp)";
+  }else{
+    sub.innerText = startDate
+      ? "(Khởi tranh: " + formatDateOnlyLocal(startDate) + ")"
+      : "(Khởi tranh: chưa rõ)";
+  }
+}
+
+function openSeasonPicker(){
+  if(isButtonLocked || !appCache) return;
+
+  const box = document.getElementById("seasonListBox");
+  let html = "";
+  const totalMatches = Number((appCache.matches || []).length);
+
+  html += `
+      <button class="season-pick-btn season-pick-all ${isAllSeasonsView()?'active':''}"
+        onclick="pickSeason('${ALL_SEASONS_KEY}')">
+        <span>Tổng hợp toàn bộ</span>
+        <span class="season-pick-meta">${totalMatches} trận · Tất cả season</span>
+      </button>
+  `;
+
+  (appCache.seasons || []).forEach(s=>{
+    const isCurrent = appCache && s === appCache.currentSeason;
+    const matchCount = (appCache.matches || []).filter(m => String(m.season || "Season 1") === String(s)).length;
+    const status = isCurrent ? "Đang hoạt động" : "Đã kết thúc";
+    html += `
+      <button class="season-pick-btn ${s===currentViewSeason?'active':''}"
+        onclick="pickSeason('${jsString(s)}')">
+        <span>${escapeHtml(s)}</span>
+        <span class="season-pick-meta">${matchCount} trận · ${status}</span>
+      </button>
+    `;
+  });
+
+  box.innerHTML = html;
+  document.getElementById("seasonPickerModal").style.display = "block";
+}
+
+function closeSeasonPicker(){
+  document.getElementById("seasonPickerModal").style.display = "none";
+}
+
+function pickSeason(name){
+  currentViewSeason = name;
+
+  renderSeasonTitle();
+  renderSeasonSummary();
+  renderRanking();
+  renderHistory();
+
+  if(document.getElementById("statsModal")?.style.display === "block"){
+    renderAdvancedStats();
+  }
+
+  if(document.getElementById("historyModal")?.style.display === "block"){
+    renderFullHistory();
+  }
+
+  closeSeasonPicker();
+  saveLocalCache();
+}
+
+function endSeason(){
+  if(!canEdit()) return;
+
+  if(isButtonLocked || !appCache) return;
+  if(!confirm("Kết thúc season hiện tại và tạo season mới?")) return;
+
+  const oldData = cloneData(appCache);
+  const nextSeason = getNextSeasonNameLocal();
+
+  appCache.currentSeason = nextSeason;
+  currentViewSeason = nextSeason;
+
+  if(!appCache.seasons) appCache.seasons = [];
+  if(!appCache.seasons.includes(nextSeason)){
+    appCache.seasons.unshift(nextSeason);
+  }
+
+  renderSeasonTitle();
+  renderSeasonSummary();
+  renderRanking();
+  renderHistory();
+
+  if(document.getElementById("statsModal")?.style.display === "block"){
+    renderAdvancedStats();
+  }
+
+  saveLocalCache();
+
+  lockBriefly("ĐANG XỬ LÝ...", 900, (typeof event !== "undefined" && event.currentTarget));
+  showSync("ĐANG ĐỒNG BỘ...");
+
+  google.script.run
+    .withSuccessHandler(function(data){
+      applyDataParts(data, true, {preserveViewSeason:true});
+      hideSync();
+    })
+    .withFailureHandler(function(err){
+      appCache = oldData;
+      applyData(appCache, true);
+      showSyncError("ĐỒNG BỘ LỖI");
+      alert("Lỗi đồng bộ kết thúc season: " + getErrorMessage(err));
+    })
+    .endCurrentSeason();
+}
+
+function getFallbackSeasonAfterDeleteLocal(deletedSeasonName){
+  const seasons = appCache.seasons || [];
+  const deletedNumber = Number(String(deletedSeasonName).replace(/\D/g,"")) || 1;
+
+  const previousSeasons = seasons
+    .filter(s => {
+      const n = Number(String(s).replace(/\D/g,"")) || 1;
+      return n < deletedNumber;
+    })
+    .sort((a,b)=>{
+      const na = Number(String(a).replace(/\D/g,"")) || 1;
+      const nb = Number(String(b).replace(/\D/g,"")) || 1;
+      return nb - na;
+    });
+
+  if(previousSeasons.length > 0){
+    return previousSeasons[0];
+  }
+
+  if(seasons.length > 0){
+    return seasons[0];
+  }
+
+  return "Season 1";
+}
+
+function getNextSeasonNameLocal(){
+  let max = 1;
+
+  ((appCache && appCache.seasons) || []).forEach(s=>{
+    const n = Number(String(s).replace(/\D/g,"")) || 1;
+    if(n > max) max = n;
+  });
+
+  return "Season " + (max + 1);
+}
+
+function isAllSeasonsView(){
+  return currentViewSeason === ALL_SEASONS_KEY;
+}
+
+function getSeasonDisplayName(seasonName){
+  return seasonName === ALL_SEASONS_KEY ? "Tổng hợp toàn bộ" : (seasonName || "Season 1");
+}
+
+/* PLAYER SELECT */
+function renderPlayersSelect(){
+  ["win1","win2","lose1","lose2"].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+
+    const old = el.value;
+
+    el.innerHTML = '<option value="">-- Chọn người --</option>';
+
+    allPlayers.forEach(p=>{
+      el.innerHTML += `<option value="${escapeAttr(p.id)}">${escapeHtml(p.name)}</option>`;
+    });
+
+    el.value = old;
+  });
+
+  refreshSelectOptions();
+}
+
+function refreshSelectOptions(){
+  const ids = ["win1","win2","lose1","lose2"];
+  const values = {};
+
+  ids.forEach(i=>{
+    const el = document.getElementById(i);
+    values[i] = el ? el.value : "";
+  });
+
+  ids.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+
+    const current = el.value;
+
+    el.innerHTML = '<option value="">-- Chọn người --</option>';
+
+    allPlayers.forEach(p=>{
+      const used = ids.some(k => k !== id && values[k] === p.id);
+
+      if(!used || p.id === current){
+        el.innerHTML += `<option value="${escapeAttr(p.id)}">${escapeHtml(p.name)}</option>`;
+      }
+    });
+
+    el.value = current;
+  });
+}
+
+/* RANKING */
+function medal(i){
+  if(i===0) return "🥇";
+  if(i===1) return "🥈";
+  if(i===2) return "🥉";
+  return "#"+(i+1);
+}
+
+function getSeasonMatches(){
+  if(!appCache) return [];
+  let list = [];
+  if(isAllSeasonsView()){
+    list = (appCache.matches || []).slice();
+  }else{
+    list = (appCache.matches || []).filter(x => x.season === currentViewSeason);
+  }
+  return sortMatchesNewestFirstLocal(list);
+}
+
+function getPlayerDisplayName(id){
+  const p = (appCache.allPlayers || appCache.players || []).find(x => String(x.id) === String(id));
+  return p ? p.name : String(id || "");
+}
+
+function renderSeasonSummary(){
+  if(!appCache) return;
+
+  const matches = getSeasonMatches();
+  const loseMoney = Number(appCache.loseMoney || 5000);
+
+  const totalLoseCount = matches.length * 2;
+  const totalMoney = totalLoseCount * loseMoney;
+  const startDate = getSeasonStartDateLocal(matches);
+  const seasonDays = startDate ? getInclusiveDayDiffLocal(startDate, new Date()) : 0;
+  const latestMatch = matches
+    .slice()
+    .sort((a,b)=>Number(b.dateValue || 0) - Number(a.dateValue || 0))[0];
+  const weekMatchCount = getCurrentWeekMatchCountLocal(matches);
+  const lastText = latestMatch ? getRelativeDayTextLocal(new Date(Number(latestMatch.dateValue))) : "Chưa có";
+  const statusText = isAllSeasonsView()
+    ? "Tất cả season"
+    : (currentViewSeason === appCache.currentSeason ? "Đang hoạt động" : "Đã kết thúc");
+  const playerCountText = isAllSeasonsView()
+    ? Number((appCache.allPlayers || appCache.players || []).length) + " người từng chơi"
+    : Number((appCache.players || []).length) + " người chơi";
+
+  const box = document.getElementById("seasonSummary");
+  if(!box) return;
+
+  box.innerHTML = `
+    <div class="summary-card">
+      <div class="summary-label">Ngày</div>
+      <div class="summary-value">${seasonDays}</div>
+      <div class="summary-sub">${statusText}</div>
+    </div>
+
+    <div class="summary-card">
+      <div class="summary-label">Tổng trận</div>
+      <div class="summary-value">${matches.length}</div>
+      <div class="summary-sub">${playerCountText}</div>
+    </div>
+
+    <div class="summary-card summary-card-money">
+      <div class="summary-label">Tiền phạt</div>
+      <div class="summary-value">${Number(totalMoney).toLocaleString("vi-VN")}đ</div>
+      <div class="summary-sub">${totalLoseCount} lượt thua</div>
+    </div>
+
+    <div class="summary-card">
+      <div class="summary-label">Nhịp chơi</div>
+      <div class="play-pulse-grid">
+        <div class="play-pulse-mini">
+          <div class="play-pulse-label">Gần nhất</div>
+          <div class="play-pulse-value">${escapeHtml(lastText)}</div>
+        </div>
+        <div class="play-pulse-mini">
+          <div class="play-pulse-label">Tuần này</div>
+          <div class="play-pulse-value">${weekMatchCount} trận</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function getSeasonStartDateLocal(matches){
+  const times = (matches || [])
+    .map(m=>Number(m.dateValue || 0))
+    .filter(t=>t > 0)
+    .sort((a,b)=>a-b);
+
+  return times.length ? new Date(times[0]) : null;
+}
+
+function getInclusiveDayDiffLocal(start, end){
+  const a = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
+  const b = new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime();
+  return Math.max(1, Math.floor((b - a) / 86400000) + 1);
+}
+
+function getRelativeDayTextLocal(date){
+  const today = new Date();
+  const a = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const b = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const diff = Math.floor((b - a) / 86400000);
+
+  if(diff <= 0) return "Hôm nay";
+  if(diff === 1) return "Hôm qua";
+  return diff + " ngày trước";
+}
+
+function getCurrentWeekMatchCountLocal(matches){
+  const now = new Date();
+  const day = now.getDay() || 7;
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day + 1).getTime();
+  const end = start + 7 * 86400000;
+
+  return (matches || []).filter(m=>{
+    const t = Number(m.dateValue || 0);
+    return t >= start && t < end;
+  }).length;
+}
+
+function formatDateOnlyLocal(date){
+  const pad = n => String(n).padStart(2,"0");
+  return `${pad(date.getDate())}/${pad(date.getMonth()+1)}/${date.getFullYear()}`;
+}
+
+function renderRanking(){
+  if(!appCache) return;
+
+  const matches = getSeasonMatches();
+  const loseMoney = Number(appCache.loseMoney || 5000);
+
+  let stats = {};
+
+  allPlayers.forEach(p=>{
+    stats[p.id] = {
+      id:p.id,
+      name:p.name,
+      played:0,
+      win:0,
+      lose:0
+    };
+  });
+
+  matches.forEach(m=>{
+    [m.win1,m.win2].forEach(id=>{
+      if(stats[id]){
+        stats[id].played++;
+        stats[id].win++;
+      }
+    });
+
+    [m.lose1,m.lose2].forEach(id=>{
+      if(stats[id]){
+        stats[id].played++;
+        stats[id].lose++;
+      }
+    });
+  });
+
+  let arr = Object.values(stats).map(x=>{
+    x.rate = x.played ? ((x.win/x.played)*100).toFixed(1) : "0.0";
+    x.money = x.lose * loseMoney;
+    return x;
+  });
+
+  arr.sort((a,b)=>
+    Number(b.rate)-Number(a.rate) ||
+    b.win-a.win ||
+    a.lose-b.lose ||
+    a.name.localeCompare(b.name)
+  );
+
+  let html = "";
+  let mobileHtml = "";
+
+  if(arr.length === 0){
+    html = '<tr><td colspan="7">Chưa có dữ liệu</td></tr>';
+    mobileHtml = '<div class="history-empty">Chưa có dữ liệu</div>';
+  }else{
+    arr.forEach((p,i)=>{
+      const isExpanded = String(expandedRankingPlayerId) === String(p.id);
+      html += `
+      <tr class="ranking-player-row ${isExpanded ? 'expanded' : ''}">
+        <td>${medal(i)}</td>
+        <td class="name">
+          <button class="ranking-name-btn" onclick="toggleRankingDetail('${jsString(p.id)}')">
+            <span>${escapeHtml(p.name)}</span>
+            <span class="ranking-expand-icon">${isExpanded ? '▲' : '▼'}</span>
+          </button>
+        </td>
+        <td>${p.played}</td>
+        <td>${p.win}</td>
+        <td>${p.lose}</td>
+        <td class="rate">${p.rate}%</td>
+        <td class="money">${Number(p.money).toLocaleString("vi-VN")}đ</td>
+      </tr>
+      `;
+
+      if(isExpanded){
+        html += renderRankingDetailRow(p, i + 1, matches);
+      }
+
+      mobileHtml += renderMobileRankingCard(p, i + 1, matches, isExpanded);
+    });
+  }
+
+  const ranking = document.getElementById("ranking");
+  if(ranking) ranking.innerHTML = html;
+
+  const mobileRanking = document.getElementById("mobileRankingList");
+  if(mobileRanking) mobileRanking.innerHTML = mobileHtml;
+}
+
+function toggleRankingDetail(playerId){
+  expandedRankingPlayerId = String(expandedRankingPlayerId) === String(playerId) ? "" : String(playerId);
+  renderRanking();
+}
+
+function renderRankingDetailRow(player, rank, matches){
+  const detail = buildRankingPlayerDetail(player.id, matches || []);
+
+  return `
+    <tr class="ranking-detail-row">
+      <td colspan="7">
+        <div class="ranking-detail-shell">
+          <div class="ranking-detail-line ranking-detail-chip ranking-detail-form"><span>Phong độ:</span> ${detail.formLine}</div>
+          <div class="ranking-detail-line ranking-detail-chip"><span>Đối tác tin cậy:</span> ${detail.partnerLine}</div>
+          <div class="ranking-detail-line ranking-detail-chip"><span>${detail.hardLabel}:</span> ${detail.hardLine}</div>
+          <div class="ranking-detail-line ranking-detail-chip"><span>${detail.brightLabel}:</span> ${detail.brightLine}</div>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function renderMobileRankingCard(player, rank, matches, isExpanded){
+  const detail = buildRankingPlayerDetail(player.id, matches || []);
+  const rankText = rank <= 3 ? medal(rank - 1) : "#" + rank;
+
+  return `
+    <div class="mobile-player-card ${isExpanded ? 'expanded' : ''}" onclick="toggleRankingDetail('${jsString(player.id)}')">
+      <div class="mobile-player-top">
+        <div class="mobile-player-left">
+          <div class="mobile-rank-badge">${rankText}</div>
+          <div class="mobile-player-main">
+            <div class="mobile-player-name">${escapeHtml(player.name)}</div>
+            <div class="mobile-player-meta">${Number(player.played) || 0} trận · ${Number(player.win) || 0}W / ${Number(player.lose) || 0}L</div>
+          </div>
+        </div>
+        <div class="mobile-player-right">
+          <div class="mobile-player-rate">${escapeHtml(player.rate)}%</div>
+          <div class="mobile-player-money">${Number(player.money).toLocaleString("vi-VN")}đ</div>
+        </div>
+      </div>
+      ${isExpanded ? `
+        <div class="mobile-player-detail">
+          <div class="mobile-detail-chip"><span>Phong độ</span>${detail.formLine}</div>
+          <div class="mobile-detail-chip"><span>Đối tác tin cậy</span>${detail.partnerLine}</div>
+          <div class="mobile-detail-chip"><span>${detail.hardLabel}</span>${detail.hardLine}</div>
+          <div class="mobile-detail-chip"><span>${detail.brightLabel}</span>${detail.brightLine}</div>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function buildRankingPlayerDetail(playerId, matches){
+  const form = getPlayerRecentFormLocal(playerId, matches);
+  const formPattern = form.join("");
+  const formComment = formPattern.length === 5
+    ? getFormCommentLocal(formPattern)
+    : "Chưa đủ dữ liệu";
+
+  const partner = getTrustedPartnerLocal(playerId, matches);
+  const hard = getRivalMatchupLocal(playerId, matches, "hard");
+  const bright = getRivalMatchupLocal(playerId, matches, "bright");
+  const hardQualified = hard && hard.played >= 5 && hard.lossRate > 50;
+  const brightQualified = bright && bright.played >= 5 && bright.rate > 50;
+  return {
+    formLine: formPattern
+      ? `${escapeHtml(formComment)} <span class="ranking-form-strip">${renderRankingFormPatternLocal(form)}</span>`
+      : escapeHtml(formComment),
+    partnerLine: partner
+      ? `🤝 ${escapeHtml(getPlayerDisplayName(partner.id))} • ${partner.rate.toFixed(0)}% thắng • thắng ${partner.win}/${partner.played}`
+      : "Chưa đủ dữ liệu",
+    hardLabel: hardQualified && hard.lossRate > 70 ? "Thiên địch" : "Kèo khó",
+    hardLine: hardQualified
+      ? `☠️ gặp ${escapeHtml(getPlayerDisplayName(hard.id))} • ${hard.lossRate.toFixed(0)}% thua • thua ${hard.lose}/${hard.played}`
+      : "Chưa có đối thủ áp đảo",
+    brightLabel: brightQualified && bright.rate > 70 ? "Khắc chế cứng" : "Kèo sáng",
+    brightLine: brightQualified
+      ? `⚔️ gặp ${escapeHtml(getPlayerDisplayName(bright.id))} • ${bright.rate.toFixed(0)}% thắng • thắng ${bright.win}/${bright.played}`
+      : "Chưa có kèo sáng rõ ràng"
+  };
+}
+
+function getPlayerStatsInMatchesLocal(playerId, matches){
+  const stats = {played:0, win:0, lose:0};
+
+  (matches || []).forEach(m=>{
+    if(String(m.win1) === String(playerId) || String(m.win2) === String(playerId)){
+      stats.played++;
+      stats.win++;
+    }else if(String(m.lose1) === String(playerId) || String(m.lose2) === String(playerId)){
+      stats.played++;
+      stats.lose++;
+    }
+  });
+
+  return stats;
+}
+
+function renderRankingFormPatternLocal(form){
+  return (form || []).map(x=>`<span class="ranking-form-pill ${x === "W" ? "win" : "lose"}">${x}</span>`).join("");
+}
+
+function getPlayerRecentFormLocal(playerId, matches){
+  const form = [];
+
+  sortMatchesNewestFirstLocal(matches || [])
+    .forEach(m=>{
+      if(form.length >= 5) return;
+
+      if(String(m.win1) === String(playerId) || String(m.win2) === String(playerId)){
+        form.push("W");
+      }else if(String(m.lose1) === String(playerId) || String(m.lose2) === String(playerId)){
+        form.push("L");
+      }
+    });
+
+  return form;
+}
+
+function getFormCommentLocal(pattern){
+  const map = {
+    WWWWW:"Hủy diệt",
+    WWWWL:"Quá cháy",
+    WWWLW:"Chững nhẹ",
+    WWWLL:"Hạ nhiệt",
+    WWLWW:"Đang hăng",
+    WWLWL:"Chưa ổn định",
+    WWLLW:"Lúc hay lúc dở",
+    WWLLL:"Rơi phong độ",
+    WLWWW:"Vào guồng",
+    WLWWL:"Chệch nhịp nhẹ",
+    WLWLW:"Thất thường",
+    WLWLL:"Đuối cuối chặng",
+    WLLWW:"Lấy lại phong độ",
+    WLLWL:"Gượng giữ nhịp",
+    WLLLW:"Le lói hy vọng",
+    WLLLL:"Lao dốc",
+    LWWWW:"Tăng tốc mạnh",
+    LWWWL:"Chững lại nhẹ",
+    LWWLW:"Chưa ổn định",
+    LWWLL:"Mất nhịp",
+    LWLWW:"Bắt nhịp tốt",
+    LWLWL:"Phập phù",
+    LWLLW:"Còn hy vọng",
+    LWLLL:"Xuống tay",
+    LLWWW:"Hồi sinh mạnh",
+    LLWWL:"Hồi sinh rồi chững",
+    LLWLW:"Chưa chắc chắn",
+    LLWLL:"Sa sút",
+    LLLWW:"Có dấu hiệu hồi sinh",
+    LLLWL:"Nhấp nhổm trở lại",
+    LLLLW:"Vừa tỉnh giấc",
+    LLLLL:"Khủng hoảng"
+  };
+
+  return map[pattern] || "Chưa đủ dữ liệu";
+}
+
+function getTrustedPartnerLocal(playerId, matches){
+  const map = {};
+
+  (matches || []).forEach(m=>{
+    let partnerId = "";
+    let won = false;
+
+    if(String(m.win1) === String(playerId)){
+      partnerId = m.win2;
+      won = true;
+    }else if(String(m.win2) === String(playerId)){
+      partnerId = m.win1;
+      won = true;
+    }else if(String(m.lose1) === String(playerId)){
+      partnerId = m.lose2;
+    }else if(String(m.lose2) === String(playerId)){
+      partnerId = m.lose1;
+    }
+
+    if(!partnerId) return;
+
+    const id = String(partnerId);
+    if(!map[id]) map[id] = {id:id, played:0, win:0};
+    map[id].played++;
+    if(won) map[id].win++;
+  });
+
+  const arr = Object.values(map)
+    .filter(x=>x.played >= 5)
+    .map(x=>{
+      x.rate = x.played ? (x.win / x.played) * 100 : 0;
+      return x;
+    })
+    .sort((a,b)=>b.rate-a.rate || b.win-a.win || b.played-a.played || getPlayerDisplayName(a.id).localeCompare(getPlayerDisplayName(b.id)));
+
+  return arr[0] || null;
+}
+
+function getRivalMatchupLocal(playerId, matches, mode){
+  const map = {};
+
+  (matches || []).forEach(m=>{
+    const isWinner = String(m.win1) === String(playerId) || String(m.win2) === String(playerId);
+    const isLoser = String(m.lose1) === String(playerId) || String(m.lose2) === String(playerId);
+    if(!isWinner && !isLoser) return;
+
+    const opponents = isWinner ? [m.lose1, m.lose2] : [m.win1, m.win2];
+
+    opponents.forEach(opp=>{
+      const id = String(opp);
+      if(!map[id]) map[id] = {id:id, played:0, win:0, lose:0};
+      map[id].played++;
+      if(isWinner) map[id].win++;
+      if(isLoser) map[id].lose++;
+    });
+  });
+
+  const arr = Object.values(map)
+    .filter(x=>x.played >= 5)
+    .map(x=>{
+      x.rate = x.played ? (x.win / x.played) * 100 : 0;
+      x.lossRate = x.played ? (x.lose / x.played) * 100 : 0;
+      return x;
+    });
+
+  let qualified = [];
+
+  if(mode === "bright"){
+    qualified = arr
+      .filter(x=>x.rate > 50);
+    qualified
+      .sort((a,b)=>b.rate-a.rate || b.win-a.win || b.played-a.played || getPlayerDisplayName(a.id).localeCompare(getPlayerDisplayName(b.id)));
+  }else{
+    qualified = arr
+      .filter(x=>x.lossRate > 50);
+    qualified
+      .sort((a,b)=>b.lossRate-a.lossRate || b.lose-a.lose || b.played-a.played || getPlayerDisplayName(a.id).localeCompare(getPlayerDisplayName(b.id)));
+  }
+
+  return qualified[0] || null;
+}
+
+/* MATCH - LOCAL FIRST */
+function submitMatch(){
+  if(!canEdit()) return;
+
+  if(isButtonLocked || !appCache) return;
+
+  const data = {
+    win1: document.getElementById("win1").value,
+    win2: document.getElementById("win2").value,
+    lose1: document.getElementById("lose1").value,
+    lose2: document.getElementById("lose2").value,
+    winScore: document.getElementById("winScore").value,
+    loseScore: document.getElementById("loseScore").value
+  };
+
+  const ids = [data.win1,data.win2,data.lose1,data.lose2];
+
+  if(ids.includes("")){
+    alert("Chưa chọn đủ 4 người.");
+    return;
+  }
+
+  if(new Set(ids).size < 4){
+    alert("Người chơi bị trùng.");
+    return;
+  }
+
+  const duplicatedLocal = findSameRecentMatchLocal(data);
+
+  if(duplicatedLocal){
+    alert("Trận này vừa được nhập gần đây. Hệ thống đã chặn để tránh trùng trận.");
+    return;
+  }
+
+  const tempId = "TEMP_" + Date.now();
+  data.tempId = tempId;
+
+  const tempMatch = makeLocalMatch(tempId, data);
+
+  if(!appCache.matches) appCache.matches = [];
+  appCache.matches.unshift(tempMatch);
+
+  currentViewSeason = appCache.currentSeason;
+
+  renderSeasonTitle();
+  renderSeasonSummary();
+  renderRanking();
+  renderHistory();
+
+  if(document.getElementById("statsModal")?.style.display === "block"){
+    renderAdvancedStats();
+  }
+
+  applySmartDefaultScore();
+
+  enqueuePendingAction({
+    id: tempId,
+    type: "addMatch",
+    data: data,
+    createdAt: Date.now()
+  });
+  saveLocalCache();
+
+  lockBriefly("ĐANG XỬ LÝ...", 900, (typeof event !== "undefined" && event.currentTarget));
+  showSync("ĐANG ĐỒNG BỘ...");
+
+  google.script.run
+    .withSuccessHandler(function(result){
+      const oldCurrentSeason = appCache.currentSeason;
+      replaceTempMatch(result.tempId, result.match);
+
+      appCache.currentSeason = result.currentSeason || appCache.currentSeason;
+      appCache.log = normalizeLog(result.log || appCache.log);
+      removePendingAction(tempId);
+
+      dedupeMatchesLocal();
+      saveLocalCache();
+      renderAfterMatchSync(oldCurrentSeason, result.match);
+      hideSync();
+    })
+    .withFailureHandler(function(err){
+      markUnsynced(tempId);
+      renderHistory();
+      saveLocalCache();
+      showSyncError("ĐỒNG BỘ LỖI");
+      alert("Đã cập nhật local nhưng chưa đồng bộ được Sheet: " + getErrorMessage(err));
+    })
+    .addMatch(data);
+}
+
+function makeLocalMatch(tempId, data){
+  const nameMap = {};
+  allPlayers.forEach(p=> nameMap[p.id] = p.name);
+
+  const now = new Date();
+
+  return {
+    matchId: tempId,
+    dateValue: now.getTime(),
+    date: formatDateLocal(now),
+    win1: data.win1,
+    win2: data.win2,
+    lose1: data.lose1,
+    lose2: data.lose2,
+    win1Name: nameMap[data.win1] || data.win1,
+    win2Name: nameMap[data.win2] || data.win2,
+    lose1Name: nameMap[data.lose1] || data.lose1,
+    lose2Name: nameMap[data.lose2] || data.lose2,
+    winScore: Number(data.winScore) || 0,
+    loseScore: Number(data.loseScore) || 0,
+    season: appCache.currentSeason || currentViewSeason,
+    synced:false
+  };
+}
+
+function replaceTempMatch(tempId, serverMatch){
+  if(!appCache.matches) appCache.matches = [];
+
+  serverMatch = enrichMatchNamesLocal(serverMatch || {});
+  let replaced = false;
+  appCache.matches = appCache.matches.map(m=>{
+    if(String(m.matchId) === String(tempId)){
+      replaced = true;
+      return Object.assign({}, m, serverMatch, {synced:true, syncError:false});
+    }
+    return m;
+  });
+
+  if(!replaced && serverMatch && serverMatch.matchId){
+    appCache.matches.unshift(serverMatch);
+  }
+
+  dedupeMatchesLocal();
+}
+
+function enrichMatchNamesLocal(match){
+  const nameMap = {};
+  (appCache && appCache.allPlayers || allPlayers || []).forEach(p=>{
+    nameMap[String(p.id)] = p.name;
+  });
+
+  return Object.assign({}, match, {
+    win1Name: match.win1Name || nameMap[String(match.win1)] || match.win1,
+    win2Name: match.win2Name || nameMap[String(match.win2)] || match.win2,
+    lose1Name: match.lose1Name || nameMap[String(match.lose1)] || match.lose1,
+    lose2Name: match.lose2Name || nameMap[String(match.lose2)] || match.lose2,
+    synced: true
+  });
+}
+
+function renderAfterMatchSync(oldCurrentSeason, serverMatch){
+  const serverSeason = serverMatch && serverMatch.season;
+  const seasonChanged = oldCurrentSeason && appCache.currentSeason && String(oldCurrentSeason) !== String(appCache.currentSeason);
+  const viewAffected = !serverSeason || isAllSeasonsView() || String(serverSeason) === String(currentViewSeason);
+
+  renderHistory();
+
+  if(document.getElementById("historyModal")?.style.display === "block"){
+    renderFullHistory();
+  }
+
+  if(seasonChanged || !viewAffected){
+    renderCurrentView();
+    return;
+  }
+}
+
+function markUnsynced(tempId){
+  appCache.matches = (appCache.matches || []).map(m=>{
+    if(String(m.matchId) === String(tempId)){
+      m.synced = false;
+      m.syncError = true;
+    }
+    return m;
+  });
+}
+
+function mergeServerDataIfNeeded(callback){
+  checkServerLogAndRefresh(false);
+  if(callback) callback();
+}
+
+/* HISTORY */
+function historyCard(m){
+  const syncText = m.synced === false
+    ? '<span class="sync-warn"> • Chưa đồng bộ</span>'
+    : '';
+
+  return `
+  <div class="history-item">
+    <div class="history-date">${escapeHtml(m.date)} • ${escapeHtml(m.season)}${syncText}</div>
+    <div>
+      <b>${escapeHtml(m.win1Name)}</b> + <b>${escapeHtml(m.win2Name)}</b>
+      thắng
+      <b>${escapeHtml(m.lose1Name)}</b> + <b>${escapeHtml(m.lose2Name)}</b>
+    </div>
+    <div class="history-score">${Number(m.winScore) || 0} - ${Number(m.loseScore) || 0}</div>
+    <button class="history-delete-x delete-btn" title="Xóa trận" onclick="openDeleteConfirm('${jsString(m.matchId)}')">×</button>
+  </div>
+  `;
+}
+
+function recentHistoryCard(m){
+  const syncText = m.synced === false
+    ? '<span class="sync-warn"> • Chưa đồng bộ</span>'
+    : '';
+  const date = m.dateValue ? new Date(Number(m.dateValue)) : null;
+  const dateText = date ? formatShortDateLocal(date) : escapeHtml(String(m.date || ""));
+  const timeText = date ? formatTimeOnlyLocal(date) : "--:--";
+
+  return `
+    <div class="recent-match-item">
+      <div class="recent-match-top">
+        <div class="recent-match-meta">${escapeHtml(m.season)} • ${dateText}${syncText}</div>
+        <button class="recent-delete-btn delete-btn" title="Xóa trận" onclick="openDeleteConfirm('${jsString(m.matchId)}')">×</button>
+      </div>
+      <div class="recent-match-main">
+        <div class="recent-match-time">${timeText}</div>
+        <div class="recent-match-team recent-match-win" title="${escapeAttr(m.win1Name + ' / ' + m.win2Name)}">
+          <div>${escapeHtml(m.win1Name)}</div>
+          <div>${escapeHtml(m.win2Name)}</div>
+        </div>
+        <div class="recent-match-score">${Number(m.winScore) || 0} - ${Number(m.loseScore) || 0}</div>
+        <div class="recent-match-team recent-match-lose" title="${escapeAttr(m.lose1Name + ' / ' + m.lose2Name)}">
+          <div>${escapeHtml(m.lose1Name)}</div>
+          <div>${escapeHtml(m.lose2Name)}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function getHistoryList(){
+  if(!appCache) return [];
+  let list = [];
+  if(isAllSeasonsView()){
+    list = (appCache.matches || []).slice();
+  }else{
+    list = (appCache.matches || []).filter(x => x.season === currentViewSeason);
+  }
+  return sortMatchesNewestFirstLocal(list);
+}
+
+function renderHistory(){
+  const list = getHistoryList().slice(0,3);
+  let html = "";
+
+  if(!list.length){
+    html = '<div class="history-empty">Chưa có lịch sử trận.</div>';
+  }else{
+    list.forEach(m=> html += recentHistoryCard(m));
+  }
+
+  const box = document.getElementById("historyBox");
+  if(box) box.innerHTML = html;
+
+  if(document.getElementById("historyModal")?.style.display === "block"){
+    renderFullHistory();
+  }
+}
+
+function openHistory(){
+  document.getElementById("historyModal").style.display = "block";
+  renderFullHistory();
+}
+
+function renderFullHistory(){
+  const list = getHistoryList();
+  let html = "";
+
+  if(!list.length){
+    html = '<div class="history-empty">Chưa có dữ liệu.</div>';
+  }else{
+    list.forEach(m=> html += historyCard(m));
+  }
+
+  const box = document.getElementById("fullHistoryBox");
+  if(box) box.innerHTML = html;
+}
+
+function closeHistory(){
+  document.getElementById("historyModal").style.display = "none";
+}
+
+/* DELETE LOCAL FIRST */
+function getMatchById(id){
+  return (appCache.matches || []).find(m => String(m.matchId) === String(id));
+}
+
+function ensureDeleteModal(){
+  if(document.getElementById("deleteConfirmModal")) return;
+
+  const div = document.createElement("div");
+  div.id = "deleteConfirmModal";
+  div.className = "modal";
+  div.style.display = "none";
+
+  div.innerHTML = `
+    <div class="modal-content confirm-box">
+      <h3>⚠️ Xác nhận xóa trận</h3>
+      <div id="deleteConfirmText" class="confirm-text"></div>
+
+      <div class="confirm-actions">
+        <button class="mini-btn red-btn" id="confirmDeleteBtn" onclick="confirmDeleteMatch()">XÓA TRẬN</button>
+        <button class="mini-btn" onclick="closeDeleteConfirm()">HỦY</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(div);
+}
+
+function openDeleteConfirm(id){
+  if(isButtonLocked || !appCache) return;
+
+  ensureDeleteModal();
+  pendingDeleteId = id;
+
+  const m = getMatchById(id);
+  let text = "Bạn chắc chắn muốn xóa trận này?";
+
+  if(m){
+    text = `
+      <div class="history-date">${escapeHtml(m.date)} • ${escapeHtml(m.season)}</div>
+      <div>
+        <b>${escapeHtml(m.win1Name)}</b> + <b>${escapeHtml(m.win2Name)}</b>
+        thắng
+        <b>${escapeHtml(m.lose1Name)}</b> + <b>${escapeHtml(m.lose2Name)}</b>
+      </div>
+      <div class="history-score">${Number(m.winScore) || 0} - ${Number(m.loseScore) || 0}</div>
+    `;
+  }
+
+  document.getElementById("deleteConfirmText").innerHTML = text;
+  document.getElementById("deleteConfirmModal").style.display = "block";
+}
+
+function closeDeleteConfirm(){
+  pendingDeleteId = null;
+  const modal = document.getElementById("deleteConfirmModal");
+  if(modal) modal.style.display = "none";
+}
+
+function confirmDeleteMatch(){
+  if(!canEdit()) return;
+
+  if(!pendingDeleteId || isButtonLocked || !appCache) return;
+
+  const id = pendingDeleteId;
+  const removed = getMatchById(id);
+
+  closeDeleteConfirm();
+
+  appCache.matches = (appCache.matches || []).filter(m => String(m.matchId) !== String(id));
+
+  renderSeasonSummary();
+  renderRanking();
+  renderHistory();
+
+  if(document.getElementById("statsModal")?.style.display === "block"){
+    renderAdvancedStats();
+  }
+
+  enqueuePendingAction({
+    id: "delete_" + id,
+    type: "deleteMatch",
+    matchId: id,
+    removed: removed,
+    createdAt: Date.now()
+  });
+  saveLocalCache();
+
+  lockBriefly("ĐANG XỬ LÝ...", 900, (typeof event !== "undefined" && event.currentTarget));
+  showSync("ĐANG ĐỒNG BỘ...");
+
+  if(String(id).startsWith("TEMP_")){
+    removePendingAction("delete_" + id);
+    hideSync();
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(result){
+      appCache.log = normalizeLog(result.log || appCache.log);
+      appCache.currentSeason = result.currentSeason;
+      removePendingAction("delete_" + id);
+
+      saveLocalCache();
+      renderCurrentView();
+      hideSync();
+    })
+    .withFailureHandler(function(err){
+      if(removed){
+        appCache.matches.unshift(removed);
+      }
+      renderRanking();
+      renderHistory();
+      saveLocalCache();
+      showSyncError("ĐỒNG BỘ LỖI");
+      alert("Xóa local rồi nhưng đồng bộ Sheet lỗi: " + getErrorMessage(err));
+    })
+    .deleteMatch(id);
+}
+
+/* SETTINGS */
+function openSettings(){
+  if(!canEdit()) return;
+
+  if(isButtonLocked) return;
+  document.getElementById("settingsModal").style.display = "block";
+}
+
+function closeSettings(){
+  document.getElementById("settingsModal").style.display = "none";
+}
+
+/* PLAYER SETTINGS */
+function openPlayerSetting(){
+  if(!canEdit()) return;
+
+  if(isButtonLocked || !appCache) return;
+
+  document.getElementById("playerModal").style.display = "block";
+
+  let html = "";
+
+  (appCache.allPlayers || []).forEach((p,index)=>{
+    html += `
+    <div class="setting-row player-setting-row">
+      <div class="setting-index">${index + 1}</div>
+
+      <input class="setting-row-input" id="name_${safeId(p.id)}" value="${escapeAttr(p.name)}">
+
+      <label class="active-check">
+        <input type="checkbox" id="active_${safeId(p.id)}" ${p.active?'checked':''}>
+        <span>✓</span>
+      </label>
+
+      <button class="setting-save-btn" onclick="savePlayer('${jsString(p.id)}')">ĐỔI TÊN</button>
+    </div>
+    `;
+  });
+
+  document.getElementById("playerListBox").innerHTML = html;
+}
+
+function closePlayerSetting(){
+  document.getElementById("playerModal").style.display = "none";
+}
+
+function savePlayer(id){
+  if(!canEdit()) return;
+
+  if(isButtonLocked || !appCache) return;
+
+  const nameInput = document.getElementById("name_"+safeId(id));
+  const activeInput = document.getElementById("active_"+safeId(id));
+
+  const name = nameInput ? nameInput.value.trim() : "";
+  const active = activeInput ? activeInput.checked : false;
+
+  if(!name){
+    alert("Tên thành viên không được để trống.");
+    return;
+  }
+
+  const oldData = cloneData(appCache);
+
+  const pAll = (appCache.allPlayers || []).find(p=>p.id===id);
+  const pActive = (appCache.players || []).find(p=>p.id===id);
+
+  if(pAll){
+    pAll.name = name;
+    pAll.active = active;
+  }
+
+  if(pActive){
+    pActive.name = name;
+  }
+
+  appCache.players = (appCache.allPlayers || []).filter(p=>p.active);
+  allPlayers = appCache.players;
+
+  renderPlayersSelect();
+  renderRanking();
+  renderHistory();
+  openPlayerSetting();
+  saveLocalCache();
+
+  lockBriefly("ĐANG XỬ LÝ...", 900, (typeof event !== "undefined" && event.currentTarget));
+  showSync("ĐANG ĐỒNG BỘ...");
+
+  google.script.run
+    .withSuccessHandler(function(data){
+      applyDataParts(data, true, {preserveViewSeason:true});
+      hideSync();
+    })
+    .withFailureHandler(function(err){
+      appCache = oldData;
+      applyData(appCache, true, {preserveViewSeason:true});
+      showSyncError("ĐỒNG BỘ LỖI");
+      alert("Lỗi đồng bộ thành viên: " + getErrorMessage(err));
+    })
+    .updatePlayer(id,name,active);
+}
+
+function addNewPlayer(){
+  if(!canEdit()) return;
+
+  if(isButtonLocked || !appCache) return;
+
+  const nameEl = document.getElementById("newPlayerName");
+  const name = nameEl.value.trim();
+
+  if(!name){
+    alert("Nhập tên thành viên mới.");
+    return;
+  }
+
+  const tempId = "P_TEMP_" + Date.now();
+  const oldData = cloneData(appCache);
+
+  if(!appCache.allPlayers) appCache.allPlayers = [];
+  if(!appCache.players) appCache.players = [];
+
+  const p = {id:tempId,name:name,active:true};
+
+  appCache.allPlayers.push(p);
+  appCache.players.push(p);
+  allPlayers = appCache.players;
+
+  nameEl.value = "";
+
+  renderPlayersSelect();
+  renderRanking();
+  openPlayerSetting();
+  saveLocalCache();
+
+  lockBriefly("ĐANG XỬ LÝ...", 900, (typeof event !== "undefined" && event.currentTarget));
+  showSync("ĐANG ĐỒNG BỘ...");
+
+  google.script.run
+    .withSuccessHandler(function(data){
+      applyDataParts(data, true, {preserveViewSeason:true});
+      hideSync();
+    })
+    .withFailureHandler(function(err){
+      appCache = oldData;
+      applyData(appCache, true, {preserveViewSeason:true});
+      showSyncError("ĐỒNG BỘ LỖI");
+      alert("Lỗi đồng bộ thêm thành viên: " + getErrorMessage(err));
+    })
+    .addPlayer(name);
+}
+
+/* MONEY SETTINGS */
+function openMoneySetting(){
+  if(isButtonLocked || !appCache) return;
+
+  document.getElementById("moneyModal").style.display = "block";
+  document.getElementById("loseMoneyInput").value = appCache.loseMoney || 5000;
+}
+
+function closeMoneySetting(){
+  document.getElementById("moneyModal").style.display = "none";
+}
+
+function saveLoseMoney(){
+  if(!canEdit()) return;
+
+  if(isButtonLocked || !appCache) return;
+
+  const v = Number(document.getElementById("loseMoneyInput").value);
+
+  if(!v || v < 0){
+    alert("Mức phạt không hợp lệ.");
+    return;
+  }
+
+  const oldData = cloneData(appCache);
+
+  appCache.loseMoney = v;
+  renderRanking();
+  saveLocalCache();
+
+  lockBriefly("ĐANG XỬ LÝ...", 900, (typeof event !== "undefined" && event.currentTarget));
+  showSync("ĐANG ĐỒNG BỘ...");
+
+  google.script.run
+    .withSuccessHandler(function(data){
+      applyDataParts(data, true, {preserveViewSeason:true});
+      closeMoneySetting();
+      hideSync();
+    })
+    .withFailureHandler(function(err){
+      appCache = oldData;
+      applyData(appCache, true, {preserveViewSeason:true});
+      showSyncError("ĐỒNG BỘ LỖI");
+      alert("Lỗi đồng bộ tiền phạt: " + getErrorMessage(err));
+    })
+    .updateLoseMoney(v);
+}
+
+/* SEASON SETTINGS */
+function openSeasonSetting(){
+  if(!canEdit()) return;
+
+  if(isButtonLocked || !appCache) return;
+
+  document.getElementById("seasonManageModal").style.display = "block";
+
+  let html = `
+    <div class="season-manage-actions">
+      <button class="season-action-wide gold-btn" onclick="endSeason()">
+        KẾT THÚC SEASON HIỆN TẠI
+      </button>
+    </div>
+    <div class="season-manage-note">
+      Trận mới luôn được lưu vào season đang hoạt động: <b>${escapeHtml(appCache.currentSeason || "Season 1")}</b>.
+      Muốn active lại season đã đóng thì bấm <b>CHỌN</b> ở dòng season đó.
+    </div>
+  `;
+
+  (appCache.seasons || []).forEach((s,index)=>{
+    const isCurrent = s === appCache.currentSeason;
+
+    html += `
+    <div class="setting-row season-setting-row season-setting-row-delete">
+      <div class="setting-index">${index + 1}</div>
+
+      <input class="setting-row-input" id="season_${safeId(s)}" value="${escapeAttr(s)}">
+
+      <button class="season-action-btn green" onclick="renameThisSeason('${jsString(s)}')">${isCurrent ? 'ĐỔI TÊN' : 'CẬP NHẬT'}</button>
+
+      ${isCurrent
+        ? '<span class="season-current-disabled-badge">ĐANG DÙNG</span>'
+        : `<button class="season-action-btn blue" onclick="setThisSeason('${jsString(s)}')">CHỌN</button>`}
+
+      <button class="season-action-btn red" onclick="askDeleteSeason('${jsString(s)}')">
+        XÓA
+      </button>
+    </div>
+    `;
+  });
+
+  html += `
+    <button class="season-action-wide blue" onclick="openRestoreSeasonPicker()">
+      ♻ KHÔI PHỤC SEASON
+    </button>
+  `;
+
+  document.getElementById("seasonManageBox").innerHTML = html;
+}
+
+function closeSeasonSetting(){
+  document.getElementById("seasonManageModal").style.display = "none";
+}
+
+function renameThisSeason(oldName){
+  if(!canEdit()) return;
+
+  if(isButtonLocked || !appCache) return;
+
+  const input = document.getElementById("season_"+safeId(oldName));
+  const newName = input ? input.value.trim() : "";
+
+  if(!newName){
+    alert("Tên season không được để trống.");
+    return;
+  }
+
+  const oldData = cloneData(appCache);
+
+  appCache.matches.forEach(m=>{
+    if(m.season === oldName) m.season = newName;
+  });
+
+  appCache.seasons = appCache.seasons.map(s=>s===oldName?newName:s);
+
+  if(appCache.currentSeason === oldName){
+    appCache.currentSeason = newName;
+  }
+
+  if(currentViewSeason === oldName){
+    currentViewSeason = newName;
+  }
+
+  renderSeasonTitle();
+  renderRanking();
+  renderHistory();
+  openSeasonSetting();
+  saveLocalCache();
+
+  lockBriefly("ĐANG XỬ LÝ...", 900, (typeof event !== "undefined" && event.currentTarget));
+  showSync("ĐANG ĐỒNG BỘ...");
+
+  google.script.run
+    .withSuccessHandler(function(data){
+      applyDataParts(data, true, {preserveViewSeason:true});
+      hideSync();
+    })
+    .withFailureHandler(function(err){
+      appCache = oldData;
+      applyData(appCache, true, {preserveViewSeason:true});
+      showSyncError("ĐỒNG BỘ LỖI");
+      alert("Lỗi đồng bộ đổi tên season: " + getErrorMessage(err));
+    })
+    .renameSeason(oldName,newName);
+}
+
+function openRestoreSeasonPicker(){
+  if(!canEdit()) return;
+
+  if(isButtonLocked) return;
+
+  ensureRestoreSeasonModal();
+
+  document.getElementById("restoreSeasonModal").style.display = "block";
+
+  const cachedList = getDeletedSeasonsCache();
+
+  if(cachedList && cachedList.length){
+    renderRestoreSeasonList(cachedList, true);
+  }else{
+    document.getElementById("restoreSeasonListBox").innerHTML =
+      '<div class="history-empty">Đang kiểm tra dữ liệu đã xóa...</div>';
+  }
+
+  showSync("ĐANG KIỂM TRA SHEET...");
+
+  google.script.run
+    .withSuccessHandler(function(list){
+      saveDeletedSeasonsCache(list || []);
+      renderRestoreSeasonList(list || [], false);
+      hideSync();
+    })
+    .withFailureHandler(function(err){
+      hideSync();
+      showSyncError("TẢI LỖI");
+
+      if(!cachedList || !cachedList.length){
+        document.getElementById("restoreSeasonListBox").innerHTML =
+          '<div class="history-empty">Không tải được danh sách từ Sheet. Vui lòng thử lại.</div>';
+      }
+
+      console.warn("Không tải được danh sách season đã xóa:", getErrorMessage(err));
+    })
+    .getDeletedSeasons();
+}
+
+function ensureRestoreSeasonModal(){
+  if(document.getElementById("restoreSeasonModal")) return;
+
+  const div = document.createElement("div");
+  div.id = "restoreSeasonModal";
+  div.className = "modal";
+  div.style.display = "none";
+
+  div.innerHTML = `
+    <div class="modal-content picker-box">
+      <div class="history-head">
+        <h3>♻ Khôi phục Season</h3>
+        <button class="mini-btn red-btn" onclick="closeRestoreSeasonPicker()">ĐÓNG</button>
+      </div>
+
+      <div id="restoreSeasonListBox"></div>
+    </div>
+  `;
+
+  document.body.appendChild(div);
+}
+
+function closeRestoreSeasonPicker(){
+  const modal = document.getElementById("restoreSeasonModal");
+  if(modal) modal.style.display = "none";
+}
+
+function restoreThisSeason(seasonName){
+  if(!canEdit()) return;
+
+  if(isButtonLocked) return;
+
+  const ok = confirm(
+    "Khôi phục " + seasonName + "?\n\n" +
+    "Dữ liệu hiển thị có thể là cache. Khi bấm OK, hệ thống sẽ kiểm tra trực tiếp trên Sheet.\n\n" +
+    "Nếu tên season này đang tồn tại, hệ thống sẽ tự tạo tên mới dạng " + seasonName + "_bak."
+  );
+
+  if(!ok) return;
+
+  lockBriefly("ĐANG KHÔI PHỤC...", 900, (typeof event !== "undefined" && event.currentTarget));
+  showSync("ĐANG KHÔI PHỤC TỪ SHEET...");
+
+  google.script.run
+    .withSuccessHandler(function(data){
+      if(data.deletedSeasons){
+        saveDeletedSeasonsCache(data.deletedSeasons);
+        renderRestoreSeasonList(data.deletedSeasons, false);
+      }
+
+      applyDataParts(data, true, {preserveViewSeason:true});
+      currentViewSeason = data.restoredSeason || data.currentSeason || currentViewSeason;
+
+      closeRestoreSeasonPicker();
+      openSeasonSetting();
+
+      renderSeasonTitle();
+      renderRanking();
+      renderHistory();
+      saveLocalCache();
+
+      hideSync();
+
+      if(data.originalSeason && data.restoredSeason && data.originalSeason !== data.restoredSeason){
+        alert("Đã khôi phục sang season mới: " + data.restoredSeason);
+      }else{
+        alert("Đã khôi phục season: " + (data.restoredSeason || seasonName));
+      }
+    })
+    .withFailureHandler(function(err){
+      hideSync();
+      showSyncError("KHÔI PHỤC LỖI");
+
+      google.script.run
+        .withSuccessHandler(function(list){
+          saveDeletedSeasonsCache(list || []);
+          renderRestoreSeasonList(list || [], false);
+        })
+        .withFailureHandler(function(){})
+        .getDeletedSeasons();
+
+      alert("Lỗi khôi phục season: " + getErrorMessage(err));
+    })
+    .restoreDeletedSeason(seasonName);
+}
+
+function renderRestoreSeasonList(list, fromCache){
+  let html = "";
+
+  if(!list || !list.length){
+    html = '<div class="history-empty">Không có season đã xóa để khôi phục.</div>';
+  }else{
+    if(fromCache){
+      html += '<div class="history-empty">Đang hiển thị dữ liệu lưu tạm. Hệ thống đang kiểm tra Sheet...</div>';
+    }
+
+    list.forEach(item=>{
+      html += `
+        <button class="season-pick-btn" onclick="restoreThisSeason('${jsString(item.season)}')">
+          ♻ ${escapeHtml(item.season)} (${Number(item.count) || 0} trận)
+        </button>
+      `;
+    });
+  }
+
+  const box = document.getElementById("restoreSeasonListBox");
+  if(box) box.innerHTML = html;
+}
+
+function getDeletedSeasonsCache(){
+  try{
+    const raw = localStorage.getItem(DELETED_SEASONS_CACHE_KEY);
+    if(!raw) return [];
+
+    const payload = JSON.parse(raw);
+    return Array.isArray(payload.list) ? payload.list : [];
+  }catch(e){
+    localStorage.removeItem(DELETED_SEASONS_CACHE_KEY);
+    return [];
+  }
+}
+
+function saveDeletedSeasonsCache(list){
+  try{
+    localStorage.setItem(DELETED_SEASONS_CACHE_KEY, JSON.stringify({
+      cachedAt: Date.now(),
+      list: Array.isArray(list) ? list : []
+    }));
+  }catch(e){
+    console.warn("Không lưu được cache season đã xóa", e);
+  }
+}
+
+function getPendingQueue(){
+  const matches = getStoredQueue(PENDING_MATCHES_KEY);
+  const deletes = getStoredQueue(PENDING_DELETES_KEY);
+
+  if(matches.length || deletes.length){
+    return matches.concat(deletes);
+  }
+
+  try{
+    const raw = localStorage.getItem(PENDING_QUEUE_KEY);
+    if(!raw) return [];
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  }catch(e){
+    localStorage.removeItem(PENDING_QUEUE_KEY);
+    return [];
+  }
+}
+
+function savePendingQueue(list){
+  const matches = [];
+  const deletes = [];
+
+  (Array.isArray(list) ? list : []).forEach(function(item){
+    if(item && item.type === "addMatch") matches.push(item);
+    if(item && item.type === "deleteMatch") deletes.push(item);
+  });
+
+  saveStoredQueue(PENDING_MATCHES_KEY, matches);
+  saveStoredQueue(PENDING_DELETES_KEY, deletes);
+
+  try{
+    localStorage.removeItem(PENDING_QUEUE_KEY);
+  }catch(e){
+    console.warn("Không lưu được pending queue", e);
+  }
+}
+
+function clearPendingQueue(){
+  savePendingQueue([]);
+}
+
+function getStoredQueue(key){
+  try{
+    const raw = localStorage.getItem(key);
+    if(!raw) return [];
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  }catch(e){
+    localStorage.removeItem(key);
+    return [];
+  }
+}
+
+function saveStoredQueue(key, list){
+  try{
+    localStorage.setItem(key, JSON.stringify(Array.isArray(list) ? list : []));
+  }catch(e){
+    console.warn("Không lưu được " + key, e);
+  }
+}
+
+function enqueuePendingAction(action){
+  if(!action || !action.id) return;
+  const queue = getPendingQueue().filter(x => String(x.id) !== String(action.id));
+  queue.push(Object.assign({
+    attempt: 0,
+    lastAttemptAt: 0,
+    status: "pending"
+  }, action));
+  savePendingQueue(queue);
+}
+
+function removePendingAction(id){
+  savePendingQueue(getPendingQueue().filter(x => String(x.id) !== String(id)));
+}
+
+function retryPendingQueue(){
+  if(IS_READ_ONLY) return;
+
+  if(!appCache || retryQueueRunning) return;
+
+  const queue = getPendingQueue();
+  if(!queue.length) return;
+
+  const now = Date.now();
+  const item = queue.find(function(x){
+    const attempt = Number(x.attempt || 0);
+    const lastAttemptAt = Number(x.lastAttemptAt || 0);
+    const delay = attempt <= 0 ? 0 : Math.min(5 * 60 * 1000, 10000 * Math.pow(2, Math.min(attempt - 1, 5)));
+    return now - lastAttemptAt >= delay;
+  });
+
+  if(!item) return;
+
+  showPendingSyncNotice(queue.length);
+  markPendingAttempt(item.id);
+  retryQueueRunning = true;
+
+  if(item.type === "addMatch"){
+    google.script.run
+      .withSuccessHandler(function(result){
+        retryQueueRunning = false;
+        if(result && result.match){
+          replaceTempMatch(item.data && item.data.tempId || item.id, result.match);
+          appCache.currentSeason = result.currentSeason || appCache.currentSeason;
+          appCache.log = normalizeLog(result.log || appCache.log);
+          removePendingAction(item.id);
+          renderCurrentView();
+          saveLocalCache();
+          if(!IS_READ_ONLY) retryPendingQueue();
+        }
+      })
+      .withFailureHandler(function(err){
+        retryQueueRunning = false;
+        markPendingError(item.id);
+        showPendingSyncNotice(getPendingQueue().length);
+        console.warn("Retry add match lỗi:", getErrorMessage(err));
+      })
+      .addMatch(item.data || {});
+    return;
+  }
+
+  if(item.type === "deleteMatch"){
+    google.script.run
+      .withSuccessHandler(function(result){
+        retryQueueRunning = false;
+        appCache.log = normalizeLog(result && result.log ? result.log : appCache.log);
+        if(result && result.currentSeason) appCache.currentSeason = result.currentSeason;
+        appCache.matches = (appCache.matches || []).filter(m => String(m.matchId) !== String(item.matchId));
+        removePendingAction(item.id);
+        renderCurrentView();
+        saveLocalCache();
+        if(!IS_READ_ONLY) retryPendingQueue();
+      })
+      .withFailureHandler(function(err){
+        retryQueueRunning = false;
+        markPendingError(item.id);
+        showPendingSyncNotice(getPendingQueue().length);
+        console.warn("Retry delete match lỗi:", getErrorMessage(err));
+      })
+      .deleteMatch(item.matchId);
+  }
+}
+
+function markPendingAttempt(id){
+  const queue = getPendingQueue().map(function(item){
+    if(String(item.id) === String(id)){
+      item.attempt = Number(item.attempt || 0) + 1;
+      item.lastAttemptAt = Date.now();
+      item.status = "syncing";
+    }
+    return item;
+  });
+  savePendingQueue(queue);
+}
+
+function markPendingError(id){
+  const queue = getPendingQueue().map(function(item){
+    if(String(item.id) === String(id)){
+      item.status = "error";
+    }
+    return item;
+  });
+  savePendingQueue(queue);
+}
+
+function showPendingSyncNotice(count){
+  if(!count) return;
+  showSync("Có " + count + " thay đổi chưa đồng bộ - đang thử lại nền...");
+}
+
+function setThisSeason(name){
+  if(!canEdit()) return;
+
+  if(isButtonLocked || !appCache) return;
+
+  const oldData = cloneData(appCache);
+
+  appCache.currentSeason = name;
+  currentViewSeason = name;
+
+  renderSeasonTitle();
+  renderSeasonSummary();
+  renderRanking();
+  renderHistory();
+  closeSeasonSetting();
+  saveLocalCache();
+
+  lockBriefly("ĐANG XỬ LÝ...", 900, (typeof event !== "undefined" && event.currentTarget));
+  showSync("ĐANG ĐỒNG BỘ...");
+
+  google.script.run
+    .withSuccessHandler(function(data){
+      applyDataParts(data, true, {preserveViewSeason:true});
+      hideSync();
+    })
+    .withFailureHandler(function(err){
+      appCache = oldData;
+      applyData(appCache, true, {preserveViewSeason:true});
+      showSyncError("ĐỒNG BỘ LỖI");
+      alert("Lỗi đồng bộ season hiện tại: " + getErrorMessage(err));
+    })
+    .setCurrentSeason(name);
+}
+
+function askDeleteSeason(seasonName){
+  if(!canEdit()) return;
+
+  if(isButtonLocked || !appCache) return;
+
+  const ok = confirm(
+    "Xóa " + seasonName + "?\n\n" +
+    "Toàn bộ trận của season này sẽ được chuyển sang sheet backup MATCHES_DELETED để có thể khôi phục sau."
+  );
+
+  if(!ok) return;
+
+  const oldData = cloneData(appCache);
+
+  const isDeletingCurrent = seasonName === appCache.currentSeason;
+
+  appCache.matches = (appCache.matches || []).filter(m=>m.season !== seasonName);
+  appCache.seasons = (appCache.seasons || []).filter(s=>s !== seasonName);
+
+  if(isDeletingCurrent){
+    appCache.currentSeason = getFallbackSeasonAfterDeleteLocal(seasonName);
+    currentViewSeason = appCache.currentSeason;
+  }else if(currentViewSeason === seasonName){
+    currentViewSeason = appCache.currentSeason || appCache.seasons[0] || "Season 1";
+  }
+  renderSeasonTitle();
+  renderSeasonSummary();
+  renderRanking();
+  renderHistory();
+  openSeasonSetting();
+  saveLocalCache();
+
+  lockBriefly("ĐANG XỬ LÝ...", 900, (typeof event !== "undefined" && event.currentTarget));
+  showSync("ĐANG ĐỒNG BỘ...");
+
+  google.script.run
+    .withSuccessHandler(function(data){
+      applyDataParts(data, true, {preserveViewSeason:true});
+      hideSync();
+    })
+    .withFailureHandler(function(err){
+      appCache = oldData;
+      applyData(appCache, true, {preserveViewSeason:true});
+      showSyncError("ĐỒNG BỘ LỖI");
+      alert("Lỗi đồng bộ xóa season: " + getErrorMessage(err));
+    })
+    .deleteSeason(seasonName);
+}
+
+/* HELPERS */
+function dedupeMatchesLocal(){
+  if(!appCache || !Array.isArray(appCache.matches)) return;
+
+  const seenId = new Set();
+  const seenServerLike = new Set();
+
+  appCache.matches = appCache.matches.filter(m=>{
+    const id = String(m.matchId || "");
+    if(!id) return false;
+
+    if(seenId.has(id)) return false;
+    seenId.add(id);
+
+    // Chống nhân đôi khi server trả duplicated match và local đang có temp
+    const key = [
+      m.season || "",
+      normalizePairLocal(m.win1, m.win2),
+      normalizePairLocal(m.lose1, m.lose2),
+      Number(m.winScore) || 0,
+      Number(m.loseScore) || 0,
+      String(m.date || "")
+    ].join("||");
+
+    if(!String(id).startsWith("TEMP_")){
+      if(seenServerLike.has(key)) return false;
+      seenServerLike.add(key);
+    }
+
+    return true;
+  });
+}
+
+function normalizePairLocal(a,b){
+  return [String(a || "").trim(), String(b || "").trim()].sort().join("|");
+}
+
+function sortMatchesNewestFirstLocal(matches){
+  return (matches || []).slice().sort(compareMatchesNewestFirstLocal);
+}
+
+function compareMatchesNewestFirstLocal(a,b){
+  const ta = getMatchTimeValueLocal(a);
+  const tb = getMatchTimeValueLocal(b);
+  if(tb !== ta) return tb - ta;
+
+  const ia = getMatchIdSortValueLocal(a);
+  const ib = getMatchIdSortValueLocal(b);
+  if(ib !== ia) return ib - ia;
+
+  return String(b && b.matchId || "").localeCompare(String(a && a.matchId || ""));
+}
+
+function getMatchTimeValueLocal(m){
+  const direct = Number(m && m.dateValue || 0);
+  if(direct) return direct;
+
+  const raw = String(m && m.date || "").trim();
+  const parsed = parseLocalDateTimeValue(raw);
+  return parsed || 0;
+}
+
+function getMatchIdSortValueLocal(m){
+  const id = String(m && m.matchId || "");
+  const nums = id.match(/\d+/g);
+  if(!nums || !nums.length) return 0;
+  return Number(nums.join("").slice(0, 15)) || 0;
+}
+
+function parseLocalDateTimeValue(raw){
+  const match = String(raw || "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{1,2}))?/);
+  if(!match) return 0;
+
+  const d = Number(match[1]);
+  const mo = Number(match[2]) - 1;
+  const y = Number(match[3]);
+  const h = Number(match[4] || 0);
+  const mi = Number(match[5] || 0);
+  const time = new Date(y, mo, d, h, mi).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function findSameRecentMatchLocal(data){
+  if(!appCache || !Array.isArray(appCache.matches)) return null;
+
+  const season = appCache.currentSeason || currentViewSeason || "Season 1";
+  const now = Date.now();
+
+  const newWinTeam = normalizePairLocal(data.win1, data.win2);
+  const newLoseTeam = normalizePairLocal(data.lose1, data.lose2);
+
+  return appCache.matches.find(m=>{
+    const matchTime = Number(m.dateValue || 0);
+    if(!matchTime) return false;
+
+    const diffMinutes = Math.abs(now - matchTime) / 60000;
+    if(diffMinutes > 15) return false;
+
+    if(String(m.season || "Season 1") !== String(season)) return false;
+
+    const oldWinTeam = normalizePairLocal(m.win1, m.win2);
+    const oldLoseTeam = normalizePairLocal(m.lose1, m.lose2);
+
+    return oldWinTeam === newWinTeam && oldLoseTeam === newLoseTeam;
+  });
+}
+
+function formatDateLocal(d){
+  const pad = n => String(n).padStart(2,"0");
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatShortDateLocal(d){
+  const pad = n => String(n).padStart(2,"0");
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}`;
+}
+
+function formatTimeOnlyLocal(d){
+  const pad = n => String(n).padStart(2,"0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function escapeHtml(str){
+  return String(str ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function escapeAttr(str){
+  return escapeHtml(str);
+}
+
+function jsString(str){
+  return String(str ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/"/g, "&quot;")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "");
+}
+
+function safeId(str){
+  return String(str ?? "").replace(/[^a-zA-Z0-9_-]/g,"_");
+}
+
+function cloneData(data){
+  return JSON.parse(JSON.stringify(data || {}));
+}
+
+function getErrorMessage(err){
+  if(!err) return "Không rõ lỗi.";
+  return err.message || String(err);
+}
+
+/* START */
+initApp();
+</script>

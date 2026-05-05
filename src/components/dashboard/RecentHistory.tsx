@@ -1,0 +1,256 @@
+'use client';
+import { useState, useTransition } from 'react';
+import { cn } from '@/lib/utils';
+import { History, Clock, X, Trash2, Calendar, AlertTriangle } from 'lucide-react';
+import { deleteMatchAction } from '@/app/actions';
+
+// ─── Delete confirm modal ─────────────────────────────────────────────────────
+function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[600] flex items-center justify-center p-6">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-300" onClick={onCancel} />
+      <div className="relative rounded-[2.5rem] border border-red-500/20 bg-slate-950 shadow-2xl p-8 max-w-sm w-full animate-in zoom-in-95 duration-200">
+        <div className="flex flex-col items-center gap-6 text-center">
+          <div className="w-16 h-16 rounded-3xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+            <AlertTriangle className="w-8 h-8 text-red-400" />
+          </div>
+          <div>
+            <h3 className="font-black text-white text-xl tracking-tight">Xóa trận đấu?</h3>
+            <p className="text-white/30 text-sm font-bold mt-2 leading-relaxed">Hành động này không thể hoàn tác. Lịch sử trận sẽ biến mất vĩnh viễn.</p>
+          </div>
+          <div className="flex gap-3 w-full">
+            <button onClick={onCancel}
+              className="flex-1 py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white/40 font-black text-xs uppercase tracking-widest transition-all active:scale-95">
+              Hủy
+            </button>
+            <button onClick={onConfirm}
+              className="flex-1 py-4 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-red-500/20 transition-all active:scale-95">
+              Xóa ngay
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Full history modal ───────────────────────────────────────────────────────
+function HistoryModal({ matches, players, onClose, canEdit }: { matches: any[]; players: any[]; onClose: () => void; canEdit: boolean }) {
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [, start] = useTransition();
+
+  const grouped: Record<string, any[]> = {};
+  matches.forEach(m => { (grouped[m.season ?? 'Season 1'] ??= []).push(m); });
+
+  return (
+    <div className="fixed inset-0 z-[500] flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-300" onClick={onClose} />
+      {deleteTarget && (
+        <ConfirmDelete
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            const id = deleteTarget;
+            setDeleteTarget(null);
+            start(async () => { await deleteMatchAction(id!); });
+          }}
+        />
+      )}
+      <div className="relative flex flex-col w-full sm:max-w-2xl h-[92vh] sm:h-auto sm:max-h-[85vh] bg-slate-950 sm:rounded-3xl rounded-t-[2.5rem] border border-white/[0.08] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 duration-300">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.06] shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <History className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-black text-lg text-white tracking-tight">Lịch sử trận đấu</h2>
+              <p className="text-[10px] text-white/20 font-bold uppercase tracking-widest mt-0.5">{matches.length} trận đấu được ghi lại</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-10 h-10 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all active:scale-90">
+            <X className="w-5 h-5 text-white/50" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
+          {Object.entries(grouped).map(([season, list]) => (
+            <div key={season} className="space-y-4">
+              <div className="flex items-center gap-3 px-1">
+                <span className="text-[10px] font-black text-primary px-3 py-1 bg-primary/10 rounded-full uppercase tracking-[0.2em]">{season}</span>
+                <div className="h-px flex-1 bg-white/[0.05]" />
+                <span className="text-[10px] text-white/20 font-bold uppercase tracking-widest">{list.length} trận</span>
+              </div>
+              <div className="space-y-2">
+                {list.map((m: any) => (
+                  <MatchCard key={m.id} m={m} players={players} canEdit={canEdit} onDelete={() => setDeleteTarget(m.id)} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Shared match card (used in modal) ───────────────────────────────────────
+function MatchCard({ m, players, onDelete, canEdit }: { m: any; players: any[]; onDelete: () => void; canEdit: boolean }) {
+  const name = (id: string) => players.find(p => p.id === id)?.name ?? id;
+  const d = new Date(m.date);
+  const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+  return (
+    <div className="group rounded-2xl border border-white/[0.04] bg-white/[0.015] hover:bg-white/[0.03] transition-all overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.03]">
+        <span className="text-[10px] font-bold text-white/25 flex items-center gap-1.5 uppercase tracking-widest">
+          <Calendar className="w-3 h-3 opacity-40" />{date}<span className="mx-1 opacity-20">·</span><Clock className="w-3 h-3 opacity-40" />{time}
+        </span>
+        {canEdit && (
+          <button onClick={onDelete} className="text-white/10 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-all active:scale-90">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+      <div className="px-4 py-4 flex items-center gap-3">
+        <div className="flex-1 min-w-0 text-right space-y-0.5">
+          <div className="text-sm font-black text-white/90 truncate">{name(m.win_1)}</div>
+          {m.win_2 && <div className="text-sm font-black text-white/90 truncate">{name(m.win_2)}</div>}
+        </div>
+        <div className="shrink-0 px-4 py-2 rounded-2xl bg-primary/10 border border-primary/20 text-primary font-black text-sm tabular-nums shadow-lg shadow-primary/5">
+          {m.win_score}–{m.lose_score}
+        </div>
+        <div className="flex-1 min-w-0 text-left space-y-0.5">
+          <div className="text-sm font-black text-white/90 truncate">{name(m.lose_1)}</div>
+          {m.lose_2 && <div className="text-sm font-black text-white/90 truncate">{name(m.lose_2)}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main RecentHistory ───────────────────────────────────────────────────────
+export function RecentHistory({ matches, players, canEdit = false }: { matches: any[]; players: any[]; canEdit?: boolean }) {
+  const [showAll, setShowAll] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [, start] = useTransition();
+  const name = (id: string) => players.find(p => p.id === id)?.name ?? id;
+
+  if (matches.length === 0) return (
+    <div className="rounded-2xl border border-white/[0.06] bg-slate-900/80 py-16 text-center text-white/15 text-[10px] font-black uppercase tracking-[0.3em]">
+      Chưa có lịch sử
+    </div>
+  );
+
+  const recent = matches.slice(0, 5);
+
+  return (
+    <>
+      {showAll && <HistoryModal matches={matches} players={players} canEdit={canEdit} onClose={() => setShowAll(false)} />}
+      {deleteTarget && (
+        <ConfirmDelete
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            const id = deleteTarget;
+            setDeleteTarget(null);
+            start(async () => { await deleteMatchAction(id!); });
+          }}
+        />
+      )}
+
+      <div className="w-full rounded-2xl border border-white/[0.06] bg-slate-900/80 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+          <div className="flex items-center gap-2.5">
+            <History className="w-4 h-4 text-white/30" />
+            <span className="text-xs font-black text-white/40 uppercase tracking-[0.25em]">Lịch sử gần đây</span>
+          </div>
+          <button onClick={() => setShowAll(true)}
+            className="text-xs font-black text-primary/70 hover:text-primary uppercase tracking-widest transition-colors">
+            Tất cả →
+          </button>
+        </div>
+
+        {/* Rows */}
+        {recent.map((m, idx) => {
+          const d = new Date(m.date);
+          const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+          const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+          const isDouble = m.win_2 || m.lose_2;
+
+          return (
+            <div key={m.id}
+              className={cn('border-b border-white/[0.04] last:border-0', idx % 2 === 1 && 'bg-white/[0.015]')}>
+
+              {/* ── PC ─────────────────────────────────────────────────── */}
+              <div className="hidden sm:flex items-stretch min-h-[72px]">
+                <div className="w-28 shrink-0 border-r border-white/[0.05] flex flex-col items-center justify-center gap-0.5 px-3">
+                  <span className="text-[17px] font-black text-white/75 tabular-nums leading-none">{time}</span>
+                  <span className="text-[11px] font-semibold text-white/30 tabular-nums">{date}</span>
+                  <span className="text-[9px] font-black text-primary/40 uppercase tracking-widest mt-0.5">{m.season ?? 'S1'}</span>
+                </div>
+
+                <div className="flex-1 min-w-0 flex flex-col justify-center items-end px-5 gap-0.5">
+                  <span className="text-[14px] font-bold text-white/85 truncate max-w-full">{name(m.win_1)}</span>
+                  {isDouble && <span className="text-[14px] font-bold text-white/85 truncate max-w-full">{name(m.win_2)}</span>}
+                </div>
+
+                <div className="shrink-0 flex items-center justify-center px-4">
+                  <div className="px-4 py-2 rounded-xl bg-primary/10 border border-primary/20 text-primary font-black text-[17px] tabular-nums tracking-tight whitespace-nowrap">
+                    {m.win_score}–{m.lose_score}
+                  </div>
+                </div>
+
+                <div className="flex-1 min-w-0 flex flex-col justify-center items-start px-5 gap-0.5">
+                  <span className="text-[14px] font-bold text-white/85 truncate max-w-full">{name(m.lose_1)}</span>
+                  {isDouble && <span className="text-[14px] font-bold text-white/85 truncate max-w-full">{name(m.lose_2)}</span>}
+                </div>
+
+                <div className="shrink-0 flex items-center justify-center w-12">
+                  {canEdit && (
+                    <button onClick={() => setDeleteTarget(m.id)}
+                      className="p-2 text-white/15 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* ── MOBILE ───────────────────────────────────────────────── */}
+              <div className="sm:hidden px-4 py-3">
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="text-[10px] font-bold text-white/25 flex items-center gap-1.5">
+                    <span className="text-primary/50 font-black">{m.season ?? 'S1'}</span>
+                    <span className="text-white/10">·</span>
+                    {date} <span className="text-white/10">·</span> {time}
+                  </span>
+                  {canEdit && (
+                    <button onClick={() => setDeleteTarget(m.id)}
+                      className="text-white/15 hover:text-red-400 p-1 rounded-lg transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0 flex flex-col gap-0.5 text-right">
+                    <span className="text-[13px] font-bold text-white/85 truncate leading-snug">{name(m.win_1)}</span>
+                    {isDouble && <span className="text-[13px] font-bold text-white/85 truncate leading-snug">{name(m.win_2)}</span>}
+                  </div>
+
+                  <div className="shrink-0 min-w-[68px] text-center px-2.5 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-black text-sm tabular-nums whitespace-nowrap">
+                    {m.win_score}–{m.lose_score}
+                  </div>
+
+                  <div className="flex-1 min-w-0 flex flex-col gap-0.5 text-left">
+                    <span className="text-[13px] font-bold text-white/85 truncate leading-snug">{name(m.lose_1)}</span>
+                    {isDouble && <span className="text-[13px] font-bold text-white/85 truncate leading-snug">{name(m.lose_2)}</span>}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<?!= include('css'); ?>
+
+</head>
+
+<body>
+<script>
+window.APP_MODE = "<?= appMode || 'edit' ?>";
+window.APP_READ_ONLY = window.APP_MODE === "view";
+</script>
+<div class="app">
+
+  <div class="header">
+    <h1>🏓 Pickleball Ranking</h1>
+    <p>Bảng thành tích & tiền phạt nội bộ</p>
+    <button id="mobileSeasonTitleBtn" class="mobile-season-title-btn" onclick="openSeasonPicker()">SEASON 1</button>
+  </div>
+
+  <?!= include('modules'); ?>
+
+</div>
+
+<?!= include('js'); ?>
+<?!= include('addon_loader'); ?>
+
+</body>
+</html>

@@ -1,0 +1,199 @@
+<style>
+#advancedStatsBox{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:14px;
+}
+
+.analysis-tabs{
+  display:flex;
+  gap:8px;
+  overflow-x:auto;
+  padding:2px 0 10px;
+  scrollbar-width:thin;
+}
+
+.analysis-tab{
+  width:auto;
+  min-width:max-content;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  margin:0;
+  padding:10px 12px;
+  border-radius:999px;
+  background:#0f172a;
+  border:1px solid #334155;
+  color:#cbd5e1;
+  font-size:13px;
+  white-space:nowrap;
+}
+
+.analysis-tab.active{
+  background:#22c55e;
+  border-color:#22c55e;
+  color:#fff;
+}
+
+.analysis-tab-icon{
+  display:inline-flex;
+  line-height:1;
+}
+
+.analysis-plugin-host,
+.analysis-plugin{
+  min-width:0;
+}
+
+.analysis-plugin-panel{
+  background:#0f172a;
+  border:1px solid #334155;
+  border-radius:16px;
+  padding:14px;
+}
+
+.analysis-plugin-head{
+  margin-bottom:12px;
+}
+
+.analysis-plugin-head h4{
+  margin:0;
+  font-size:16px;
+}
+
+.analysis-plugin-body{
+  min-width:0;
+}
+
+.analysis-empty{
+  color:#94a3b8;
+  padding:10px 0;
+}
+
+.analysis-stats-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px 0;
+  border-bottom:1px solid #334155;
+}
+
+.analysis-stats-row:last-child{
+  border-bottom:none;
+}
+
+.analysis-stats-name{
+  font-weight:700;
+  color:#f8fafc;
+}
+
+.analysis-stats-sub{
+  color:#94a3b8;
+  font-size:12px;
+  margin-top:3px;
+}
+
+.analysis-stats-count{
+  color:#facc15;
+  font-weight:800;
+  white-space:nowrap;
+}
+
+.analysis-form-line{
+  display:flex;
+  gap:5px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+.analysis-form-chip{
+  width:26px;
+  height:26px;
+  border-radius:999px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:12px;
+  font-weight:800;
+}
+
+.analysis-form-chip.win{
+  background:#16a34a;
+  color:#fff;
+}
+
+.analysis-form-chip.lose{
+  background:#dc2626;
+  color:#fff;
+}
+
+.analysis-best-pair-box{
+  background:#020617;
+  border:1px solid #334155;
+  border-radius:14px;
+  padding:14px;
+}
+
+.analysis-team-vs-box{
+  display:grid;
+  grid-template-columns:1fr 72px 1fr;
+  align-items:center;
+  gap:10px;
+  background:#020617;
+  border:1px solid #334155;
+  border-radius:14px;
+  padding:14px;
+}
+
+.analysis-team-vs-side{
+  text-align:center;
+  min-width:0;
+}
+
+.analysis-team-vs-mid{
+  text-align:center;
+}
+
+.analysis-vs-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:44px;
+  height:44px;
+  border-radius:999px;
+  background:#334155;
+  color:#facc15;
+  font-weight:900;
+  margin-bottom:6px;
+}
+
+@media(max-width:760px){
+  .analysis-tabs{
+    margin:0 -2px;
+    padding-bottom:9px;
+  }
+
+  .analysis-tab{
+    padding:10px 11px;
+    font-size:12px;
+  }
+
+  .analysis-stats-row{
+    align-items:flex-start;
+  }
+
+  .analysis-form-line{
+    max-width:150px;
+  }
+
+  .analysis-team-vs-box{
+    grid-template-columns:1fr;
+  }
+
+  .analysis-team-vs-mid{
+    order:2;
+  }
+}
+</style>

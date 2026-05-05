@@ -1,0 +1,222 @@
+<div class="summary-grid" id="seasonSummary">
+  <div class="summary-card">
+    <div class="summary-label">Ngày</div>
+    <div class="summary-value">0</div>
+  </div>
+
+  <div class="summary-card">
+    <div class="summary-label">Tổng trận</div>
+    <div class="summary-value">0</div>
+  </div>
+
+  <div class="summary-card">
+    <div class="summary-label">Tiền phạt</div>
+    <div class="summary-value">0đ</div>
+  </div>
+
+  <div class="summary-card">
+    <div class="summary-label">Nhịp chơi</div>
+    <div class="summary-value">--</div>
+  </div>
+</div>
+
+<div class="card">
+
+  <div class="ranking-topbar">
+    <h3>🏆 Bảng xếp hạng</h3>
+
+    <div class="ranking-actions">
+      <button class="icon-btn" onclick="openAdvancedStats()" title="Trung tâm phân tích">📊</button>
+    </div>
+  </div>
+
+  <div class="season-center-wrap">
+    <button id="seasonTitleBtn" class="season-title-btn" onclick="openSeasonPicker()">
+      SEASON 1
+    </button>
+  </div>
+
+  <div class="table-wrap">
+    <table class="desktop-ranking-table">
+      <thead>
+        <tr>
+          <th>Hạng</th>
+          <th>Người chơi</th>
+          <th>Trận</th>
+          <th>Thắng</th>
+          <th>Thua</th>
+          <th>Tỷ lệ</th>
+          <th>Tiền phạt</th>
+        </tr>
+      </thead>
+
+      <tbody id="ranking">
+        <tr>
+          <td colspan="7">Đang tải bảng xếp hạng...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="mobileRankingList" class="mobile-ranking-list"></div>
+
+</div>
+
+<div class="card">
+  <h3>➕ Cập nhật trận đấu</h3>
+
+  <div class="match-layout">
+
+    <div class="team-box win">
+      <div class="team-title win-title">ĐỘI THẮNG</div>
+
+      <label>Người thắng 1</label>
+      <select id="win1" onchange="refreshSelectOptions()"></select>
+
+      <label>Người thắng 2</label>
+      <select id="win2" onchange="refreshSelectOptions()"></select>
+    </div>
+
+    <div class="score-box">
+      <div class="score-title">TỶ SỐ</div>
+
+      <div class="score-inputs">
+        <div class="score-stepper">
+          <button type="button" class="score-step-btn" onclick="adjustScore('winScore', -1)">−</button>
+          <input id="winScore" class="score-input" type="number" inputmode="numeric" pattern="[0-9]*" value="11">
+          <button type="button" class="score-step-btn" onclick="adjustScore('winScore', 1)">+</button>
+        </div>
+        <div class="vs">-</div>
+        <div class="score-stepper">
+          <button type="button" class="score-step-btn" onclick="adjustScore('loseScore', -1)">−</button>
+          <input id="loseScore" class="score-input" type="number" inputmode="numeric" pattern="[0-9]*" value="0">
+          <button type="button" class="score-step-btn" onclick="adjustScore('loseScore', 1)">+</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="team-box lose">
+      <div class="team-title lose-title">ĐỘI THUA</div>
+
+      <label>Người thua 1</label>
+      <select id="lose1" onchange="refreshSelectOptions()"></select>
+
+      <label>Người thua 2</label>
+      <select id="lose2" onchange="refreshSelectOptions()"></select>
+    </div>
+
+  </div>
+
+  <button id="submitBtn" onclick="submitMatch()">CẬP NHẬT KẾT QUẢ</button>
+</div>
+
+<div class="card">
+  <div class="history-head">
+    <h3>🕒 3 trận gần nhất</h3>
+    <button class="mini-btn" onclick="openHistory()">XEM FULL</button>
+  </div>
+
+  <div id="historyBox">Đang tải lịch sử...</div>
+</div>
+
+<!-- SEASON PICKER -->
+<div id="seasonPickerModal" class="modal" style="display:none;">
+  <div class="modal-content picker-box">
+    <div class="history-head">
+      <h3>📅 Chọn Season</h3>
+      <button class="mini-btn red-btn" onclick="closeSeasonPicker()">ĐÓNG</button>
+    </div>
+
+    <div id="seasonListBox"></div>
+  </div>
+</div>
+
+<!-- FULL HISTORY -->
+<div id="historyModal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <div class="history-head">
+      <h3>📋 Toàn bộ lịch sử trận</h3>
+      <button class="mini-btn red-btn" onclick="closeHistory()">ĐÓNG</button>
+    </div>
+
+    <div id="fullHistoryBox"></div>
+  </div>
+</div>
+
+<!-- ANALYSIS CENTER -->
+<div id="statsModal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <div class="history-head">
+      <h3>📊 Trung tâm phân tích</h3>
+      <button class="mini-btn red-btn" onclick="closeAdvancedStats()">ĐÓNG</button>
+    </div>
+
+    <div id="advancedStatsBox"></div>
+  </div>
+</div>
+
+<!-- SETTINGS MAIN -->
+<div id="settingsModal" class="modal" style="display:none;">
+  <div class="modal-content picker-box">
+    <div class="history-head">
+      <h3>⚙ Cài đặt</h3>
+      <button class="mini-btn red-btn" onclick="closeSettings()">ĐÓNG</button>
+    </div>
+
+    <div class="settings-menu">
+      <button class="setting-item" onclick="openPlayerSetting()">👥 Thành viên</button>
+      <button class="setting-item" onclick="openSeasonSetting()">🏆 Season</button>
+      <button class="setting-item" onclick="openMoneySetting()">💸 Tiền phạt</button>
+    </div>
+  </div>
+</div>
+
+<!-- PLAYER SETTING -->
+<div id="playerModal" class="modal" style="display:none;">
+  <div class="modal-content picker-box">
+    <div class="history-head">
+      <h3>👥 Thành viên</h3>
+      <button class="mini-btn red-btn" onclick="closePlayerSetting()">ĐÓNG</button>
+    </div>
+
+    <div id="playerListBox"></div>
+
+    <hr style="border-color:#334155;margin:14px 0;">
+
+    <input id="newPlayerName" placeholder="Tên thành viên mới">
+    <button onclick="addNewPlayer()">THÊM THÀNH VIÊN</button>
+  </div>
+</div>
+
+<!-- SEASON SETTING -->
+<div id="seasonManageModal" class="modal" style="display:none;">
+  <div class="modal-content picker-box">
+    <div class="history-head">
+      <h3>🏆 Quản lý Season</h3>
+      <button class="mini-btn red-btn" onclick="closeSeasonSetting()">ĐÓNG</button>
+    </div>
+
+    <div id="seasonManageBox"></div>
+  </div>
+</div>
+
+<!-- MONEY -->
+<div id="moneyModal" class="modal" style="display:none;">
+  <div class="modal-content picker-box">
+    <div class="history-head">
+      <h3>💸 Tiền phạt</h3>
+      <button class="mini-btn red-btn" onclick="closeMoneySetting()">ĐÓNG</button>
+    </div>
+
+    <input id="loseMoneyInput" type="number" placeholder="5000">
+    <button onclick="saveLoseMoney()">LƯU MỨC PHẠT</button>
+  </div>
+</div>
+
+<!-- SYNC STATUS -->
+<div id="syncStatus" class="sync-status">
+  ĐANG ĐỒNG BỘ...
+</div>
+
+<!-- FLOAT BUTTON -->
+<button class="fab-setting" onclick="openSettings()">⚙</button>

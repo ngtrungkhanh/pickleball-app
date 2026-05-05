@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  
+  /* Breakpoints */
+  --breakpoint-3xl: 1900px;
+}
+
+:root {
+  --background: #020617; /* Slate 950 */
+  --foreground: #f8fafc;
+  --primary: #22c55e;
+  --primary-foreground: #020617;
+  --secondary: #1e293b;
+  --secondary-foreground: #f8fafc;
+  --accent: #10b981;
+  --accent-foreground: #020617;
+  --card: #0f172a;
+  --card-foreground: #f8fafc;
+  --border: #1e293b;
+
+  /* Typography Clamp Scaling */
+  --font-size-base: clamp(0.875rem, 0.8rem + 0.5vw, 1.25rem); 
+  --font-size-stats: clamp(1.5rem, 1rem + 2vw, 3rem);
+  --font-size-h1: clamp(2.25rem, 1rem + 5vw, 5rem);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-tap-highlight-color: transparent;
+  font-size: var(--font-size-base);
+}
+
+.glass {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+h1 { font-size: var(--font-size-h1); font-weight: 900; }
+.stats-text { font-size: var(--font-size-stats); font-weight: 900; }
+
+/* Fix Dropdown Dark Theme */
+select {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #0f172a;
+  color: #f8fafc;
+}
+
+/* Hide scrollbar */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

@@ -1,0 +1,61 @@
+<script>
+(function(){
+  registerAnalysisPlugin({
+    id: "player-rivalry",
+    title: "C\u00e1 nh\u00e2n \u0111\u1ed1i \u0111\u1ea7u",
+    icon: "#",
+    order: 40,
+    render: render
+  });
+
+  function render(container, context){
+    const matches = context.matches || [];
+    const map = {};
+
+    matches.forEach(m=>{
+      const winners = [m.win1, m.win2];
+      const losers = [m.lose1, m.lose2];
+
+      winners.forEach(w=>{
+        losers.forEach(l=>{
+          const key = [String(w), String(l)].sort().join("|");
+
+          if(!map[key]){
+            map[key] = {
+              ids:key.split("|"),
+              count:0
+            };
+          }
+
+          map[key].count++;
+        });
+      });
+    });
+
+    const arr = Object.values(map)
+      .filter(x=>x.count >= 2)
+      .sort((a,b)=>b.count-a.count)
+      .slice(0,2);
+
+    if(!arr.length){
+      container.innerHTML = '<div class="analysis-empty">Ch\u01b0a c\u00f3 c\u1eb7p c\u00e1 nh\u00e2n \u0111\u1ed1i \u0111\u1ea7u l\u1eb7p l\u1ea1i.</div>';
+      return;
+    }
+
+    container.innerHTML = arr.map((x,i)=>{
+      const nameA = getPlayerDisplayName(x.ids[0]);
+      const nameB = getPlayerDisplayName(x.ids[1]);
+
+      return `
+        <div class="analysis-stats-row plugin-player-rivalry-row">
+          <div>
+            <div class="analysis-stats-name">${medal(i)} ${escapeHtml(nameA)} vs ${escapeHtml(nameB)}</div>
+            <div class="analysis-stats-sub">T\u1ed5ng s\u1ed1 l\u1ea7n g\u1eb7p nhau \u1edf hai \u0111\u1ed9i \u0111\u1ed1i \u0111\u1ea7u</div>
+          </div>
+          <div class="analysis-stats-count">${x.count} l\u1ea7n</div>
+        </div>
+      `;
+    }).join("");
+  }
+})();
+</script>
