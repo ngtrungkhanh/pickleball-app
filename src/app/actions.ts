@@ -410,21 +410,42 @@ export async function rebuildStatsAction() {
   try {
     const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
     
-    // 1. Truncate stats table
-    await sql`TRUNCATE player_stats`;
-    
-    // 2. Fetch all matches
+    // 1. Fetch all matches
     const { rows: matches } = await sql`SELECT * FROM matches`;
     
-    // 3. Re-calculate everything
+    // 2. Calculate everything in memory to avoid DB roundtrips
+    const statsMap = new Map<string, { wins: number; losses: number; money: number }>();
+    
     for (const m of matches) {
       const season = m.season || 'Season 1';
-      // Winners
-      await updatePlayerStatsIncremental(m.win_1, season, 1, 0, 0);
-      if (m.win_2) await updatePlayerStatsIncremental(m.win_2, season, 1, 0, 0);
-      // Losers
-      await updatePlayerStatsIncremental(m.lose_1, season, 0, 1, lose_money);
-      if (m.lose_2) await updatePlayerStatsIncremental(m.lose_2, season, 0, 1, lose_money);
+      const winners = [m.win_1, m.win_2].filter(Boolean);
+      const losers = [m.lose_1, m.lose_2].filter(Boolean);
+
+      winners.forEach(pid => {
+        const key = `${pid}:${season}`;
+        const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
+        s.wins++;
+        statsMap.set(key, s);
+      });
+
+      losers.forEach(pid => {
+        const key = `${pid}:${season}`;
+        const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
+        s.losses++;
+        s.money += lose_money;
+        statsMap.set(key, s);
+      });
+    }
+
+    // 3. Clear and Bulk Insert
+    await sql`TRUNCATE player_stats`;
+    
+    for (const [key, s] of statsMap.entries()) {
+      const [playerId, season] = key.split(':');
+      await sql`
+        INSERT INTO player_stats (player_id, season, wins, losses, total, money)
+        VALUES (${playerId}, ${season}, ${s.wins}, ${s.losses}, ${s.wins + s.losses}, ${s.money})
+      `;
     }
     
     await logAudit('REBUILD_STATS', `Rebuilt player_stats from ${matches.length} matches`);
