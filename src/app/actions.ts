@@ -588,3 +588,56 @@ export async function togglePlayerActiveAction(playerId: string, active: boolean
     return { error: 'Lỗi khi cập nhật trạng thái thành viên' };
   }
 }
+
+export async function updateMatchAction(formData: FormData) {
+  try {
+    const id = String(formData.get('id') || '');
+    const win_1 = String(formData.get('win_1') || '');
+    const win_2 = (formData.get('win_2') as string) || null;
+    const lose_1 = String(formData.get('lose_1') || '');
+    const lose_2 = (formData.get('lose_2') as string) || null;
+    const win_score = parseInt(formData.get('win_score') as string);
+    const lose_score = parseInt(formData.get('lose_score') as string);
+    const dateStr = String(formData.get('date') || '');
+
+    if (!id || !win_1 || !lose_1) return { error: 'Thông tin trận đấu không hợp lệ' };
+
+    // Get old match first to reverse stats
+    const { rows } = await sql`SELECT * FROM matches WHERE id = ${id}`;
+    if (rows.length === 0) return { error: 'Không tìm thấy trận đấu cũ' };
+    const old = rows[0];
+
+    const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
+
+    // 1. Reverse old stats
+    await updatePlayerStatsIncremental(old.win_1, old.season, -1, 0, 0);
+    if (old.win_2) await updatePlayerStatsIncremental(old.win_2, old.season, -1, 0, 0);
+    await updatePlayerStatsIncremental(old.lose_1, old.season, 0, -1, -lose_money);
+    if (old.lose_2) await updatePlayerStatsIncremental(old.lose_2, old.season, 0, -1, -lose_money);
+
+    // 2. Update match details
+    const dateVal = dateStr ? new Date(dateStr) : new Date(old.date);
+    await sql`
+      UPDATE matches 
+      SET win_1 = ${win_1}, win_2 = ${win_2}, lose_1 = ${lose_1}, lose_2 = ${lose_2}, 
+          win_score = ${win_score}, lose_score = ${lose_score}, date = ${dateVal.toISOString()}
+      WHERE id = ${id}
+    `;
+
+    // 3. Apply new stats
+    await updatePlayerStatsIncremental(win_1, old.season, 1, 0, 0);
+    if (win_2) await updatePlayerStatsIncremental(win_2, old.season, 1, 0, 0);
+    await updatePlayerStatsIncremental(lose_1, old.season, 0, 1, lose_money);
+    if (lose_2) await updatePlayerStatsIncremental(lose_2, old.season, 0, 1, lose_money);
+
+    await logAudit('UPDATE_MATCH', `Updated Match ${id}: ${win_1}${win_2 ? '/' + win_2 : ''} vs ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
+
+    revalidatePath('/');
+    revalidatePath('/history');
+    revalidatePath('/analysis');
+    return { success: true };
+  } catch (error: any) {
+    console.error('Update match failed:', error);
+    return { error: 'Lỗi khi sửa trận đấu: ' + error.message };
+  }
+}
