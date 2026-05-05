@@ -37,10 +37,19 @@ export default function Dashboard({
   initialConfig?: Record<string, string>,
   initialSeasons?: Season[],
 }) {
-  const [optimisticMatches, addOptimisticMatch] = useOptimistic(
-    initialMatches,
-    (state, newMatch: Match) => [newMatch, ...state]
-  );
+  // Use local state for matches to ensure instant updates that persist 
+  // until the server-side ISR revalidation completes in the background.
+  const [matches, setMatches] = useState(initialMatches);
+  
+  // Sync state if initialMatches changes (e.g. after a background revalidation)
+  useEffect(() => {
+    setMatches(initialMatches);
+  }, [initialMatches]);
+
+  const addLocalMatch = (newMatch: Match) => {
+    setMatches(prev => [newMatch, ...prev]);
+  };
+
   const [settingsOpen, setSettingsOpen] = useState(false);
   const canEdit = useSyncExternalStore(subscribeEditMode, getEditModeSnapshot, () => false);
   const activeSeason = initialConfig.active_season || 'Season 1';
@@ -75,13 +84,13 @@ export default function Dashboard({
       </div>
 
       {/* 1. Summary */}
-      <SummaryGrid players={initialPlayers} matches={optimisticMatches} loseMoney={loseMoney} />
+      <SummaryGrid players={initialPlayers} matches={matches} loseMoney={loseMoney} />
 
       {/* 2. Leaderboard */}
       <Leaderboard
         key={activeSeason}
         players={initialPlayers}
-        matches={optimisticMatches}
+        matches={matches}
         seasons={initialSeasons}
         activeSeason={activeSeason}
         loseMoney={loseMoney}
@@ -98,13 +107,13 @@ export default function Dashboard({
             <h3 className="font-black text-[10px] sm:text-xs uppercase tracking-[0.4em] text-white/25">Ghi kết quả</h3>
           </div>
           <div className="rounded-2xl border border-white/[0.06] bg-slate-900/80 overflow-hidden">
-            <ScoreForm players={initialPlayers} onAddMatch={addOptimisticMatch} activeSeason={activeSeason} />
+            <ScoreForm players={initialPlayers} onAddMatch={addLocalMatch} activeSeason={activeSeason} />
           </div>
         </div>
       )}
 
       {/* 4. Recent History */}
-      <RecentHistory matches={optimisticMatches} players={initialPlayers} canEdit={canEdit} />
+      <RecentHistory matches={matches} players={initialPlayers} canEdit={canEdit} />
 
       <SettingsModal
         open={settingsOpen}

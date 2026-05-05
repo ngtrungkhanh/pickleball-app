@@ -43,6 +43,30 @@ async function setConfigValue(key: string, value: string) {
   `;
 }
 
+async function logAudit(action_type: string, details: string) {
+  try {
+    await sql`
+      INSERT INTO audit_logs (action_type, details)
+      VALUES (${action_type}, ${details})
+    `;
+  } catch (err) {
+    console.error('Audit log failed:', err);
+  }
+}
+
+async function updatePlayerStatsIncremental(playerId: string, season: string, deltaWins: number, deltaLosses: number, deltaMoney: number) {
+  await sql`
+    INSERT INTO player_stats (player_id, season, wins, losses, total, money)
+    VALUES (${playerId}, ${season}, ${deltaWins}, ${deltaLosses}, ${deltaWins + deltaLosses}, ${deltaMoney})
+    ON CONFLICT (player_id, season) DO UPDATE SET
+      wins = player_stats.wins + EXCLUDED.wins,
+      losses = player_stats.losses + EXCLUDED.losses,
+      total = player_stats.total + EXCLUDED.total,
+      money = player_stats.money + EXCLUDED.money,
+      last_updated = NOW()
+  `;
+}
+
 export async function addMatchAction(formData: FormData) {
   const id = `M${Date.now().toString(36).slice(-10)}`.toUpperCase();
   const win_1 = formData.get('win_1') as string;
@@ -73,8 +97,22 @@ export async function addMatchAction(formData: FormData) {
       INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season)
       VALUES (${id}, NOW(), ${win_1}, ${win_2}, ${lose_1}, ${lose_2}, ${win_score}, ${lose_score}, ${season})
     `;
+
+    const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
+
+    // Update winners
+    await updatePlayerStatsIncremental(win_1, season, 1, 0, 0);
+    if (win_2) await updatePlayerStatsIncremental(win_2, season, 1, 0, 0);
+
+    // Update losers
+    await updatePlayerStatsIncremental(lose_1, season, 0, 1, lose_money);
+    if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 1, lose_money);
+
+    await logAudit('ADD_MATCH', `Match ${id}: ${win_1}${win_2 ? '/' + win_2 : ''} beat ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
+
     revalidatePath('/');
     revalidatePath('/history');
+    revalidatePath('/analysis');
     return { success: true };
   } catch (error) {
     console.error('Failed to add match:', error);
@@ -84,9 +122,25 @@ export async function addMatchAction(formData: FormData) {
 
 export async function deleteMatchAction(matchId: string) {
   try {
+    const { rows } = await sql`SELECT * FROM matches WHERE id = ${matchId}`;
+    if (rows.length === 0) return { error: 'Không tìm thấy trận đấu' };
+    const m = rows[0];
+
+    const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
+
+    // Reverse stats
+    await updatePlayerStatsIncremental(m.win_1, m.season, -1, 0, 0);
+    if (m.win_2) await updatePlayerStatsIncremental(m.win_2, m.season, -1, 0, 0);
+    await updatePlayerStatsIncremental(m.lose_1, m.season, 0, -1, -lose_money);
+    if (m.lose_2) await updatePlayerStatsIncremental(m.lose_2, m.season, 0, -1, -lose_money);
+
     await sql`DELETE FROM matches WHERE id = ${matchId}`;
+
+    await logAudit('DELETE_MATCH', `Deleted Match ${matchId}`);
+
     revalidatePath('/');
     revalidatePath('/history');
+    revalidatePath('/analysis');
     return { success: true };
   } catch (error) {
     console.error('Failed to delete match:', error);
@@ -101,6 +155,9 @@ export async function addPlayerAction(formData: FormData) {
 
     const id = `P${Date.now().toString(36).slice(-7)}`.toUpperCase();
     await sql`INSERT INTO players (id, name, active) VALUES (${id}, ${name}, true)`;
+    
+    await logAudit('ADD_PLAYER', `Added player ${name} (${id})`);
+
     revalidatePath('/');
     revalidatePath('/analysis');
     return { success: true };
@@ -190,6 +247,11 @@ export async function deletePlayerAction(formData: FormData) {
     // and to be clean.
     await sql`DELETE FROM matches WHERE win_1 = ${id} OR win_2 = ${id} OR lose_1 = ${id} OR lose_2 = ${id}`;
     await sql`DELETE FROM players WHERE id = ${id}`;
+    
+    // Also clean up stats for this player
+    await sql`DELETE FROM player_stats WHERE player_id = ${id}`;
+
+    await logAudit('DELETE_PLAYER', `Deleted player ${players[0].name} (${id}) and archived their data.`);
 
     revalidatePath('/');
     revalidatePath('/analysis');
@@ -341,5 +403,78 @@ export async function updateFineAction(formData: FormData) {
   } catch (error) {
     console.error('Failed to update fine:', error);
     return { error: 'Lỗi khi lưu mức phạt.' };
+  }
+}
+
+export async function rebuildStatsAction() {
+  try {
+    const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
+    
+    // 1. Truncate stats table
+    await sql`TRUNCATE player_stats`;
+    
+    // 2. Fetch all matches
+    const { rows: matches } = await sql`SELECT * FROM matches`;
+    
+    // 3. Re-calculate everything
+    for (const m of matches) {
+      const season = m.season || 'Season 1';
+      // Winners
+      await updatePlayerStatsIncremental(m.win_1, season, 1, 0, 0);
+      if (m.win_2) await updatePlayerStatsIncremental(m.win_2, season, 1, 0, 0);
+      // Losers
+      await updatePlayerStatsIncremental(m.lose_1, season, 0, 1, lose_money);
+      if (m.lose_2) await updatePlayerStatsIncremental(m.lose_2, season, 0, 1, lose_money);
+    }
+    
+    await logAudit('REBUILD_STATS', `Rebuilt player_stats from ${matches.length} matches`);
+    
+    revalidatePath('/');
+    return { success: true };
+  } catch (error) {
+    console.error('Rebuild failed:', error);
+    return { error: 'Lỗi khi đồng bộ lại số liệu.' };
+  }
+}
+
+export async function getAuditLogs() {
+  const { rows } = await sql`SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 100`;
+  return rows;
+}
+
+export async function getArchives() {
+  const { rows } = await sql`SELECT * FROM archives ORDER BY deleted_at DESC LIMIT 50`;
+  return rows;
+}
+
+export async function restoreFromArchive(archiveId: number) {
+  try {
+    const { rows } = await sql`SELECT * FROM archives WHERE id = ${archiveId}`;
+    if (rows.length === 0) return { error: 'Không tìm thấy dữ liệu lưu trữ' };
+    
+    const item = rows[0];
+    const data = item.data;
+    
+    if (item.type === 'PLAYER') {
+      const p = data.player;
+      await sql`INSERT INTO players (id, name, active) VALUES (${p.id}, ${p.name}, ${p.active})`;
+      for (const m of data.matches) {
+        await sql`
+          INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season)
+          VALUES (${m.id}, ${m.date}, ${m.win_1}, ${m.win_2}, ${m.lose_1}, ${m.lose_2}, ${m.win_score}, ${m.lose_score}, ${m.season})
+          ON CONFLICT (id) DO NOTHING
+        `;
+      }
+      await rebuildStatsAction();
+    }
+    
+    await sql`DELETE FROM archives WHERE id = ${archiveId}`;
+    await logAudit('RESTORE', `Restored ${item.type} ${item.name}`);
+    
+    revalidatePath('/');
+    return { success: true };
+  } catch (error) {
+    console.error('Restore failed:', error);
+    return { error: 'Lỗi khi khôi phục dữ liệu' };
   }
 }

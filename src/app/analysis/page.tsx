@@ -1,7 +1,7 @@
 import { sql } from '@vercel/postgres';
 import { AnalysisCenter } from '@/components/analysis/AnalysisCenter';
 
-export const revalidate = 0;
+export const revalidate = false; // ISR - Chỉ revalidate khi có action ghi dữ liệu
 
 type Player = { id: string; name: string; active?: boolean };
 type Match = {
