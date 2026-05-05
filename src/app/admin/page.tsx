@@ -18,7 +18,8 @@ import {
   getAuditLogs, 
   getArchives, 
   restoreFromArchive, 
-  rebuildStatsAction 
+  rebuildStatsAction,
+  verifyAdminAction 
 } from '@/app/actions';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';

@@ -1,5 +1,5 @@
 'use client';
-import { useOptimistic, useState, useSyncExternalStore } from 'react';
+import { useOptimistic, useState, useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { BarChart3, Settings } from 'lucide-react';
 import { SummaryGrid } from './dashboard/SummaryGrid';
