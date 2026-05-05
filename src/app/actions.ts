@@ -545,3 +545,34 @@ export async function getMatchesAfterAction(lastId: string) {
     return [];
   }
 }
+
+export async function getPlayersAction() {
+  try {
+    const { rows } = await sql`SELECT * FROM players ORDER BY name ASC`;
+    return rows;
+  } catch (error) {
+    console.error('Failed to fetch players:', error);
+    return [];
+  }
+}
+
+export async function getSeasonsAction() {
+  try {
+    const { rows } = await sql`SELECT * FROM seasons ORDER BY start_date DESC`;
+    return rows;
+  } catch (error) {
+    console.error('Failed to fetch seasons:', error);
+    return [];
+  }
+}
+
+export async function togglePlayerActiveAction(playerId: string, active: boolean) {
+  try {
+    await sql`UPDATE players SET active = ${active} WHERE id = ${playerId}`;
+    await logAudit('UPDATE_PLAYER', `Changed player ${playerId} active status to ${active}`);
+    revalidatePath('/');
+    return { success: true };
+  } catch (error) {
+    return { error: 'Lỗi khi cập nhật trạng thái thành viên' };
+  }
+}
