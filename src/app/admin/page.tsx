@@ -49,6 +49,13 @@ export default function AdminPage() {
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [isPending, startTransition] = useTransition();
 
+  // Task 20: Auto-load data on auth
+  useEffect(() => {
+    if (isAuth) {
+      loadData();
+    }
+  }, [isAuth]);
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     checkPass(pass);
@@ -56,18 +63,23 @@ export default function AdminPage() {
 
   const checkPass = async (input: string) => {
     setLoading(true);
-    const res = await verifyAdminAction(input);
-    if (res.success) {
-      setIsAuth(true);
-      loadData();
-    } else {
-      setMsg({ type: 'error', text: res.error || 'Mật khẩu sai rồi sếp ơi!' });
+    try {
+      const res = await verifyAdminAction(input);
+      if (res.success) {
+        setIsAuth(true);
+        // loadData will be triggered by useEffect
+      } else {
+        setMsg({ type: 'error', text: res.error || 'Mật khẩu sai rồi sếp ơi!' });
+      }
+    } catch (err) {
+      setMsg({ type: 'error', text: 'Lỗi kết nối server.' });
     }
     setLoading(false);
   };
 
   const loadData = async () => {
     setLoading(true);
+    console.log('Admin: Loading all data...');
     try {
       const [l, a, p, s, m] = await Promise.all([
         getAuditLogs(), 
@@ -76,12 +88,16 @@ export default function AdminPage() {
         getSeasonsAction(),
         getMatchesAfterAction('')
       ]);
-      setLogs(l);
-      setArchives(a);
-      setPlayers(p);
-      setSeasons(s);
-      setMatches(m);
-    } catch (err) {}
+      console.log('Admin Data Loaded:', { logs: l?.length, players: p?.length, matches: m?.length });
+      setLogs(l || []);
+      setArchives(a || []);
+      setPlayers(p || []);
+      setSeasons(s || []);
+      setMatches(m || []);
+    } catch (err) {
+      console.error('Admin Load Failed:', err);
+      setMsg({ type: 'error', text: 'Không thể tải dữ liệu từ server.' });
+    }
     setLoading(false);
   };
 

@@ -74,6 +74,18 @@ export async function GET(request: Request) {
       );
     `;
 
+    // 7. Create archives table for Recycle Bin
+    await sql`
+      CREATE TABLE IF NOT EXISTS archives (
+        id SERIAL PRIMARY KEY,
+        type VARCHAR(20) NOT NULL, -- 'PLAYER' or 'MATCH'
+        original_id VARCHAR(50) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        data JSONB NOT NULL,
+        deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
     await sql`
       INSERT INTO seasons (id, name, active)
       VALUES ('Season 1', 'Season 1', true)

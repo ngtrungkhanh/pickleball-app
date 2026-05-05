@@ -43,16 +43,6 @@ async function setConfigValue(key: string, value: string) {
   `;
 }
 
-async function logAudit(action_type: string, details: string) {
-  try {
-    await sql`
-      INSERT INTO audit_logs (action_type, details)
-      VALUES (${action_type}, ${details})
-    `;
-  } catch (err) {
-    console.error('Audit log failed:', err);
-  }
-}
 
 async function updatePlayerStatsIncremental(playerId: string, season: string, deltaWins: number, deltaLosses: number, deltaMoney: number) {
   await sql`
@@ -472,14 +462,35 @@ export async function rebuildStatsAction() {
   }
 }
 
+export async function logAudit(type: string, details: string) {
+  try {
+    await sql`
+      INSERT INTO audit_logs (action_type, details)
+      VALUES (${type}, ${details})
+    `;
+  } catch (err) {
+    console.warn('Audit log failed (table might be missing):', err);
+  }
+}
+
 export async function getAuditLogs() {
-  const { rows } = await sql`SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 100`;
-  return rows;
+  try {
+    const { rows } = await sql`SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 100`;
+    return rows;
+  } catch (error) {
+    console.warn('Could not fetch audit logs:', error);
+    return [];
+  }
 }
 
 export async function getArchives() {
-  const { rows } = await sql`SELECT * FROM archives ORDER BY deleted_at DESC LIMIT 50`;
-  return rows;
+  try {
+    const { rows } = await sql`SELECT * FROM archives ORDER BY deleted_at DESC LIMIT 50`;
+    return rows;
+  } catch (error) {
+    console.warn('Could not fetch archives:', error);
+    return [];
+  }
 }
 
 export async function restoreFromArchive(archiveId: number) {
