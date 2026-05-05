@@ -408,16 +408,27 @@ export async function updateFineAction(formData: FormData) {
 
 export async function rebuildStatsAction() {
   try {
+    // Ensure table exists just in case
+    await sql`
+      CREATE TABLE IF NOT EXISTS player_stats (
+        player_id VARCHAR(10) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        season VARCHAR(50) NOT NULL,
+        wins INT DEFAULT 0,
+        losses INT DEFAULT 0,
+        total INT DEFAULT 0,
+        money INT DEFAULT 0,
+        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (player_id, season)
+      )
+    `;
+
     const lose_money = parseInt(await getConfigValue('lose_money', '5000')) || 5000;
     
-    // 1. Fetch all existing players to avoid foreign key errors
     const { rows: players } = await sql`SELECT id FROM players`;
     const validPlayerIds = new Set(players.map(p => p.id));
     
-    // 2. Fetch all matches
     const { rows: matches } = await sql`SELECT * FROM matches`;
     
-    // 3. Calculate in memory
     const statsMap = new Map<string, { wins: number; losses: number; money: number }>();
     
     for (const m of matches) {
@@ -441,28 +452,23 @@ export async function rebuildStatsAction() {
       });
     }
 
-    // 4. Clear and Insert safely
     await sql`DELETE FROM player_stats`;
     
     for (const [key, s] of statsMap.entries()) {
       const [playerId, season] = key.split(':');
-      try {
-        await sql`
-          INSERT INTO player_stats (player_id, season, wins, losses, total, money)
-          VALUES (${playerId}, ${season}, ${s.wins}, ${s.losses}, ${s.wins + s.losses}, ${s.money})
-        `;
-      } catch (e) {
-        console.error(`Skipping stats for ${playerId}:`, e);
-      }
+      await sql`
+        INSERT INTO player_stats (player_id, season, wins, losses, total, money)
+        VALUES (${playerId}, ${season}, ${s.wins}, ${s.losses}, ${s.wins + s.losses}, ${s.money})
+      `;
     }
     
     await logAudit('REBUILD_STATS', `Rebuilt player_stats from ${matches.length} matches`);
     
     revalidatePath('/');
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Rebuild failed:', error);
-    return { error: 'Lỗi khi đồng bộ lại số liệu. Vui lòng kiểm tra console hoặc logs.' };
+    return { error: `Lỗi hệ thống: ${error.message}` };
   }
 }
 
