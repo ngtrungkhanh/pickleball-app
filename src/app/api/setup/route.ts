@@ -3,19 +3,6 @@ import { NextResponse } from 'next/server';
 
 export async function GET(request: Request) {
   try {
-    // Check for a secret key to prevent unauthorized access to this route
-    // In production, you'd want to secure this properly
-    const { searchParams } = new URL(request.url);
-    const secret = searchParams.get('secret');
-    if (secret !== process.env.SETUP_SECRET && process.env.NODE_ENV === 'production') {
-       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Drop tables if they exist (optional, handle with care)
-    // await sql`DROP TABLE IF EXISTS matches;`;
-    // await sql`DROP TABLE IF EXISTS players;`;
-    // await sql`DROP TABLE IF EXISTS config;`;
-
     // 1. Create players table
     await sql`
       CREATE TABLE IF NOT EXISTS players (
