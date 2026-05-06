@@ -33,7 +33,7 @@ import {
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
-const adminTabs = ['Nháº­t kÃ½ & Há»‡ thá»‘ng', 'ThÃ nh viÃªn', 'Season', 'Tráº­n Ä‘áº¥u'];
+const adminTabs = ['Nhật ký & Hệ thống', 'Thành viên', 'Season', 'Trận đấu'];
 const ADMIN_AUTH_DATE_KEY = 'pickleball_admin_auth_date';
 
 export default function AdminPage() {
@@ -627,20 +627,20 @@ export default function AdminPage() {
           {activeTab === 'Season' && (
             <div className="bg-slate-900/50 border border-white/5 rounded-3xl overflow-hidden">
               <div className="px-6 py-5 border-b border-white/5">
-                <h3 className="font-black text-sm uppercase tracking-widest">Quáº£n lÃ½ Seasons</h3>
+                <h3 className="font-black text-sm uppercase tracking-widest">Quản lý Seasons</h3>
               </div>
               <div className="p-6 grid gap-4">
                 {seasons.map(s => (
                   <div key={s.id} className="bg-white/5 border border-white/10 rounded-2xl p-6 flex items-center justify-between">
                     <div>
                       <h4 className="text-xl font-black text-white">{s.name}</h4>
-                      <p className="text-xs font-bold text-white/30">Báº¯t Ä‘áº§u: {new Date(s.start_date).toLocaleDateString()}</p>
+                      <p className="text-xs font-bold text-white/30">Bắt đầu: {new Date(s.start_date).toLocaleDateString()}</p>
                     </div>
                     <div className="flex items-center gap-3">
                       {s.active ? (
-                        <span className="bg-primary/20 text-primary px-4 py-2 rounded-xl text-[10px] font-black uppercase">Äang kÃ­ch hoáº¡t</span>
+                        <span className="bg-primary/20 text-primary px-4 py-2 rounded-xl text-[10px] font-black uppercase">Đang kích hoạt</span>
                       ) : (
-                        <button className="bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl text-[10px] font-black uppercase text-white/40">KÃ­ch hoáº¡t</button>
+                        <button className="bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl text-[10px] font-black uppercase text-white/40">Kích hoạt</button>
                       )}
                     </div>
                   </div>
