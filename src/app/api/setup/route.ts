@@ -9,6 +9,8 @@ export async function GET(request: Request) {
         id VARCHAR(10) PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
         active BOOLEAN DEFAULT TRUE,
+        deleted_at TIMESTAMP,
+        delete_group_id VARCHAR(80),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
@@ -25,7 +27,9 @@ export async function GET(request: Request) {
         win_score INT NOT NULL,
         lose_score INT NOT NULL,
         season VARCHAR(50) NOT NULL,
-        created_by VARCHAR(50) DEFAULT 'SYSTEM'
+        created_by VARCHAR(50) DEFAULT 'SYSTEM',
+        deleted_at TIMESTAMP,
+        delete_group_id VARCHAR(80)
       );
     `;
 
@@ -33,6 +37,10 @@ export async function GET(request: Request) {
     try {
       await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS created_by VARCHAR(50) DEFAULT 'SYSTEM';`;
       await sql`ALTER TABLE matches ALTER COLUMN created_by TYPE VARCHAR(50);`;
+      await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`;
+      await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80);`;
+      await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`;
+      await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80);`;
     } catch (err) {
       console.warn('created_by column update failed', err);
     }
@@ -99,6 +107,12 @@ export async function GET(request: Request) {
       INSERT INTO seasons (id, name, active)
       VALUES ('Season 1', 'Season 1', true)
       ON CONFLICT (id) DO NOTHING;
+    `;
+
+    await sql`
+      INSERT INTO players (id, name, active)
+      VALUES ('__GUEST__', 'Khách', true)
+      ON CONFLICT (id) DO UPDATE SET name = 'Khách', deleted_at = NULL;
     `;
 
     await sql`

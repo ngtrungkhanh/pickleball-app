@@ -1,6 +1,7 @@
 'use server';
 import { sql } from '@vercel/postgres';
 import { revalidatePath } from 'next/cache';
+import { GUEST_ID, GUEST_NAME, isGuestId, matchHasGuest } from '@/lib/guest';
 
 async function ensureSeasonTable() {
   await sql`
@@ -25,6 +26,38 @@ async function ensureConfigTable() {
   `;
 }
 
+async function ensureSoftDeleteColumns() {
+  await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
+  await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80)`;
+  await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
+  await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80)`;
+}
+
+async function ensureGuestPlayer() {
+  await ensureSoftDeleteColumns();
+  await sql`
+    INSERT INTO players (id, name, active)
+    VALUES (${GUEST_ID}, ${GUEST_NAME}, true)
+    ON CONFLICT (id) DO UPDATE SET name = ${GUEST_NAME}, deleted_at = NULL
+  `;
+
+  const { rows } = await sql`
+    SELECT id FROM players
+    WHERE lower(name) IN ('khách mời', 'khach moi', 'guest')
+      AND id <> ${GUEST_ID}
+  `;
+
+  for (const row of rows) {
+    const oldId = String(row.id);
+    await sql`UPDATE matches SET win_1 = ${GUEST_ID} WHERE win_1 = ${oldId}`;
+    await sql`UPDATE matches SET win_2 = ${GUEST_ID} WHERE win_2 = ${oldId}`;
+    await sql`UPDATE matches SET lose_1 = ${GUEST_ID} WHERE lose_1 = ${oldId}`;
+    await sql`UPDATE matches SET lose_2 = ${GUEST_ID} WHERE lose_2 = ${oldId}`;
+    await sql`DELETE FROM player_stats WHERE player_id = ${oldId}`;
+    await sql`DELETE FROM players WHERE id = ${oldId}`;
+  }
+}
+
 async function getConfigValue(key: string, fallback: string) {
   try {
     const { rows } = await sql`SELECT value FROM config WHERE key = ${key} LIMIT 1`;
@@ -45,6 +78,7 @@ async function setConfigValue(key: string, value: string) {
 
 
 async function updatePlayerStatsIncremental(playerId: string, season: string, deltaWins: number, deltaLosses: number, deltaMoney: number) {
+  if (!playerId || isGuestId(playerId)) return;
   await sql`
     INSERT INTO player_stats (player_id, season, wins, losses, total, money)
     VALUES (${playerId}, ${season}, ${deltaWins}, ${deltaLosses}, ${deltaWins + deltaLosses}, ${deltaMoney})
@@ -58,6 +92,7 @@ async function updatePlayerStatsIncremental(playerId: string, season: string, de
 }
 
 export async function addMatchAction(formData: FormData) {
+  await ensureGuestPlayer();
   const id = `M${Date.now().toString(36).slice(-10)}`.toUpperCase();
   const win_1 = formData.get('win_1') as string;
   const win_2 = (formData.get('win_2') as string) || null;
@@ -90,14 +125,17 @@ export async function addMatchAction(formData: FormData) {
     `;
 
     const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
+    const hasGuest = matchHasGuest({ win_1, win_2, lose_1, lose_2 });
 
-    // Update winners
-    await updatePlayerStatsIncremental(win_1, season, 1, 0, 0);
-    if (win_2) await updatePlayerStatsIncremental(win_2, season, 1, 0, 0);
+    if (!hasGuest) {
+      await updatePlayerStatsIncremental(win_1, season, 1, 0, 0);
+      if (win_2) await updatePlayerStatsIncremental(win_2, season, 1, 0, 0);
+      await updatePlayerStatsIncremental(lose_1, season, 0, 1, 0);
+      if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 1, 0);
+    }
 
-    // Update losers
-    await updatePlayerStatsIncremental(lose_1, season, 0, 1, lose_money);
-    if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 1, lose_money);
+    await updatePlayerStatsIncremental(lose_1, season, 0, 0, lose_money);
+    if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 0, lose_money);
 
     await logAudit('ADD_MATCH', `Match ${id} by ${created_by}: ${win_1}${win_2 ? '/' + win_2 : ''} beat ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
 
@@ -113,19 +151,26 @@ export async function addMatchAction(formData: FormData) {
 
 export async function deleteMatchAction(matchId: string) {
   try {
+    await ensureSoftDeleteColumns();
     const { rows } = await sql`SELECT * FROM matches WHERE id = ${matchId}`;
     if (rows.length === 0) return { error: 'Không tìm thấy trận đấu' };
     const m = rows[0];
 
     const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
+    const hasGuest = matchHasGuest(m);
 
     // Reverse stats
-    await updatePlayerStatsIncremental(m.win_1, m.season, -1, 0, 0);
-    if (m.win_2) await updatePlayerStatsIncremental(m.win_2, m.season, -1, 0, 0);
-    await updatePlayerStatsIncremental(m.lose_1, m.season, 0, -1, -lose_money);
-    if (m.lose_2) await updatePlayerStatsIncremental(m.lose_2, m.season, 0, -1, -lose_money);
+    if (!hasGuest) {
+      await updatePlayerStatsIncremental(m.win_1, m.season, -1, 0, 0);
+      if (m.win_2) await updatePlayerStatsIncremental(m.win_2, m.season, -1, 0, 0);
+      await updatePlayerStatsIncremental(m.lose_1, m.season, 0, -1, 0);
+      if (m.lose_2) await updatePlayerStatsIncremental(m.lose_2, m.season, 0, -1, 0);
+    }
+    await updatePlayerStatsIncremental(m.lose_1, m.season, 0, 0, -lose_money);
+    if (m.lose_2) await updatePlayerStatsIncremental(m.lose_2, m.season, 0, 0, -lose_money);
 
-    await sql`DELETE FROM matches WHERE id = ${matchId}`;
+    const groupId = `delete-match-${matchId}-${Date.now().toString(36)}`;
+    await sql`UPDATE matches SET deleted_at = NOW(), delete_group_id = ${groupId} WHERE id = ${matchId}`;
 
     await logAudit('DELETE_MATCH', `Deleted Match ${matchId}`);
 
@@ -165,7 +210,11 @@ export async function updatePlayerAction(formData: FormData) {
     const active = String(formData.get('active') || 'true') === 'true';
     if (!id || !name) return { error: 'Thông tin thành viên không hợp lệ' };
 
-    await sql`UPDATE players SET name = ${name}, active = ${active} WHERE id = ${id}`;
+    if (isGuestId(id)) {
+      await sql`UPDATE players SET name = ${GUEST_NAME}, active = ${active}, deleted_at = NULL WHERE id = ${GUEST_ID}`;
+    } else {
+      await sql`UPDATE players SET name = ${name}, active = ${active} WHERE id = ${id}`;
+    }
     revalidatePath('/');
     revalidatePath('/analysis');
     return { success: true };
@@ -185,7 +234,8 @@ export async function updatePlayersAction(formData: FormData) {
 
     for (let i = 0; i < ids.length; i++) {
       if (!ids[i] || !names[i]) return { error: 'Tên thành viên không hợp lệ' };
-      await sql`UPDATE players SET name = ${names[i]}, active = ${activeIds.has(ids[i])} WHERE id = ${ids[i]}`;
+      const nextName = isGuestId(ids[i]) ? GUEST_NAME : names[i];
+      await sql`UPDATE players SET name = ${nextName}, active = ${activeIds.has(ids[i])} WHERE id = ${ids[i]}`;
     }
 
     revalidatePath('/');
@@ -213,9 +263,12 @@ async function ensureArchiveTable() {
 export async function deletePlayerAction(formData: FormData) {
   try {
     const id = String(formData.get('id') || '').trim();
+    if (isGuestId(id)) return { error: 'Không được xóa Khách' };
     if (!id) return { error: 'Thành viên không hợp lệ' };
 
     await ensureArchiveTable();
+    await ensureSoftDeleteColumns();
+    await ensureSoftDeleteColumns();
 
     // Get player info
     const { rows: players } = await sql`SELECT * FROM players WHERE id = ${id}`;
@@ -224,7 +277,8 @@ export async function deletePlayerAction(formData: FormData) {
     // Get all related matches
     const { rows: matches } = await sql`
       SELECT * FROM matches 
-      WHERE win_1 = ${id} OR win_2 = ${id} OR lose_1 = ${id} OR lose_2 = ${id}
+      WHERE deleted_at IS NULL
+        AND (win_1 = ${id} OR win_2 = ${id} OR lose_1 = ${id} OR lose_2 = ${id})
     `;
 
     // Archive data
@@ -234,15 +288,20 @@ export async function deletePlayerAction(formData: FormData) {
       VALUES ('PLAYER', ${id}, ${players[0].name}, ${JSON.stringify(archiveData)})
     `;
 
-    // Delete matches first due to potential (though not explicit here) constraints, 
-    // and to be clean.
-    await sql`DELETE FROM matches WHERE win_1 = ${id} OR win_2 = ${id} OR lose_1 = ${id} OR lose_2 = ${id}`;
-    await sql`DELETE FROM players WHERE id = ${id}`;
+    const groupId = `delete-player-${id}-${Date.now().toString(36)}`;
+    await sql`
+      UPDATE matches
+      SET deleted_at = NOW(), delete_group_id = ${groupId}
+      WHERE deleted_at IS NULL
+        AND (win_1 = ${id} OR win_2 = ${id} OR lose_1 = ${id} OR lose_2 = ${id})
+    `;
+    await sql`UPDATE players SET deleted_at = NOW(), active = false, delete_group_id = ${groupId} WHERE id = ${id}`;
     
     // Also clean up stats for this player
     await sql`DELETE FROM player_stats WHERE player_id = ${id}`;
 
-    await logAudit('DELETE_PLAYER', `Deleted player ${players[0].name} (${id}) and archived their data.`);
+    await rebuildStatsAction();
+    await logAudit('DELETE_PLAYER', `Soft deleted player ${players[0].name} (${id}) and ${matches.length} related matches.`);
 
     revalidatePath('/');
     revalidatePath('/analysis');
@@ -265,7 +324,7 @@ export async function deleteSeasonAction(formData: FormData) {
     const { rows: seasons } = await sql`SELECT * FROM seasons WHERE name = ${name}`;
     
     // Get all matches in this season
-    const { rows: matches } = await sql`SELECT * FROM matches WHERE season = ${name}`;
+    const { rows: matches } = await sql`SELECT * FROM matches WHERE season = ${name} AND deleted_at IS NULL`;
 
     // Archive
     const archiveData = { season: seasons[0] || { name }, matches };
@@ -274,9 +333,9 @@ export async function deleteSeasonAction(formData: FormData) {
       VALUES ('SEASON', ${name}, ${name}, ${JSON.stringify(archiveData)})
     `;
 
-    // Delete
-    await sql`DELETE FROM matches WHERE season = ${name}`;
-    await sql`DELETE FROM seasons WHERE name = ${name}`;
+    const groupId = `delete-season-${name}-${Date.now().toString(36)}`;
+    await sql`UPDATE matches SET deleted_at = NOW(), delete_group_id = ${groupId} WHERE season = ${name} AND deleted_at IS NULL`;
+    await sql`UPDATE seasons SET archived = true WHERE name = ${name}`;
     
     // If we deleted the active season, we should probably set another one as active or clear config
     const activeSeason = await getConfigValue('active_season', '');
@@ -284,6 +343,7 @@ export async function deleteSeasonAction(formData: FormData) {
       await sql`DELETE FROM config WHERE key = 'active_season'`;
     }
 
+    await rebuildStatsAction();
     revalidatePath('/');
     revalidatePath('/analysis');
     revalidatePath('/history');
@@ -415,29 +475,38 @@ export async function rebuildStatsAction() {
 
     const lose_money = parseInt(await getConfigValue('lose_money', '5000')) || 5000;
     
-    const { rows: players } = await sql`SELECT id FROM players`;
-    const validPlayerIds = new Set(players.map(p => p.id));
+    const { rows: players } = await sql`SELECT id FROM players WHERE deleted_at IS NULL`;
+    const validPlayerIds = new Set(players.map(p => p.id).filter(id => !isGuestId(id)));
     
-    const { rows: matches } = await sql`SELECT * FROM matches`;
+    const { rows: matches } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL`;
     
     const statsMap = new Map<string, { wins: number; losses: number; money: number }>();
     
     for (const m of matches) {
       const season = m.season || 'Season 1';
+      const hasGuest = matchHasGuest(m);
       const winners = [m.win_1, m.win_2].filter(pid => pid && validPlayerIds.has(pid));
       const losers = [m.lose_1, m.lose_2].filter(pid => pid && validPlayerIds.has(pid));
 
-      winners.forEach(pid => {
-        const key = `${pid}:${season}`;
-        const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-        s.wins++;
-        statsMap.set(key, s);
-      });
+      if (!hasGuest) {
+        winners.forEach(pid => {
+          const key = `${pid}:${season}`;
+          const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
+          s.wins++;
+          statsMap.set(key, s);
+        });
+
+        losers.forEach(pid => {
+          const key = `${pid}:${season}`;
+          const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
+          s.losses++;
+          statsMap.set(key, s);
+        });
+      }
 
       losers.forEach(pid => {
         const key = `${pid}:${season}`;
         const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-        s.losses++;
         s.money += lose_money;
         statsMap.set(key, s);
       });
@@ -538,19 +607,19 @@ export async function getMatchesAfterAction(lastId: string) {
   try {
     // If no lastId, return nothing (safety) or all (initial sync)
     if (!lastId) {
-      const { rows } = await sql`SELECT * FROM matches ORDER BY date ASC`;
+      const { rows } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL ORDER BY date ASC`;
       return rows;
     }
     
     // Fetch only matches created after the current lastId
     // We use the date of the lastId to find newer ones
-    const { rows: lastMatch } = await sql`SELECT date FROM matches WHERE id = ${lastId} LIMIT 1`;
+    const { rows: lastMatch } = await sql`SELECT date FROM matches WHERE id = ${lastId} AND deleted_at IS NULL LIMIT 1`;
     if (lastMatch.length === 0) {
-      const { rows } = await sql`SELECT * FROM matches ORDER BY date ASC`;
+      const { rows } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL ORDER BY date ASC`;
       return rows;
     }
     
-    const { rows } = await sql`SELECT * FROM matches WHERE date > ${lastMatch[0].date} ORDER BY date ASC`;
+    const { rows } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL AND date > ${lastMatch[0].date} ORDER BY date ASC`;
     return rows;
   } catch (error) {
     console.error('Fetch incremental matches failed:', error);
@@ -560,7 +629,7 @@ export async function getMatchesAfterAction(lastId: string) {
 
 export async function getPlayersAction() {
   try {
-    const { rows } = await sql`SELECT * FROM players ORDER BY name ASC`;
+    const { rows } = await sql`SELECT * FROM players WHERE deleted_at IS NULL ORDER BY name ASC`;
     return rows;
   } catch (error) {
     console.error('Failed to fetch players:', error);
@@ -608,12 +677,18 @@ export async function updateMatchAction(formData: FormData) {
     const old = rows[0];
 
     const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
+    const oldHasGuest = matchHasGuest(old);
+    const newHasGuest = matchHasGuest({ win_1, win_2, lose_1, lose_2 });
 
     // 1. Reverse old stats
-    await updatePlayerStatsIncremental(old.win_1, old.season, -1, 0, 0);
-    if (old.win_2) await updatePlayerStatsIncremental(old.win_2, old.season, -1, 0, 0);
-    await updatePlayerStatsIncremental(old.lose_1, old.season, 0, -1, -lose_money);
-    if (old.lose_2) await updatePlayerStatsIncremental(old.lose_2, old.season, 0, -1, -lose_money);
+    if (!oldHasGuest) {
+      await updatePlayerStatsIncremental(old.win_1, old.season, -1, 0, 0);
+      if (old.win_2) await updatePlayerStatsIncremental(old.win_2, old.season, -1, 0, 0);
+      await updatePlayerStatsIncremental(old.lose_1, old.season, 0, -1, 0);
+      if (old.lose_2) await updatePlayerStatsIncremental(old.lose_2, old.season, 0, -1, 0);
+    }
+    await updatePlayerStatsIncremental(old.lose_1, old.season, 0, 0, -lose_money);
+    if (old.lose_2) await updatePlayerStatsIncremental(old.lose_2, old.season, 0, 0, -lose_money);
 
     // 2. Update match details
     const dateVal = dateStr ? new Date(dateStr) : new Date(old.date);
@@ -625,10 +700,14 @@ export async function updateMatchAction(formData: FormData) {
     `;
 
     // 3. Apply new stats
-    await updatePlayerStatsIncremental(win_1, old.season, 1, 0, 0);
-    if (win_2) await updatePlayerStatsIncremental(win_2, old.season, 1, 0, 0);
-    await updatePlayerStatsIncremental(lose_1, old.season, 0, 1, lose_money);
-    if (lose_2) await updatePlayerStatsIncremental(lose_2, old.season, 0, 1, lose_money);
+    if (!newHasGuest) {
+      await updatePlayerStatsIncremental(win_1, old.season, 1, 0, 0);
+      if (win_2) await updatePlayerStatsIncremental(win_2, old.season, 1, 0, 0);
+      await updatePlayerStatsIncremental(lose_1, old.season, 0, 1, 0);
+      if (lose_2) await updatePlayerStatsIncremental(lose_2, old.season, 0, 1, 0);
+    }
+    await updatePlayerStatsIncremental(lose_1, old.season, 0, 0, lose_money);
+    if (lose_2) await updatePlayerStatsIncremental(lose_2, old.season, 0, 0, lose_money);
 
     await logAudit('UPDATE_MATCH', `Updated Match ${id}: ${win_1}${win_2 ? '/' + win_2 : ''} vs ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
 

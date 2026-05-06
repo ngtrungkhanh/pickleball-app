@@ -1,5 +1,5 @@
 'use client';
-import { useOptimistic, useState, useEffect, useSyncExternalStore } from 'react';
+import { useState, useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { BarChart3, Settings } from 'lucide-react';
 import { SummaryGrid } from './dashboard/SummaryGrid';
@@ -29,13 +29,11 @@ function getEditModeSnapshot() {
 export default function Dashboard({
   initialPlayers,
   initialMatches,
-  initialStats = [],
   initialConfig = {},
   initialSeasons = [],
 }: {
   initialPlayers: Player[],
   initialMatches: Match[],
-  initialStats?: any[],
   initialConfig?: Record<string, string>,
   initialSeasons?: Season[],
 }) {
@@ -55,7 +53,9 @@ export default function Dashboard({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const canEdit = useSyncExternalStore(subscribeEditMode, getEditModeSnapshot, () => false);
   const activeSeason = initialConfig.active_season || 'Season 1';
+  const [selectedSeason, setSelectedSeason] = useState<string | null>(activeSeason);
   const loseMoney = Number(initialConfig.lose_money || 5000);
+  const viewedMatches = selectedSeason === null ? matches : matches.filter(m => (m.season || 'Season 1') === selectedSeason);
 
   const unlock = (password: string) => {
     const expected = process.env.NEXT_PUBLIC_EDIT_PASS || 'pickleball';
@@ -86,16 +86,16 @@ export default function Dashboard({
       </div>
 
       {/* 1. Summary */}
-      <SummaryGrid players={initialPlayers} matches={matches} loseMoney={loseMoney} />
+      <SummaryGrid players={initialPlayers} matches={viewedMatches} loseMoney={loseMoney} />
 
       {/* 2. Leaderboard */}
       <Leaderboard
-        key={activeSeason}
         players={initialPlayers}
         matches={matches}
-        initialStats={initialStats}
         seasons={initialSeasons}
         activeSeason={activeSeason}
+        selectedSeason={selectedSeason}
+        onSeasonChange={setSelectedSeason}
         loseMoney={loseMoney}
       />
 
@@ -116,7 +116,7 @@ export default function Dashboard({
       )}
 
       {/* 4. Recent History */}
-      <RecentHistory matches={matches} players={initialPlayers} canEdit={canEdit} />
+      <RecentHistory matches={viewedMatches} players={initialPlayers} canEdit={canEdit} />
 
       <SettingsModal
         open={settingsOpen}

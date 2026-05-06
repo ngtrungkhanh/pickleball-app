@@ -6,8 +6,13 @@ import { DeleteMatchButton } from '@/components/DeleteMatchButton';
 export const revalidate = 0;
 
 export default async function HistoryPage() {
-  const { rows: players } = await sql`SELECT * FROM players ORDER BY name ASC`;
-  const { rows: matches } = await sql`SELECT * FROM matches ORDER BY date DESC`;
+  try {
+    await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
+    await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
+  } catch {}
+
+  const { rows: players } = await sql`SELECT * FROM players WHERE deleted_at IS NULL ORDER BY name ASC`;
+  const { rows: matches } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL ORDER BY date DESC`;
 
   const getName = (id: string) => players.find((p: any) => p.id === id)?.name || id;
 

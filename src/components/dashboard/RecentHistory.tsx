@@ -3,6 +3,7 @@ import { useState, useTransition } from 'react';
 import { cn } from '@/lib/utils';
 import { History, Clock, X, Trash2, Calendar, AlertTriangle } from 'lucide-react';
 import { deleteMatchAction } from '@/app/actions';
+import { isGuestId } from '@/lib/guest';
 
 // ─── Delete confirm modal ─────────────────────────────────────────────────────
 function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
@@ -37,10 +38,42 @@ function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCance
 // ─── Full history modal ───────────────────────────────────────────────────────
 function HistoryModal({ matches, players, onClose, canEdit }: { matches: any[]; players: any[]; onClose: () => void; canEdit: boolean }) {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [member1, setMember1] = useState('');
+  const [member2, setMember2] = useState('');
+  const [relation, setRelation] = useState<'-' | 'partner' | 'opponent'>('-');
+  const [result, setResult] = useState<'-' | 'win' | 'loss'>('-');
   const [, start] = useTransition();
 
+  const playerOptions = players.filter(p => p.active !== false && !p.deleted_at);
+  const ids = (m: any) => [m.win_1, m.win_2, m.lose_1, m.lose_2].filter(Boolean);
+  const team = (m: any, id: string) => ([m.win_1, m.win_2].includes(id) ? 'win' : [m.lose_1, m.lose_2].includes(id) ? 'loss' : null);
+  const filteredMatches = matches.filter(m => {
+    if (member1 && !ids(m).includes(member1)) return false;
+    if (member2 && !ids(m).includes(member2)) return false;
+    if (member1 && member2 && relation !== '-') {
+      const t1 = team(m, member1);
+      const t2 = team(m, member2);
+      if (!t1 || !t2) return false;
+      if (relation === 'partner' && t1 !== t2) return false;
+      if (relation === 'opponent' && t1 === t2) return false;
+    }
+    if (member1 && result !== '-' && team(m, member1) !== result) return false;
+    return true;
+  });
+
+  const memberSummary = member1 && !isGuestId(member1)
+    ? filteredMatches.reduce((acc, m) => {
+      const t = team(m, member1);
+      if (t === 'win') acc.wins++;
+      if (t === 'loss') acc.losses++;
+      return acc;
+    }, { wins: 0, losses: 0 })
+    : null;
+  const summaryTotal = memberSummary ? memberSummary.wins + memberSummary.losses : 0;
+  const wr = summaryTotal ? ((memberSummary!.wins / summaryTotal) * 100).toFixed(1) : '0.0';
+
   const grouped: Record<string, any[]> = {};
-  matches.forEach(m => { (grouped[m.season ?? 'Season 1'] ??= []).push(m); });
+  filteredMatches.forEach(m => { (grouped[m.season ?? 'Season 1'] ??= []).push(m); });
 
   return (
     <div className="fixed inset-0 z-[500] flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -69,6 +102,32 @@ function HistoryModal({ matches, players, onClose, canEdit }: { matches: any[]; 
           <button onClick={onClose} className="w-10 h-10 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all active:scale-90">
             <X className="w-5 h-5 text-white/50" />
           </button>
+        </div>
+        <div className="border-b border-white/[0.06] px-4 sm:px-6 py-4 space-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <select value={member1} onChange={e => { const v = e.target.value; setMember1(v); if (!v) setResult('-'); if (v && v === member2) setMember2(''); }} className="rounded-xl bg-slate-900 border border-white/[0.08] px-3 py-2 text-xs font-bold text-white/80">
+              <option value="">Thành viên 1</option>
+              {playerOptions.map(p => <option key={p.id} value={p.id}>{isGuestId(p.id) ? 'Khách' : p.name}</option>)}
+            </select>
+            <select value={member2} onChange={e => { const v = e.target.value; setMember2(v === member1 ? '' : v); if (!member1 || !v || v === member1) setRelation('-'); }} className="rounded-xl bg-slate-900 border border-white/[0.08] px-3 py-2 text-xs font-bold text-white/80">
+              <option value="">Thành viên 2</option>
+              {playerOptions.filter(p => p.id !== member1).map(p => <option key={p.id} value={p.id}>{isGuestId(p.id) ? 'Khách' : p.name}</option>)}
+            </select>
+            <select value={relation} disabled={!member1 || !member2} onChange={e => setRelation(e.target.value as typeof relation)} className="rounded-xl bg-slate-900 border border-white/[0.08] px-3 py-2 text-xs font-bold text-white/80 disabled:opacity-35">
+              <option value="-">Quan hệ</option>
+              <option value="partner">Hợp tác</option>
+              <option value="opponent">Đối đầu</option>
+            </select>
+            <select value={result} disabled={!member1} onChange={e => setResult(e.target.value as typeof result)} className="rounded-xl bg-slate-900 border border-white/[0.08] px-3 py-2 text-xs font-bold text-white/80 disabled:opacity-35">
+              <option value="-">Kết quả</option>
+              <option value="win">Thắng</option>
+              <option value="loss">Thua</option>
+            </select>
+          </div>
+          <div className="text-[11px] font-black text-white/35 uppercase tracking-widest">
+            Đang hiện {filteredMatches.length}/{matches.length} trận
+            {memberSummary && ` · ${memberSummary.wins}W / ${memberSummary.losses}L · WR ${wr}%`}
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
           {Object.entries(grouped).map(([season, list]) => (
@@ -253,4 +312,3 @@ export function RecentHistory({ matches, players, canEdit = false }: { matches: 
     </>
   );
 }
-

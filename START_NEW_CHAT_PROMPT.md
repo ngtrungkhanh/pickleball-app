@@ -40,6 +40,10 @@ Trạng thái code gần nhất:
 - User-facing save feedback dùng `Đang lưu...` / `Lưu lỗi - thử lại`, không dùng `Đang đồng bộ...`.
 - Settings server actions đã được bọc try/catch để trả lỗi ra UI, tránh treo `Đang lưu...`.
 - `/analysis` đã có route Trung tâm phân tích read-only với tabs tổng quan/player/partner/opponent/trend/history. ELO hiện là bản đơn giản.
+- Đã tích hợp **Bộ định danh thiết bị ẩn danh (Device Fingerprint)**: Tự tạo Device ID duy nhất `USR-XXXX` và cho phép người chơi đặt biệt danh (Lưu trong `localStorage`), kèm thu thập trình duyệt/phần cứng lưu trữ trực tiếp vào cột `created_by` có độ rộng nâng cấp lên 50 kí tự trong `src/app/api/setup/route.ts`.
+- Đã xây dựng **Sửa đổi trực tiếp (Inline Edit)** tại trang Admin: cho phép sửa tên thành viên tại chỗ, sửa chi tiết trận đấu (Ngày-giờ dạng `datetime-local`, người thắng/thua, tỷ số) inline cực đẹp.
+- Đã hoàn thiện **Logic Đảo ngược thống kê (Recalculation Balance)** trong server-action `updateMatchAction` tự động trừ điểm số/tiền phạt cũ rồi cộng điểm mới để cân bằng số liệu.
+- Đã sửa triệt để **Lỗi mã hóa Phông chữ tiếng Việt (mojibake)** trên trang Admin Panel, khôi phục 100% hiển thị tiếng Việt UTF-8 chuẩn có dấu.
 
 File/code quan trọng vừa chạm:
 - `src/app/actions.ts`

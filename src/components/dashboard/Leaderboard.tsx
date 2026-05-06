@@ -171,19 +171,21 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
 export function Leaderboard({
   players,
   matches,
-  initialStats = [],
   seasons: seasonList = [],
   activeSeason = 'Season 1',
+  selectedSeason,
+  onSeasonChange,
   loseMoney = 5000,
 }: {
   players: Player[];
   matches: Match[];
-  initialStats?: any[];
   seasons?: Season[];
   activeSeason?: string;
+  selectedSeason?: string | null;
+  onSeasonChange?: (season: string | null) => void;
   loseMoney?: number;
 }) {
-  const [currentSeason, setCurrentSeason] = useState<string | null>(activeSeason);
+  const currentSeason = selectedSeason === undefined ? activeSeason : selectedSeason;
   const [seasonOpen, setSeasonOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -208,6 +210,7 @@ export function Leaderboard({
       return Number(b.replace(/\D/g, '')) - Number(a.replace(/\D/g, ''));
     });
 
+  const setCurrentSeason = (season: string | null) => onSeasonChange?.(season);
   const filtered = currentSeason === null ? matches : matches.filter(m => (m.season || 'Season 1') === currentSeason);
   
   const seasonStartText = filtered.length
@@ -219,9 +222,8 @@ export function Leaderboard({
     : null;
 
   // Task 18: Use pre-calculated stats for active season, calculate from raw matches for history
-  const isCurrentSeason = currentSeason === activeSeason;
-  const board = calculateLeaderboard(players, filtered, loseMoney, isCurrentSeason ? initialStats : undefined)
-    .filter(p => p.active !== false)
+  const board = calculateLeaderboard(players, filtered, loseMoney)
+    .filter(p => p.active !== false && p.id !== '__GUEST__')
     .slice(0, 20);
 
   const toggle = (id: string) => setExpandedId(prev => prev === id ? null : id);

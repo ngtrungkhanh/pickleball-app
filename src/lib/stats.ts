@@ -1,3 +1,5 @@
+import { GUEST_ID, isGuestId, isRankingMatch, loserFineCount } from './guest';
+
 export function calculateLeaderboard(players: any[], matches: any[], loseMoney: number = 5000, precalculatedStats?: any[]) {
   const stats = players.map(p => ({
     ...p,
@@ -22,20 +24,30 @@ export function calculateLeaderboard(players: any[], matches: any[], loseMoney: 
       }
     });
   } else {
-    // Fallback to calculating from raw matches
-    matches.forEach(m => {
+    const rankingMatches = matches.filter(isRankingMatch);
+    const fineMatches = matches.filter(m => !m.deleted_at);
+
+    rankingMatches.forEach(m => {
       [m.win_1, m.win_2].forEach(id => {
-        if (id && statsMap.has(id)) {
+        if (id && statsMap.has(id) && !isGuestId(id)) {
           const s = statsMap.get(id)!;
           s.wins++;
           s.total++;
         }
       });
       [m.lose_1, m.lose_2].forEach(id => {
-        if (id && statsMap.has(id)) {
+        if (id && statsMap.has(id) && !isGuestId(id)) {
           const s = statsMap.get(id)!;
           s.losses++;
           s.total++;
+        }
+      });
+    });
+
+    fineMatches.forEach(m => {
+      [m.lose_1, m.lose_2].forEach(id => {
+        if (id && statsMap.has(id) && !isGuestId(id)) {
+          const s = statsMap.get(id)!;
           s.money += loseMoney;
         }
       });
@@ -55,11 +67,13 @@ export function calculateLeaderboard(players: any[], matches: any[], loseMoney: 
 }
 
 export function getSeasonSummaryStats(matches: any[], loseMoney: number = 5000) {
-  const totalMatches = matches.length;
-  const totalLoseCount = totalMatches * 2;
+  const visibleMatches = matches.filter(m => !m.deleted_at);
+  const rankingMatches = visibleMatches.filter(isRankingMatch);
+  const totalMatches = rankingMatches.length;
+  const totalLoseCount = visibleMatches.reduce((sum, m) => sum + loserFineCount(m), 0);
   const totalMoney = totalLoseCount * loseMoney;
 
-  const matchDates = matches.map(m => new Date(m.date).getTime()).sort((a, b) => a - b);
+  const matchDates = rankingMatches.map(m => new Date(m.date).getTime()).sort((a, b) => a - b);
   const startDate = matchDates.length > 0 ? new Date(matchDates[0]) : null;
   const seasonDays = startDate ? Math.max(1, Math.floor((Date.now() - startDate.getTime()) / 86400000) + 1) : 0;
 
@@ -69,12 +83,12 @@ export function getSeasonSummaryStats(matches: any[], loseMoney: number = 5000) 
   const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day + 1).getTime();
   const endOfWeek = startOfWeek + 7 * 86400000;
 
-  const matchesThisWeek = matches.filter(m => {
+  const matchesThisWeek = rankingMatches.filter(m => {
     const t = new Date(m.date).getTime();
     return t >= startOfWeek && t < endOfWeek;
   }).length;
 
-  const latestMatch = matches.length > 0 ? new Date(matches[0].date) : null;
+  const latestMatch = rankingMatches.length > 0 ? new Date(rankingMatches[0].date) : null;
   let lastText = "Chưa có";
   if (latestMatch) {
     const mDate = new Date(latestMatch.getFullYear(), latestMatch.getMonth(), latestMatch.getDate()).getTime();
@@ -96,7 +110,8 @@ export function getSeasonSummaryStats(matches: any[], loseMoney: number = 5000) 
 }
 
 export function getPlayerAdvancedStats(playerId: string, matches: any[], players: any[]) {
-  const playerMatches = matches.filter(m => 
+  const rankingMatches = matches.filter(isRankingMatch);
+  const playerMatches = rankingMatches.filter(m => 
     m.win_1 === playerId || m.win_2 === playerId || 
     m.lose_1 === playerId || m.lose_2 === playerId
   );
@@ -126,7 +141,7 @@ export function getPlayerAdvancedStats(playerId: string, matches: any[], players
       ? (m.win_1 === playerId ? m.win_2 : m.win_1)
       : (m.lose_1 === playerId ? m.lose_2 : m.lose_1);
     
-    if (partnerId) {
+    if (partnerId && partnerId !== GUEST_ID) {
       const s = partners.get(partnerId) || { wins: 0, total: 0 };
       if (isWin) s.wins++;
       s.total++;
@@ -150,7 +165,7 @@ export function getPlayerAdvancedStats(playerId: string, matches: any[], players
     const enemyTeam = isWin ? [m.lose_1, m.lose_2] : [m.win_1, m.win_2];
     
     enemyTeam.forEach(rivalId => {
-      if (rivalId) {
+      if (rivalId && rivalId !== GUEST_ID) {
         const s = rivals.get(rivalId) || { wins: 0, losses: 0, total: 0 };
         if (isWin) s.wins++;
         if (!isWin) s.losses++;

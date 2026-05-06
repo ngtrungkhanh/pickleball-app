@@ -6,8 +6,9 @@ import { ArrowLeft, Search, RefreshCw, Database } from 'lucide-react';
 import { buildElo, buildOpponentRows, buildPartnerRows, getName, getPlayerAnalysis } from '@/lib/analytics';
 import { calculateLeaderboard } from '@/lib/stats';
 import { cn } from '@/lib/utils';
-import { getLocalMatches, saveMatchesLocal, getLastMatchId } from '@/lib/db';
+import { getLocalMatches, saveMatchesLocal } from '@/lib/db';
 import { getMatchesAfterAction } from '@/app/actions';
+import { isGuestId, isRankingMatch } from '@/lib/guest';
 
 type Player = { id: string; name: string; active?: boolean };
 type Match = {
@@ -21,13 +22,28 @@ type Match = {
   lose_score?: number;
   season?: string;
 };
+type Season = { id?: string; name: string; active?: boolean; start_date?: string };
 
 const tabs = ['Tổng quan', 'Player', 'Partner', 'Opponent', 'Trend', 'Match history'];
 
-export function AnalysisCenter({ players, matches: initialMatches, loseMoney = 5000 }: { players: Player[]; matches: Match[]; loseMoney?: number }) {
+export function AnalysisCenter({
+  players,
+  matches: initialMatches,
+  seasons = [],
+  activeSeason = 'Season 1',
+  loseMoney = 5000,
+}: {
+  players: Player[];
+  matches: Match[];
+  seasons?: Season[];
+  activeSeason?: string;
+  loseMoney?: number;
+}) {
   const [tab, setTab] = useState(tabs[0]);
-  const [playerId, setPlayerId] = useState(players[0]?.id || '');
+  const visiblePlayers = players.filter(p => p.active !== false && !isGuestId(p.id));
+  const [playerId, setPlayerId] = useState(visiblePlayers[0]?.id || '');
   const [query, setQuery] = useState('');
+  const [selectedSeason, setSelectedSeason] = useState<string | null>(activeSeason);
   
   const [localMatches, setLocalMatches] = useState<Match[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -66,13 +82,16 @@ export function AnalysisCenter({ players, matches: initialMatches, loseMoney = 5
     sync();
   }, [initialMatches]);
 
-  const activeMatches = localMatches.length > 0 ? localMatches : initialMatches;
+  const allMatches = localMatches.length > 0 ? localMatches : initialMatches;
+  const activeMatches = selectedSeason === null ? allMatches : allMatches.filter(m => (m.season || 'Season 1') === selectedSeason);
+  const rankingMatches = activeMatches.filter(isRankingMatch);
+  const seasonOptions = Array.from(new Set([activeSeason, ...seasons.map(s => s.name), ...allMatches.map(m => m.season || 'Season 1')].filter(Boolean)));
 
-  const board = useMemo(() => calculateLeaderboard(players, activeMatches, loseMoney), [players, activeMatches, loseMoney]);
-  const elo = useMemo(() => buildElo(players, activeMatches), [players, activeMatches]);
-  const partnerRows = useMemo(() => buildPartnerRows(players, activeMatches), [players, activeMatches]);
-  const opponentRows = useMemo(() => buildOpponentRows(players, activeMatches), [players, activeMatches]);
-  const analysis = useMemo(() => getPlayerAnalysis(playerId, players, activeMatches), [playerId, players, activeMatches]);
+  const board = useMemo(() => calculateLeaderboard(players, activeMatches, loseMoney).filter(p => !isGuestId(p.id)), [players, activeMatches, loseMoney]);
+  const elo = useMemo(() => buildElo(visiblePlayers, rankingMatches), [visiblePlayers, rankingMatches]);
+  const partnerRows = useMemo(() => buildPartnerRows(visiblePlayers, rankingMatches), [visiblePlayers, rankingMatches]);
+  const opponentRows = useMemo(() => buildOpponentRows(visiblePlayers, rankingMatches), [visiblePlayers, rankingMatches]);
+  const analysis = useMemo(() => getPlayerAnalysis(playerId, visiblePlayers, rankingMatches), [playerId, visiblePlayers, rankingMatches]);
 
   const filteredHistory = activeMatches.filter(m => {
     if (!query.trim()) return true;
@@ -100,6 +119,15 @@ export function AnalysisCenter({ players, matches: initialMatches, loseMoney = 5
         </div>
       </div>
 
+      <select
+        value={selectedSeason ?? 'all'}
+        onChange={e => setSelectedSeason(e.target.value === 'all' ? null : e.target.value)}
+        className="w-full sm:w-64 rounded-xl bg-slate-900 border border-white/[0.06] px-4 py-3 text-sm font-black text-white/70"
+      >
+        <option value="all">Tổng hợp</option>
+        {seasonOptions.map(s => <option key={s} value={s}>{s}</option>)}
+      </select>
+
       <div className="flex gap-2 overflow-x-auto pb-1">
         {tabs.map(t => (
           <button
@@ -114,8 +142,8 @@ export function AnalysisCenter({ players, matches: initialMatches, loseMoney = 5
 
       {tab === 'Tổng quan' && (
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          <Stat label="Tổng trận" value={activeMatches.length} />
-          <Stat label="Thành viên" value={players.length} />
+          <Stat label="Tổng trận" value={rankingMatches.length} />
+          <Stat label="Thành viên" value={visiblePlayers.length} />
           <Stat label="Top BXH" value={board[0]?.name || '--'} />
           <Stat label="ELO cao nhất" value={`${[...elo.rating.entries()].sort((a, b) => b[1] - a[1])[0]?.[1] ?? 1000}`} />
         </div>
@@ -124,7 +152,7 @@ export function AnalysisCenter({ players, matches: initialMatches, loseMoney = 5
       {tab === 'Player' && (
         <div className="space-y-4">
           <select value={playerId} onChange={e => setPlayerId(e.target.value)} className="w-full sm:max-w-sm rounded-xl px-4 py-3">
-            {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {visiblePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
             <Stat label="Rank BXH" value={`#${analysis.rank || '--'}`} />

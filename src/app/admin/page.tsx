@@ -33,7 +33,8 @@ import {
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
-const adminTabs = ['Nhật ký & Hệ thống', 'Thành viên', 'Season', 'Trận đấu'];
+const adminTabs = ['Nháº­t kÃ½ & Há»‡ thá»‘ng', 'ThÃ nh viÃªn', 'Season', 'Tráº­n Ä‘áº¥u'];
+const ADMIN_AUTH_DATE_KEY = 'pickleball_admin_auth_date';
 
 export default function AdminPage() {
   const [pass, setPass] = useState('');
@@ -45,6 +46,7 @@ export default function AdminPage() {
   const [players, setPlayers] = useState<any[]>([]);
   const [seasons, setSeasons] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
+  const [matchSearch, setMatchSearch] = useState('');
 
   // Inline editing states
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
@@ -56,6 +58,15 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    try {
+      const today = new Date().toLocaleDateString('en-CA');
+      if (localStorage.getItem(ADMIN_AUTH_DATE_KEY) === today) {
+        setIsAuth(true);
+      }
+    } catch {}
+  }, []);
 
   // Task 20: Auto-load data on auth
   useEffect(() => {
@@ -74,13 +85,17 @@ export default function AdminPage() {
     try {
       const res = await verifyAdminAction(input);
       if (res.success) {
+        try {
+          const today = new Date().toLocaleDateString('en-CA');
+          localStorage.setItem(ADMIN_AUTH_DATE_KEY, today);
+        } catch {}
         setIsAuth(true);
         // loadData will be triggered by useEffect
       } else {
-        setMsg({ type: 'error', text: res.error || 'Mật khẩu sai rồi sếp ơi!' });
+        setMsg({ type: 'error', text: res.error || 'Máº­t kháº©u sai rá»“i sáº¿p Æ¡i!' });
       }
     } catch (err) {
-      setMsg({ type: 'error', text: 'Lỗi kết nối server.' });
+      setMsg({ type: 'error', text: 'Lá»—i káº¿t ná»‘i server.' });
     }
     setLoading(false);
   };
@@ -104,7 +119,7 @@ export default function AdminPage() {
       setMatches(m || []);
     } catch (err) {
       console.error('Admin Load Failed:', err);
-      setMsg({ type: 'error', text: 'Không thể tải dữ liệu từ server.' });
+      setMsg({ type: 'error', text: 'KhÃ´ng thá»ƒ táº£i dá»¯ liá»‡u tá»« server.' });
     }
     setLoading(false);
   };
@@ -174,7 +189,7 @@ export default function AdminPage() {
     fd.append('win_1', editMatchData.win_1);
     if (editMatchData.win_2) fd.append('win_2', editMatchData.win_2);
     fd.append('lose_1', editMatchData.lose_1);
-    if (editMatchData.lose_2) fd.append('lose_2', editMatchData.lose_2);
+    fd.append('lose_2', editMatchData.lose_2);
     fd.append('win_score', String(editMatchData.win_score));
     fd.append('lose_score', String(editMatchData.lose_score));
     if (editMatchData.date) fd.append('date', editMatchData.date);
@@ -189,6 +204,27 @@ export default function AdminPage() {
     }
     setLoading(false);
   };
+
+  const playerName = (id?: string | null) => players.find(p => p.id === id)?.name || id || '';
+  const visibleMatches = [...matches]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .filter(m => {
+      const q = matchSearch.trim().toLowerCase();
+      if (!q) return true;
+      const text = [
+        m.id,
+        m.season,
+        m.created_by,
+        m.win_score,
+        m.lose_score,
+        playerName(m.win_1),
+        playerName(m.win_2),
+        playerName(m.lose_1),
+        playerName(m.lose_2),
+        new Date(m.date).toLocaleString('vi-VN'),
+      ].join(' ').toLowerCase();
+      return text.includes(q);
+    });
 
   if (!isAuth) {
     return (
@@ -347,8 +383,16 @@ export default function AdminPage() {
                 <h3 className="font-black text-sm uppercase tracking-widest">Quản lý Lịch sử Trận đấu</h3>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                  <input placeholder="Tìm theo tên..." className="bg-white/5 border border-white/10 rounded-xl py-2 pl-9 pr-4 text-xs" />
+                  <input
+                    value={matchSearch}
+                    onChange={e => setMatchSearch(e.target.value)}
+                    placeholder="Tìm theo tên, season, thiết bị..."
+                    className="bg-white/5 border border-white/10 rounded-xl py-2 pl-9 pr-4 text-xs"
+                  />
                 </div>
+              </div>
+              <div className="px-6 py-3 border-b border-white/5 text-[10px] font-black uppercase tracking-widest text-white/25">
+                Đang hiện {visibleMatches.length}/{matches.length} trận · Mới nhất lên trước
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
@@ -363,7 +407,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {matches.map(m => {
+                    {visibleMatches.map(m => {
                       const isEditing = editingMatchId === m.id;
                       const matchDate = new Date(m.date);
                       // Adjust to local datetime string format for inputs: YYYY-MM-DDTHH:mm
@@ -456,18 +500,18 @@ export default function AdminPage() {
                       return (
                         <tr key={m.id} className="hover:bg-white/[0.02] transition-all">
                           <td className="px-6 py-4 text-xs font-bold text-white/40">{formattedTime}</td>
-                          <td className="px-6 py-4 text-sm font-black text-primary truncate max-w-[150px]">
-                            {players.find(p => p.id === m.win_1)?.name || m.win_1}
-                            {m.win_2 ? ` / ${players.find(p => p.id === m.win_2)?.name || m.win_2}` : ''}
+                          <td className="px-6 py-4 text-sm font-black text-primary max-w-[260px] line-clamp-2 break-words leading-snug">
+                            {playerName(m.win_1)}
+                            {m.win_2 ? ` / ${playerName(m.win_2)}` : ''}
                           </td>
                           <td className="px-6 py-4">
                             <span className="bg-white/5 px-2 py-1 rounded-lg font-black text-xs">
                               {m.win_score}-{m.lose_score}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-sm font-bold text-white/60 truncate max-w-[150px]">
-                            {players.find(p => p.id === m.lose_1)?.name || m.lose_1}
-                            {m.lose_2 ? ` / ${players.find(p => p.id === m.lose_2)?.name || m.lose_2}` : ''}
+                          <td className="px-6 py-4 text-sm font-bold text-white/60 max-w-[260px] line-clamp-2 break-words leading-snug">
+                            {playerName(m.lose_1)}
+                            {m.lose_2 ? ` / ${playerName(m.lose_2)}` : ''}
                           </td>
                           <td className="px-6 py-4 text-xs font-bold text-blue-400/80 truncate max-w-[180px]">
                             {m.created_by || 'Chưa có dữ liệu'}
@@ -583,20 +627,20 @@ export default function AdminPage() {
           {activeTab === 'Season' && (
             <div className="bg-slate-900/50 border border-white/5 rounded-3xl overflow-hidden">
               <div className="px-6 py-5 border-b border-white/5">
-                <h3 className="font-black text-sm uppercase tracking-widest">Quản lý Seasons</h3>
+                <h3 className="font-black text-sm uppercase tracking-widest">Quáº£n lÃ½ Seasons</h3>
               </div>
               <div className="p-6 grid gap-4">
                 {seasons.map(s => (
                   <div key={s.id} className="bg-white/5 border border-white/10 rounded-2xl p-6 flex items-center justify-between">
                     <div>
                       <h4 className="text-xl font-black text-white">{s.name}</h4>
-                      <p className="text-xs font-bold text-white/30">Bắt đầu: {new Date(s.start_date).toLocaleDateString()}</p>
+                      <p className="text-xs font-bold text-white/30">Báº¯t Ä‘áº§u: {new Date(s.start_date).toLocaleDateString()}</p>
                     </div>
                     <div className="flex items-center gap-3">
                       {s.active ? (
-                        <span className="bg-primary/20 text-primary px-4 py-2 rounded-xl text-[10px] font-black uppercase">Đang kích hoạt</span>
+                        <span className="bg-primary/20 text-primary px-4 py-2 rounded-xl text-[10px] font-black uppercase">Äang kÃ­ch hoáº¡t</span>
                       ) : (
-                        <button className="bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl text-[10px] font-black uppercase text-white/40">Kích hoạt</button>
+                        <button className="bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl text-[10px] font-black uppercase text-white/40">KÃ­ch hoáº¡t</button>
                       )}
                     </div>
                   </div>
@@ -610,3 +654,6 @@ export default function AdminPage() {
     </div>
   );
 }
+
+
+

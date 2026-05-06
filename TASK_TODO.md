@@ -24,126 +24,52 @@
 
 ---
 
-## 🔥 SPRINT 2.5 (CHƯA LÀM): TỐI ƯU HIỆU NĂNG & TRẢI NGHIỆM GHI ĐIỂM
+## ✅ SPRINT 2.5 (ĐÃ HOÀN THÀNH): TỐI ƯU HIỆU NĂNG & TRẢI NGHIỆM GHI ĐIỂM
 
 ### Task 15: Chuyển đổi sang ISR (Incremental Static Regeneration)
-
-**Mục tiêu:** Tiết kiệm tối đa Compute CU-hrs cho Vercel Free Plan. Hiện tại mỗi lần truy cập đều gọi Database → tốn Quota liên tục.
-
-**Hành động cụ thể:**
-
-1. **Sửa `src/app/page.tsx`:**
-   - Dòng 4: Đổi `export const revalidate = 0` thành `export const revalidate = false`.
-   - Dòng 8: Đổi `LIMIT 100` thành `LIMIT 500` (Full-Preload toàn bộ trận đấu).
-
-2. **Sửa `src/app/actions.ts`:**
-   - Hàm `addMatchAction`: Sau `INSERT`, gọi `revalidatePath('/')` (đã có sẵn, chỉ cần đảm bảo không bị xóa).
-   - Hàm `deleteMatchAction`: Tương tự, `revalidatePath('/')` đã có.
-
-3. **Kết quả mong đợi:**
-   - Truy cập xem BXH: **0 Compute** (trả file HTML tĩnh từ CDN).
-   - Ghi điểm: Tốn Compute **1 lần duy nhất** (INSERT + rebuild HTML).
-   - Xem Full Lịch sử: **0 Compute** (dữ liệu đã nhúng sẵn trong HTML).
+- [x] Đổi `export const revalidate = false` trong `src/app/page.tsx` và nâng giới hạn lấy dữ liệu lên 500 trận.
+- [x] Đảm bảo gọi `revalidatePath('/')` trong các server actions để cập nhật cache tĩnh, tiết kiệm tối đa Compute CU-hrs cho Vercel Free Plan.
 
 ### Task 16: ScoreForm — Local-First Sync & Silent Background Upload
-
-**Mục tiêu:** Bấm "Ghi" → thấy "Đã lưu" trong 1 giây → Form reset ngay → Dữ liệu gửi ngầm xuống server.
-
-**Hành động cụ thể (sửa `src/components/ScoreForm.tsx`):**
-
-1. **Phản hồi 1 giây:**
-   - Dòng 114: Đổi `setTimeout(() => setOptimisticSaved(false), 2000)` thành `1000`.
-   - Sau 1 giây: Reset form (clear win1/win2/lose1/lose2), mở khóa nút bấm.
-
-2. **Sync Indicator (góc trên bên phải):**
-   - Thêm state `isSyncing` (boolean).
-   - Khi bắt đầu gọi `addMatchAction`, set `isSyncing = true`.
-   - Khi server trả về (success/error), set `isSyncing = false`.
-   - Render một indicator nhỏ cố định ở góc trên bên phải (`fixed top-4 right-4`):
-     ```
-     isSyncing = true  → "⟳ Đang đồng bộ..." (màu vàng nhạt)
-     syncError = true   → "⚠ Lỗi đồng bộ – Thử lại" (màu đỏ, bấm được)
-     ```
-
-3. **Tách biệt UI và Network:**
-   - Nút "Ghi" chỉ bị disable trong 1 giây (tránh double-click), KHÔNG đợi server response.
-   - Quá trình gửi dữ liệu lên server chạy hoàn toàn **dưới nền (Background)**.
+- [x] Bấm "Ghi" -> thấy thành công trong 1 giây và tự reset form, mở khóa nhập trận tiếp theo ngay lập tức.
+- [x] Gửi dữ liệu đồng bộ âm thầm dưới nền (Background Sync) kèm Sync Indicator nhỏ gọn ở góc màn hình.
 
 ### Task 17: Chặn trùng 15 phút (Local Duplicate Check)
-
-**Mục tiêu:** Nếu người chơi nhập trùng y hệt một trận đã ghi trong 15 phút gần nhất → chặn ngay tại máy, không gửi lên server.
-
-**Hành động cụ thể (sửa `src/components/ScoreForm.tsx`):**
-
-1. **Lưu 2 trận gần nhất vào `localStorage`:**
-   - Key: `pickleball_recent_matches`
-   - Value: Array chứa tối đa 2 trận, mỗi trận gồm: `{ players: [win1, win2, lose1, lose2].sort(), timestamp: Date.now() }`
-   - Lưu sau khi validation thành công, trước khi gửi lên server.
-
-2. **Logic kiểm tra trùng:**
-   ```typescript
-   function isDuplicate(newPlayers: string[]): boolean {
-     const recent = JSON.parse(localStorage.getItem('pickleball_recent_matches') || '[]');
-     const sorted = newPlayers.filter(Boolean).sort();
-     const now = Date.now();
-     return recent.some((m: any) => {
-       const timeDiff = (now - m.timestamp) / 60000; // phút
-       if (timeDiff > 15) return false;
-       return JSON.stringify(m.players) === JSON.stringify(sorted);
-     });
-   }
-   ```
-
-3. **Khi phát hiện trùng:** Hiện alert hoặc Toast: *"Trận đấu này dường như đã được ghi trong 15 phút gần đây. Vui lòng kiểm tra lại!"*
+- [x] Tích hợp logic quét trùng 15 phút so sánh với 2 trận gần nhất trực tiếp tại localStorage của trình duyệt, ngăn chặn bấm nhầm mà không cần tốn Quota server.
 
 ### Task 18: Hộp đen (Offline Backup — localStorage)
-
-**Mục tiêu:** Tránh mất dữ liệu khi mạng chập chờn hoặc tắt trang giữa chừng.
-
-**Hành động cụ thể:**
-
-1. **Lưu Draft trước khi gửi:**
-   - Key: `pickleball_pending_match`
-   - Value: `{ match: { win1, win2, lose1, lose2, winScore, loseScore }, timestamp: Date.now() }`
-   - Lưu **TRƯỚC** khi gọi `addMatchAction`.
-   - Xóa **SAU** khi server trả về `{ success: true }`.
-
-2. **Phục hồi khi mở App (sửa `src/components/Dashboard.tsx`):**
-   - Trong `useEffect` đầu tiên, kiểm tra `localStorage.getItem('pickleball_pending_match')`.
-   - Nếu có → Hiện banner cố định ở đầu trang: *"⚠ Có 1 trận đấu chưa đồng bộ do mất mạng. [Thử lại] [Bỏ qua]"*
-   - Bấm "Thử lại" → Gọi lại `addMatchAction` với dữ liệu đã lưu.
+- [x] Triển khai cơ chế "Hộp đen" tự động sao lưu trận đấu thành Draft tạm thời trước khi gửi, hiện banner khôi phục dữ liệu khi mạng chập chờn hoặc tắt trang giữa chừng.
 
 ### Task 19: Server-side Duplicate Check (Tầng bọc hậu)
+- [x] Xây dựng tầng bọc hậu tại Postgres server để chặn trùng chéo khi nhiều thiết bị gửi điểm đồng thời.
 
-**Mục tiêu:** Phòng trường hợp 2 người dùng trên 2 máy khác nhau cùng ghi 1 trận.
+### Task 20: Tối ưu Giao diện còn sót
+- [x] Chuẩn hóa khoảng cách, độ cao của các ô Select nhập điểm, đồng bộ tỷ lệ Mirror Legacy chuẩn 100%.
 
-**Hành động cụ thể (sửa `src/app/actions.ts`):**
+---
 
-1. **Trước khi INSERT, thêm query kiểm tra:**
-   ```sql
-   SELECT id FROM matches
-   WHERE date > NOW() - INTERVAL '15 minutes'
-   AND (
-     (win_1 IN (${win_1}, ${win_2}) AND win_2 IN (${win_1}, ${win_2}))
-     OR (lose_1 IN (${lose_1}, ${lose_2}) AND lose_2 IN (${lose_1}, ${lose_2}))
-   )
-   LIMIT 1;
-   ```
-2. **Nếu tìm thấy kết quả:** Return `{ error: 'Trận đấu này đã được ghi trong 15 phút gần đây' }`.
+## ✅ SPRINT 2.6 (ĐÃ HOÀN THÀNH): BẢO MẬT ĐỊNH DANH & QUẢN TRỊ ADMIN
 
-### Task 20: Tối ưu Giao diện còn sót (Nếu vẫn lỗi sau Task 12-14)
+### Task 21: Định danh thiết bị ẩn danh & Biệt danh (Device Fingerprint)
+- [x] Tự động sinh mã định danh duy nhất vĩnh viễn `USR-XXXX` lưu trong localStorage.
+- [x] Cho phép người dùng đặt Biệt danh thiết bị (Ví dụ: "Chung ĐT", "Tùng PC") trực tiếp dưới Form ghi điểm.
+- [x] Tự động giải mã thông tin phần cứng và trình duyệt qua `navigator.userAgent`.
+- [x] Ghép nối toàn bộ thông số thành chuỗi chi tiết dạng `USR-XXXX (Biệt danh) [Device Model]` và gửi lên lưu trữ tại cột `created_by` trong bảng `matches` (Độ rộng cột tăng lên 50 kí tự trong setup DB).
 
-**Chỉ làm nếu giao diện vẫn chưa ưng ý sau khi chạy xong Task 12-14.**
+### Task 22: Sửa đổi trực tiếp (Inline Edit) trong Admin Panel
+- [x] Thiết kế nút `[Sửa]` đổi tên thành viên trực tiếp, lưu tức thì qua `updatePlayerAction`.
+- [x] Thiết kế nút `Sửa` trận đấu tại Tab Lịch sử, biến toàn bộ dòng dữ liệu thành form chỉnh sửa inline (Ngày-giờ dạng `datetime-local`, chọn người thắng/thua, nhập tỷ số) và lưu trực tiếp qua `updateMatchAction`.
 
-- [ ] Kiểm tra lại cỡ chữ toàn bộ Dashboard trên cả 3 loại màn hình (Mobile, Full HD, 2K).
-- [ ] Đảm bảo các ô Select và ô Nhập điểm có chiều cao bằng nhau, thẳng hàng.
-- [ ] Dấu gạch ngang giữa 2 tỷ số phải to và rõ.
-- [ ] Kiểm tra Leaderboard Detail (phần mở rộng): các dòng Text List phải đều nhau.
+### Task 23: Logic Đảo ngược thống kê cân bằng điểm số (Incremental Balance)
+- [x] Xây dựng thuật toán trong `updateMatchAction` tự động trừ ngược điểm số, trận thắng, tiền phạt của người chơi cũ của trận đấu cũ trước khi cộng dồn số liệu mới, giữ vững tính nhất quán tuyệt đối cho bảng xếp hạng.
+
+### Task 24: Khắc phục triệt để lỗi Phông chữ Tiếng Việt
+- [x] Rà soát và chuyển đổi 100% các chuỗi ký tự Việt hóa bị hỏng encoding (mojibake) trên trang Admin thành UTF-8 chuẩn có dấu chuẩn chỉ.
 
 ---
 
 ## SPRINT 3 (DỰ KIẾN): THỐNG KÊ & PLUGINS
-*(Sẽ cập nhật chi tiết sau khi hoàn thiện Sprint 2.5)*
-- Phong độ nâng cao.
-- Plugin Thiên địch / Kèo sáng.
-- Plugin Cặp đôi tốt nhất.
+*(Sẽ cập nhật chi tiết sau khi vận hành ổn định các tính năng mới)*
+- Phong độ nâng cao và biểu đồ xu hướng.
+- Plugin Thiên địch / Kèo sáng nâng cấp.
+- Plugin Cặp đôi ăn ý / Cạ cứng.

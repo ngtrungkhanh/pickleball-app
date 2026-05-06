@@ -3,6 +3,7 @@ import { useState, useTransition, useRef, useEffect } from 'react';
 import { addMatchAction } from '@/app/actions';
 import { Minus, Plus, Trophy, Ghost, Send, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isGuestId } from '@/lib/guest';
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 const PENDING_KEY = 'pickleball_pending_match';
@@ -109,8 +110,31 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
   const [isEditingNick, setIsEditingNick] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState('');
 
-  const active = players.filter(p => p.active);
+  const active = players.filter(p => p.active && !p.deleted_at);
   const reset = () => { setWin1(''); setWin2(''); setLose1(''); setLose2(''); setWs(11); setLs(5); };
+
+  type Slot = 'win1' | 'win2' | 'lose1' | 'lose2';
+  const setSlot = (slot: Slot, value: string) => {
+    if (value && !isGuestId(value)) {
+      if (slot !== 'win1' && win1 === value) setWin1('');
+      if (slot !== 'win2' && win2 === value) setWin2('');
+      if (slot !== 'lose1' && lose1 === value) setLose1('');
+      if (slot !== 'lose2' && lose2 === value) setLose2('');
+    }
+
+    if (slot === 'win1') setWin1(value);
+    if (slot === 'win2') setWin2(value);
+    if (slot === 'lose1') setLose1(value);
+    if (slot === 'lose2') setLose2(value);
+  };
+
+  const optionsFor = (slot: Slot) => {
+    const sameSideSelected = slot.startsWith('win')
+      ? [slot === 'win1' ? win2 : win1]
+      : [slot === 'lose1' ? lose2 : lose1];
+
+    return active.filter(p => isGuestId(p.id) || !sameSideSelected.includes(p.id));
+  };
 
   // Task 21: Auto-generate unique Device ID, retrieve Nickname, and detect hardware specs
   useEffect(() => {
@@ -222,13 +246,13 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
               <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.3em]">Đội thắng</span>
             </div>
             <div className="space-y-3">
-              <select value={win1} onChange={e => setWin1(e.target.value)} className={selectCls} required>
+              <select value={win1} onChange={e => setSlot('win1', e.target.value)} className={selectCls} required>
                 <option value="">Người thắng 1 *</option>
-                {active.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {optionsFor('win1').map(p => <option key={p.id} value={p.id}>{isGuestId(p.id) ? 'Khách' : p.name}</option>)}
               </select>
-              <select value={win2} onChange={e => setWin2(e.target.value)} className={selectCls}>
+              <select value={win2} onChange={e => setSlot('win2', e.target.value)} className={selectCls}>
                 <option value="">Người thắng 2</option>
-                {active.filter(p => p.id !== win1).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {optionsFor('win2').map(p => <option key={p.id} value={p.id}>{isGuestId(p.id) ? 'Khách' : p.name}</option>)}
               </select>
             </div>
           </div>
@@ -251,13 +275,13 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
               <Ghost className="w-4 h-4 text-red-400 opacity-60" />
             </div>
             <div className="space-y-3">
-              <select value={lose1} onChange={e => setLose1(e.target.value)} className={selectCls} required>
+              <select value={lose1} onChange={e => setSlot('lose1', e.target.value)} className={selectCls} required>
                 <option value="">Người thua 1 *</option>
-                {active.filter(p => p.id !== win1 && p.id !== win2).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {optionsFor('lose1').map(p => <option key={p.id} value={p.id}>{isGuestId(p.id) ? 'Khách' : p.name}</option>)}
               </select>
-              <select value={lose2} onChange={e => setLose2(e.target.value)} className={selectCls}>
+              <select value={lose2} onChange={e => setSlot('lose2', e.target.value)} className={selectCls}>
                 <option value="">Người thua 2</option>
-                {active.filter(p => p.id !== win1 && p.id !== win2 && p.id !== lose1).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {optionsFor('lose2').map(p => <option key={p.id} value={p.id}>{isGuestId(p.id) ? 'Khách' : p.name}</option>)}
               </select>
             </div>
           </div>
@@ -314,4 +338,3 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
     </>
   );
 }
-

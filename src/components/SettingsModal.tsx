@@ -13,8 +13,6 @@ import {
   Trophy,
   Users,
   X,
-  CheckSquare,
-  Square
 } from 'lucide-react';
 import {
   addPlayerAction,
@@ -25,11 +23,11 @@ import {
   setActiveSeasonAction,
   updateFineAction,
   updatePlayerAction,
-  updatePlayersAction,
 } from '@/app/actions';
 import { cn } from '@/lib/utils';
+import { GUEST_NAME, isGuestId } from '@/lib/guest';
 
-type Player = { id: string; name: string; active?: boolean };
+type Player = { id: string; name: string; active?: boolean; deleted_at?: unknown };
 type Season = { id: string; name: string; active?: boolean; start_date?: string };
 type ActionResult = { error?: string; success?: boolean };
 type Feedback = { target: string; type: 'saving' | 'success' | 'error'; text: string } | null;
@@ -234,9 +232,10 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                         )}>
                           <div className="flex-1 flex items-center gap-2 min-w-0">
                             <input 
-                              defaultValue={p.name} 
+                              defaultValue={isGuestId(p.id) ? GUEST_NAME : p.name}
+                              disabled={isGuestId(p.id)}
                               onBlur={(e) => {
-                                if (e.target.value.trim() !== p.name) {
+                                if (!isGuestId(p.id) && e.target.value.trim() !== p.name) {
                                   const fd = new FormData();
                                   fd.append('id', p.id);
                                   fd.append('name', e.target.value.trim());
@@ -244,7 +243,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                                   submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu');
                                 }
                               }}
-                              className="flex-1 bg-transparent px-2 py-0.5 text-sm font-bold text-white outline-none focus:text-primary transition-colors min-w-0" 
+                              className="flex-1 bg-transparent px-2 py-0.5 text-sm font-bold text-white outline-none focus:text-primary transition-colors min-w-0 disabled:text-primary disabled:cursor-not-allowed" 
                             />
                             <InlineFeedback feedback={feedback} target={`player-${p.id}`} />
                           </div>
@@ -262,16 +261,18 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                               }}
                               className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0" 
                             />
-                            <span className="text-[9px] font-black text-white/20 uppercase tracking-widest hidden sm:inline">Active</span>
+                            <span className="text-[9px] font-black text-white/20 uppercase tracking-widest hidden sm:inline">{isGuestId(p.id) ? 'Dropdown' : 'Active'}</span>
                           </label>
 
-                          <button
-                            type="button"
-                            onClick={() => setDeleteTarget(p)}
-                            className="w-7 h-7 rounded-lg border border-red-500/10 bg-red-500/5 text-red-400/20 hover:text-red-400 hover:bg-red-500/15 flex items-center justify-center transition-all shrink-0"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
+                          {!isGuestId(p.id) && (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(p)}
+                              className="w-7 h-7 rounded-lg border border-red-500/10 bg-red-500/5 text-red-400/20 hover:text-red-400 hover:bg-red-500/15 flex items-center justify-center transition-all shrink-0"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>

@@ -78,6 +78,12 @@ Do not make a desktop fix that causes mobile overflow, hidden content, or unread
 - Polished RecentHistory: Mobile view shows Season label, dense metadata line, and clear team names/scores.
 - Standardized Text: Changed 'Unlock' to 'Mở khóa' in Settings. Standardized 'Ghi kết quả' and 'Active' across the UI.
 - SummaryGrid: Enhanced visuals with refined gradients, `rounded-3xl` containers, and better typography.
+- Integrated anonymous Device Fingerprinting (`USR-XXXX` + user custom nickname + browser hardware model) to attribute match logging securely without logins.
+- Raised database `created_by` column size to 50 characters in `src/app/api/setup/route.ts` to fully store metadata.
+- Implemented direct inline renaming `[Sửa]` for players list in Settings Settings.
+- Built comprehensive inline editing for historical matches, allowing admins to modify dates/times, player rosters, and scores directly from the admin history table.
+- Added incremental stats balance recalculation inside `updateMatchAction` to seamlessly subtract previous score weight and add updated scores.
+- Cleaned and corrected all Vietnamese character encodings (mojibake) in the admin console.
 
 ## Immediate Handover Notes
 - `npm run build` passed.
@@ -85,3 +91,12 @@ Do not make a desktop fix that causes mobile overflow, hidden content, or unread
 - Modal consistency issues have been addressed.
 - Recent History now includes Season markers in the mobile view.
 - ScoreForm is optimized for fast entry during play.
+
+## Guest Player / Season Filter Decisions
+- System guest player uses `id = __GUEST__` and display name `Khách`.
+- `Khách` is always protected: do not rename it and do not delete it. Its `active` checkbox only controls whether it appears in match-entry dropdowns and history filters.
+- Normal inactive members are hidden from leaderboard and match-entry dropdowns, but old data remains.
+- Matches containing `Khách` remain in history, do not count ranking/stats/analytics, and still count fines for non-guest losers only.
+- Dashboard season selector is now global for SummaryGrid, Leaderboard, Recent History, and Full History. Default selected season is `activeSeason`; `Tổng hợp` means all seasons.
+- Analysis Center has its own season selector, defaulting to `activeSeason`.
+- Deletes should be recoverable. Match/member/season delete flows should soft-delete visible records with `deleted_at`/`delete_group_id` rather than hard deleting user-visible data.
