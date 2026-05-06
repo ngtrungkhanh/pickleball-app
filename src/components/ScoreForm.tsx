@@ -301,38 +301,6 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
           >
             {ui === 'saved' ? <><CheckCircle2 className="w-5 h-5" /> Đã lưu</> : <><Send className="w-5 h-5" /> Ghi kết quả</>}
           </button>
-
-          {/* Device identity and Nickname editor */}
-          <div className="text-center text-white/20 text-[10px] font-bold tracking-widest uppercase mt-2">
-            {isEditingNick ? (
-              <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 animate-in fade-in duration-200">
-                <input
-                  type="text"
-                  placeholder="Đặt tên thiết bị (VD: ĐT của Chung)..."
-                  defaultValue={nickname}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      saveNickname(e.currentTarget.value.trim());
-                    }
-                  }}
-                  className="bg-transparent border-none text-white/80 focus:outline-none text-[10px] w-48 text-center"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => setIsEditingNick(false)}
-                  className="text-red-400 hover:text-red-300 px-1 font-black"
-                >
-                  Hủy
-                </button>
-              </div>
-            ) : (
-              <span className="flex items-center gap-2 cursor-pointer hover:text-white/40 transition-colors" onClick={() => setIsEditingNick(true)}>
-                <span>📱 Thiết bị: <span className="text-white/40">{clientId}</span> {nickname ? `(${nickname})` : '[Đặt biệt danh]'}</span>
-              </span>
-            )}
-          </div>
         </div>
       </form>
     </>

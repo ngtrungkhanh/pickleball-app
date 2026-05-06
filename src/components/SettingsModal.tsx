@@ -166,7 +166,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                 {!canEdit ? (
                   <div className="flex flex-col sm:flex-row gap-3">
                     <input
-                      type="password"
+                      type="text"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
                       placeholder="Nhập mật khẩu..."
@@ -174,16 +174,24 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           const ok = onUnlock(password);
-                          setFeedback({ target: 'access', type: ok ? 'success' : 'error', text: ok ? 'Đã mở quyền chỉnh sửa' : 'Sai pass' });
-                          if (ok) setPassword('');
+                          if (ok) {
+                            setPassword('');
+                            onClose();
+                          } else {
+                            setFeedback({ target: 'access', type: 'error', text: 'Sai pass' });
+                          }
                         }
                       }}
                     />
                     <button
                       onClick={() => {
                         const ok = onUnlock(password);
-                        setFeedback({ target: 'access', type: ok ? 'success' : 'error', text: ok ? 'Đã mở quyền chỉnh sửa' : 'Sai pass' });
-                        if (ok) setPassword('');
+                        if (ok) {
+                          setPassword('');
+                          onClose();
+                        } else {
+                          setFeedback({ target: 'access', type: 'error', text: 'Sai pass' });
+                        }
                       }}
                       className="rounded-2xl bg-primary px-8 py-4 text-xs font-black text-black uppercase tracking-widest shadow-lg shadow-primary/20 active:scale-95 transition-all"
                     >
