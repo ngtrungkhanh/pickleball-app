@@ -4,12 +4,11 @@ import * as xlsx from 'xlsx';
 import path from 'path';
 import fs from 'fs';
 
-// Helper to convert Excel date to JS Date
+// Helper to convert Excel date to JS Date adjusting for local timezone offset
 function excelDateToJSDate(excelDate: number) {
-  // Excel uses 1900 epoch, JS uses 1970 epoch. 25569 is the difference in days.
-  // Multiply by 86400 (seconds in a day) and 1000 (ms in a sec)
-  // Note: Excel incorrectly assumes 1900 was a leap year, so we subtract 1 more day (25569 total).
-  return new Date((excelDate - 25569) * 86400 * 1000);
+  const tempDate = new Date((excelDate - 25569) * 86400 * 1000);
+  const tzOffset = tempDate.getTimezoneOffset() * 60000;
+  return new Date(tempDate.getTime() + tzOffset);
 }
 
 export async function GET(request: Request) {

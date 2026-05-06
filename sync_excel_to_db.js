@@ -26,9 +26,11 @@ if (fs.existsSync(envPath)) {
 
 const { sql } = require('@vercel/postgres');
 
-// Helper to convert Excel serial date to JS Date
+// Helper to convert Excel serial date to JS Date adjusting for local timezone offset
 function excelDateToJSDate(excelDate) {
-  return new Date((excelDate - 25569) * 86400 * 1000);
+  const tempDate = new Date((excelDate - 25569) * 86400 * 1000);
+  const tzOffset = tempDate.getTimezoneOffset() * 60000;
+  return new Date(tempDate.getTime() + tzOffset);
 }
 
 // Helpers to identify Guest players
