@@ -78,11 +78,11 @@ export default function Dashboard({
   return (
     <div className="space-y-5 transition-all duration-500 w-full">
       <div className="flex items-center justify-end gap-2">
-        <Link href="/analysis" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-slate-900/80 px-3 py-2 text-xs font-black text-white/45 hover:text-primary transition-colors">
+        <Link href="/analysis" className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
           <BarChart3 className="w-4 h-4" />
           Trung tâm phân tích
         </Link>
-        <button onClick={() => setSettingsOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-slate-900/80 px-3 py-2 text-xs font-black text-white/45 hover:text-primary transition-colors">
+        <button onClick={() => setSettingsOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
           <Settings className="w-4 h-4" />
           Cài đặt
         </button>
@@ -116,9 +116,9 @@ export default function Dashboard({
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
             </span>
-            <h3 className="font-black text-[10px] sm:text-xs uppercase tracking-[0.4em] text-white/25">Ghi kết quả</h3>
+            <h3 className="font-black text-[10px] sm:text-xs uppercase tracking-[0.4em] text-slate-300/70">Ghi kết quả</h3>
           </div>
-          <div className="rounded-2xl border border-white/[0.06] bg-slate-900/80 overflow-hidden">
+          <div className="rounded-2xl border border-slate-500/25 bg-[#142034]/95 overflow-hidden">
             <ScoreForm players={initialPlayers} onAddMatch={addLocalMatch} activeSeason={activeSeason} />
           </div>
         </div>

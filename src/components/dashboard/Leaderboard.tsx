@@ -57,7 +57,7 @@ function formatShortDate(value: unknown) {
 
 function RankBadge({ i }: { i: number }) {
   if (i === 0) return <span className="text-xl leading-none">🥇</span>;
-  return <span className="text-[14px] font-black text-white/35 tabular-nums">#{i + 1}</span>;
+  return <span className="text-[14px] font-black text-slate-300/75 tabular-nums">#{i + 1}</span>;
 }
 
 function WinRatePill({ rate }: { rate: number }) {
@@ -66,7 +66,7 @@ function WinRatePill({ rate }: { rate: number }) {
   return (
     <div className="flex flex-col items-center gap-1">
       <span className="font-black text-[15px] tabular-nums leading-none" style={{ color }}>{rate}%</span>
-      <div className="w-12 h-[2px] bg-white/[0.07] rounded-full overflow-hidden">
+      <div className="w-12 h-[2px] bg-white/[0.16] rounded-full overflow-hidden">
         <div className="h-full rounded-full" style={{ width: `${rate}%`, background: color, opacity: 0.75 }} />
       </div>
     </div>
@@ -77,17 +77,17 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
   const recent = adv.recent?.length ? adv.recent : [];
 
   return (
-    <div className="overflow-hidden bg-slate-950/60" style={{ animation: 'expandDown 0.2s ease-out' }}>
+    <div className="overflow-hidden bg-[#0d1728]/85" style={{ animation: 'expandDown 0.2s ease-out' }}>
       <style>{`
         @keyframes expandDown {
           from { opacity: 0; max-height: 0; transform: translateY(-5px); }
           to { opacity: 1; max-height: 400px; transform: translateY(0); }
         }
       `}</style>
-      <div className="px-4 sm:px-8 py-4 sm:py-5 border-t border-white/[0.05]">
+      <div className="px-4 sm:px-8 py-4 sm:py-5 border-t border-slate-500/20">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 items-stretch">
-          <div className="min-w-0 rounded-xl border border-white/[0.06] bg-white/[0.025] px-4 py-4 flex flex-col items-center justify-center text-center gap-2.5">
-            <div className="font-black text-white/40 uppercase tracking-widest text-xs sm:text-sm">Phong độ</div>
+          <div className="min-w-0 rounded-xl border border-slate-500/20 bg-white/[0.045] px-4 py-4 flex flex-col items-center justify-center text-center gap-2.5">
+            <div className="font-black text-slate-300/80 uppercase tracking-widest text-xs sm:text-sm">Phong độ</div>
             <div className="min-w-0 w-full text-base sm:text-lg font-black text-white/90 leading-snug break-words">
               {adv.formComment || 'Đang duy trì ổn định.'}
             </div>
@@ -114,11 +114,11 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
             'min-w-0 rounded-xl border px-4 py-4 flex flex-col items-center justify-center text-center gap-2.5',
             adv.bestPartner?.label === 'Cạ cứng'
               ? 'border-emerald-300/20 bg-emerald-400/[0.06]'
-              : 'border-white/[0.06] bg-white/[0.025]',
+              : 'border-slate-500/20 bg-white/[0.045]',
           )}>
             <div className={cn(
               'font-black uppercase tracking-widest text-xs sm:text-sm',
-              adv.bestPartner?.label === 'Cạ cứng' ? 'text-emerald-200/80' : 'text-white/40',
+              adv.bestPartner?.label === 'Cạ cứng' ? 'text-emerald-200/90' : 'text-slate-300/80',
             )}>
               {adv.bestPartner?.label === 'Cạ cứng' ? '🤝 Cạ cứng' : adv.bestPartner?.label || 'Đối tác tin cậy'}
             </div>
@@ -137,13 +137,13 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
             ) : (
               <>
                 <div className="text-base sm:text-lg font-black text-white/55">Chưa có cặp ăn ý</div>
-                <div className="text-xs sm:text-sm font-bold text-white/35">Cần trên 50% thắng và ít nhất 5 trận chung</div>
+                <div className="text-xs sm:text-sm font-bold text-slate-300/65">Cần trên 50% thắng và ít nhất 5 trận chung</div>
               </>
             )}
           </div>
 
-          <div className="min-w-0 rounded-xl border border-white/[0.06] bg-white/[0.025] px-4 py-4 flex flex-col items-center justify-center text-center gap-2.5">
-            <div className="font-black text-white/40 uppercase tracking-widest text-xs sm:text-sm">
+          <div className="min-w-0 rounded-xl border border-slate-500/20 bg-white/[0.045] px-4 py-4 flex flex-col items-center justify-center text-center gap-2.5">
+            <div className="font-black text-slate-300/80 uppercase tracking-widest text-xs sm:text-sm">
               {adv.toughestRival?.label === 'Thiên địch' ? '☠ Thiên địch' : adv.toughestRival?.label || 'Kèo khó'}
             </div>
             {adv.toughestRival ? (
@@ -158,7 +158,7 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
             ) : (
               <>
                 <div className="text-base sm:text-lg font-black text-white/55">Chưa có đối thủ áp đảo</div>
-                <div className="text-xs sm:text-sm font-bold text-white/35">Cần ít nhất 5 lần gặp</div>
+                <div className="text-xs sm:text-sm font-bold text-slate-300/65">Cần ít nhất 5 lần gặp</div>
               </>
             )}
           </div>
@@ -229,8 +229,8 @@ export function Leaderboard({
   const toggle = (id: string) => setExpandedId(prev => prev === id ? null : id);
 
   return (
-    <div className="w-full rounded-2xl sm:rounded-[2rem] border border-white/[0.08] bg-slate-900/90 shadow-2xl overflow-visible backdrop-blur-2xl">
-      <div className="flex items-center justify-center px-4 sm:px-6 py-5 sm:py-6 border-b border-white/[0.08]">
+    <div className="w-full rounded-2xl sm:rounded-[2rem] border border-slate-500/25 bg-[#142034]/95 shadow-[0_24px_70px_rgba(0,0,0,0.34)] overflow-visible backdrop-blur-2xl">
+      <div className="flex items-center justify-center px-4 sm:px-6 py-5 sm:py-6 border-b border-slate-500/25">
         <div className="relative" ref={dropRef}>
           <button
             onClick={() => setSeasonOpen(p => !p)}
@@ -243,10 +243,10 @@ export function Leaderboard({
               </h2>
               <Sparkles className="w-4 h-4 text-primary opacity-40 group-hover:opacity-100 transition-opacity" />
             </div>
-            <div className="text-[10px] sm:text-xs font-bold text-white/25 tracking-widest leading-none">
+            <div className="text-[10px] sm:text-xs font-bold text-slate-300/65 tracking-widest leading-none">
               {seasonStartText ? `Khởi tranh ${seasonStartText}` : 'Chưa có dữ liệu'}
             </div>
-            <div className="h-0.5 w-8 bg-primary/20 rounded-full transition-all group-hover:w-16 group-hover:bg-primary/50" />
+            <div className="h-0.5 w-8 bg-primary/35 rounded-full transition-all group-hover:w-16 group-hover:bg-primary/70" />
           </button>
 
           {seasonOpen && (
@@ -285,14 +285,14 @@ export function Leaderboard({
             <col style={{ width: '15%' }} />
           </colgroup>
           <thead>
-            <tr className="bg-white/[0.015]">
-              <th className="py-4 px-4 text-center text-sm 2xl:text-base font-black uppercase tracking-widest text-white/35">#</th>
-              <th className="py-4 px-4 text-left text-sm 2xl:text-base font-black uppercase tracking-widest text-white/35">Thành viên</th>
-              <th className="py-4 px-4 text-center text-sm 2xl:text-base font-black uppercase tracking-widest text-white/35">Trận</th>
-              <th className="py-4 px-4 text-center text-sm 2xl:text-base font-black uppercase tracking-widest text-green-400/55">W</th>
-              <th className="py-4 px-4 text-center text-sm 2xl:text-base font-black uppercase tracking-widest text-red-400/55">L</th>
-              <th className="py-4 px-4 text-center text-sm 2xl:text-base font-black uppercase tracking-widest text-primary/60">Tỉ lệ</th>
-              <th className="py-4 px-4 text-right text-sm 2xl:text-base font-black uppercase tracking-widest text-amber-400/60 pr-8">Phạt</th>
+            <tr className="bg-white/[0.045]">
+              <th className="py-4 px-4 text-center text-sm 2xl:text-base font-black uppercase tracking-widest text-slate-300/80">#</th>
+              <th className="py-4 px-4 text-left text-sm 2xl:text-base font-black uppercase tracking-widest text-slate-300/80">Thành viên</th>
+              <th className="py-4 px-4 text-center text-sm 2xl:text-base font-black uppercase tracking-widest text-slate-300/80">Trận</th>
+              <th className="py-4 px-4 text-center text-sm 2xl:text-base font-black uppercase tracking-widest text-green-300/85">W</th>
+              <th className="py-4 px-4 text-center text-sm 2xl:text-base font-black uppercase tracking-widest text-red-300/85">L</th>
+              <th className="py-4 px-4 text-center text-sm 2xl:text-base font-black uppercase tracking-widest text-primary/90">Tỉ lệ</th>
+              <th className="py-4 px-4 text-right text-sm 2xl:text-base font-black uppercase tracking-widest text-amber-300/90 pr-8">Phạt</th>
             </tr>
           </thead>
           <tbody>
@@ -306,30 +306,30 @@ export function Leaderboard({
                   <tr
                     onClick={() => toggle(p.id)}
                     className={cn(
-                      'border-t border-white/[0.03] cursor-pointer transition-all group',
-                      exp ? 'bg-primary/[0.05]' : 'hover:bg-white/[0.02]',
+                      'border-t border-slate-500/16 cursor-pointer transition-all group',
+                      exp ? 'bg-primary/[0.075]' : 'hover:bg-white/[0.04]',
                     )}
                   >
                     <td className="py-4 px-4 text-center"><RankBadge i={i} /></td>
                     <td className="py-4 px-4">
                       <div className="flex items-center gap-3">
-                        <span className={cn('font-black text-lg truncate transition-all', exp ? 'text-primary' : 'text-white/80 group-hover:text-white')}>
+                        <span className={cn('font-black text-lg truncate transition-all', exp ? 'text-primary' : 'text-slate-100 group-hover:text-white')}>
                           {p.name}
                         </span>
                         <div className={cn('w-1.5 h-1.5 rounded-full bg-primary opacity-0 transition-all scale-0', exp && 'opacity-100 scale-100')} />
                       </div>
                     </td>
-                    <td className="py-4 px-4 text-center font-black text-lg text-white/35 tabular-nums">{p.total}</td>
-                    <td className="py-4 px-4 text-center font-black text-lg text-green-400/80 tabular-nums">{p.wins}</td>
-                    <td className="py-4 px-4 text-center font-black text-lg text-red-400/70 tabular-nums">{p.losses}</td>
+                    <td className="py-4 px-4 text-center font-black text-lg text-slate-300/75 tabular-nums">{p.total}</td>
+                    <td className="py-4 px-4 text-center font-black text-lg text-green-300 tabular-nums">{p.wins}</td>
+                    <td className="py-4 px-4 text-center font-black text-lg text-red-300/90 tabular-nums">{p.losses}</td>
                     <td className="py-4 px-4 text-center"><WinRatePill rate={rate} /></td>
                     <td className="py-4 px-4 text-right pr-8 font-black text-xl text-amber-400 tabular-nums">
                       {p.money.toLocaleString('vi-VN')}
                     </td>
                   </tr>
                   {exp && (
-                    <tr key={`${p.id}-detail`} className="bg-primary/[0.02]">
-                      <td colSpan={7} className="p-0 border-t border-white/[0.05]">
+                    <tr key={`${p.id}-detail`} className="bg-primary/[0.03]">
+                      <td colSpan={7} className="p-0 border-t border-slate-500/20">
                         <DetailPanel adv={adv} />
                       </td>
                     </tr>
@@ -349,10 +349,10 @@ export function Leaderboard({
           const rateColor = rate >= 60 ? '#22c55e' : rate >= 40 ? '#94a3b8' : '#f87171';
 
           return (
-            <div key={p.id} className="border-t border-white/[0.05] first:border-t-0">
+            <div key={p.id} className="border-t border-slate-500/20 first:border-t-0">
               <button
                 onClick={() => toggle(p.id)}
-                className={cn('w-full flex items-center gap-3 px-4 py-4 text-left transition-all', exp ? 'bg-primary/[0.07]' : 'active:bg-white/[0.04]')}
+                className={cn('w-full flex items-center gap-3 px-4 py-4 text-left transition-all', exp ? 'bg-primary/[0.09]' : 'active:bg-white/[0.05]')}
               >
                 <div className="w-8 shrink-0 flex justify-center"><RankBadge i={i} /></div>
                 <div className="flex-1 min-w-0">
@@ -360,9 +360,9 @@ export function Leaderboard({
                     {p.name}
                   </div>
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
-                    <span className="text-white/25">{p.total}T</span>
-                    <span className="text-green-400/50">{p.wins}W</span>
-                    <span className="text-red-400/50">{p.losses}L</span>
+                    <span className="text-slate-300/65">{p.total}T</span>
+                    <span className="text-green-300/75">{p.wins}W</span>
+                    <span className="text-red-300/75">{p.losses}L</span>
                   </div>
                 </div>
                 <div className="shrink-0 flex flex-col items-end gap-1">
