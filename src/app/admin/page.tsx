@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useTransition, useRef } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import {
   ShieldCheck,
   History,
@@ -37,6 +37,16 @@ import Link from 'next/link';
 const adminTabs = ['Nhật ký & Hệ thống', 'Thành viên', 'Season', 'Trận đấu'];
 const ADMIN_AUTH_DATE_KEY = 'pickleball_admin_auth_date';
 
+type FilePickerWindow = Window & {
+  showOpenFilePicker?: (options?: {
+    multiple?: boolean;
+    types?: Array<{
+      description?: string;
+      accept: Record<string, string[]>;
+    }>;
+  }) => Promise<Array<{ getFile: () => Promise<File> }>>;
+};
+
 function actionSucceeded(res: { success?: boolean } | { error?: string } | undefined) {
   return Boolean(res && 'success' in res && res.success);
 }
@@ -67,7 +77,6 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [isPending, startTransition] = useTransition();
-  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     try {
@@ -157,14 +166,57 @@ export default function AdminPage() {
     });
   };
 
-  const onPickXlsx = () => {
-    importInputRef.current?.click();
+  const deferImport = (file: File | null) => {
+    if (!file) return;
+    setTimeout(() => {
+      void onImportXlsx(file);
+    }, 0);
+  };
+
+  const openFallbackFilePicker = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    input.style.position = 'fixed';
+    input.style.left = '-9999px';
+    input.onchange = () => {
+      const file = input.files?.[0] || null;
+      input.remove();
+      deferImport(file);
+    };
+    document.body.appendChild(input);
+    input.click();
+  };
+
+  const onPickXlsx = async () => {
+    const picker = (window as FilePickerWindow).showOpenFilePicker;
+    if (!picker) {
+      openFallbackFilePicker();
+      return;
+    }
+
+    try {
+      const [handle] = await picker({
+        multiple: false,
+        types: [
+          {
+            description: 'Excel workbook',
+            accept: {
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+            },
+          },
+        ],
+      });
+      deferImport(handle ? await handle.getFile() : null);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setMsg({ type: 'error', text: 'Không thể mở file XLSX.' });
+    }
   };
 
   const onImportXlsx = async (file: File | null) => {
     if (!file) return;
     if (!confirm('Import từ file sẽ xóa toàn bộ lịch sử trận hiện có và thay bằng dữ liệu trong sheet MATCHES. Tiếp tục?')) {
-      if (importInputRef.current) importInputRef.current.value = '';
       return;
     }
 
@@ -183,16 +235,8 @@ export default function AdminPage() {
     } catch {
       setMsg({ type: 'error', text: 'Lỗi kết nối khi import XLSX.' });
     } finally {
-      if (importInputRef.current) importInputRef.current.value = '';
       setLoading(false);
     }
-  };
-
-  const onImportInputChange = (file: File | null) => {
-    if (!file) return;
-    setTimeout(() => {
-      void onImportXlsx(file);
-    }, 0);
   };
 
   const onRestore = (id: number) => {
@@ -332,13 +376,6 @@ export default function AdminPage() {
           </div>
 
           <div className="flex gap-3">
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              className="hidden"
-              onChange={e => onImportInputChange(e.target.files?.[0] || null)}
-            />
             <button onClick={onPickXlsx} className="px-5 py-3 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-orange-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
               <Upload className="w-4 h-4" /> Import XLSX
             </button>
