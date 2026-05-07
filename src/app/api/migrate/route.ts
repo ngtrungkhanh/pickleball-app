@@ -4,12 +4,19 @@ import * as xlsx from 'xlsx';
 import path from 'path';
 import fs from 'fs';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
+import { isGuestId, matchHasGuest } from '@/lib/guest';
 
 // Helper to convert Excel date to JS Date adjusting for local timezone offset
 function excelDateToJSDate(excelDate: number) {
   const tempDate = new Date((excelDate - 25569) * 86400 * 1000);
   const tzOffset = tempDate.getTimezoneOffset() * 60000;
   return new Date(tempDate.getTime() + tzOffset);
+}
+
+function parseMatchDate(raw: unknown) {
+  if (typeof raw === 'number') return excelDateToJSDate(raw);
+  const date = new Date(String(raw || ''));
+  return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
 export async function GET(request: Request) {
@@ -102,5 +109,106 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error('Migration error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    if (shouldBlockPreviewWrites()) {
+      return NextResponse.json(
+        { error: 'Preview writes are blocked because Preview uses the production database.' },
+        { status: 403 },
+      );
+    }
+
+    const form = await request.formData();
+    const file = form.get('file');
+    if (!(file instanceof File)) {
+      return NextResponse.json({ error: 'File xlsx không hợp lệ.' }, { status: 400 });
+    }
+
+    const buf = Buffer.from(await file.arrayBuffer());
+    const workbook = xlsx.read(buf, { type: 'buffer' });
+    const matchesSheet = workbook.Sheets['MATCHES'];
+    if (!matchesSheet) {
+      return NextResponse.json({ error: 'Không tìm thấy sheet MATCHES.' }, { status: 400 });
+    }
+
+    const rows = xlsx.utils.sheet_to_json<Record<string, unknown>>(matchesSheet);
+
+    await sql`DELETE FROM matches`;
+
+    let inserted = 0;
+    for (const m of rows) {
+      const id = String(m.match_id || '').trim();
+      if (!id) continue;
+      const date = parseMatchDate(m.date);
+      const win_1 = String(m.win_1 || '').trim();
+      const win_2 = String(m.win_2 || '').trim() || null;
+      const lose_1 = String(m.lose_1 || '').trim();
+      const lose_2 = String(m.lose_2 || '').trim() || null;
+      const win_score = Number(m.win_score) || 0;
+      const lose_score = Number(m.lose_score) || 0;
+      const season = String(m.season || 'Season 1');
+      const created_by = String(m.created_by || 'MIGRATE_XLSX').slice(0, 50);
+
+      if (!win_1 || !lose_1) continue;
+
+      await sql`
+        INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by, deleted_at, delete_group_id)
+        VALUES (${id}, ${date.toISOString()}, ${win_1}, ${win_2}, ${lose_1}, ${lose_2}, ${win_score}, ${lose_score}, ${season}, ${created_by}, NULL, NULL)
+      `;
+      inserted++;
+    }
+
+    const loseMoneyConfig = await sql`SELECT value FROM config WHERE key = 'lose_money' LIMIT 1`;
+    const loseMoney = Number(loseMoneyConfig.rows[0]?.value || 5000) || 5000;
+    const players = await sql`SELECT id FROM players WHERE deleted_at IS NULL`;
+    const validPlayerIds = new Set(players.rows.map((p) => String(p.id)).filter((id) => !isGuestId(id)));
+    const allMatches = await sql`SELECT * FROM matches WHERE deleted_at IS NULL`;
+
+    const statsMap = new Map<string, { wins: number; losses: number; money: number }>();
+    for (const m of allMatches.rows) {
+      const season = String(m.season || 'Season 1');
+      const winners = [m.win_1, m.win_2].filter((pid) => pid && validPlayerIds.has(String(pid))).map(String);
+      const losers = [m.lose_1, m.lose_2].filter((pid) => pid && validPlayerIds.has(String(pid))).map(String);
+      const hasGuest = matchHasGuest(m as any);
+
+      if (!hasGuest) {
+        winners.forEach((pid) => {
+          const key = `${pid}:${season}`;
+          const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
+          s.wins += 1;
+          statsMap.set(key, s);
+        });
+        losers.forEach((pid) => {
+          const key = `${pid}:${season}`;
+          const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
+          s.losses += 1;
+          statsMap.set(key, s);
+        });
+      }
+
+      losers.forEach((pid) => {
+        const key = `${pid}:${season}`;
+        const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
+        s.money += loseMoney;
+        statsMap.set(key, s);
+      });
+    }
+
+    await sql`DELETE FROM player_stats`;
+    for (const [key, s] of statsMap.entries()) {
+      const [playerId, season] = key.split(':');
+      await sql`
+        INSERT INTO player_stats (player_id, season, wins, losses, total, money)
+        VALUES (${playerId}, ${season}, ${s.wins}, ${s.losses}, ${s.wins + s.losses}, ${s.money})
+      `;
+    }
+
+    return NextResponse.json({ success: true, inserted }, { status: 200 });
+  } catch (error: any) {
+    console.error('XLSX import error:', error);
+    return NextResponse.json({ error: error.message || 'Import thất bại.' }, { status: 500 });
   }
 }

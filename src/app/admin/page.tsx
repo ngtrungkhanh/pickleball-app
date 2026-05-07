@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useRef } from 'react';
 import {
   ShieldCheck,
   History,
@@ -12,7 +12,8 @@ import {
   User,
   ArrowLeft,
   Search,
-  RefreshCw
+  RefreshCw,
+  Upload
 } from 'lucide-react';
 import {
   getAuditLogs,
@@ -66,6 +67,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [isPending, startTransition] = useTransition();
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     try {
@@ -153,6 +155,37 @@ export default function AdminPage() {
         setMsg({ type: 'error', text: actionError(res, 'Lỗi rồi!') });
       }
     });
+  };
+
+  const onPickXlsx = () => {
+    importInputRef.current?.click();
+  };
+
+  const onImportXlsx = async (file: File | null) => {
+    if (!file) return;
+    if (!confirm('Import từ file sẽ xóa toàn bộ lịch sử trận hiện có và thay bằng dữ liệu trong sheet MATCHES. Tiếp tục?')) {
+      if (importInputRef.current) importInputRef.current.value = '';
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/migrate', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok) {
+        setMsg({ type: 'error', text: json?.error || 'Import thất bại.' });
+      } else {
+        setMsg({ type: 'success', text: `Đã import ${json?.inserted ?? 0} trận từ file XLSX.` });
+        await loadData();
+      }
+    } catch {
+      setMsg({ type: 'error', text: 'Lỗi kết nối khi import XLSX.' });
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = '';
+      setLoading(false);
+    }
   };
 
   const onRestore = (id: number) => {
@@ -292,6 +325,16 @@ export default function AdminPage() {
           </div>
 
           <div className="flex gap-3">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              className="hidden"
+              onChange={e => onImportXlsx(e.target.files?.[0] || null)}
+            />
+            <button onClick={onPickXlsx} className="px-5 py-3 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-orange-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
+              <Upload className="w-4 h-4" /> Import XLSX
+            </button>
             <button onClick={onBackup} className="px-5 py-3 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
               <Database className="w-4 h-4" /> Sao lưu dữ liệu
             </button>
@@ -662,6 +705,7 @@ export default function AdminPage() {
     </div>
   );
 }
+
 
 
 
