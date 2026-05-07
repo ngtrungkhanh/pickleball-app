@@ -70,7 +70,7 @@ Before assuming local code is production-current, compare against Vercel
 Deployments:
 
 - Domain: `conchimnon.vercel.app`
-- Expected production commit at cleanup time: `355d9b6`
+- Current production commit after latest sync: `11cf340`
 
 ## Repo Layout
 

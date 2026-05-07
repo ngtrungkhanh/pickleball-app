@@ -68,6 +68,7 @@ export default function AdminPage() {
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [isPending, startTransition] = useTransition();
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const importFileRef = useRef<File | null>(null);
 
   useEffect(() => {
     try {
@@ -189,11 +190,15 @@ export default function AdminPage() {
   };
 
   const onImportInputChange = (file: File | null) => {
-    if (!file) return;
-    // Keep the input event handler lightweight to reduce INP on hidden file input.
-    requestAnimationFrame(() => {
-      void onImportXlsx(file);
-    });
+    importFileRef.current = file;
+  };
+
+  const onStartImport = () => {
+    if (!importFileRef.current) {
+      setMsg({ type: 'error', text: 'Bạn chưa chọn file XLSX.' });
+      return;
+    }
+    void onImportXlsx(importFileRef.current);
   };
 
   const onRestore = (id: number) => {
@@ -341,7 +346,10 @@ export default function AdminPage() {
               onChange={e => onImportInputChange(e.target.files?.[0] || null)}
             />
             <button onClick={onPickXlsx} className="px-5 py-3 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-orange-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
-              <Upload className="w-4 h-4" /> Import XLSX
+              <Upload className="w-4 h-4" /> Chọn XLSX
+            </button>
+            <button onClick={onStartImport} className="px-5 py-3 rounded-xl bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/40 text-orange-300 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
+              <Upload className="w-4 h-4" /> Bắt đầu import
             </button>
             <button onClick={onBackup} className="px-5 py-3 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
               <Database className="w-4 h-4" /> Sao lưu dữ liệu

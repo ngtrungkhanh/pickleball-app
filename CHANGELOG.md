@@ -6,8 +6,8 @@ repo.
 ## Current Production Snapshot
 
 - Production domain: `https://conchimnon.vercel.app/`
-- Production commit verified from Vercel: `355d9b6`
-- Commit message: `feat: show password as text and close modal on unlock, hide device info from score form`
+- Production commit verified from Vercel/GitHub: `11cf340`
+- Commit message: `fix: duplicate match confirm flow with server guard`
 
 ## Major Completed Work
 
@@ -86,3 +86,26 @@ repo.
   `https://pickleball-app-git-dev-ngtrungkhanhs-projects.vercel.app/`
 - Kept the Preview write guard as a safety switch; only branch `dev` should have
   `ALLOW_PREVIEW_WRITES=true`.
+
+### Duplicate Match Flow Hardening
+
+- Changed duplicate key from sorted 4-player set to team-based key:
+  `sort(win_1,win_2) > sort(lose_1,lose_2)`.
+- Score entry now requires full 4-player selection.
+- Local duplicate detection shows a confirm dialog instead of blocking forever.
+- Server re-checks duplicates in 15 minutes and only allows duplicate insert
+  when client sends `duplicate_confirmed=true`.
+- Client now handles server duplicate skip by syncing view state back from
+  server.
+
+### Admin XLSX Import
+
+- Added `Import XLSX` button on `/admin` to upload local `.xlsx` files.
+- Added `POST /api/migrate` flow to replace all match history from sheet
+  `MATCHES`.
+- Import now auto-creates missing `players` IDs referenced by match rows before
+  inserting matches to avoid foreign key failures.
+- Rebuilds `player_stats` after import based on current match data and fine
+  config.
+- Reduced hidden file input INP cost by deferring heavy import logic out of the
+  input change event.

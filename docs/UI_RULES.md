@@ -80,6 +80,10 @@ Desktop leaderboard uses a table. Mobile leaderboard uses stacked rows.
 - Keep save feedback short and clear.
 - Score steppers are hidden on desktop and shown on mobile.
 - Winner and loser select groups sit around the centered score box on desktop.
+- Duplicate detection in 15 minutes should show a confirmation prompt instead of
+  hard blocking.
+- Player select placeholders should act as hint-only when empty; option menus
+  should prioritize actual player names.
 
 ## History
 
@@ -89,6 +93,13 @@ Desktop leaderboard uses a table. Mobile leaderboard uses stacked rows.
 - Full-history modal filters by member, partner/opponent relation, and result.
 - Standalone `/history` is separate from the dashboard modal and currently uses a
   server-rendered request path.
+
+## Admin Import
+
+- Admin header includes an `Import XLSX` action for local file selection.
+- Import action must clearly warn that existing match history will be replaced.
+- Keep hidden file input handlers lightweight; defer heavy import work outside
+  the direct input event to reduce INP spikes.
 
 ## Analysis UI
 

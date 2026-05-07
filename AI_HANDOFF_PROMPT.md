@@ -37,6 +37,13 @@ Read deeper docs only when relevant:
 - docs/DATA_FLOW.md for database, server actions, cache, localStorage, and match save flow.
 - docs/UI_RULES.md for layout, wording, responsive behavior, and visual rules.
 
+Recent behavior updates to remember:
+- Match save now requires 4 selected players (no empty slot).
+- Duplicate match guard uses team-based key (winner team > loser team), not sorted 4-player set.
+- If duplicate is detected in 15 minutes, UI asks for confirmation; server also re-checks and only accepts duplicate when `duplicate_confirmed=true`.
+- Admin has an `Import XLSX` button that uploads a local `.xlsx` file and replaces match history from sheet `MATCHES`.
+- XLSX import now auto-creates missing player IDs before inserting matches to avoid FK errors.
+
 Working rules:
 - Do not touch main unless the user explicitly asks for a release.
 - Do not run production database migration/drop/alter commands unless the user explicitly approves.

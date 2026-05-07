@@ -69,23 +69,30 @@ Route cache notes:
 
 Expected save flow:
 
-1. `ScoreForm` validates `win_1` and `lose_1`.
+1. `ScoreForm` validates all 4 player slots (`win_1`, `win_2`, `lose_1`,
+   `lose_2`).
 2. `ScoreForm` checks local duplicate risk using `pickleball_recent_matches`
-   within 15 minutes.
-3. `ScoreForm` optimistically inserts a temporary match into local dashboard
+   within 15 minutes with a team-based key:
+   `season::sort(win_1,win_2)>sort(lose_1,lose_2)`.
+3. If duplicate is detected, client asks for explicit confirmation before
+   sending.
+4. `ScoreForm` optimistically inserts a temporary match into local dashboard
    state.
-4. `ScoreForm` saves pending match data under `pickleball_pending_match`.
-5. `addMatchAction` reads form data and creates an id like `M<timestamp>`.
-6. `addMatchAction` checks server duplicate risk against recent matching rows.
-7. `addMatchAction` inserts into `matches` with id, date, players, score,
+5. `ScoreForm` saves pending match data under `pickleball_pending_match`.
+6. `addMatchAction` reads form data and creates an id like `M<timestamp>`.
+7. `addMatchAction` checks server duplicate risk against recent matching rows
+   using the same team-based key and season.
+8. If duplicate exists and `duplicate_confirmed` is missing/false, server skips
+   insert and returns `skippedDuplicate`.
+9. `addMatchAction` inserts into `matches` with id, date, players, score,
    season, and `created_by`.
-8. `addMatchAction` updates `player_stats` incrementally:
+10. `addMatchAction` updates `player_stats` incrementally:
    - guest matches do not count wins/losses
    - loser fines still count for non-guest losers
-9. `addMatchAction` writes an audit log.
-10. `addMatchAction` revalidates `/`, `/history`, and `/analysis`.
-11. Client clears pending state after confirmed success or keeps retry state on
-    error.
+11. `addMatchAction` writes an audit log.
+12. `addMatchAction` revalidates `/`, `/history`, and `/analysis`.
+13. Client clears pending state after confirmed success, refreshes on
+    `skippedDuplicate`, or keeps retry state on error.
 
 Do not remove local-first/pending behavior unless replacing it with an equally
 safe flow.
@@ -177,6 +184,10 @@ Rules:
   default config.
 - `/api/migrate` reads `legacy/PICKLEBALL RANKING.xlsx`; production requires
   `SETUP_SECRET`.
+- `/api/migrate` also supports `POST` with uploaded `.xlsx`:
+  - replaces all records in `matches` from sheet `MATCHES`
+  - auto-creates missing player IDs referenced by uploaded matches
+  - rebuilds `player_stats` from imported match data
 - `sync_excel_to_db.js` is a destructive local migration helper that deletes
   existing DB records before importing Excel data. Do not run it against
   production unless the user explicitly approves.

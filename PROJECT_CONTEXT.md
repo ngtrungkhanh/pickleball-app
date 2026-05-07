@@ -9,7 +9,7 @@ deeper product, data, or UI details in `docs/`.
 - Dev preview: `https://pickleball-app-git-dev-ngtrungkhanhs-projects.vercel.app/`
 - Production branch: `main`
 - Shared working branch: `dev`
-- Current verified production commit at cleanup time: `355d9b6`
+- Current verified production commit after latest push: `11cf340`
 - GitHub remote: `https://github.com/ngtrungkhanh/pickleball-app.git`
 
 Do not edit `main` directly. Work on `dev`, push `dev`, test Vercel Preview,
@@ -61,6 +61,11 @@ Read only when relevant:
   pointed at the wrong database again.
 - New matches must use `config.active_season`.
 - `matches.id` and `matches.date` are required and must be inserted explicitly.
+- Match entry now requires all 4 player slots selected.
+- Duplicate match guard uses team-based matching and confirmation
+  (`duplicate_confirmed`) across client and server.
+- Admin XLSX import can replace all `matches` data from sheet `MATCHES` and
+  now auto-creates missing player IDs before match inserts.
 - Full `npm run lint` has existing debt; use targeted lint for changed files.
 - UI review order: mobile, Desktop Full HD, 2K, 4K.
 

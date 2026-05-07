@@ -22,8 +22,9 @@ filters feel instant while Vercel/Postgres usage stays low.
 - Edit mode is unlocked in Settings and stored locally in the browser.
 - Read-only users can view leaderboard, history, and analysis.
 - Edit users can record matches and use admin controls.
-- On Vercel Preview/dev, write UI is disabled by default because Preview
-  currently uses the same database as Production.
+- On Vercel Preview, writes are protected by a Preview write guard.
+- Branch `dev` preview is expected to use a separate dev database and can enable
+  writes with `ALLOW_PREVIEW_WRITES=true`.
 
 ## Main Routes
 
@@ -53,14 +54,14 @@ Score entry is designed for fast mobile use during live play.
 
 Expected behavior:
 
-- Require at least `winner 1` and `loser 1`.
-- Allow singles or doubles. Second player slots are optional.
+- Require all 4 slots: `winner 1`, `winner 2`, `loser 1`, `loser 2`.
 - Guest can be selected and is allowed in dropdowns.
 - Prevent the same non-guest player from occupying duplicate slots on the same
   side by clearing conflicting selections.
 - Default score is `11-5`.
 - Score steppers are visible on mobile; desktop uses compact score inputs.
-- Prevent obvious duplicate submissions within 15 minutes using localStorage.
+- Detect duplicate risk within 15 minutes using localStorage with a team-based
+  match key, then ask for user confirmation before continuing.
 - Optimistically add a temporary local match immediately.
 - Save pending data to localStorage before server sync.
 - Add device identity in `created_by`.
@@ -148,6 +149,7 @@ Admin page supports:
 - archive/recycle-bin view and restore
 - JSON backup download of players, matches, logs, archives, seasons
 - rebuild stats action
+- import XLSX and replace full match history from sheet `MATCHES`
 - members tab with inline edit/toggle
 - seasons tab
 - matches tab with search and inline match editing
