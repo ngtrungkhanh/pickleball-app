@@ -6,6 +6,7 @@ deeper product, data, or UI details in `docs/`.
 ## Current Source of Truth
 
 - Production: `https://conchimnon.vercel.app/`
+- Dev preview: `https://pickleball-app-git-dev-ngtrungkhanhs-projects.vercel.app/`
 - Production branch: `main`
 - Shared working branch: `dev`
 - Current verified production commit at cleanup time: `355d9b6`
@@ -53,8 +54,11 @@ Read only when relevant:
 - Do not run production database migration/drop/alter commands without explicit
   user approval.
 - Do not casually delete user-visible production data.
-- Preview/dev currently uses the same Postgres env as production, so code blocks
-  preview write actions unless `ALLOW_PREVIEW_WRITES=true` is explicitly set.
+- Production uses the Production database. Preview branch `dev` uses a separate
+  dev database via Vercel branch env overrides.
+- Keep the Preview write guard. Only branch `dev` should have
+  `ALLOW_PREVIEW_WRITES=true`; it is a safety switch if Preview env is ever
+  pointed at the wrong database again.
 - New matches must use `config.active_season`.
 - `matches.id` and `matches.date` are required and must be inserted explicitly.
 - Full `npm run lint` has existing debt; use targeted lint for changed files.

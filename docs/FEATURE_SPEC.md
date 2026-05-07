@@ -198,5 +198,5 @@ ELO is currently calculated client-side from preloaded/cached matches.
 - Do not make score entry harder on mobile.
 - Do not remove local pending save/retry behavior without replacing it.
 - Do not treat `legacy/` as source of truth unless the user explicitly asks.
-- Do not enable Preview writes while it uses the production database unless the
-  user explicitly approves.
+- Do not enable Preview writes unless the Preview deployment is confirmed to use
+  a separate dev database or the user explicitly approves the risk.

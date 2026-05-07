@@ -14,11 +14,14 @@ logic, caching/revalidation, localStorage, or Vercel compute behavior.
 
 Current Vercel env status:
 
-- Preview and Production currently point to the same Postgres database.
-- Because of that, Preview/dev write actions are blocked by default.
-- To intentionally allow Preview writes, set `ALLOW_PREVIEW_WRITES=true` for the
-  Preview environment only after the user explicitly accepts the risk or after a
-  separate dev database is configured.
+- Production deployments from `main` use the Production database.
+- Preview deployments from branch `dev` use a separate dev database.
+- The dev database is intended for testing and can be edited without affecting
+  production data.
+- Merging `dev` into `main` merges code only. Database data and Vercel env
+  values do not merge through Git.
+- Keep `ALLOW_PREVIEW_WRITES=true` scoped only to Preview branch `dev`. Do not
+  add it to Production.
 
 ## Important Tables and Config
 
@@ -165,7 +168,8 @@ Rules:
 - Be careful with schema changes inside page render. They are convenient but can
   spend compute and should not grow uncontrolled.
 - Page-render schema/guest normalization is skipped in Preview when preview
-  writes are blocked.
+  writes are blocked. It can run on branch `dev` while `ALLOW_PREVIEW_WRITES`
+  is true and the branch points to the separate dev database.
 
 ## Setup and Migration
 

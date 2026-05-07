@@ -2,6 +2,9 @@
 
 Production app for `https://conchimnon.vercel.app/`.
 
+Dev preview for branch `dev`:
+`https://pickleball-app-git-dev-ngtrungkhanhs-projects.vercel.app/`
+
 Built with Next.js App Router, Tailwind CSS, Vercel Postgres, and Vercel
 hosting. The current production source is GitHub `main`.
 
@@ -56,6 +59,12 @@ Branch policy:
 - `dev` is the shared working branch for all AI agents and machines.
 - Use Vercel Preview from `dev` for testing.
 - Merge `dev` into `main` only after the user confirms release.
+
+Database policy:
+
+- Production deployments from `main` use the Production database.
+- Preview deployments from branch `dev` use a separate dev database.
+- Merging `dev` into `main` merges code only; database data does not merge.
 
 Before assuming local code is production-current, compare against Vercel
 Deployments:

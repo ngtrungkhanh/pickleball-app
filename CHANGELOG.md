@@ -70,8 +70,19 @@ repo.
 
 ### Preview Safety
 
-- Confirmed Vercel Preview and Production currently use the same Postgres env.
+- Previously confirmed Vercel Preview and Production were using the same
+  Postgres env before the dev database split.
 - Added a Preview write guard so dev/preview cannot add, edit, delete, migrate,
   rebuild stats, or run setup writes unless `ALLOW_PREVIEW_WRITES=true` is set.
 - Dashboard hides write controls on Preview and shows a warning while writes are
   blocked.
+
+### Dev Database Split
+
+- Created a separate dev database for Vercel Preview branch `dev`.
+- Added Vercel branch env overrides so branch `dev` can use the dev database
+  while Production remains on the Production database.
+- Documented the dev preview URL:
+  `https://pickleball-app-git-dev-ngtrungkhanhs-projects.vercel.app/`
+- Kept the Preview write guard as a safety switch; only branch `dev` should have
+  `ALLOW_PREVIEW_WRITES=true`.

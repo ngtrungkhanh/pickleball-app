@@ -10,6 +10,9 @@ Communicate with the user in Vietnamese.
 Production is running on Vercel:
 https://conchimnon.vercel.app/
 
+Dev preview for branch dev:
+https://pickleball-app-git-dev-ngtrungkhanhs-projects.vercel.app/
+
 Branch workflow:
 - main is production. Do not edit main directly.
 - dev is the shared working branch for all AI agents and all machines.
@@ -17,6 +20,12 @@ Branch workflow:
 - Before editing code, update dev from GitHub.
 - After finishing a clear unit of work, commit and push to dev so another AI or machine can continue.
 - Only merge dev into main when the user confirms everything is tested and ready for production release.
+
+Database workflow:
+- Production/main uses the Production database.
+- Dev preview from branch dev uses a separate dev database.
+- Merging dev into main merges code only; database data does not merge.
+- Keep Preview write permissions scoped to branch dev only.
 
 Before doing work, read these files:
 1. README.md
