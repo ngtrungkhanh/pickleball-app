@@ -102,17 +102,34 @@ export async function addMatchAction(formData: FormData) {
   const lose_score = parseInt(formData.get('lose_score') as string);
   const season = (formData.get('season') as string) || await getConfigValue('active_season', 'Season 1');
   const created_by = (formData.get('created_by') as string) || 'SYSTEM';
+  const duplicate_confirmed = String(formData.get('duplicate_confirmed') || '').toLowerCase() === 'true';
+
+  if (!win_1 || !win_2 || !lose_1 || !lose_2) {
+    return { error: 'Thieu nguoi choi. Can du 4 nguoi.' };
+  }
+
+  const normalizeTeam = (a?: string | null, b?: string | null) => [a || '', b || ''].filter(Boolean).sort().join('|');
 
   try {
-    const { rows: existing } = await sql`
-      SELECT id FROM matches
+    const currentWinTeam = normalizeTeam(win_1, win_2);
+    const currentLoseTeam = normalizeTeam(lose_1, lose_2);
+    const { rows: recent } = await sql`
+      SELECT id, win_1, win_2, lose_1, lose_2 FROM matches
       WHERE date > NOW() - INTERVAL '15 minutes'
-        AND win_1 = ANY(ARRAY[${win_1}, ${win_2 ?? ''}]::text[])
-        AND lose_1 = ANY(ARRAY[${lose_1}, ${lose_2 ?? ''}]::text[])
-      LIMIT 1
+        AND season = ${season}
+        AND deleted_at IS NULL
+      ORDER BY date DESC
+      LIMIT 20
     `;
-    if (existing.length > 0) {
-      return { error: 'Trận đấu này dường như đã được ghi trong 15 phút gần đây. Vui lòng kiểm tra lại!' };
+
+    const isDuplicate = recent.some((m) => {
+      const winTeam = normalizeTeam(String(m.win_1 || ''), String(m.win_2 || ''));
+      const loseTeam = normalizeTeam(String(m.lose_1 || ''), String(m.lose_2 || ''));
+      return winTeam === currentWinTeam && loseTeam === currentLoseTeam;
+    });
+
+    if (isDuplicate && !duplicate_confirmed) {
+      return { skippedDuplicate: true };
     }
   } catch {
     // Duplicate check is non-critical; saving can continue.
@@ -145,10 +162,9 @@ export async function addMatchAction(formData: FormData) {
     return { success: true };
   } catch (error) {
     console.error('Failed to add match:', error);
-    return { error: 'Lỗi khi lưu trận đấu. Vui lòng thử lại.' };
+    return { error: 'Loi khi luu tran dau. Vui long thu lai.' };
   }
 }
-
 export async function deleteMatchAction(matchId: string) {
   try {
     await ensureSoftDeleteColumns();
@@ -720,3 +736,4 @@ export async function updateMatchAction(formData: FormData) {
     return { error: 'Lỗi khi sửa trận đấu: ' + error.message };
   }
 }
+
