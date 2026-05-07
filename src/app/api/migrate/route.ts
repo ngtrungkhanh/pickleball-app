@@ -6,17 +6,56 @@ import fs from 'fs';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
 import { isGuestId, matchHasGuest } from '@/lib/guest';
 
-// Helper to convert Excel date to JS Date adjusting for local timezone offset
-function excelDateToJSDate(excelDate: number) {
-  const tempDate = new Date((excelDate - 25569) * 86400 * 1000);
-  const tzOffset = tempDate.getTimezoneOffset() * 60000;
-  return new Date(tempDate.getTime() + tzOffset);
+const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+// Excel serial is treated as Bangkok local time; convert once to UTC for DB storage.
+function excelDateToUTCDate(excelDate: number) {
+  const excelEpochUtcMs = Date.UTC(1899, 11, 30);
+  const millis = Math.round(excelDate * 86400 * 1000);
+  return new Date(excelEpochUtcMs + millis - BANGKOK_OFFSET_MS);
+}
+
+function parseTextDateAsBangkok(raw: string) {
+  const text = raw.trim();
+  const m = text.match(
+    /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?:\s+(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?)?$/
+  );
+  if (m) {
+    const day = Number(m[1]);
+    const month = Number(m[2]);
+    const year = Number(m[3].length === 2 ? `20${m[3]}` : m[3]);
+    const hour = Number(m[4] || 0);
+    const minute = Number(m[5] || 0);
+    const second = Number(m[6] || 0);
+    return new Date(Date.UTC(year, month - 1, day, hour, minute, second) - BANGKOK_OFFSET_MS);
+  }
+
+  // If already explicit UTC string, keep as-is.
+  if (/z$/i.test(text) || /[+\-]\d{2}:\d{2}$/.test(text)) {
+    const d = new Date(text);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // Fallback: parse as local-like and reinterpret as Bangkok local wall-clock.
+  const fallback = new Date(text);
+  if (Number.isNaN(fallback.getTime())) return null;
+  return new Date(
+    Date.UTC(
+      fallback.getFullYear(),
+      fallback.getMonth(),
+      fallback.getDate(),
+      fallback.getHours(),
+      fallback.getMinutes(),
+      fallback.getSeconds(),
+      fallback.getMilliseconds()
+    ) - BANGKOK_OFFSET_MS
+  );
 }
 
 function parseMatchDate(raw: unknown) {
-  if (typeof raw === 'number') return excelDateToJSDate(raw);
-  const date = new Date(String(raw || ''));
-  return Number.isNaN(date.getTime()) ? new Date() : date;
+  if (typeof raw === 'number') return excelDateToUTCDate(raw);
+  const parsed = parseTextDateAsBangkok(String(raw || ''));
+  return parsed || new Date();
 }
 
 export async function GET(request: Request) {
@@ -62,7 +101,7 @@ export async function GET(request: Request) {
       const matches = xlsx.utils.sheet_to_json<any>(matchesSheet);
       for (const m of matches) {
         if (!m.match_id) continue;
-        const date = typeof m.date === 'number' ? excelDateToJSDate(m.date) : new Date(m.date);
+        const date = typeof m.date === 'number' ? excelDateToUTCDate(m.date) : parseMatchDate(m.date);
         
         await sql`
           INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season)
