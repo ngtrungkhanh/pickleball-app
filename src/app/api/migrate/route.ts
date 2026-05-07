@@ -58,6 +58,17 @@ function parseMatchDate(raw: unknown) {
   return parsed || new Date();
 }
 
+function parseSheetBoolean(raw: unknown, fallback = true) {
+  if (raw === undefined || raw === null || raw === '') return fallback;
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'number') return raw !== 0;
+
+  const text = String(raw).trim().toLowerCase();
+  if (['true', '1', 'yes', 'y', 'active'].includes(text)) return true;
+  if (['false', '0', 'no', 'n', 'inactive'].includes(text)) return false;
+  return fallback;
+}
+
 export async function GET(request: Request) {
   try {
     if (shouldBlockPreviewWrites()) {
@@ -174,6 +185,32 @@ export async function POST(request: Request) {
     }
 
     const rows = xlsx.utils.sheet_to_json<Record<string, unknown>>(matchesSheet);
+    const playersSheet = workbook.Sheets['PLAYERS'];
+    const playerRows = playersSheet
+      ? xlsx.utils.sheet_to_json<Record<string, unknown>>(playersSheet)
+      : [];
+
+    const importedPlayerIds = new Set<string>();
+    let playersUpserted = 0;
+    for (const p of playerRows) {
+      const id = String(p.player_id || p.id || '').trim();
+      if (!id) continue;
+
+      const name = String(p.name || id).trim() || id;
+      const active = parseSheetBoolean(p.active, true);
+      importedPlayerIds.add(id);
+
+      await sql`
+        INSERT INTO players (id, name, active, deleted_at, delete_group_id)
+        VALUES (${id}, ${name}, ${active}, NULL, NULL)
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          active = EXCLUDED.active,
+          deleted_at = NULL,
+          delete_group_id = NULL
+      `;
+      playersUpserted++;
+    }
 
     const incomingPlayerIds = new Set<string>();
     for (const m of rows) {
@@ -187,7 +224,7 @@ export async function POST(request: Request) {
       const existingPlayers = await sql`SELECT id FROM players`;
       const existingSet = new Set(existingPlayers.rows.map((p) => String(p.id)));
       for (const pid of incomingPlayerIds) {
-        if (existingSet.has(pid)) continue;
+        if (existingSet.has(pid) || importedPlayerIds.has(pid)) continue;
         await sql`
           INSERT INTO players (id, name, active, deleted_at, delete_group_id)
           VALUES (${pid}, ${pid}, true, NULL, NULL)
@@ -266,7 +303,7 @@ export async function POST(request: Request) {
       `;
     }
 
-    return NextResponse.json({ success: true, inserted }, { status: 200 });
+    return NextResponse.json({ success: true, inserted, playersUpserted }, { status: 200 });
   } catch (error: any) {
     console.error('XLSX import error:', error);
     return NextResponse.json({ error: error.message || 'Import thất bại.' }, { status: 500 });
