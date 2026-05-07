@@ -1,5 +1,6 @@
 import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import * as xlsx from 'xlsx';
 import path from 'path';
 import fs from 'fs';
@@ -302,6 +303,11 @@ export async function POST(request: Request) {
         VALUES (${playerId}, ${season}, ${s.wins}, ${s.losses}, ${s.wins + s.losses}, ${s.money})
       `;
     }
+
+    revalidatePath('/');
+    revalidatePath('/analysis');
+    revalidatePath('/history');
+    revalidatePath('/add-match');
 
     return NextResponse.json({ success: true, inserted, playersUpserted }, { status: 200 });
   } catch (error: any) {
