@@ -188,6 +188,14 @@ export default function AdminPage() {
     }
   };
 
+  const onImportInputChange = (file: File | null) => {
+    if (!file) return;
+    // Keep the input event handler lightweight to reduce INP on hidden file input.
+    requestAnimationFrame(() => {
+      void onImportXlsx(file);
+    });
+  };
+
   const onRestore = (id: number) => {
     startTransition(async () => {
       const res = await restoreFromArchive(id);
@@ -330,7 +338,7 @@ export default function AdminPage() {
               type="file"
               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               className="hidden"
-              onChange={e => onImportXlsx(e.target.files?.[0] || null)}
+              onChange={e => onImportInputChange(e.target.files?.[0] || null)}
             />
             <button onClick={onPickXlsx} className="px-5 py-3 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-orange-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
               <Upload className="w-4 h-4" /> Import XLSX

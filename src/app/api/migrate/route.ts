@@ -136,6 +136,27 @@ export async function POST(request: Request) {
 
     const rows = xlsx.utils.sheet_to_json<Record<string, unknown>>(matchesSheet);
 
+    const incomingPlayerIds = new Set<string>();
+    for (const m of rows) {
+      [m.win_1, m.win_2, m.lose_1, m.lose_2]
+        .map((v) => String(v || '').trim())
+        .filter(Boolean)
+        .forEach((id) => incomingPlayerIds.add(id));
+    }
+
+    if (incomingPlayerIds.size > 0) {
+      const existingPlayers = await sql`SELECT id FROM players`;
+      const existingSet = new Set(existingPlayers.rows.map((p) => String(p.id)));
+      for (const pid of incomingPlayerIds) {
+        if (existingSet.has(pid)) continue;
+        await sql`
+          INSERT INTO players (id, name, active, deleted_at, delete_group_id)
+          VALUES (${pid}, ${pid}, true, NULL, NULL)
+          ON CONFLICT (id) DO UPDATE SET deleted_at = NULL
+        `;
+      }
+    }
+
     await sql`DELETE FROM matches`;
 
     let inserted = 0;
