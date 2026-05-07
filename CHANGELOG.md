@@ -1,0 +1,69 @@
+# Changelog
+
+This is a compact project history. Keep detailed chat transcripts out of the
+repo.
+
+## Current Production Snapshot
+
+- Production domain: `https://conchimnon.vercel.app/`
+- Production commit verified from Vercel: `355d9b6`
+- Commit message: `feat: show password as text and close modal on unlock, hide device info from score form`
+
+## Major Completed Work
+
+### Next.js Migration
+
+- Migrated from legacy Google Apps Script + Sheets toward Next.js + Vercel
+  Postgres.
+- Added database setup and migration helpers.
+- Kept `legacy/` as reference material for behavior and layout decisions.
+
+### Dashboard
+
+- Built dark ranking dashboard with summary, leaderboard, score form, recent
+  history, full history, and analysis entry points.
+- Added season filtering and active-season support.
+- Added read-only default mode with edit unlock through Settings.
+
+### Performance
+
+- Shifted toward static/ISR-style reads to reduce Vercel/Postgres compute.
+- Dashboard preloads a bounded match history because expected match volume is
+  only a few hundred records.
+- Writes use server actions and refresh/revalidate after database updates.
+
+### Score Entry
+
+- Added optimistic/local-first score entry.
+- Added local backup/pending behavior for flaky network protection.
+- Added client-side and server-side duplicate checks.
+- Added smart score defaults based on recent match scores.
+
+### Admin
+
+- Added Settings modal with access, member, season, and fine settings.
+- Added inline member rename.
+- Added inline match editing in admin history.
+- Added incremental stat-balance logic when editing matches.
+
+### Analysis
+
+- Added `/analysis` read-only analysis center with overview, player, partner,
+  opponent, trend placeholder, and history views.
+
+### Cleanup
+
+- Consolidated root documentation into `README.md`, `PROJECT_CONTEXT.md`, and
+  `CHANGELOG.md`.
+- Removed old chat logs, duplicate handoff prompts, and temporary scratch files.
+
+### Documentation Audit
+
+- Rebuilt documentation around the current production Next.js app instead of the
+  old `legacy/` Apps Script implementation.
+- Added tiered docs:
+  - `docs/FEATURE_SPEC.md`
+  - `docs/DATA_FLOW.md`
+  - `docs/UI_RULES.md`
+- Updated `AI_HANDOFF_PROMPT.md` so future AI sessions read only the required
+  docs first and then open deeper docs by task type.
