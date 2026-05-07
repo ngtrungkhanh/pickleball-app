@@ -1,5 +1,6 @@
 import { sql } from '@vercel/postgres';
 import { AnalysisCenter } from '@/components/analysis/AnalysisCenter';
+import { shouldBlockPreviewWrites } from '@/lib/environment';
 
 export const revalidate = false; // ISR - Chỉ revalidate khi có action ghi dữ liệu
 
@@ -18,6 +19,8 @@ type Match = {
 
 export default async function AnalysisPage() {
   try {
+    if (shouldBlockPreviewWrites()) throw new Error('Preview writes disabled');
+
     await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
     await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80)`;
     await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;

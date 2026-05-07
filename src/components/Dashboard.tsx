@@ -31,11 +31,13 @@ export default function Dashboard({
   initialMatches,
   initialConfig = {},
   initialSeasons = [],
+  previewWritesBlocked = false,
 }: {
   initialPlayers: Player[],
   initialMatches: Match[],
   initialConfig?: Record<string, string>,
   initialSeasons?: Season[],
+  previewWritesBlocked?: boolean,
 }) {
   // Use local state for matches to ensure instant updates that persist 
   // until the server-side ISR revalidation completes in the background.
@@ -52,6 +54,7 @@ export default function Dashboard({
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const canEdit = useSyncExternalStore(subscribeEditMode, getEditModeSnapshot, () => false);
+  const canWrite = canEdit && !previewWritesBlocked;
   const activeSeason = initialConfig.active_season || 'Season 1';
   const [selectedSeason, setSelectedSeason] = useState<string | null>(activeSeason);
   const loseMoney = Number(initialConfig.lose_money || 5000);
@@ -85,6 +88,12 @@ export default function Dashboard({
         </button>
       </div>
 
+      {previewWritesBlocked && (
+        <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-left text-xs font-bold text-amber-200">
+          Dev preview dang dung chung database voi production nen cac thao tac ghi/sua/xoa da bi khoa de bao ve data that.
+        </div>
+      )}
+
       {/* 1. Summary */}
       <SummaryGrid players={initialPlayers} matches={viewedMatches} loseMoney={loseMoney} />
 
@@ -100,7 +109,7 @@ export default function Dashboard({
       />
 
       {/* 3. Score Form */}
-      {canEdit && (
+      {canWrite && (
         <div>
           <div className="flex items-center gap-2.5 px-1 mb-3">
             <span className="relative flex h-2 w-2">
@@ -116,12 +125,12 @@ export default function Dashboard({
       )}
 
       {/* 4. Recent History */}
-      <RecentHistory matches={viewedMatches} players={initialPlayers} canEdit={canEdit} />
+      <RecentHistory matches={viewedMatches} players={initialPlayers} canEdit={canWrite} />
 
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        canEdit={canEdit}
+        canEdit={canWrite}
         onUnlock={unlock}
         onLock={lock}
         players={initialPlayers}

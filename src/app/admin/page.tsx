@@ -36,6 +36,14 @@ import Link from 'next/link';
 const adminTabs = ['Nhật ký & Hệ thống', 'Thành viên', 'Season', 'Trận đấu'];
 const ADMIN_AUTH_DATE_KEY = 'pickleball_admin_auth_date';
 
+function actionSucceeded(res: { success?: boolean } | { error?: string } | undefined) {
+  return Boolean(res && 'success' in res && res.success);
+}
+
+function actionError(res: { success?: boolean } | { error?: string } | undefined, fallback: string) {
+  return res && 'error' in res && res.error ? res.error : fallback;
+}
+
 export default function AdminPage() {
   const [pass, setPass] = useState('');
   const [isAuth, setIsAuth] = useState(false);
@@ -84,7 +92,7 @@ export default function AdminPage() {
     setLoading(true);
     try {
       const res = await verifyAdminAction(input);
-      if (res.success) {
+      if (actionSucceeded(res)) {
         try {
           const today = new Date().toLocaleDateString('en-CA');
           localStorage.setItem(ADMIN_AUTH_DATE_KEY, today);
@@ -92,7 +100,7 @@ export default function AdminPage() {
         setIsAuth(true);
         // loadData will be triggered by useEffect
       } else {
-        setMsg({ type: 'error', text: res.error || 'Máº­t kháº©u sai rá»“i sáº¿p Æ¡i!' });
+        setMsg({ type: 'error', text: actionError(res, 'Máº­t kháº©u sai rá»“i sáº¿p Æ¡i!') });
       }
     } catch (err) {
       setMsg({ type: 'error', text: 'Lá»—i káº¿t ná»‘i server.' });
@@ -138,11 +146,11 @@ export default function AdminPage() {
     if (!confirm('Bạn có chắc muốn tính toán lại toàn bộ số liệu không?')) return;
     startTransition(async () => {
       const res = await rebuildStatsAction();
-      if (res.success) {
+      if (actionSucceeded(res)) {
         setMsg({ type: 'success', text: 'Đã đồng bộ lại toàn bộ số liệu thành công!' });
         loadData();
       } else {
-        setMsg({ type: 'error', text: res.error || 'Lỗi rồi!' });
+        setMsg({ type: 'error', text: actionError(res, 'Lỗi rồi!') });
       }
     });
   };
@@ -150,18 +158,18 @@ export default function AdminPage() {
   const onRestore = (id: number) => {
     startTransition(async () => {
       const res = await restoreFromArchive(id);
-      if (res.success) {
+      if (actionSucceeded(res)) {
         setMsg({ type: 'success', text: 'Đã khôi phục dữ liệu thành công!' });
         loadData();
       } else {
-        setMsg({ type: 'error', text: res.error || 'Lỗi rồi!' });
+        setMsg({ type: 'error', text: actionError(res, 'Lỗi rồi!') });
       }
     });
   };
 
   const onTogglePlayer = async (pid: string, current: boolean) => {
     const res = await togglePlayerActiveAction(pid, !current);
-    if (res.success) loadData();
+    if (actionSucceeded(res)) loadData();
   };
 
   const onSavePlayer = async (pid: string) => {
@@ -173,11 +181,11 @@ export default function AdminPage() {
     
     setLoading(true);
     const res = await updatePlayerAction(fd);
-    if (res.success) {
+    if (actionSucceeded(res)) {
       setEditingPlayerId(null);
       loadData();
     } else {
-      alert(res.error || 'Lỗi khi cập nhật thành viên');
+      alert(actionError(res, 'Lỗi khi cập nhật thành viên'));
     }
     setLoading(false);
   };
@@ -196,11 +204,11 @@ export default function AdminPage() {
 
     setLoading(true);
     const res = await updateMatchAction(fd);
-    if (res.success) {
+    if (actionSucceeded(res)) {
       setEditingMatchId(null);
       loadData();
     } else {
-      alert(res.error || 'Lỗi khi cập nhật trận đấu');
+      alert(actionError(res, 'Lỗi khi cập nhật trận đấu'));
     }
     setLoading(false);
   };

@@ -67,3 +67,11 @@ repo.
   - `docs/UI_RULES.md`
 - Updated `AI_HANDOFF_PROMPT.md` so future AI sessions read only the required
   docs first and then open deeper docs by task type.
+
+### Preview Safety
+
+- Confirmed Vercel Preview and Production currently use the same Postgres env.
+- Added a Preview write guard so dev/preview cannot add, edit, delete, migrate,
+  rebuild stats, or run setup writes unless `ALLOW_PREVIEW_WRITES=true` is set.
+- Dashboard hides write controls on Preview and shows a warning while writes are
+  blocked.

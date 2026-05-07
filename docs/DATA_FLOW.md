@@ -12,6 +12,14 @@ logic, caching/revalidation, localStorage, or Vercel compute behavior.
 - GitHub stores source code.
 - Vercel deployments store build history, not local secrets or database data.
 
+Current Vercel env status:
+
+- Preview and Production currently point to the same Postgres database.
+- Because of that, Preview/dev write actions are blocked by default.
+- To intentionally allow Preview writes, set `ALLOW_PREVIEW_WRITES=true` for the
+  Preview environment only after the user explicitly accepts the risk or after a
+  separate dev database is configured.
+
 ## Important Tables and Config
 
 The exact schema lives in setup/migration code. Current important concepts:
@@ -156,6 +164,8 @@ Rules:
 - Do not add polling or background DB reads without a clear need.
 - Be careful with schema changes inside page render. They are convenient but can
   spend compute and should not grow uncontrolled.
+- Page-render schema/guest normalization is skipped in Preview when preview
+  writes are blocked.
 
 ## Setup and Migration
 

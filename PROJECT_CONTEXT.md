@@ -53,6 +53,8 @@ Read only when relevant:
 - Do not run production database migration/drop/alter commands without explicit
   user approval.
 - Do not casually delete user-visible production data.
+- Preview/dev currently uses the same Postgres env as production, so code blocks
+  preview write actions unless `ALLOW_PREVIEW_WRITES=true` is explicitly set.
 - New matches must use `config.active_season`.
 - `matches.id` and `matches.date` are required and must be inserted explicitly.
 - Full `npm run lint` has existing debt; use targeted lint for changed files.

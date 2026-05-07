@@ -31,6 +31,10 @@ function clearPending() {
   try { localStorage.removeItem(PENDING_KEY); } catch {}
 }
 
+function actionSucceeded(res: { success?: boolean } | { error?: string } | undefined) {
+  return Boolean(res && 'success' in res && res.success);
+}
+
 // ─── Sync indicator ───────────────────────────────────────────────────────────
 function SyncBadge({ state, onRetry }: { state: 'idle' | 'syncing' | 'error' | 'ok'; onRetry?: () => void }) {
   if (state === 'idle') return null;
@@ -186,7 +190,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
         setSync('syncing');
         start(async () => {
           const r = await addMatchAction(fd);
-          if (!r?.error) { clearPending(); setSync('ok'); setTimeout(() => setSync('idle'), 2500); }
+          if (actionSucceeded(r)) { clearPending(); setSync('ok'); setTimeout(() => setSync('idle'), 2500); }
           else setSync('error');
         });
       } else clearPending();
@@ -198,7 +202,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
     savePending(Object.fromEntries(fd.entries()));
     start(async () => {
       const r = await addMatchAction(fd);
-      if (!r?.error) { clearPending(); setSync('ok'); setTimeout(() => setSync('idle'), 2500); }
+      if (actionSucceeded(r)) { clearPending(); setSync('ok'); setTimeout(() => setSync('idle'), 2500); }
       else { setSync('error'); setPendingFd(fd); }
     });
   };

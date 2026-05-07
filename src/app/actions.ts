@@ -2,6 +2,7 @@
 import { sql } from '@vercel/postgres';
 import { revalidatePath } from 'next/cache';
 import { GUEST_ID, GUEST_NAME, isGuestId, matchHasGuest } from '@/lib/guest';
+import { previewWriteBlockedResult, shouldBlockPreviewWrites } from '@/lib/environment';
 
 async function ensureSeasonTable() {
   await sql`
@@ -92,6 +93,8 @@ async function updatePlayerStatsIncremental(playerId: string, season: string, de
 }
 
 export async function addMatchAction(formData: FormData) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   await ensureGuestPlayer();
   const id = `M${Date.now().toString(36).slice(-10)}`.toUpperCase();
   const win_1 = formData.get('win_1') as string;
@@ -150,6 +153,8 @@ export async function addMatchAction(formData: FormData) {
 }
 
 export async function deleteMatchAction(matchId: string) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   try {
     await ensureSoftDeleteColumns();
     const { rows } = await sql`SELECT * FROM matches WHERE id = ${matchId}`;
@@ -185,6 +190,8 @@ export async function deleteMatchAction(matchId: string) {
 }
 
 export async function addPlayerAction(formData: FormData) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   try {
     const name = String(formData.get('name') || '').trim();
     if (!name) return { error: 'Tên thành viên không hợp lệ' };
@@ -204,6 +211,8 @@ export async function addPlayerAction(formData: FormData) {
 }
 
 export async function updatePlayerAction(formData: FormData) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   try {
     const id = String(formData.get('id') || '');
     const name = String(formData.get('name') || '').trim();
@@ -225,6 +234,8 @@ export async function updatePlayerAction(formData: FormData) {
 }
 
 export async function updatePlayersAction(formData: FormData) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   try {
     const ids = formData.getAll('id').map(String);
     const names = formData.getAll('name').map(v => String(v).trim());
@@ -261,6 +272,8 @@ async function ensureArchiveTable() {
 }
 
 export async function deletePlayerAction(formData: FormData) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   try {
     const id = String(formData.get('id') || '').trim();
     if (isGuestId(id)) return { error: 'Không được xóa Khách' };
@@ -314,6 +327,8 @@ export async function deletePlayerAction(formData: FormData) {
 }
 
 export async function deleteSeasonAction(formData: FormData) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   try {
     const name = String(formData.get('name') || '').trim();
     if (!name) return { error: 'Season không hợp lệ' };
@@ -355,6 +370,8 @@ export async function deleteSeasonAction(formData: FormData) {
 }
 
 export async function endSeasonAction() {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   try {
     await ensureSeasonTable();
     
@@ -396,6 +413,8 @@ export async function endSeasonAction() {
 }
 
 export async function createSeasonAction(formData: FormData) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   try {
     await ensureSeasonTable();
     const name = String(formData.get('name') || '').trim();
@@ -419,6 +438,8 @@ export async function createSeasonAction(formData: FormData) {
 }
 
 export async function setActiveSeasonAction(formData: FormData) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   try {
     await ensureSeasonTable();
     const name = String(formData.get('name') || '').trim();
@@ -442,6 +463,8 @@ export async function setActiveSeasonAction(formData: FormData) {
 }
 
 export async function updateFineAction(formData: FormData) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   try {
     const value = String(formData.get('lose_money') || '').trim();
     const amount = Number(value);
@@ -458,6 +481,8 @@ export async function updateFineAction(formData: FormData) {
 }
 
 export async function rebuildStatsAction() {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   try {
     // Ensure table exists just in case
     await sql`
@@ -533,6 +558,8 @@ export async function rebuildStatsAction() {
 }
 
 export async function logAudit(type: string, details: string) {
+  if (shouldBlockPreviewWrites()) return;
+
   try {
     await sql`
       INSERT INTO audit_logs (action_type, details)
@@ -564,6 +591,8 @@ export async function getArchives() {
 }
 
 export async function restoreFromArchive(archiveId: number) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   try {
     const { rows } = await sql`SELECT * FROM archives WHERE id = ${archiveId}`;
     if (rows.length === 0) return { error: 'Không tìm thấy dữ liệu lưu trữ' };
@@ -648,6 +677,8 @@ export async function getSeasonsAction() {
 }
 
 export async function togglePlayerActiveAction(playerId: string, active: boolean) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   try {
     await sql`UPDATE players SET active = ${active} WHERE id = ${playerId}`;
     await logAudit('UPDATE_PLAYER', `Changed player ${playerId} active status to ${active}`);
@@ -659,6 +690,8 @@ export async function togglePlayerActiveAction(playerId: string, active: boolean
 }
 
 export async function updateMatchAction(formData: FormData) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
   try {
     const id = String(formData.get('id') || '');
     const win_1 = String(formData.get('win_1') || '');

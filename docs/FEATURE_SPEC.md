@@ -22,6 +22,8 @@ filters feel instant while Vercel/Postgres usage stays low.
 - Edit mode is unlocked in Settings and stored locally in the browser.
 - Read-only users can view leaderboard, history, and analysis.
 - Edit users can record matches and use admin controls.
+- On Vercel Preview/dev, write UI is disabled by default because Preview
+  currently uses the same database as Production.
 
 ## Main Routes
 
@@ -196,3 +198,5 @@ ELO is currently calculated client-side from preloaded/cached matches.
 - Do not make score entry harder on mobile.
 - Do not remove local pending save/retry behavior without replacing it.
 - Do not treat `legacy/` as source of truth unless the user explicitly asks.
+- Do not enable Preview writes while it uses the production database unless the
+  user explicitly approves.

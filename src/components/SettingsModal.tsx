@@ -66,6 +66,10 @@ function InlineFeedback({ feedback, target }: { feedback: Feedback; target: stri
   );
 }
 
+function actionError(res: { success?: boolean } | { error?: string } | undefined) {
+  return res && 'error' in res ? res.error : undefined;
+}
+
 export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, players, seasons, config }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<(typeof tabs)[number]['id']>(canEdit ? 'players' : 'access');
@@ -89,8 +93,9 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
     setFeedback({ target, type: 'saving', text: 'Đang lưu...' });
     start(async () => {
       const res = await action(formData);
-      if (res?.error) {
-        setFeedback({ target, type: 'error', text: res.error });
+      const error = actionError(res);
+      if (error) {
+        setFeedback({ target, type: 'error', text: error });
         return;
       }
 
@@ -398,8 +403,9 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                       setFeedback({ target: 'delete-player', type: 'saving', text: 'Đang xóa...' });
                       start(async () => {
                         const res = await deletePlayerAction(fd);
-                        if (res?.error) {
-                          setFeedback({ target: 'delete-player', type: 'error', text: res.error });
+                        const error = actionError(res);
+                        if (error) {
+                          setFeedback({ target: 'delete-player', type: 'error', text: error });
                           return;
                         }
                         setFeedback({ target: 'delete-player', type: 'success', text: 'Đã xóa' });
@@ -441,8 +447,9 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                       setFeedback({ target: 'delete-season', type: 'saving', text: 'Đang xóa...' });
                       start(async () => {
                         const res = await deleteSeasonAction(fd);
-                        if (res?.error) {
-                          setFeedback({ target: 'delete-season', type: 'error', text: res.error });
+                        const error = actionError(res);
+                        if (error) {
+                          setFeedback({ target: 'delete-season', type: 'error', text: error });
                           return;
                         }
                         setFeedback({ target: 'delete-season', type: 'success', text: 'Đã xóa' });

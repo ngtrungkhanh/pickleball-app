@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import * as xlsx from 'xlsx';
 import path from 'path';
 import fs from 'fs';
+import { shouldBlockPreviewWrites } from '@/lib/environment';
 
 // Helper to convert Excel date to JS Date adjusting for local timezone offset
 function excelDateToJSDate(excelDate: number) {
@@ -13,6 +14,13 @@ function excelDateToJSDate(excelDate: number) {
 
 export async function GET(request: Request) {
   try {
+    if (shouldBlockPreviewWrites()) {
+      return NextResponse.json(
+        { error: 'Preview writes are blocked because Preview uses the production database.' },
+        { status: 403 },
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const secret = searchParams.get('secret');
     if (secret !== process.env.SETUP_SECRET && process.env.NODE_ENV === 'production') {
