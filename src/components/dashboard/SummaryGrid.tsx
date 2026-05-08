@@ -17,7 +17,7 @@ export function SummaryGrid({ matches, loseMoney = 5000 }: SummaryGridProps) {
       Icon: Banknote,
       color: '#f59e0b',
       label: 'Tiền phạt',
-      big: s.totalMoney >= 1000 ? `${(s.totalMoney / 1000).toLocaleString('vi-VN')}k` : `${s.totalMoney}`,
+      big: s.totalMoney.toLocaleString('vi-VN'),
       unit: '',
     },
     { Icon: Zap, color: '#a78bfa', label: 'Tuần này', big: `${s.matchesThisWeek}`, unit: 'trận' },
@@ -28,7 +28,7 @@ export function SummaryGrid({ matches, loseMoney = 5000 }: SummaryGridProps) {
       {cards.map(({ Icon, color, label, big, unit }, i) => (
         <div
           key={i}
-          className="relative group overflow-hidden rounded-lg bg-[#192844]/95 border border-slate-400/25 px-3 py-3 sm:px-4 sm:py-3 shadow-[0_10px_28px_rgba(0,0,0,0.20)] transition-all hover:-translate-y-0.5 hover:bg-[#1d2d4b] hover:border-slate-300/35 hover:shadow-xl"
+          className="relative group overflow-hidden rounded-xl bg-[#192844]/95 border border-slate-400/25 px-3 py-3 sm:px-4 sm:py-3 shadow-[0_10px_28px_rgba(0,0,0,0.20)] transition-all hover:-translate-y-0.5 hover:bg-[#1d2d4b] hover:border-slate-300/35 hover:shadow-xl"
         >
           <div
             className="absolute inset-0 opacity-[0.12] pointer-events-none transition-opacity group-hover:opacity-[0.18]"

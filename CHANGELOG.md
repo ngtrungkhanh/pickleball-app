@@ -112,11 +112,12 @@ repo.
 
 ### Dashboard UI Refresh
 
-- Compact dashboard summary cards while keeping money displayed in `k` format.
+- Compact dashboard summary cards while keeping fine amounts in full grouped
+  numeric format such as `35.000`.
 - Brightened the main dashboard surfaces, borders, and hover states for better
   contrast on dark backgrounds.
-- Made the leaderboard season selector more compact and kept the desktop table
-  header sticky inside a bounded scroll area.
+- Kept the leaderboard season selector as a two-line header and kept the desktop
+  table header sticky inside a bounded scroll area.
 - Reworked expanded leaderboard detail into four compact blocks, adding `Kèo dễ`
   / `Khắc chế cứng` from easiest-rival stats.
 - Rebalanced score entry into winner, score, and loser columns on desktop while

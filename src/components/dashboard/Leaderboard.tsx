@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Sparkles, Trophy } from 'lucide-react';
+import { Handshake, ShieldCheck, Skull, Sparkles, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { calculateLeaderboard, getPlayerAdvancedStats } from '@/lib/stats';
 
@@ -62,8 +62,7 @@ function formatShortDate(value: unknown) {
   });
 }
 
-function formatMoneyK(value: number) {
-  if (value >= 1000) return `${(value / 1000).toLocaleString('vi-VN')}k`;
+function formatMoney(value: number) {
   return value.toLocaleString('vi-VN');
 }
 
@@ -91,6 +90,23 @@ function WinRatePill({ rate }: { rate: number }) {
   );
 }
 
+function DetailTitle({
+  children,
+  icon,
+  className,
+}: {
+  children: React.ReactNode;
+  icon?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex items-center justify-center gap-1.5 font-black uppercase tracking-widest text-[11px] sm:text-xs', className)}>
+      {icon}
+      <span>{children}</span>
+    </div>
+  );
+}
+
 function DetailPanel({ adv }: { adv: AdvancedStats }) {
   const recent = adv.recent?.length ? adv.recent : [];
 
@@ -104,8 +120,8 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
       `}</style>
       <div className="px-3 py-3 sm:px-4 sm:py-4 border-t border-slate-500/20">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 items-stretch">
-          <div className="min-w-0 rounded-xl border border-slate-400/20 bg-white/[0.055] px-3 py-3 flex flex-col items-center justify-center text-center gap-2">
-            <div className="font-black text-slate-300/90 uppercase tracking-widest text-[11px] sm:text-xs">Phong độ</div>
+          <div className="min-w-0 rounded-2xl border border-slate-400/20 bg-white/[0.055] px-3 py-3 flex flex-col items-center justify-center text-center gap-2">
+            <DetailTitle className="text-slate-300/90">Phong độ</DetailTitle>
             <div className="min-w-0 w-full text-sm sm:text-base font-black text-white leading-snug break-words">
               {adv.formComment || 'Đang duy trì ổn định.'}
             </div>
@@ -129,17 +145,17 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
           </div>
 
           <div className={cn(
-            'min-w-0 rounded-xl border px-3 py-3 flex flex-col items-center justify-center text-center gap-2',
+            'min-w-0 rounded-2xl border px-3 py-3 flex flex-col items-center justify-center text-center gap-2',
             adv.bestPartner?.label === 'Cạ cứng'
               ? 'border-emerald-300/25 bg-emerald-400/[0.07]'
               : 'border-slate-400/20 bg-white/[0.055]',
           )}>
-            <div className={cn(
-              'font-black uppercase tracking-widest text-[11px] sm:text-xs',
-              adv.bestPartner?.label === 'Cạ cứng' ? 'text-emerald-200/90' : 'text-slate-300/80',
-            )}>
+            <DetailTitle
+              className={adv.bestPartner?.label === 'Cạ cứng' ? 'text-emerald-200/90' : 'text-slate-300/80'}
+              icon={<Handshake className="h-3.5 w-3.5" />}
+            >
               {adv.bestPartner?.label || 'Đối tác tin cậy'}
-            </div>
+            </DetailTitle>
             {adv.bestPartner ? (
               <>
                 <div className="min-w-0 w-full text-sm sm:text-base font-black text-white leading-snug break-words">
@@ -160,10 +176,10 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
             )}
           </div>
 
-          <div className="min-w-0 rounded-xl border border-red-400/25 bg-red-400/[0.06] px-3 py-3 flex flex-col items-center justify-center text-center gap-2">
-            <div className="font-black text-red-300 uppercase tracking-widest text-[11px] sm:text-xs">
+          <div className="min-w-0 rounded-2xl border border-red-400/25 bg-red-400/[0.06] px-3 py-3 flex flex-col items-center justify-center text-center gap-2">
+            <DetailTitle className="text-red-300" icon={<Skull className="h-3.5 w-3.5" />}>
               {adv.toughestRival?.label || 'Kèo khó'}
-            </div>
+            </DetailTitle>
             {adv.toughestRival ? (
               <>
                 <div className="min-w-0 w-full text-sm sm:text-base font-black text-white leading-snug break-words">
@@ -181,10 +197,10 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
             )}
           </div>
 
-          <div className="min-w-0 rounded-xl border border-sky-400/25 bg-sky-400/[0.06] px-3 py-3 flex flex-col items-center justify-center text-center gap-2">
-            <div className="font-black text-sky-300 uppercase tracking-widest text-[11px] sm:text-xs">
+          <div className="min-w-0 rounded-2xl border border-sky-400/25 bg-sky-400/[0.06] px-3 py-3 flex flex-col items-center justify-center text-center gap-2">
+            <DetailTitle className="text-sky-300" icon={<ShieldCheck className="h-3.5 w-3.5" />}>
               {adv.easiestRival?.label || 'Kèo dễ'}
-            </div>
+            </DetailTitle>
             {adv.easiestRival ? (
               <>
                 <div className="min-w-0 w-full text-sm sm:text-base font-black text-white leading-snug break-words">
@@ -268,28 +284,28 @@ export function Leaderboard({
   const toggle = (id: string) => setExpandedId(prev => prev === id ? null : id);
 
   return (
-    <div className="w-full rounded-xl border border-slate-400/25 bg-[#192844]/95 shadow-[0_24px_70px_rgba(0,0,0,0.30)] overflow-visible backdrop-blur-2xl">
-      <div className="flex items-center justify-center px-4 py-3 border-b border-slate-400/25">
+    <div className="w-full rounded-2xl sm:rounded-[2rem] border border-slate-400/25 bg-[#192844]/95 shadow-[0_24px_70px_rgba(0,0,0,0.30)] overflow-visible backdrop-blur-2xl">
+      <div className="flex items-center justify-center px-4 sm:px-6 py-5 sm:py-6 border-b border-slate-400/25">
         <div className="relative flex flex-col items-center" ref={dropRef}>
           <button
             onClick={() => setSeasonOpen(p => !p)}
-            className="group flex min-w-0 items-center justify-center gap-3 rounded-lg px-2 py-1 transition-all hover:bg-white/[0.04] active:scale-95"
+            className="group flex flex-col items-center gap-1.5 rounded-2xl px-4 py-2 transition-all hover:bg-white/[0.04] active:scale-95"
           >
-            <Sparkles className="w-4 h-4 shrink-0 text-primary opacity-60 group-hover:opacity-100 transition-opacity" />
-            <div className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-3">
-              <h2 className="truncate text-base sm:text-lg font-black text-white uppercase tracking-[0.22em] leading-none">
+            <div className="flex items-center gap-2.5">
+              <Sparkles className="w-4 h-4 text-primary opacity-50 group-hover:opacity-100 transition-opacity" />
+              <h2 className="text-lg sm:text-xl font-black text-white uppercase tracking-[0.25em] sm:tracking-[0.3em] leading-none">
                 {currentSeason ?? 'Tổng hợp'}
               </h2>
-              <span className="hidden h-4 w-px bg-slate-500/60 sm:block" />
-              <span className="text-[10px] sm:text-xs font-bold text-slate-300/80 tracking-wide leading-none">
-                {seasonStartText ? `Khởi tranh ${seasonStartText}` : 'Chưa có dữ liệu'}
-              </span>
+              <Sparkles className="w-4 h-4 text-primary opacity-50 group-hover:opacity-100 transition-opacity" />
             </div>
-            <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70 transition-all', seasonOpen && 'scale-125 bg-primary')} />
+            <div className="text-[10px] sm:text-xs font-bold text-slate-300/80 tracking-widest leading-none">
+              {seasonStartText ? `Khởi tranh ${seasonStartText}` : 'Chưa có dữ liệu'}
+            </div>
+            <div className="h-0.5 w-8 bg-primary/45 rounded-full transition-all group-hover:w-16 group-hover:bg-primary/80" />
           </button>
 
           {seasonOpen && (
-            <div className="absolute top-11 z-[100] w-64 rounded-xl border border-slate-400/30 bg-[#18263d] shadow-[0_26px_80px_rgba(0,0,0,0.42)] overflow-hidden origin-top animate-in fade-in zoom-in-95 duration-200">
+            <div className="absolute top-full mt-3 z-[100] w-64 rounded-2xl border border-slate-400/30 bg-[#18263d] shadow-[0_26px_80px_rgba(0,0,0,0.42)] overflow-hidden origin-top animate-in fade-in zoom-in-95 duration-200">
               <div className="border-b border-slate-400/20 px-4 py-3 text-center text-[10px] font-black uppercase tracking-[0.24em] text-slate-300/80">
                 Chọn season
               </div>
@@ -366,7 +382,7 @@ export function Leaderboard({
                     <td className="py-3 px-4 text-center font-black text-base 2xl:text-lg text-red-300/95 tabular-nums">{p.losses}</td>
                     <td className="py-3 px-4 text-center"><WinRatePill rate={rate} /></td>
                     <td className="py-3 px-4 text-right pr-8 font-black text-lg text-amber-400 tabular-nums">
-                      {formatMoneyK(p.money)}
+                      {formatMoney(p.money)}
                     </td>
                   </tr>
                   {exp && (
@@ -409,7 +425,7 @@ export function Leaderboard({
                 </div>
                 <div className="shrink-0 flex flex-col items-end gap-1">
                   <span className="font-black text-xl tabular-nums leading-none" style={{ color: rateColor }}>{rate}%</span>
-                  <span className="text-xs font-black text-amber-400/90">{formatMoneyK(p.money)}</span>
+                  <span className="text-xs font-black text-amber-400/90">{formatMoney(p.money)}</span>
                 </div>
               </button>
               {exp && <DetailPanel adv={adv} />}

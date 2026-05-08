@@ -106,7 +106,7 @@ function ScoreStepper({ label, value, onChange }: { label: string; value: number
 }
 
 const selectCls = [
-  'w-full h-12 rounded-lg px-3',
+  'w-full h-12 rounded-xl px-3',
   'bg-[#0f1a2c] border border-slate-500/25',
   'text-sm font-bold text-white/90',
   'focus:outline-none focus:border-primary/40 focus:bg-slate-900',
@@ -276,7 +276,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
       <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-5">
         <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 md:gap-5 items-center">
 
-          <div className="min-w-0 rounded-lg border border-green-500/35 bg-green-500/5 p-3 sm:p-4 space-y-3">
+          <div className="min-w-0 rounded-2xl border border-green-500/35 bg-green-500/5 p-3 sm:p-4 space-y-3">
             <div className="flex items-center gap-3">
               <Trophy className="w-4 h-4 text-primary opacity-60" />
               <span className="text-[10px] font-black text-green-300 uppercase tracking-[0.24em]">Đội thắng</span>
@@ -294,7 +294,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
           </div>
 
           <div className="flex flex-col items-center">
-            <div className="w-full md:w-60 bg-black/45 rounded-lg border border-slate-600/60 p-3 sm:p-4 flex items-center justify-center gap-3 sm:gap-4 shadow-inner">
+            <div className="w-full md:w-60 bg-black/45 rounded-2xl border border-slate-600/60 p-3 sm:p-4 flex items-center justify-center gap-3 sm:gap-4 shadow-inner">
               <ScoreStepper label="Thắng" value={ws} onChange={setWs} />
               <div className="pt-4">
                 <span className="text-slate-400/80 font-black text-2xl sm:text-3xl select-none leading-none">-</span>
@@ -303,7 +303,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
             </div>
           </div>
 
-          <div className="min-w-0 rounded-lg border border-red-500/35 bg-red-500/5 p-3 sm:p-4 space-y-3">
+          <div className="min-w-0 rounded-2xl border border-red-500/35 bg-red-500/5 p-3 sm:p-4 space-y-3">
             <div className="flex items-center justify-center md:justify-end gap-3">
               <span className="text-[10px] font-black text-red-300 uppercase tracking-[0.24em]">Đội thua</span>
               <Ghost className="w-4 h-4 text-red-400 opacity-60" />
@@ -327,7 +327,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
             type="submit"
             disabled={ui === 'saved'}
             className={cn(
-              'w-full min-h-12 py-3 rounded-lg font-black text-xs sm:text-sm uppercase tracking-[0.24em] transition-all duration-300 flex items-center justify-center gap-3',
+              'w-full min-h-12 py-3 rounded-2xl font-black text-xs sm:text-sm uppercase tracking-[0.24em] transition-all duration-300 flex items-center justify-center gap-3',
               ui === 'saved'
                 ? 'bg-primary/20 text-primary/60 cursor-default'
                 : 'bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20 active:scale-95'
