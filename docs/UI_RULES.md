@@ -24,6 +24,10 @@ targets.
   content.
 - Use dense but readable information layout.
 - Avoid oversized decorative UI.
+- Keep dashboard cards and score-entry controls visually soft enough for the
+  current style. Prefer medium/large rounded corners such as `rounded-2xl` for
+  major cards and controls unless space is too tight; avoid reverting the main
+  dashboard to a sharp, boxy look.
 
 ## Wording
 
@@ -68,6 +72,9 @@ grid instead of four stacked single-column blocks.
 Keep each detail line short. Prefer concise text such as `Khong ngan ai`,
 `Khong keo free`, `Gap con rai rac`, `Drama dang tich tu`, `Dang len tay`,
 or `Tut nhip nhe`.
+Partner detail should also use the same compact four-line pattern when possible:
+label/icon, partner name, short win metric, and one short fun line such as
+`Danh chung rat ben` or `Cap nay kha on`.
 
 Desktop leaderboard uses a table. Mobile leaderboard uses stacked rows.
 Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
