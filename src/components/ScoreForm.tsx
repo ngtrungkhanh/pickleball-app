@@ -76,12 +76,12 @@ function SyncBadge({ state, onRetry }: { state: 'idle' | 'syncing' | 'error' | '
 function ScoreStepper({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   const ref = useRef<HTMLInputElement>(null);
   return (
-    <div className="flex flex-col items-center gap-3">
-      <span className="text-[10px] sm:text-xs font-black text-white/20 uppercase tracking-[0.25em]">{label}</span>
-      <div className="flex items-center gap-2 sm:gap-5">
+    <div className="flex flex-col items-center gap-2">
+      <span className="text-[10px] sm:text-xs font-black text-slate-300/75 uppercase tracking-[0.22em]">{label}</span>
+      <div className="flex items-center gap-2 sm:gap-4">
         <button type="button"
           onClick={() => onChange(Math.max(0, value - 1))}
-          className="sm:hidden w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 active:scale-90 transition-all shrink-0">
+          className="sm:hidden w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-300/70 active:scale-90 transition-all shrink-0">
           <Minus className="w-4 h-4" />
         </button>
 
@@ -91,7 +91,7 @@ function ScoreStepper({ label, value, onChange }: { label: string; value: number
           value={value}
           onChange={e => { const n = parseInt(e.target.value, 10); if (!isNaN(n) && n >= 0) onChange(n); else if (e.target.value === '') onChange(0); }}
           onFocus={() => setTimeout(() => ref.current?.select(), 0)}
-          className="w-12 sm:w-20 text-center bg-transparent border-0 border-b-4 border-white/5 focus:border-primary/40 outline-none font-black text-white text-2xl sm:text-5xl transition-all py-1 tabular-nums"
+          className="w-12 sm:w-16 text-center bg-transparent border-0 border-b-4 border-white/10 focus:border-primary/50 outline-none font-black text-white text-2xl sm:text-4xl transition-all py-1 tabular-nums"
           style={{ lineHeight: 1 }}
         />
 
@@ -106,11 +106,11 @@ function ScoreStepper({ label, value, onChange }: { label: string; value: number
 }
 
 const selectCls = [
-  'w-full rounded-2xl px-5 py-4',
-  'bg-slate-900/50 border border-white/[0.08]',
+  'w-full h-12 rounded-lg px-3',
+  'bg-[#0f1a2c] border border-slate-500/25',
   'text-sm font-bold text-white/90',
   'focus:outline-none focus:border-primary/40 focus:bg-slate-900',
-  'transition-all cursor-pointer hover:border-white/15',
+  'transition-all cursor-pointer hover:border-white/25',
   'appearance-none',
 ].join(' ');
 
@@ -273,13 +273,13 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
   return (
     <>
       <SyncBadge state={sync} onRetry={() => { if (pendingFd) { doSync(pendingFd); setPendingFd(null); } }} />
-      <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
+      <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-5">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 md:gap-5 items-center">
 
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 mb-1">
+          <div className="min-w-0 rounded-lg border border-green-500/35 bg-green-500/5 p-3 sm:p-4 space-y-3">
+            <div className="flex items-center gap-3">
               <Trophy className="w-4 h-4 text-primary opacity-60" />
-              <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.3em]">Đội thắng</span>
+              <span className="text-[10px] font-black text-green-300 uppercase tracking-[0.24em]">Đội thắng</span>
             </div>
             <div className="space-y-3">
               <select value={win1} onChange={e => setSlot('win1', e.target.value)} className={selectCls} required>
@@ -294,18 +294,18 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
           </div>
 
           <div className="flex flex-col items-center">
-            <div className="w-full bg-white/[0.02] rounded-2xl sm:rounded-3xl border border-white/[0.06] p-3 sm:p-6 flex items-center justify-center gap-3 sm:gap-7 shadow-xl">
+            <div className="w-full md:w-60 bg-black/45 rounded-lg border border-slate-600/60 p-3 sm:p-4 flex items-center justify-center gap-3 sm:gap-4 shadow-inner">
               <ScoreStepper label="Thắng" value={ws} onChange={setWs} />
-              <div className="pt-5">
-                <span className="text-white/10 font-black text-2xl sm:text-4xl select-none leading-none">-</span>
+              <div className="pt-4">
+                <span className="text-slate-400/80 font-black text-2xl sm:text-3xl select-none leading-none">-</span>
               </div>
               <ScoreStepper label="Thua" value={ls} onChange={setLs} />
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-center md:justify-end gap-3 mb-1">
-              <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.3em]">Đội thua</span>
+          <div className="min-w-0 rounded-lg border border-red-500/35 bg-red-500/5 p-3 sm:p-4 space-y-3">
+            <div className="flex items-center justify-center md:justify-end gap-3">
+              <span className="text-[10px] font-black text-red-300 uppercase tracking-[0.24em]">Đội thua</span>
               <Ghost className="w-4 h-4 text-red-400 opacity-60" />
             </div>
             <div className="space-y-3">
@@ -327,7 +327,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
             type="submit"
             disabled={ui === 'saved'}
             className={cn(
-              'w-full max-w-xs py-4 rounded-2xl font-black text-xs uppercase tracking-[0.3em] transition-all duration-300 flex items-center justify-center gap-3',
+              'w-full min-h-12 py-3 rounded-lg font-black text-xs sm:text-sm uppercase tracking-[0.24em] transition-all duration-300 flex items-center justify-center gap-3',
               ui === 'saved'
                 ? 'bg-primary/20 text-primary/60 cursor-default'
                 : 'bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20 active:scale-95'

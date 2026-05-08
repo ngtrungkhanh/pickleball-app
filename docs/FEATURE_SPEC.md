@@ -99,6 +99,7 @@ Expanded player detail currently shows:
 - recent form and form comment
 - best partner when at least 5 shared matches and above 50% win rate
 - toughest rival when at least 5 meetings and above 50% loss rate
+- easiest rival when at least 5 meetings and above 50% win rate
 
 ## Seasons
 

@@ -57,6 +57,9 @@ Expanded player detail uses balanced blocks:
 
 Partner detail qualifies only above 50% win rate and at least 5 shared matches.
 Partner label upgrades above 70% win rate.
+Leaderboard expanded detail uses four compact blocks where possible: form,
+partner, difficult rival, and easy rival. Mobile detail should use a 2-by-2
+grid instead of four stacked single-column blocks.
 
 Desktop leaderboard uses a table. Mobile leaderboard uses stacked rows.
 

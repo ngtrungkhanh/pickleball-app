@@ -59,9 +59,9 @@ export default async function HomePage() {
   } catch {}
 
   return (
-    <div className="space-y-6 sm:space-y-12 animate-in fade-in duration-1000 max-w-[1400px] mx-auto">
-      <div className="flex flex-col gap-6 items-center text-center">
-        <h1 className="font-black tracking-tighter text-white drop-shadow-[0_0_30px_rgba(34,197,94,0.3)] leading-none text-5xl sm:text-7xl lg:text-[5rem] xl:text-[6rem]">
+    <div className="space-y-5 sm:space-y-7 animate-in fade-in duration-1000 max-w-5xl mx-auto">
+      <div className="flex flex-col gap-5 items-center text-center">
+        <h1 className="font-black tracking-tighter text-white drop-shadow-[0_0_30px_rgba(34,197,94,0.25)] leading-none text-4xl sm:text-6xl lg:text-7xl">
           Pickleball <span className="text-primary italic">Ranking</span>
         </h1>
         <Dashboard

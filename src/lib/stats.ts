@@ -185,6 +185,16 @@ export function getPlayerAdvancedStats(playerId: string, matches: any[], players
     toughestRival = sortedRivals[0];
   }
 
+  let easiestRival = null;
+  const sortedEasyRivals = Array.from(rivals.entries())
+    .map(([id, s]) => ({ id, ...s, winRate: (s.wins / s.total) * 100, lossRate: (s.losses / s.total) * 100 }))
+    .filter(x => x.total >= 5 && x.winRate > 50)
+    .sort((a, b) => b.winRate - a.winRate || b.wins - a.wins || b.total - a.total);
+
+  if (sortedEasyRivals.length > 0) {
+    easiestRival = sortedEasyRivals[0];
+  }
+
   const getName = (id: string) => players.find(p => p.id === id)?.name || "Ẩn danh";
 
   return {
@@ -199,6 +209,11 @@ export function getPlayerAdvancedStats(playerId: string, matches: any[], players
       name: getName(toughestRival.id),
       label: toughestRival.lossRate > 70 ? "Thiên địch" : "Kèo khó",
       ...toughestRival
+    } : null,
+    easiestRival: easiestRival ? {
+      name: getName(easiestRival.id),
+      label: easiestRival.winRate > 70 ? "Khắc chế cứng" : "Kèo dễ",
+      ...easiestRival
     } : null
   };
 }
