@@ -42,26 +42,35 @@ targets.
 - Mobile first.
 - Text must not overlap or overflow containers.
 - Score input must remain prominent and fast to tap on mobile.
-- SummaryGrid is 1 column on narrow mobile, 2 columns from 420px, 4 columns on
-  wide desktop.
+- SummaryGrid should use a compact 2-by-2 layout on mobile when possible and 4
+  columns on wide desktop. Reduce mobile number text if needed so long money
+  values do not collide with labels or icons.
 - Leaderboard table/header remains important content and should not become
   unreadable microcopy.
+- Avoid nested scrolling inside the leaderboard for the normal small member
+  list. Let the page scroll naturally so mobile users can reach score entry
+  without getting trapped in an inner scroll region.
 
 ## Leaderboard Detail
 
-Expanded player detail uses balanced blocks:
+Expanded player detail uses balanced compact blocks:
 
-- title line
+- title line with optional icon
 - main content line
 - supporting metric line
+- short fun/insight line when useful
 
 Partner detail qualifies only above 50% win rate and at least 5 shared matches.
 Partner label upgrades above 70% win rate.
 Leaderboard expanded detail uses four compact blocks where possible: form,
 partner, difficult rival, and easy rival. Mobile detail should use a 2-by-2
 grid instead of four stacked single-column blocks.
+Keep each detail line short. Prefer concise text such as `Khong ngan ai`,
+`Khong keo free`, `Gap con rai rac`, `Drama dang tich tu`, `Dang len tay`,
+or `Tut nhip nhe`.
 
 Desktop leaderboard uses a table. Mobile leaderboard uses stacked rows.
+Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
 
 ## Settings and Modals
 
@@ -87,6 +96,16 @@ Desktop leaderboard uses a table. Mobile leaderboard uses stacked rows.
   hard blocking.
 - Player select placeholders should act as hint-only when empty; option menus
   should prioritize actual player names.
+- Native select menus are hard to style consistently. For the score form,
+  prefer a custom player picker when implementing the next UI pass:
+  - mobile opens a bottom sheet
+  - desktop opens a popover
+  - each player item should be at least about 56px tall for touch accuracy
+  - winner picker uses green active/hover accents
+  - loser picker uses red active/hover accents
+  - real members appear first
+  - guest (`Khach`) appears last, separated by a divider and a small user icon
+  - keep the existing duplicate-slot prevention and required-four-slots behavior
 
 ## History
 

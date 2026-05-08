@@ -38,6 +38,15 @@ Read only when relevant:
 - Simple read-only/edit mode without a full login system.
 - Stable production; preview changes before release.
 
+## Current UI Follow-Up
+
+- Continue dashboard UI work from `docs/FEATURE_SPEC.md` and `docs/UI_RULES.md`.
+- Agreed but not fully implemented: custom mobile-first player picker, 2-by-2
+  mobile summary cards, no nested leaderboard scrolling for the small member
+  list, and four-line expanded leaderboard detail with compact fun remarks.
+- Local demo routes such as `/ui-demo` and `/picker-demo` may exist on one
+  machine for review, but should not be pushed unless explicitly requested.
+
 ## Architecture Snapshot
 
 - Next.js App Router
