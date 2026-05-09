@@ -1,6 +1,31 @@
 import { GUEST_ID, isGuestId, isRankingMatch, loserFineCount } from './guest';
 
-export function calculateLeaderboard(players: any[], matches: any[], loseMoney: number = 5000, precalculatedStats?: any[]) {
+type StatPlayer = {
+  id: string;
+  name: string;
+  active?: boolean;
+  [key: string]: unknown;
+};
+
+type StatMatch = {
+  win_1?: unknown;
+  win_2?: unknown;
+  lose_1?: unknown;
+  lose_2?: unknown;
+  date?: unknown;
+  deleted_at?: unknown;
+  [key: string]: unknown;
+};
+
+type PrecalculatedStat = {
+  player_id: string;
+  wins: number | string;
+  losses: number | string;
+  total: number | string;
+  money: number | string;
+};
+
+export function calculateLeaderboard(players: StatPlayer[], matches: StatMatch[], loseMoney: number = 5000, precalculatedStats?: PrecalculatedStat[]) {
   const stats = players.map(p => ({
     ...p,
     wins: 0,
@@ -29,15 +54,17 @@ export function calculateLeaderboard(players: any[], matches: any[], loseMoney: 
 
     rankingMatches.forEach(m => {
       [m.win_1, m.win_2].forEach(id => {
-        if (id && statsMap.has(id) && !isGuestId(id)) {
-          const s = statsMap.get(id)!;
+        const playerId = typeof id === 'string' ? id : '';
+        if (playerId && statsMap.has(playerId) && !isGuestId(playerId)) {
+          const s = statsMap.get(playerId)!;
           s.wins++;
           s.total++;
         }
       });
       [m.lose_1, m.lose_2].forEach(id => {
-        if (id && statsMap.has(id) && !isGuestId(id)) {
-          const s = statsMap.get(id)!;
+        const playerId = typeof id === 'string' ? id : '';
+        if (playerId && statsMap.has(playerId) && !isGuestId(playerId)) {
+          const s = statsMap.get(playerId)!;
           s.losses++;
           s.total++;
         }
@@ -46,8 +73,9 @@ export function calculateLeaderboard(players: any[], matches: any[], loseMoney: 
 
     fineMatches.forEach(m => {
       [m.lose_1, m.lose_2].forEach(id => {
-        if (id && statsMap.has(id) && !isGuestId(id)) {
-          const s = statsMap.get(id)!;
+        const playerId = typeof id === 'string' ? id : '';
+        if (playerId && statsMap.has(playerId) && !isGuestId(playerId)) {
+          const s = statsMap.get(playerId)!;
           s.money += loseMoney;
         }
       });
@@ -66,14 +94,14 @@ export function calculateLeaderboard(players: any[], matches: any[], loseMoney: 
   );
 }
 
-export function getSeasonSummaryStats(matches: any[], loseMoney: number = 5000) {
+export function getSeasonSummaryStats(matches: StatMatch[], loseMoney: number = 5000) {
   const visibleMatches = matches.filter(m => !m.deleted_at);
   const rankingMatches = visibleMatches.filter(isRankingMatch);
   const totalMatches = rankingMatches.length;
   const totalLoseCount = visibleMatches.reduce((sum, m) => sum + loserFineCount(m), 0);
   const totalMoney = totalLoseCount * loseMoney;
 
-  const matchDates = rankingMatches.map(m => new Date(m.date).getTime()).sort((a, b) => a - b);
+  const matchDates = rankingMatches.map(m => new Date(String(m.date || '')).getTime()).sort((a, b) => a - b);
   const startDate = matchDates.length > 0 ? new Date(matchDates[0]) : null;
   const seasonDays = startDate ? Math.max(1, Math.floor((Date.now() - startDate.getTime()) / 86400000) + 1) : 0;
 
@@ -84,11 +112,11 @@ export function getSeasonSummaryStats(matches: any[], loseMoney: number = 5000) 
   const endOfWeek = startOfWeek + 7 * 86400000;
 
   const matchesThisWeek = rankingMatches.filter(m => {
-    const t = new Date(m.date).getTime();
+    const t = new Date(String(m.date || '')).getTime();
     return t >= startOfWeek && t < endOfWeek;
   }).length;
 
-  const latestMatch = rankingMatches.length > 0 ? new Date(rankingMatches[0].date) : null;
+  const latestMatch = rankingMatches.length > 0 ? new Date(String(rankingMatches[0].date || '')) : null;
   let lastText = "Chưa có";
   if (latestMatch) {
     const mDate = new Date(latestMatch.getFullYear(), latestMatch.getMonth(), latestMatch.getDate()).getTime();
@@ -109,17 +137,27 @@ export function getSeasonSummaryStats(matches: any[], loseMoney: number = 5000) 
   };
 }
 
-export function getPlayerAdvancedStats(playerId: string, matches: any[], players: any[]) {
+export function getPlayerAdvancedStats(playerId: string, matches: StatMatch[], players: StatPlayer[]) {
   const rankingMatches = matches.filter(isRankingMatch);
   const playerMatches = rankingMatches.filter(m => 
     m.win_1 === playerId || m.win_2 === playerId || 
     m.lose_1 === playerId || m.lose_2 === playerId
   );
 
+  const resultFor = (m: StatMatch) => (m.win_1 === playerId || m.win_2 === playerId ? 'W' : 'L');
   const recent = playerMatches.slice(0, 5).map(m => {
-    const isWin = m.win_1 === playerId || m.win_2 === playerId;
-    return isWin ? 'W' : 'L';
+    return resultFor(m);
   });
+  const previousRecent = playerMatches.slice(5, 10).map(m => resultFor(m));
+  const recentWins = recent.filter(r => r === 'W').length;
+  const previousWins = previousRecent.filter(r => r === 'W').length;
+
+  let formTrend = "Chờ thêm trận";
+  if (recent.length >= 5 && previousRecent.length >= 5) {
+    if (recentWins > previousWins) formTrend = "Đang lên tay";
+    else if (recentWins < previousWins) formTrend = "Tụt nhịp nhẹ";
+    else formTrend = "Giữ nhịp ổn";
+  }
 
   const formPattern = recent.join("");
   const formMap: Record<string, string> = {
@@ -141,11 +179,12 @@ export function getPlayerAdvancedStats(playerId: string, matches: any[], players
       ? (m.win_1 === playerId ? m.win_2 : m.win_1)
       : (m.lose_1 === playerId ? m.lose_2 : m.lose_1);
     
-    if (partnerId && partnerId !== GUEST_ID) {
-      const s = partners.get(partnerId) || { wins: 0, total: 0 };
+    const normalizedPartnerId = typeof partnerId === 'string' ? partnerId : '';
+    if (normalizedPartnerId && normalizedPartnerId !== GUEST_ID) {
+      const s = partners.get(normalizedPartnerId) || { wins: 0, total: 0 };
       if (isWin) s.wins++;
       s.total++;
-      partners.set(partnerId, s);
+      partners.set(normalizedPartnerId, s);
     }
   });
 
@@ -165,19 +204,22 @@ export function getPlayerAdvancedStats(playerId: string, matches: any[], players
     const enemyTeam = isWin ? [m.lose_1, m.lose_2] : [m.win_1, m.win_2];
     
     enemyTeam.forEach(rivalId => {
-      if (rivalId && rivalId !== GUEST_ID) {
-        const s = rivals.get(rivalId) || { wins: 0, losses: 0, total: 0 };
+      const normalizedRivalId = typeof rivalId === 'string' ? rivalId : '';
+      if (normalizedRivalId && normalizedRivalId !== GUEST_ID) {
+        const s = rivals.get(normalizedRivalId) || { wins: 0, losses: 0, total: 0 };
         if (isWin) s.wins++;
         if (!isWin) s.losses++;
         s.total++;
-        rivals.set(rivalId, s);
+        rivals.set(normalizedRivalId, s);
       }
     });
   });
 
   let toughestRival = null;
-  const sortedRivals = Array.from(rivals.entries())
-    .map(([id, s]) => ({ id, ...s, winRate: (s.wins / s.total) * 100, lossRate: (s.losses / s.total) * 100 }))
+  const rivalStats = Array.from(rivals.entries())
+    .map(([id, s]) => ({ id, ...s, winRate: (s.wins / s.total) * 100, lossRate: (s.losses / s.total) * 100 }));
+  const maxRivalMeetings = rivalStats.reduce((max, rival) => Math.max(max, rival.total), 0);
+  const sortedRivals = rivalStats
     .filter(x => x.total >= 5 && x.lossRate > 50)
     .sort((a, b) => b.lossRate - a.lossRate || b.losses - a.losses || b.total - a.total);
 
@@ -185,20 +227,67 @@ export function getPlayerAdvancedStats(playerId: string, matches: any[], players
     toughestRival = sortedRivals[0];
   }
 
+  let easiestRival = null;
+  const sortedEasyRivals = rivalStats
+    .filter(x => x.total >= 5 && x.winRate > 50)
+    .sort((a, b) => b.winRate - a.winRate || b.wins - a.wins || b.total - a.total);
+
+  if (sortedEasyRivals.length > 0) {
+    easiestRival = sortedEasyRivals[0];
+  }
+
   const getName = (id: string) => players.find(p => p.id === id)?.name || "Ẩn danh";
+  const rivalFallback = (kind: 'tough' | 'easy') => {
+    if (playerMatches.length < 5) {
+      return kind === 'tough'
+        ? { main: "Chưa lộ thiên địch", metric: "Chưa đủ mẫu", note: "Đánh thêm vài trận đã" }
+        : { main: "Chưa thấy kèo thơm", metric: "Chưa đủ mẫu", note: "Đánh thêm vài trận đã" };
+    }
+    if (maxRivalMeetings < 3) {
+      return { main: "Chưa ai đủ duyên", metric: "Gặp còn rải rác", note: "Chờ thêm kèo quen" };
+    }
+    if (maxRivalMeetings < 5) {
+      return kind === 'tough'
+        ? { main: "Drama đang tích tụ", metric: "Thêm vài trận là rõ", note: "Sắp có kết luận" }
+        : { main: "Mùi kèo đang tới", metric: "Thêm vài trận là rõ", note: "Sắp có kết luận" };
+    }
+    return kind === 'tough'
+      ? { main: "Không ngán ai", metric: "Chưa ai bắt nạt được", note: "Tạm thời rất lì" }
+      : { main: "Không kèo free", metric: "Ai cũng phải đánh thật", note: "Chưa có con mồi" };
+  };
 
   return {
     recent,
     formComment,
+    formTrend,
+    rivalSample: {
+      playerTotal: playerMatches.length,
+      maxMeetings: maxRivalMeetings,
+    },
     bestPartner: bestPartner ? {
       name: getName(bestPartner.id),
       label: bestPartner.rate > 70 ? "Cạ cứng" : "Đối tác tin cậy",
+      note: bestPartner.rate > 70 ? "Đánh chung rất bén" : "Cặp này khá ổn",
       ...bestPartner
     } : null,
+    bestPartnerFallback: {
+      main: "Chưa có cặp ăn ý",
+      metric: "Đổi partner liên tục",
+      note: "Chờ thêm trận chung",
+    },
     toughestRival: toughestRival ? {
       name: getName(toughestRival.id),
       label: toughestRival.lossRate > 70 ? "Thiên địch" : "Kèo khó",
+      note: toughestRival.lossRate > 70 ? "Gặp là hơi rén" : "Kèo này hơi mệt",
       ...toughestRival
-    } : null
+    } : null,
+    toughestRivalFallback: rivalFallback('tough'),
+    easiestRival: easiestRival ? {
+      name: getName(easiestRival.id),
+      label: easiestRival.winRate > 70 ? "Khắc chế cứng" : "Kèo dễ",
+      note: easiestRival.winRate > 70 ? "Kèo thơm quen mặt" : "Cửa sáng hơn chút",
+      ...easiestRival
+    } : null,
+    easiestRivalFallback: rivalFallback('easy'),
   };
 }

@@ -1,6 +1,7 @@
 // Task 15: ISR — trang tĩnh, chỉ rebuild khi có thao tác ghi/xóa
 import { sql } from '@vercel/postgres';
 import Dashboard from '@/components/Dashboard';
+import { shouldBlockPreviewWrites } from '@/lib/environment';
 
 export const revalidate = false; // Static by default, revalidated on demand via revalidatePath
 
@@ -10,6 +11,8 @@ type Season = { id: string; name: string; active?: boolean; start_date?: string 
 
 export default async function HomePage() {
   try {
+    if (shouldBlockPreviewWrites()) throw new Error('Preview writes disabled');
+
     await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
     await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80)`;
     await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
@@ -66,6 +69,7 @@ export default async function HomePage() {
           initialMatches={matches as Match[]}
           initialConfig={config}
           initialSeasons={seasons}
+          previewWritesBlocked={shouldBlockPreviewWrites()}
         />
       </div>
     </div>

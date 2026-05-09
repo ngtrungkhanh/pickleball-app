@@ -1,12 +1,17 @@
 import { sql } from '@vercel/postgres';
 import Link from 'next/link';
-import { ArrowLeft, Clock, Calendar, Trash2 } from 'lucide-react';
+import { ArrowLeft, Clock, Calendar } from 'lucide-react';
 import { DeleteMatchButton } from '@/components/DeleteMatchButton';
+import { shouldBlockPreviewWrites } from '@/lib/environment';
 
 export const revalidate = 0;
 
 export default async function HistoryPage() {
+  const previewWritesBlocked = shouldBlockPreviewWrites();
+
   try {
+    if (previewWritesBlocked) throw new Error('Preview writes disabled');
+
     await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
     await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
   } catch {}
@@ -67,7 +72,7 @@ export default async function HistoryPage() {
                       <span className="text-white/10 mx-1">•</span>
                       <Clock className="w-3.5 h-3.5" /> {timeText}
                     </span>
-                    <DeleteMatchButton matchId={m.id} />
+                    {!previewWritesBlocked && <DeleteMatchButton matchId={m.id} />}
                   </div>
 
                   {/* Match row */}

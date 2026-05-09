@@ -12,7 +12,8 @@ import {
   User,
   ArrowLeft,
   Search,
-  RefreshCw
+  RefreshCw,
+  Upload
 } from 'lucide-react';
 import {
   getAuditLogs,
@@ -35,6 +36,24 @@ import Link from 'next/link';
 
 const adminTabs = ['Nhật ký & Hệ thống', 'Thành viên', 'Season', 'Trận đấu'];
 const ADMIN_AUTH_DATE_KEY = 'pickleball_admin_auth_date';
+
+type FilePickerWindow = Window & {
+  showOpenFilePicker?: (options?: {
+    multiple?: boolean;
+    types?: Array<{
+      description?: string;
+      accept: Record<string, string[]>;
+    }>;
+  }) => Promise<Array<{ getFile: () => Promise<File> }>>;
+};
+
+function actionSucceeded(res: { success?: boolean } | { error?: string } | undefined) {
+  return Boolean(res && 'success' in res && res.success);
+}
+
+function actionError(res: { success?: boolean } | { error?: string } | undefined, fallback: string) {
+  return res && 'error' in res && res.error ? res.error : fallback;
+}
 
 export default function AdminPage() {
   const [pass, setPass] = useState('');
@@ -84,7 +103,7 @@ export default function AdminPage() {
     setLoading(true);
     try {
       const res = await verifyAdminAction(input);
-      if (res.success) {
+      if (actionSucceeded(res)) {
         try {
           const today = new Date().toLocaleDateString('en-CA');
           localStorage.setItem(ADMIN_AUTH_DATE_KEY, today);
@@ -92,7 +111,7 @@ export default function AdminPage() {
         setIsAuth(true);
         // loadData will be triggered by useEffect
       } else {
-        setMsg({ type: 'error', text: res.error || 'Máº­t kháº©u sai rá»“i sáº¿p Æ¡i!' });
+        setMsg({ type: 'error', text: actionError(res, 'Máº­t kháº©u sai rá»“i sáº¿p Æ¡i!') });
       }
     } catch (err) {
       setMsg({ type: 'error', text: 'Lá»—i káº¿t ná»‘i server.' });
@@ -138,30 +157,103 @@ export default function AdminPage() {
     if (!confirm('Bạn có chắc muốn tính toán lại toàn bộ số liệu không?')) return;
     startTransition(async () => {
       const res = await rebuildStatsAction();
-      if (res.success) {
+      if (actionSucceeded(res)) {
         setMsg({ type: 'success', text: 'Đã đồng bộ lại toàn bộ số liệu thành công!' });
         loadData();
       } else {
-        setMsg({ type: 'error', text: res.error || 'Lỗi rồi!' });
+        setMsg({ type: 'error', text: actionError(res, 'Lỗi rồi!') });
       }
     });
+  };
+
+  const deferImport = (file: File | null) => {
+    if (!file) return;
+    setTimeout(() => {
+      void onImportXlsx(file);
+    }, 0);
+  };
+
+  const openFallbackFilePicker = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    input.style.position = 'fixed';
+    input.style.left = '-9999px';
+    input.onchange = () => {
+      const file = input.files?.[0] || null;
+      input.remove();
+      deferImport(file);
+    };
+    document.body.appendChild(input);
+    input.click();
+  };
+
+  const onPickXlsx = async () => {
+    const picker = (window as FilePickerWindow).showOpenFilePicker;
+    if (!picker) {
+      openFallbackFilePicker();
+      return;
+    }
+
+    try {
+      const [handle] = await picker({
+        multiple: false,
+        types: [
+          {
+            description: 'Excel workbook',
+            accept: {
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+            },
+          },
+        ],
+      });
+      deferImport(handle ? await handle.getFile() : null);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setMsg({ type: 'error', text: 'Không thể mở file XLSX.' });
+    }
+  };
+
+  const onImportXlsx = async (file: File | null) => {
+    if (!file) return;
+    if (!confirm('Import từ file sẽ xóa toàn bộ lịch sử trận hiện có và thay bằng dữ liệu trong sheet MATCHES. Tiếp tục?')) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/migrate', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok) {
+        setMsg({ type: 'error', text: json?.error || 'Import thất bại.' });
+      } else {
+        setMsg({ type: 'success', text: `Đã import ${json?.inserted ?? 0} trận từ file XLSX.` });
+        await loadData();
+      }
+    } catch {
+      setMsg({ type: 'error', text: 'Lỗi kết nối khi import XLSX.' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const onRestore = (id: number) => {
     startTransition(async () => {
       const res = await restoreFromArchive(id);
-      if (res.success) {
+      if (actionSucceeded(res)) {
         setMsg({ type: 'success', text: 'Đã khôi phục dữ liệu thành công!' });
         loadData();
       } else {
-        setMsg({ type: 'error', text: res.error || 'Lỗi rồi!' });
+        setMsg({ type: 'error', text: actionError(res, 'Lỗi rồi!') });
       }
     });
   };
 
   const onTogglePlayer = async (pid: string, current: boolean) => {
     const res = await togglePlayerActiveAction(pid, !current);
-    if (res.success) loadData();
+    if (actionSucceeded(res)) loadData();
   };
 
   const onSavePlayer = async (pid: string) => {
@@ -173,11 +265,11 @@ export default function AdminPage() {
     
     setLoading(true);
     const res = await updatePlayerAction(fd);
-    if (res.success) {
+    if (actionSucceeded(res)) {
       setEditingPlayerId(null);
       loadData();
     } else {
-      alert(res.error || 'Lỗi khi cập nhật thành viên');
+      alert(actionError(res, 'Lỗi khi cập nhật thành viên'));
     }
     setLoading(false);
   };
@@ -196,11 +288,11 @@ export default function AdminPage() {
 
     setLoading(true);
     const res = await updateMatchAction(fd);
-    if (res.success) {
+    if (actionSucceeded(res)) {
       setEditingMatchId(null);
       loadData();
     } else {
-      alert(res.error || 'Lỗi khi cập nhật trận đấu');
+      alert(actionError(res, 'Lỗi khi cập nhật trận đấu'));
     }
     setLoading(false);
   };
@@ -284,6 +376,9 @@ export default function AdminPage() {
           </div>
 
           <div className="flex gap-3">
+            <button onClick={onPickXlsx} className="px-5 py-3 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-orange-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
+              <Upload className="w-4 h-4" /> Import XLSX
+            </button>
             <button onClick={onBackup} className="px-5 py-3 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
               <Database className="w-4 h-4" /> Sao lưu dữ liệu
             </button>
@@ -654,6 +749,4 @@ export default function AdminPage() {
     </div>
   );
 }
-
-
 

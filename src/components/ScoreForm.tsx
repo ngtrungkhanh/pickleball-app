@@ -1,8 +1,8 @@
 'use client';
-import { useState, useTransition, useRef, useEffect } from 'react';
+import { useState, useTransition, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { addMatchAction } from '@/app/actions';
-import { Minus, Plus, Trophy, Ghost, Send, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Minus, Plus, Trophy, Ghost, Send, RefreshCw, AlertCircle, CheckCircle2, Check, ChevronDown, Search, UserRound, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isGuestId } from '@/lib/guest';
 
@@ -17,20 +17,38 @@ type MatchSlots = {
   season: string;
 };
 
+type ScorePlayer = {
+  id: string;
+  name: string;
+  active?: boolean;
+  deleted_at?: unknown;
+};
+
+type RecentLocalMatch = {
+  key: string;
+  timestamp: number;
+};
+
+type ServerResult = {
+  success?: boolean;
+  skippedDuplicate?: boolean;
+  error?: string;
+};
+
 function teamKey(a: string, b: string): string {
   return [a, b].filter(Boolean).sort().join('|');
 }
 
-function duplicateKey(slots: MatchSlots): string {
+function localDuplicateKey(slots: MatchSlots): string {
   return `${slots.season}::${teamKey(slots.win1, slots.win2)}>${teamKey(slots.lose1, slots.lose2)}`;
 }
 
 function isDuplicateLocally(slots: MatchSlots): boolean {
   try {
-    const recent = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
-    const key = duplicateKey(slots);
+    const recent = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') as RecentLocalMatch[];
+    const key = localDuplicateKey(slots);
     const now = Date.now();
-    return recent.some((m: any) => (now - m.timestamp) / 60000 <= 15 && m.key === key);
+    return recent.some((m) => (now - m.timestamp) / 60000 <= 15 && m.key === key);
   } catch {
     return false;
   }
@@ -38,12 +56,9 @@ function isDuplicateLocally(slots: MatchSlots): boolean {
 
 function saveRecentLocal(slots: MatchSlots) {
   try {
-    const key = duplicateKey(slots);
-    const prev: any[] = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
-    localStorage.setItem(
-      RECENT_KEY,
-      JSON.stringify([{ key, timestamp: Date.now() }, ...prev].slice(0, 8))
-    );
+    const key = localDuplicateKey(slots);
+    const prev = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') as RecentLocalMatch[];
+    localStorage.setItem(RECENT_KEY, JSON.stringify([{ key, timestamp: Date.now() }, ...prev].slice(0, 8)));
   } catch {}
 }
 
@@ -59,75 +74,48 @@ function clearPending() {
   } catch {}
 }
 
-function SyncBadge({
-  state,
-  onRetry,
-}: {
-  state: 'idle' | 'syncing' | 'error' | 'ok';
-  onRetry?: () => void;
-}) {
+function SyncBadge({ state, onRetry }: { state: 'idle' | 'syncing' | 'error' | 'ok'; onRetry?: () => void }) {
   if (state === 'idle') return null;
   return (
-    <div
-      className={cn(
-        'fixed top-6 right-6 z-[700] flex items-center gap-3 px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] animate-in slide-in-from-top-6 duration-300 backdrop-blur-xl border transition-all',
-        state === 'syncing' && 'bg-amber-500/10 border-amber-500/20 text-amber-400',
-        state === 'error' && 'bg-red-500/10 border-red-500/20 text-red-400 cursor-pointer hover:bg-red-500/20',
-        state === 'ok' && 'bg-primary/10 border-primary/20 text-primary'
-      )}
-      onClick={state === 'error' ? onRetry : undefined}
-    >
+    <div className={cn(
+      'fixed top-6 right-6 z-[700] flex items-center gap-3 px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] animate-in slide-in-from-top-6 duration-300 backdrop-blur-xl border transition-all',
+      state === 'syncing' && 'bg-amber-500/10 border-amber-500/20 text-amber-400',
+      state === 'error' && 'bg-red-500/10 border-red-500/20 text-red-400 cursor-pointer hover:bg-red-500/20',
+      state === 'ok' && 'bg-primary/10 border-primary/20 text-primary',
+    )} onClick={state === 'error' ? onRetry : undefined}>
       {state === 'syncing' && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
       {state === 'error' && <AlertCircle className="w-3.5 h-3.5" />}
       {state === 'ok' && <CheckCircle2 className="w-3.5 h-3.5" />}
-      {state === 'syncing' ? 'Dang luu...' : state === 'error' ? 'Luu loi - thu lai' : 'Da luu'}
+      {state === 'syncing' ? 'Đang lưu...' : state === 'error' ? 'Lưu lỗi - thử lại' : 'Đã lưu'}
     </div>
   );
 }
 
-function ScoreStepper({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
+function ScoreStepper({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   const ref = useRef<HTMLInputElement>(null);
   return (
-    <div className="flex flex-col items-center gap-3">
-      <span className="text-[10px] sm:text-xs font-black text-white/20 uppercase tracking-[0.25em]">{label}</span>
-      <div className="flex items-center gap-2 sm:gap-5">
-        <button
-          type="button"
+    <div className="flex flex-col items-center gap-2">
+      <span className="text-[10px] sm:text-xs font-black text-slate-300/75 uppercase tracking-[0.22em]">{label}</span>
+      <div className="flex items-center gap-2 sm:gap-4">
+        <button type="button"
           onClick={() => onChange(Math.max(0, value - 1))}
-          className="sm:hidden w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 active:scale-90 transition-all shrink-0"
-        >
+          className="sm:hidden w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-300/70 active:scale-90 transition-all shrink-0">
           <Minus className="w-4 h-4" />
         </button>
 
         <input
           ref={ref}
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
+          type="text" inputMode="numeric" pattern="[0-9]*"
           value={value}
-          onChange={(e) => {
-            const n = parseInt(e.target.value, 10);
-            if (!isNaN(n) && n >= 0) onChange(n);
-            else if (e.target.value === '') onChange(0);
-          }}
+          onChange={e => { const n = parseInt(e.target.value, 10); if (!isNaN(n) && n >= 0) onChange(n); else if (e.target.value === '') onChange(0); }}
           onFocus={() => setTimeout(() => ref.current?.select(), 0)}
-          className="w-12 sm:w-20 text-center bg-transparent border-0 border-b-4 border-white/5 focus:border-primary/40 outline-none font-black text-white text-2xl sm:text-5xl transition-all py-1 tabular-nums"
+          className="w-12 sm:w-16 text-center bg-transparent border-0 border-b-4 border-white/10 focus:border-primary/50 outline-none font-black text-white text-2xl sm:text-4xl transition-all py-1 tabular-nums"
           style={{ lineHeight: 1 }}
         />
 
-        <button
-          type="button"
+        <button type="button"
           onClick={() => onChange(value + 1)}
-          className="sm:hidden w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary active:scale-90 transition-all shrink-0"
-        >
+          className="sm:hidden w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary active:scale-90 transition-all shrink-0">
           <Plus className="w-4 h-4" />
         </button>
       </div>
@@ -135,24 +123,153 @@ function ScoreStepper({
   );
 }
 
-const selectCls = [
-  'w-full rounded-2xl px-5 py-4',
-  'bg-slate-900/50 border border-white/[0.08]',
-  'text-sm font-bold text-white/90',
-  'focus:outline-none focus:border-primary/40 focus:bg-slate-900',
-  'transition-all cursor-pointer hover:border-white/15',
-  'appearance-none',
-].join(' ');
-
-export function ScoreForm({
+function PlayerPicker({
+  label,
+  value,
   players,
-  onAddMatch,
-  activeSeason = 'Season 1',
+  tone,
+  onChange,
 }: {
-  players: any[];
-  onAddMatch?: (m: any) => void;
-  activeSeason?: string;
+  label: string;
+  value: string;
+  players: ScorePlayer[];
+  tone: 'win' | 'lose';
+  onChange: (value: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const selected = players.find(p => p.id === value);
+  const guest = players.find(p => isGuestId(p.id));
+  const members = players.filter(p => !isGuestId(p.id) && p.name.toLowerCase().includes(query.toLowerCase()));
+  const accent = tone === 'win'
+    ? {
+        label: 'text-green-300',
+        border: 'border-green-500/35',
+        bg: 'bg-green-500/5',
+        active: 'bg-green-500/15 text-green-100 border-green-400/40',
+        hover: 'hover:bg-green-500/10 hover:text-green-100',
+        ring: 'focus:ring-green-400/25',
+      }
+    : {
+        label: 'text-red-300',
+        border: 'border-red-500/35',
+        bg: 'bg-red-500/5',
+        active: 'bg-red-500/15 text-red-100 border-red-400/40',
+        hover: 'hover:bg-red-500/10 hover:text-red-100',
+        ring: 'focus:ring-red-400/25',
+      };
+
+  const choose = (id: string) => {
+    onChange(id);
+    setOpen(false);
+    setQuery('');
+  };
+
+  const list = (
+    <div className="max-h-[70vh] overflow-y-auto p-2">
+      <div className="relative mb-2">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Tìm thành viên..."
+          className="h-11 w-full rounded-xl border border-slate-500/25 bg-slate-950/65 pl-9 pr-3 text-sm font-bold text-white outline-none focus:border-primary/50"
+        />
+      </div>
+
+      <div className="space-y-1">
+        {members.map(player => {
+          const active = player.id === value;
+          return (
+            <button
+              key={player.id}
+              type="button"
+              onClick={() => choose(player.id)}
+              className={cn(
+                'flex min-h-14 w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-base font-black transition',
+                active ? accent.active : `border-transparent text-white ${accent.hover}`,
+              )}
+            >
+              <span className="min-w-0 break-words leading-5">{player.name}</span>
+              {active && <Check className="h-5 w-5 shrink-0" strokeWidth={3} />}
+            </button>
+          );
+        })}
+      </div>
+
+      {guest && (
+        <div className="mt-2 border-t border-slate-600/60 pt-2">
+          <button
+            type="button"
+            onClick={() => choose(guest.id)}
+            className={cn(
+              'flex min-h-14 w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-base font-black transition',
+              value === guest.id ? accent.active : 'border-transparent text-slate-200 hover:bg-slate-700/55 hover:text-white',
+            )}
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-slate-500/30 bg-slate-800">
+                <UserRound className="h-4 w-4 text-slate-300" />
+              </span>
+              <span className="min-w-0 break-words leading-5">Khách</span>
+            </span>
+            {value === guest.id && <Check className="h-5 w-5 shrink-0" strokeWidth={3} />}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="relative min-w-0">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={cn(
+          'flex min-h-12 w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left transition focus:outline-none focus:ring-2',
+          accent.border,
+          accent.bg,
+          accent.ring,
+        )}
+        aria-label={label}
+      >
+        <span className={cn('min-w-0 break-words text-sm font-bold leading-5', selected ? 'text-white' : 'text-slate-400')}>
+          {selected ? (isGuestId(selected.id) ? 'Khách' : selected.name) : 'Chọn người'}
+        </span>
+        <ChevronDown className="h-5 w-5 shrink-0 text-slate-300" />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[610] bg-black/55 backdrop-blur-sm md:hidden" onClick={() => setOpen(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-[620] overflow-hidden rounded-t-[2rem] border border-slate-500/25 bg-[#142034] shadow-[0_-24px_80px_rgba(0,0,0,0.45)] md:hidden">
+            <div className="flex items-center justify-between border-b border-slate-500/25 px-5 py-4">
+              <div>
+                <div className={cn('text-sm font-black uppercase tracking-[0.22em]', accent.label)}>{label}</div>
+                <div className="mt-1 text-xs font-bold text-slate-300/75">Chạm vào tên để chọn</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="grid h-10 w-10 place-items-center rounded-xl bg-white/[0.07] text-slate-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {list}
+          </div>
+
+          <div className="fixed inset-0 z-30 hidden md:block" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-[calc(100%+0.5rem)] z-40 hidden w-full min-w-72 overflow-hidden rounded-2xl border border-slate-500/25 bg-[#142034] shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:block">
+            {list}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { players: Array<Record<string, unknown>>; onAddMatch?: (m: Record<string, unknown>) => void; activeSeason?: string }) {
   const [, start] = useTransition();
   const router = useRouter();
   const [ui, setUi] = useState<'idle' | 'saved'>('idle');
@@ -169,15 +286,15 @@ export function ScoreForm({
   const [nickname, setNickname] = useState('');
   const [deviceInfo, setDeviceInfo] = useState('');
 
-  const active = players.filter((p) => p.active && !p.deleted_at);
-  const reset = () => {
-    setWin1('');
-    setWin2('');
-    setLose1('');
-    setLose2('');
-    setWs(11);
-    setLs(5);
-  };
+  const active: ScorePlayer[] = players
+    .filter(p => p.active && !p.deleted_at && p.id && p.name)
+    .map(p => ({
+      id: String(p.id),
+      name: String(p.name),
+      active: Boolean(p.active),
+      deleted_at: p.deleted_at,
+    }));
+  const reset = () => { setWin1(''); setWin2(''); setLose1(''); setLose2(''); setWs(11); setLs(5); };
 
   type Slot = 'win1' | 'win2' | 'lose1' | 'lose2';
   const setSlot = (slot: Slot, value: string) => {
@@ -198,7 +315,8 @@ export function ScoreForm({
     const sameSideSelected = slot.startsWith('win')
       ? [slot === 'win1' ? win2 : win1]
       : [slot === 'lose1' ? lose2 : lose1];
-    return active.filter((p) => isGuestId(p.id) || !sameSideSelected.includes(p.id));
+
+    return active.filter(p => isGuestId(p.id) || !sameSideSelected.includes(p.id));
   };
 
   useEffect(() => {
@@ -208,8 +326,7 @@ export function ScoreForm({
         id = 'USR-' + Math.random().toString(36).substring(2, 6).toUpperCase();
         localStorage.setItem('pickleball_client_id', id);
       }
-      setClientId(id);
-      setNickname(localStorage.getItem('pickleball_client_nickname') || '');
+      const nick = localStorage.getItem('pickleball_client_nickname') || '';
 
       const ua = navigator.userAgent;
       let dev = 'Device';
@@ -225,13 +342,17 @@ export function ScoreForm({
       else if (ua.indexOf('Firefox') > -1) browser = 'Firefox';
       else if (ua.indexOf('Edge') > -1) browser = 'Edge';
 
-      setDeviceInfo(`${dev} - ${browser}`);
+      queueMicrotask(() => {
+        setClientId(id);
+        setNickname(nick);
+        setDeviceInfo(`${dev} - ${browser}`);
+      });
     } catch {}
   }, []);
 
   const fullIdentity = `${clientId}${nickname ? ` (${nickname})` : ''} [${deviceInfo || 'Unknown'}]`;
 
-  const handleServerResult = (r: any, fd: FormData) => {
+  const handleServerResult = useCallback((r: ServerResult | undefined, fd: FormData) => {
     if (r?.success) {
       clearPending();
       saveRecentLocal({
@@ -259,31 +380,27 @@ export function ScoreForm({
     }
     setSync('error');
     setPendingFd(fd);
-  };
+  }, [activeSeason, router]);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(PENDING_KEY);
       if (!raw) return;
-      const parsed = JSON.parse(raw);
+      const parsed = JSON.parse(raw) as { match?: Record<string, unknown>; timestamp?: number };
       if (!parsed || !parsed.match) return;
       const { match, timestamp } = parsed;
-      if ((Date.now() - timestamp) / 60000 >= 60) {
-        clearPending();
-        return;
-      }
-      const fd = new FormData();
-      Object.entries(match).forEach(([k, v]) => {
-        if (v !== undefined && v !== null && String(v) !== '') fd.append(k, String(v));
-      });
-      if (!fd.get('created_by')) fd.append('created_by', fullIdentity);
-      setSync('syncing');
-      start(async () => {
-        const r = await addMatchAction(fd);
-        handleServerResult(r, fd);
-      });
+      if (timestamp && (Date.now() - timestamp) / 60000 < 60) {
+        const fd = new FormData();
+        Object.entries(match).forEach(([k, v]) => { if (v) fd.append(k, String(v)); });
+        if (!fd.get('created_by')) fd.append('created_by', fullIdentity);
+        queueMicrotask(() => setSync('syncing'));
+        start(async () => {
+          const r = await addMatchAction(fd);
+          handleServerResult(r, fd);
+        });
+      } else clearPending();
     } catch {}
-  }, [activeSeason, fullIdentity, router]);
+  }, [fullIdentity, handleServerResult]);
 
   const doSync = (fd: FormData) => {
     setSync('syncing');
@@ -294,37 +411,20 @@ export function ScoreForm({
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!win1 || !win2 || !lose1 || !lose2) {
-      alert('Vui long chon du 4 nguoi cho tran dau.');
-      return;
-    }
+    if (!win1 || !win2 || !lose1 || !lose2) return alert('Vui lòng chọn đủ 4 người.');
 
     const slots: MatchSlots = { win1, win2, lose1, lose2, season: activeSeason };
     let duplicateConfirmed = false;
     if (isDuplicateLocally(slots)) {
-      duplicateConfirmed = window.confirm('Tran nay da trung trong vong 15 phut. Ban co chac muon ghi tiep khong?');
+      duplicateConfirmed = window.confirm('Trận này đã trùng trong vòng 15 phút. Bạn có chắc muốn ghi tiếp không?');
       if (!duplicateConfirmed) return;
     }
 
-    onAddMatch?.({
-      id: 'TMP-' + Date.now(),
-      date: new Date().toISOString(),
-      win_1: win1,
-      win_2: win2,
-      lose_1: lose1,
-      lose_2: lose2,
-      win_score: ws,
-      lose_score: ls,
-      season: activeSeason,
-      created_by: fullIdentity,
-    });
+    onAddMatch?.({ id: 'TMP-' + Date.now(), date: new Date().toISOString(), win_1: win1, win_2: win2 || null, lose_1: lose1, lose_2: lose2 || null, win_score: ws, lose_score: ls, season: activeSeason, created_by: fullIdentity });
     setUi('saved');
-    setTimeout(() => {
-      reset();
-      setUi('idle');
-    }, 1000);
+    setTimeout(() => { reset(); setUi('idle'); }, 1000);
 
     const fd = new FormData();
     fd.append('win_1', win1);
@@ -341,76 +441,42 @@ export function ScoreForm({
 
   return (
     <>
-      <SyncBadge
-        state={sync}
-        onRetry={() => {
-          if (pendingFd) {
-            doSync(pendingFd);
-            setPendingFd(null);
-          }
-        }}
-      />
-      <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 mb-1">
+      <SyncBadge state={sync} onRetry={() => { if (pendingFd) { doSync(pendingFd); setPendingFd(null); } }} />
+      <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-5">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 md:gap-5 items-center">
+
+          <div className="min-w-0 rounded-2xl border border-green-500/35 bg-green-500/5 p-3 sm:p-4 space-y-3">
+            <div className="flex items-center gap-3">
               <Trophy className="w-4 h-4 text-primary opacity-60" />
-              <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.3em]">Doi thang</span>
+              <span className="text-[10px] font-black text-green-300 uppercase tracking-[0.24em]">Đội thắng</span>
             </div>
             <div className="space-y-3">
-              <select value={win1} onChange={(e) => setSlot('win1', e.target.value)} className={selectCls} required>
-                <option value="" disabled hidden>Chon nguoi</option>
-                {optionsFor('win1').map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {isGuestId(p.id) ? 'Khach' : p.name}
-                  </option>
-                ))}
-              </select>
-              <select value={win2} onChange={(e) => setSlot('win2', e.target.value)} className={selectCls} required>
-                <option value="" disabled hidden>Chon nguoi</option>
-                {optionsFor('win2').map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {isGuestId(p.id) ? 'Khach' : p.name}
-                  </option>
-                ))}
-              </select>
+              <PlayerPicker label="Người thắng 1" tone="win" value={win1} players={optionsFor('win1')} onChange={value => setSlot('win1', value)} />
+              <PlayerPicker label="Người thắng 2" tone="win" value={win2} players={optionsFor('win2')} onChange={value => setSlot('win2', value)} />
             </div>
           </div>
 
           <div className="flex flex-col items-center">
-            <div className="w-full bg-white/[0.02] rounded-2xl sm:rounded-3xl border border-white/[0.06] p-3 sm:p-6 flex items-center justify-center gap-3 sm:gap-7 shadow-xl">
-              <ScoreStepper label="Thang" value={ws} onChange={setWs} />
-              <div className="pt-5">
-                <span className="text-white/10 font-black text-2xl sm:text-4xl select-none leading-none">-</span>
+            <div className="w-full md:w-60 bg-black/45 rounded-2xl border border-slate-600/60 p-3 sm:p-4 flex items-center justify-center gap-3 sm:gap-4 shadow-inner">
+              <ScoreStepper label="Thắng" value={ws} onChange={setWs} />
+              <div className="pt-4">
+                <span className="text-slate-400/80 font-black text-2xl sm:text-3xl select-none leading-none">-</span>
               </div>
               <ScoreStepper label="Thua" value={ls} onChange={setLs} />
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-center md:justify-end gap-3 mb-1">
-              <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.3em]">Doi thua</span>
+          <div className="min-w-0 rounded-2xl border border-red-500/35 bg-red-500/5 p-3 sm:p-4 space-y-3">
+            <div className="flex items-center justify-center md:justify-end gap-3">
+              <span className="text-[10px] font-black text-red-300 uppercase tracking-[0.24em]">Đội thua</span>
               <Ghost className="w-4 h-4 text-red-400 opacity-60" />
             </div>
             <div className="space-y-3">
-              <select value={lose1} onChange={(e) => setSlot('lose1', e.target.value)} className={selectCls} required>
-                <option value="" disabled hidden>Chon nguoi</option>
-                {optionsFor('lose1').map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {isGuestId(p.id) ? 'Khach' : p.name}
-                  </option>
-                ))}
-              </select>
-              <select value={lose2} onChange={(e) => setSlot('lose2', e.target.value)} className={selectCls} required>
-                <option value="" disabled hidden>Chon nguoi</option>
-                {optionsFor('lose2').map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {isGuestId(p.id) ? 'Khach' : p.name}
-                  </option>
-                ))}
-              </select>
+              <PlayerPicker label="Người thua 1" tone="lose" value={lose1} players={optionsFor('lose1')} onChange={value => setSlot('lose1', value)} />
+              <PlayerPicker label="Người thua 2" tone="lose" value={lose2} players={optionsFor('lose2')} onChange={value => setSlot('lose2', value)} />
             </div>
           </div>
+
         </div>
 
         <div className="flex flex-col items-center gap-4">
@@ -418,21 +484,13 @@ export function ScoreForm({
             type="submit"
             disabled={ui === 'saved'}
             className={cn(
-              'w-full max-w-xs py-4 rounded-2xl font-black text-xs uppercase tracking-[0.3em] transition-all duration-300 flex items-center justify-center gap-3',
+              'w-full min-h-12 py-3 rounded-2xl font-black text-xs sm:text-sm uppercase tracking-[0.24em] transition-all duration-300 flex items-center justify-center gap-3',
               ui === 'saved'
                 ? 'bg-primary/20 text-primary/60 cursor-default'
                 : 'bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20 active:scale-95'
             )}
           >
-            {ui === 'saved' ? (
-              <>
-                <CheckCircle2 className="w-5 h-5" /> Da luu
-              </>
-            ) : (
-              <>
-                <Send className="w-5 h-5" /> Ghi ket qua
-              </>
-            )}
+            {ui === 'saved' ? <><CheckCircle2 className="w-5 h-5" /> Đã lưu</> : <><Send className="w-5 h-5" /> Ghi kết quả</>}
           </button>
         </div>
       </form>

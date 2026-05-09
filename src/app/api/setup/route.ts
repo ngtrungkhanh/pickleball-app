@@ -1,8 +1,16 @@
 import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
+import { shouldBlockPreviewWrites } from '@/lib/environment';
 
 export async function GET(request: Request) {
   try {
+    if (shouldBlockPreviewWrites()) {
+      return NextResponse.json(
+        { error: 'Preview writes are blocked because Preview uses the production database.' },
+        { status: 403 },
+      );
+    }
+
     // 1. Create players table
     await sql`
       CREATE TABLE IF NOT EXISTS players (

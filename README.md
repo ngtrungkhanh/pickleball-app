@@ -1,37 +1,89 @@
 # Pickleball Ranking Dashboard
 
-Premium dark-mode Pickleball ranking dashboard built with Next.js, Tailwind CSS, and Vercel Postgres.
+Production app for `https://conchimnon.vercel.app/`.
+
+Dev preview for branch `dev`:
+`https://pickleball-app-git-dev-ngtrungkhanhs-projects.vercel.app/`
+
+Built with Next.js App Router, Tailwind CSS, Vercel Postgres, and Vercel
+hosting. The current production source is GitHub `main`.
 
 ## Start Here
-To save AI quota, read context in tiers.
+
+Read in tiers to save context:
 
 Always read:
-1. `WORKFLOW_LOG.md`
-2. `README.md`
+
+1. `README.md`
+2. `PROJECT_CONTEXT.md`
+3. `CHANGELOG.md`
 
 Read only when relevant:
-- `AI_CONTEXT.md` for architecture, Vercel/ISR, database, or original design rules.
-- `DEVELOPMENT_LOG.md` for historical changes, sync/local-first, or legacy decisions.
-- `TASK_TODO.md` for backlog and sprint planning.
-- `START_NEW_CHAT_PROMPT.md` when starting a fresh assistant chat.
+
+- `docs/FEATURE_SPEC.md` for product behavior and screen overview
+- `docs/DATA_FLOW.md` for database, server actions, cache, and localStorage
+- `docs/UI_RULES.md` for layout, wording, and responsive UI rules
+
+Avoid reading large legacy files unless the task requires them. Use `rg` first.
 
 ## Development
+
 ```bash
+npm install
 npm run dev
 ```
 
 Open `http://localhost:3000`.
 
 ## Verification
+
 ```bash
 npm run build
 npx eslint <changed-files>
 ```
 
-`npm run lint` may still report older repo-wide lint debt. Prefer targeted lint for changed files until that debt is cleaned up.
+Notes:
 
-## UI Priority
-Every UI change must be reviewed in this order:
+- `npm run lint` currently reports older repo-wide lint debt. Prefer targeted
+  lint for changed files until that debt is cleaned up.
+- Local `npm run build` needs a valid pooled Vercel Postgres connection in
+  `.env.local`; a direct connection string can fail during prerender.
+
+## Deployment
+
+Production is deployed by Vercel from GitHub `main`.
+
+Branch policy:
+
+- `main` is production; do not edit directly.
+- `dev` is the shared working branch for all AI agents and machines.
+- Use Vercel Preview from `dev` for testing.
+- Merge `dev` into `main` only after the user confirms release.
+
+Database policy:
+
+- Production deployments from `main` use the Production database.
+- Preview deployments from branch `dev` use a separate dev database.
+- Merging `dev` into `main` merges code only; database data does not merge.
+
+Before assuming local code is production-current, compare against Vercel
+Deployments:
+
+- Domain: `conchimnon.vercel.app`
+- Current production commit after latest sync: `11cf340`
+
+## Repo Layout
+
+- `src/app` - App Router pages, routes, and server actions
+- `src/components` - UI components
+- `src/lib` - stats, analytics, db, and utility logic
+- `legacy` - old Apps Script implementation for reference only
+- `sync_excel_to_db.js` - one-off Excel-to-Postgres migration helper
+- `docs` - deeper product, data, and UI documentation
+
+## UI Review Order
+
+Every UI change must be checked in this order:
 
 1. Mobile
 2. Desktop Full HD
