@@ -6,7 +6,7 @@ repo.
 ## Current Production Snapshot
 
 - Production domain: `https://conchimnon.vercel.app/`
-- Production commit verified from Vercel/GitHub: `d7d3eba`
+- Latest released feature commit verified from Vercel/GitHub: `d7d3eba`
 - Commit message: `fix: prevent summary card clipping`
 
 ## Major Completed Work
