@@ -161,3 +161,5 @@ repo.
 - Reweighted partner, difficult-rival, and easy-rival selection with sample
   confidence, recent results, score differential, and close-game context instead
   of sorting by raw win/loss rate alone.
+- Simplified partner/rival/easy labels so they read as direct status text, not
+  hidden-context slang.

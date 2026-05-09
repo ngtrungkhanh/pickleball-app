@@ -85,6 +85,9 @@ Partner, difficult-rival, and easy-rival notes should be self-contained and
 data-aware. Avoid comments that only make sense if another hidden name or chart
 is visible. Prefer short observations about sample strength, recent results,
 close games, score gaps, or whether the matchup is favorable but still tight.
+Partner/rival/easy labels should be direct status words that are clear at a
+glance, for example `Cặp ruột`, `Kèo khó`, `Thua sát`, `Cửa sáng`, or
+`Thắng cách biệt`. Avoid vague labels such as `Hợp bài`.
 
 Desktop leaderboard uses a table. Mobile leaderboard uses stacked rows.
 Fine amounts should use grouped full numbers such as `35.000`, not `35k`.

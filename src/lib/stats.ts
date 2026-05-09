@@ -437,7 +437,7 @@ function createInsightCandidates({
       'Sát nút vẫn xanh',
       'Bản lĩnh phút cuối',
       'Kèo căng vẫn qua',
-      'Cửa hẹp vẫn chui',
+      'Cửa hẹp vẫn thắng',
       'Lì đòn đoạn cuối',
       'Điểm cuối khá cứng',
       'Kéo sát vẫn thắng',
@@ -769,10 +769,10 @@ function pushPairResult(stat: PairStat, result: string, diff: number, index: num
 function partnerLabel(stat: PairStat & { rate: number; avgDiff: number }) {
   if (stat.total >= 12 && stat.rate >= 70) return "Cặp ruột";
   if (stat.total >= 8 && stat.rate >= 70) return "Cạ cứng";
-  if (stat.total >= 5 && stat.rate >= 80) return "Hợp vía";
-  if (stat.total >= 5 && stat.avgDiff >= 4) return "Đánh đôi có lực";
+  if (stat.total >= 5 && stat.rate >= 80) return "Cặp hợp";
+  if (stat.total >= 5 && stat.avgDiff >= 4) return "Đôi có lực";
   if (stat.total >= 8 && stat.rate >= 60) return "Đối tác tin cậy";
-  return "Đối tác ổn áp";
+  return "Đối tác ổn";
 }
 
 function partnerNote(stat: PairStat & { rate: number; avgDiff: number; score: number }, seed: string) {
@@ -787,7 +787,7 @@ function partnerNote(stat: PairStat & { rate: number; avgDiff: number; score: nu
       'Cặp này có số má',
       'Đánh chung rất bén',
       'Ghép vào là sáng',
-      'Nhìn khá hợp bài',
+      'Nhìn khá ăn ý',
       'Cặp này đáng tin',
       'Độ ăn ý khá cao',
       'Đánh đôi có nghề',
@@ -798,7 +798,7 @@ function partnerNote(stat: PairStat & { rate: number; avgDiff: number; score: nu
   }
   if (stat.total >= 5 && stat.total < 8 && stat.rate >= 80) {
     add('partner', 90, [
-      'Hợp vía thấy rõ',
+      'Đánh chung khá hợp',
       'Ít trận nhưng xanh',
       'Mẫu nhỏ mà thơm',
       'Cặp này có duyên',
@@ -861,16 +861,16 @@ function partnerNote(stat: PairStat & { rate: number; avgDiff: number; score: nu
 function rivalLabel(stat: PairStat & { winRate: number; lossRate: number; avgDiff: number }, kind: 'tough' | 'easy') {
   if (kind === 'tough') {
     if (stat.total >= 10 && stat.lossRate >= 70) return "Thiên địch";
-    if (stat.avgDiff <= -4) return "Tường khó vượt";
-    if (stat.lossRate >= 65) return "Kèo ám ảnh";
-    if (stat.diffs.filter(diff => diff < 0 && diff >= -2).length >= 2) return "Cửa hẹp";
+    if (stat.avgDiff <= -4) return "Thua cách biệt";
+    if (stat.lossRate >= 65) return "Kèo rất khó";
+    if (stat.diffs.filter(diff => diff < 0 && diff >= -2).length >= 2) return "Thua sát";
     return "Kèo khó";
   }
 
-  if (stat.total >= 10 && stat.winRate >= 75) return "Hợp bài";
-  if (stat.avgDiff >= 4) return "Kèo thuận tay";
+  if (stat.total >= 10 && stat.winRate >= 75) return "Kèo dễ";
+  if (stat.avgDiff >= 4) return "Thắng cách biệt";
   if (stat.winRate >= 75) return "Cửa sáng";
-  if (stat.diffs.filter(diff => diff > 0 && diff <= 2).length >= 2) return "Kèo lì vẫn qua";
+  if (stat.diffs.filter(diff => diff > 0 && diff <= 2).length >= 2) return "Thắng sát";
   return "Kèo dễ";
 }
 
@@ -952,10 +952,10 @@ function easyRivalNote(stat: PairStat & { winRate: number; avgDiff: number; scor
   if (stat.winRate >= 75 && stat.total >= 8) {
     add('opponent', 92, [
       'Gặp là sáng cửa hơn',
-      'Kèo này khá thuận tay',
+      'Kèo này khá thuận',
       'Cửa này đang có vía',
       'Gặp là dễ vào nhịp',
-      'Không hẳn dễ, nhưng hợp',
+      'Không dễ, nhưng thuận',
       'Đúng bài nên dễ thở',
     ], 'high-win');
   }
@@ -974,7 +974,7 @@ function easyRivalNote(stat: PairStat & { winRate: number; avgDiff: number; scor
       'Kèo căng vẫn qua',
       'Sát nút vẫn xanh',
       'Chốt game khá tỉnh',
-      'Cửa hẹp vẫn qua',
+      'Kèo sát vẫn qua',
     ], 'close-win');
   }
   if (candidates.length === 0) {
@@ -982,7 +982,7 @@ function easyRivalNote(stat: PairStat & { winRate: number; avgDiff: number; scor
       'Cửa sáng hơn chút',
       'Kèo này có nét',
       'Gặp lại khá tự tin',
-      'Có vẻ hợp bài',
+      'Có vẻ khá thuận',
       'Vẫn cần giữ nhịp',
     ], 'default');
   }
