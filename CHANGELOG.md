@@ -6,8 +6,8 @@ repo.
 ## Current Production Snapshot
 
 - Production domain: `https://conchimnon.vercel.app/`
-- Production commit verified from Vercel/GitHub: `11cf340`
-- Commit message: `fix: duplicate match confirm flow with server guard`
+- Production commit verified from Vercel/GitHub: `d7d3eba`
+- Commit message: `fix: prevent summary card clipping`
 
 ## Major Completed Work
 

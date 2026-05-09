@@ -9,7 +9,7 @@ deeper product, data, or UI details in `docs/`.
 - Dev preview: `https://pickleball-app-git-dev-ngtrungkhanhs-projects.vercel.app/`
 - Production branch: `main`
 - Shared working branch: `dev`
-- Current verified production commit after latest push: `11cf340`
+- Current verified production commit after latest push: `d7d3eba`
 - GitHub remote: `https://github.com/ngtrungkhanh/pickleball-app.git`
 
 Do not edit `main` directly. Work on `dev`, push `dev`, test Vercel Preview,
