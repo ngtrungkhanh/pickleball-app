@@ -8,10 +8,13 @@ type StatPlayer = {
 };
 
 type StatMatch = {
+  id?: unknown;
   win_1?: unknown;
   win_2?: unknown;
   lose_1?: unknown;
   lose_2?: unknown;
+  win_score?: unknown;
+  lose_score?: unknown;
   date?: unknown;
   deleted_at?: unknown;
   [key: string]: unknown;
@@ -48,6 +51,72 @@ function getVietnamWeekBoundsUtc(now = new Date()) {
   const startOfToday = getVietnamStartOfDayUtcMs(now);
   const start = startOfToday - (parts.day - 1) * DAY_MS;
   return { start, end: start + 7 * DAY_MS };
+}
+
+function numberValue(value: unknown, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function matchTime(match: StatMatch) {
+  return new Date(String(match.date || '')).getTime() || 0;
+}
+
+function resultForPlayer(match: StatMatch, playerId: string) {
+  return match.win_1 === playerId || match.win_2 === playerId ? 'W' : 'L';
+}
+
+function scoreDiffForPlayer(match: StatMatch, playerId: string) {
+  const winScore = numberValue(match.win_score);
+  const loseScore = numberValue(match.lose_score);
+  return resultForPlayer(match, playerId) === 'W' ? winScore - loseScore : loseScore - winScore;
+}
+
+function partnerForPlayer(match: StatMatch, playerId: string) {
+  const partnerId = resultForPlayer(match, playerId) === 'W'
+    ? (match.win_1 === playerId ? match.win_2 : match.win_1)
+    : (match.lose_1 === playerId ? match.lose_2 : match.lose_1);
+  return typeof partnerId === 'string' && !isGuestId(partnerId) ? partnerId : '';
+}
+
+function opponentIdsForPlayer(match: StatMatch, playerId: string) {
+  const opponents = resultForPlayer(match, playerId) === 'W'
+    ? [match.lose_1, match.lose_2]
+    : [match.win_1, match.win_2];
+  return opponents.filter((id): id is string => typeof id === 'string' && !isGuestId(id));
+}
+
+function countCurrentStreak(results: string[]) {
+  const first = results[0];
+  if (!first) return { result: '', count: 0 };
+  let count = 0;
+  for (const r of results) {
+    if (r !== first) break;
+    count++;
+  }
+  return { result: first, count };
+}
+
+function countAlternations(results: string[]) {
+  let count = 0;
+  for (let i = 1; i < results.length; i++) {
+    if (results[i] !== results[i - 1]) count++;
+  }
+  return count;
+}
+
+function seededIndex(seed: string, length: number) {
+  if (length <= 1) return 0;
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash) % length;
+}
+
+function pickSeeded(options: string[], seed: string) {
+  return options[seededIndex(seed, options.length)] || options[0] || '';
 }
 
 export function calculateLeaderboard(players: StatPlayer[], matches: StatMatch[], loseMoney: number = 5000, precalculatedStats?: PrecalculatedStat[]) {
@@ -160,40 +229,503 @@ export function getSeasonSummaryStats(matches: StatMatch[], loseMoney: number = 
   };
 }
 
+const FORM_LABELS: Record<string, string> = {
+  WWWWW: "Hủy diệt",
+  WWWWL: "Quá cháy",
+  WWWLW: "Vào guồng",
+  WWWLL: "Hồi sinh mạnh",
+  WWLWW: "Đang hăng",
+  WWLWL: "Giữ nhịp xanh",
+  WWLLW: "Vừa bật lại",
+  WWLLL: "Leo khỏi đáy",
+  WLWWW: "Vấp nhẹ",
+  WLWWL: "Chệch nhịp nhẹ",
+  WLWLW: "Thắng thua đan xen",
+  WLWLL: "Có dấu hồi",
+  WLLWW: "Vừa tỉnh nhịp",
+  WLLWL: "Tín hiệu xanh",
+  WLLLW: "Le lói",
+  WLLLL: "Cứu một nhịp",
+  LWWWW: "Đứt mạch thắng",
+  LWWWL: "Hạ nhiệt nhẹ",
+  LWWLW: "Chưa ổn định",
+  LWWLL: "Vừa hụt hơi",
+  LWLWW: "Khựng nhẹ",
+  LWLWL: "Lúc sáng lúc tối",
+  LWLLW: "Khó đoán",
+  LWLLL: "Chông chênh",
+  LLWWW: "Tụt nhịp",
+  LLWWL: "Trượt form",
+  LLWLW: "Cứu chưa kịp",
+  LLWLL: "Sa sút",
+  LLLWW: "Rơi phong độ",
+  LLLWL: "Lao dốc",
+  LLLLW: "Đỏ kéo dài",
+  LLLLL: "Khủng hoảng",
+};
+
+type InsightCategory =
+  | 'turn'
+  | 'streak'
+  | 'score'
+  | 'volatile'
+  | 'trend'
+  | 'partner'
+  | 'opponent'
+  | 'fine'
+  | 'activity'
+  | 'fallback';
+
+type InsightCandidate = {
+  text: string;
+  category: InsightCategory;
+  score: number;
+};
+
+function createInsightCandidates({
+  playerId,
+  playerMatches,
+  rankingMatches,
+  players,
+}: {
+  playerId: string;
+  playerMatches: StatMatch[];
+  rankingMatches: StatMatch[];
+  players: StatPlayer[];
+}) {
+  const recentMatches = playerMatches.slice(0, 5);
+  const previousMatches = playerMatches.slice(5, 10);
+  const recent = recentMatches.map(m => resultForPlayer(m, playerId));
+  const previous = previousMatches.map(m => resultForPlayer(m, playerId));
+  const pattern = recent.join('');
+  const recentWins = recent.filter(r => r === 'W').length;
+  const previousWins = previous.filter(r => r === 'W').length;
+  const last3 = recent.slice(0, 3);
+  const last3Wins = last3.filter(r => r === 'W').length;
+  const { result: streakResult, count: streakCount } = countCurrentStreak(recent);
+  const diffs = recentMatches.map(m => scoreDiffForPlayer(m, playerId));
+  const avgDiff = diffs.length ? diffs.reduce((sum, diff) => sum + diff, 0) / diffs.length : 0;
+  const closeGames = diffs.filter(diff => Math.abs(diff) <= 2).length;
+  const closeWins = diffs.filter(diff => diff > 0 && diff <= 2).length;
+  const closeLosses = diffs.filter(diff => diff < 0 && diff >= -2).length;
+  const blowoutWins = diffs.filter(diff => diff >= 5).length;
+  const blowoutLosses = diffs.filter(diff => diff <= -5).length;
+  const alternations = countAlternations(recent);
+  const seedBase = [
+    playerId,
+    pattern,
+    String(playerMatches[0]?.id || ''),
+    String(playerMatches[0]?.date || ''),
+  ].join('|');
+  const candidates: InsightCandidate[] = [];
+
+  const add = (category: InsightCategory, score: number, options: string[], salt: string) => {
+    candidates.push({ category, score, text: pickSeeded(options, `${seedBase}|${category}|${salt}`) });
+  };
+
+  if (recent.length < 5) {
+    add('fallback', 100, [
+      'Cần thêm vài trận',
+      'Dữ liệu còn mỏng',
+      'Chưa lộ bài nhiều',
+      'Đánh thêm rồi tính',
+      'Form còn đang giấu',
+      'Chưa đủ mẫu đẹp',
+    ], 'short-sample');
+    return { candidates, pattern, recent };
+  }
+
+  if (last3Wins === 3 && recentWins <= 3) {
+    add('turn', 98, [
+      'Ba trận mới kéo lại',
+      'Cuối form đang sáng',
+      'Mới hồi lại nhịp',
+      'Đà mới đang lên',
+      'Đuôi form có sáng',
+      'Cú quay xe đẹp',
+      'Gần đây xanh hơn',
+      'Mới thắng lại mượt',
+    ], 'last3-recover');
+  }
+  if (last3Wins === 0 && recentWins >= 2) {
+    add('turn', 98, [
+      'Cuối form hơi tối',
+      'Gần đây hơi hụt',
+      'Mới đây chững lại',
+      'Nhịp mới đang rơi',
+      'Đà cuối hơi lệch',
+      'Mới tụt khá rõ',
+      'Game mới hơi đuối',
+    ], 'last3-drop');
+  }
+  if (pattern === 'WLLLL') {
+    add('turn', 96, [
+      'Vừa cắt đà đỏ',
+      'Một trận cứu mood',
+      'Mới kéo lại điểm',
+      'Vừa thở được chút',
+      'Có tín hiệu xanh',
+    ], 'cut-red');
+  }
+  if (pattern === 'LWWWW') {
+    add('turn', 96, [
+      'Vừa mất chuỗi đẹp',
+      'Vẫn còn nền tốt',
+      'Một đỏ chưa sao',
+      'Mạch xanh vừa khựng',
+      'Nền form vẫn ổn',
+    ], 'lost-streak');
+  }
+
+  if (streakCount >= 3) {
+    if (streakResult === 'W') {
+      add('streak', 94 + streakCount, [
+        'Chuỗi xanh đang bén',
+        'Đà thắng còn nóng',
+        'Mạch thắng chưa nguội',
+        'Xanh liền nhìn thích',
+        'Nhịp thắng khá mượt',
+        'Đang chạy rất êm',
+        'Vào guồng thấy rõ',
+        'Thắng đều tay quá',
+        'Đà xanh khá chắc',
+        'Mạch thắng có lực',
+        'Game mới rất sáng',
+        'Đang giữ nhiệt tốt',
+        'Thắng liền có nét',
+        'Phong độ đang thơm',
+      ], `win-streak-${streakCount}`);
+    } else {
+      add('streak', 94 + streakCount, [
+        'Cần cắt đà đỏ',
+        'Đèn đỏ hơi dai',
+        'Nhịp thua kéo dài',
+        'Cần một trận gỡ',
+        'Mood đang hơi thấp',
+        'Đà rơi cần phanh',
+        'Đỏ liền hơi căng',
+        'Cần bật lại sớm',
+        'Game đỏ hơi nhiều',
+        'Mạch thua cần khóa',
+        'Cần kéo mood lên',
+        'Phong độ hơi lạnh',
+        'Cần thắng để thở',
+      ], `loss-streak-${streakCount}`);
+    }
+  }
+
+  if (closeGames >= 3) {
+    add('score', 90, [
+      'Toàn game nghẹt thở',
+      'Game nào cũng căng',
+      'Hay kéo tới cuối',
+      'Điểm số rất sít',
+      'Cửa thắng khá mỏng',
+      'Set nào cũng mệt',
+      'Drama hơi nhiều',
+      'Không cho ai thở',
+      'Kèo nào cũng sát',
+      'Điểm cứ dí nhau',
+      'Toàn trận đau tim',
+      'Thắng thua sát mép',
+    ], 'close-games');
+  }
+  if (closeWins >= 2) {
+    add('score', 89, [
+      'Thắng sát khá lì',
+      'Ăn sát vẫn chắc',
+      'Sát nút vẫn xanh',
+      'Bản lĩnh phút cuối',
+      'Kèo căng vẫn qua',
+      'Cửa hẹp vẫn chui',
+      'Lì đòn đoạn cuối',
+      'Điểm cuối khá cứng',
+      'Kéo sát vẫn thắng',
+      'Chốt game khá tỉnh',
+      'Thắng kiểu chịu lực',
+      'Sát nút mà bén',
+    ], 'close-wins');
+  }
+  if (closeLosses >= 2) {
+    add('score', 88, [
+      'Thua sát chưa vỡ',
+      'Đỏ nhưng còn cửa',
+      'Sát nút hơi tiếc',
+      'Thua mà vẫn lì',
+      'Thiếu chút là xanh',
+      'Chưa thua quá sâu',
+      'Còn cửa bật lại',
+      'Đen nhẹ ở cuối',
+      'Điểm sát vẫn ổn',
+      'Cách thắng một nhịp',
+      'Chưa hề vỡ trận',
+      'Đỏ nhưng có nét',
+    ], 'close-losses');
+  }
+  if (blowoutWins >= 2 || avgDiff >= 5) {
+    add('score', 86, [
+      'Ăn điểm khá sâu',
+      'Thắng khá gọn tay',
+      'Game thắng rất sạch',
+      'Điểm xanh khá dày',
+      'Áp lực khá lớn',
+      'Thắng có khoảng cách',
+      'Ván xanh khá nặng',
+      'Đánh thắng khá thoáng',
+      'Điểm kéo rất tốt',
+      'Kèo thắng hơi lực',
+      'Đẩy điểm khá xa',
+      'Thắng không lăn tăn',
+    ], 'dominance');
+  }
+  if (blowoutLosses >= 2 || avgDiff <= -5) {
+    add('score', 86, [
+      'Điểm đang hơi xa',
+      'Bị kéo cách điểm',
+      'Game thua hơi sâu',
+      'Cần giữ điểm hơn',
+      'Khoảng cách hơi rộng',
+      'Thua điểm hơi nặng',
+      'Đang mất nhiều điểm',
+      'Cần kéo sát lại',
+      'Ván đỏ hơi sâu',
+      'Điểm rơi hơi nhanh',
+      'Bị bứt hơi sớm',
+    ], 'negative-diff');
+  }
+
+  if (alternations >= 4) {
+    add('volatile', 84, [
+      'Form như công tắc',
+      'Bật tắt liên tục',
+      'Lên xuống hơi gắt',
+      'Nhịp chưa chịu yên',
+      'Vừa sáng vừa chập',
+      'Khó đoán thật sự',
+      'Thắng thua xoay vòng',
+      'Phong độ nhấp nháy',
+      'Lúc mượt lúc khựng',
+      'Vừa bay vừa rơi',
+      'Đang hơi khó đọc',
+      'Bảng điện hơi loạn',
+    ], 'high-alternation');
+  } else if (alternations >= 3) {
+    add('volatile', 78, [
+      'Nhịp đánh chưa đều',
+      'Lên xuống liên tục',
+      'Thắng thua cứ đan',
+      'Vẫn hơi khó đọc',
+      'Form còn lắc nhẹ',
+      'Nhịp chưa vào khuôn',
+    ], 'mid-alternation');
+  }
+
+  if (previous.length >= 5) {
+    const deltaWins = recentWins - previousWins;
+    const recentPrevDiff = previousMatches
+      .map(m => scoreDiffForPlayer(m, playerId))
+      .reduce((sum, diff) => sum + diff, 0) / previousMatches.length;
+    if (deltaWins >= 2 || avgDiff - recentPrevDiff >= 4) {
+      add('trend', 82, [
+        'Phong độ bật rõ',
+        'Đà mới tốt hơn',
+        'Đang tiến từng chút',
+        'Nhịp cũ bị vượt',
+        'Mới kéo lại điểm',
+        'Đang nhích lên nhẹ',
+        'Form mới sáng hơn',
+        'Cú cải thiện rõ',
+      ], 'trend-up');
+    } else if (deltaWins <= -2 || avgDiff - recentPrevDiff <= -4) {
+      add('trend', 82, [
+        'Nhịp trước đang rơi',
+        'Đà trước bị hụt',
+        'Chưa thoát vùng xám',
+        'Đang tụt khỏi nền',
+        'Nền cũ hơi lung lay',
+        'Cần giữ lại nhịp',
+      ], 'trend-down');
+    } else if (recentWins >= 3) {
+      add('trend', 72, [
+        'Giữ nền khá chắc',
+        'Nhịp ổn định dần',
+        'Vẫn giữ được nhiệt',
+        'Nền form khá ổn',
+      ], 'trend-stable-good');
+    }
+  }
+
+  const recentPartners = recentMatches.map(m => partnerForPlayer(m, playerId)).filter(Boolean);
+  const partnerCounts = new Map<string, { total: number; wins: number }>();
+  recentMatches.forEach(match => {
+    const partnerId = partnerForPlayer(match, playerId);
+    if (!partnerId) return;
+    const stat = partnerCounts.get(partnerId) || { total: 0, wins: 0 };
+    stat.total++;
+    if (resultForPlayer(match, playerId) === 'W') stat.wins++;
+    partnerCounts.set(partnerId, stat);
+  });
+  const uniquePartners = new Set(recentPartners).size;
+  const bestRecentPartner = Array.from(partnerCounts.values()).sort((a, b) => b.total - a.total || b.wins - a.wins)[0];
+  if (uniquePartners >= 4) {
+    add('partner', 70, [
+      'Partner đổi liên tục',
+      'Đổi cặp hơi loạn',
+      'Cặp kèo hơi xoay',
+      'Đang thử nhiều bài',
+      'Chưa ổn định cặp',
+      'Partner xoay khá nhiều',
+    ], 'partner-many');
+  } else if (bestRecentPartner && bestRecentPartner.total >= 3 && bestRecentPartner.wins / bestRecentPartner.total >= 0.67) {
+    add('partner', 74, [
+      'Đổi cặp vẫn ổn',
+      'Vào nhịp khá nhanh',
+      'Phối hợp đang mượt',
+      'Ít đổi cặp hơn',
+      'Nhịp đôi khá tốt',
+      'Đánh đôi khá vào',
+    ], 'partner-good');
+  } else if (bestRecentPartner && bestRecentPartner.total >= 3 && bestRecentPartner.wins / bestRecentPartner.total <= 0.34) {
+    add('partner', 70, [
+      'Phối hợp chưa đều',
+      'Cần tìm nhịp đôi',
+      'Cặp kèo hơi lệch',
+      'Nhịp đôi chưa mượt',
+      'Đánh đôi còn chao',
+    ], 'partner-rough');
+  }
+
+  const board = calculateLeaderboard(players, rankingMatches).filter(p => p.id !== GUEST_ID && p.total > 0);
+  const topSize = Math.max(2, Math.ceil(board.length * 0.3));
+  const bottomStart = Math.max(0, board.length - topSize);
+  const topIds = new Set(board.slice(0, topSize).map(p => p.id));
+  const bottomIds = new Set(board.slice(bottomStart).map(p => p.id));
+  const hardMatches = recentMatches.filter(match => opponentIdsForPlayer(match, playerId).some(id => topIds.has(id))).length;
+  const easierMatches = recentMatches.filter(match => {
+    const opponents = opponentIdsForPlayer(match, playerId);
+    return opponents.length > 0 && opponents.every(id => bottomIds.has(id));
+  }).length;
+  if (hardMatches >= 3 && recentWins >= 3) {
+    add('opponent', 76, [
+      'Gặp mạnh vẫn lì',
+      'Thắng dù lịch nặng',
+      'Qua kèo khó đẹp',
+      'Kèo cứng vẫn qua',
+      'Lịch nặng vẫn xanh',
+    ], 'hard-won');
+  } else if (hardMatches >= 3) {
+    add('opponent', 72, [
+      'Kèo gần đây khó',
+      'Lịch đấu hơi gắt',
+      'Bị ép lịch hơi nặng',
+      'Kèo vừa rồi không nhẹ',
+      'Lịch đấu khá cay',
+    ], 'hard-schedule');
+  }
+  if (easierMatches >= 3 && recentWins >= 4) {
+    add('opponent', 70, [
+      'Kèo thơm xử gọn',
+      'Cửa sáng tận dụng tốt',
+      'Gặp dễ không phí',
+      'Kèo vừa sức rất ổn',
+    ], 'easy-won');
+  } else if (easierMatches >= 3 && recentWins <= 2) {
+    add('opponent', 70, [
+      'Gặp dễ chưa tận dụng',
+      'Kèo thơm hơi phí',
+      'Cửa sáng chưa mở',
+      'Kèo vừa sức còn chao',
+    ], 'easy-missed');
+  }
+
+  const recentLosses = recent.length - recentWins;
+  if (recentLosses >= 3) {
+    add('fine', 66, [
+      'Ví hơi rén rồi',
+      'Phạt đang tăng nhanh',
+      'Cần né thêm phạt',
+      'Tiền phạt hơi nóng',
+      'Ví cần hạ nhiệt',
+      'Đỏ là ví đau',
+      'Cần cứu cái ví',
+    ], 'fine-pressure');
+  }
+
+  const latestAgeDays = playerMatches[0]?.date ? Math.floor((Date.now() - matchTime(playerMatches[0])) / DAY_MS) : null;
+  const recentSpanDays = recentMatches.length >= 5
+    ? Math.max(1, Math.floor((matchTime(recentMatches[0]) - matchTime(recentMatches[4])) / DAY_MS) + 1)
+    : null;
+  if (latestAgeDays !== null && latestAgeDays <= 1 && recentWins >= 3) {
+    add('activity', 64, [
+      'Form còn rất tươi',
+      'Mới đánh đã bén',
+      'Mood trận mới tốt',
+      'Nhịp sân còn nóng',
+    ], 'fresh-good');
+  }
+  if (recentSpanDays !== null && recentSpanDays <= 7) {
+    add('activity', 62, [
+      'Ra sân đều thật',
+      'Mật độ hơi dày',
+      'Đánh dày vẫn ổn',
+      'Lịch chơi khá kín',
+    ], 'dense-schedule');
+  } else if (recentSpanDays !== null && recentSpanDays >= 30) {
+    add('activity', 60, [
+      'Lâu lâu mới cháy',
+      'Nghỉ lâu hơi nguội',
+      'Nhịp sân hơi thưa',
+      'Form cần hâm lại',
+    ], 'wide-schedule');
+  }
+
+  if (candidates.length === 0) {
+    add('fallback', 50, [
+      'Chưa lộ điểm dị',
+      'Form còn đang giấu',
+      'Dữ liệu chưa đủ cay',
+      'Chưa thấy trend rõ',
+      'Cần thêm tí drama',
+      'Đánh thêm rồi tính',
+    ], 'default');
+  }
+
+  return { candidates, pattern, recent };
+}
+
+function selectInsight(candidates: InsightCandidate[], seed: string) {
+  const sorted = [...candidates].sort((a, b) => b.score - a.score);
+  const categoryCount = new Map<InsightCategory, number>();
+  const diverse: InsightCandidate[] = [];
+
+  for (const candidate of sorted) {
+    const count = categoryCount.get(candidate.category) || 0;
+    if (count >= 2) continue;
+    diverse.push(candidate);
+    categoryCount.set(candidate.category, count + 1);
+    if (diverse.length >= 8) break;
+  }
+
+  const bestScore = diverse[0]?.score || 0;
+  const topBand = diverse.filter(candidate => candidate.score >= bestScore - 14).slice(0, 6);
+  return pickSeeded(topBand.map(candidate => candidate.text), seed) || 'Chưa lộ điểm dị';
+}
+
 export function getPlayerAdvancedStats(playerId: string, matches: StatMatch[], players: StatPlayer[]) {
-  const rankingMatches = matches.filter(isRankingMatch);
+  const rankingMatches = matches.filter(isRankingMatch).sort((a, b) => matchTime(b) - matchTime(a));
   const playerMatches = rankingMatches.filter(m => 
     m.win_1 === playerId || m.win_2 === playerId || 
     m.lose_1 === playerId || m.lose_2 === playerId
   );
 
-  const resultFor = (m: StatMatch) => (m.win_1 === playerId || m.win_2 === playerId ? 'W' : 'L');
-  const recent = playerMatches.slice(0, 5).map(m => {
-    return resultFor(m);
+  const { candidates, pattern: formPattern, recent } = createInsightCandidates({
+    playerId,
+    playerMatches,
+    rankingMatches,
+    players,
   });
-  const previousRecent = playerMatches.slice(5, 10).map(m => resultFor(m));
-  const recentWins = recent.filter(r => r === 'W').length;
-  const previousWins = previousRecent.filter(r => r === 'W').length;
-
-  let formTrend = "Chờ thêm trận";
-  if (recent.length >= 5 && previousRecent.length >= 5) {
-    if (recentWins > previousWins) formTrend = "Đang lên tay";
-    else if (recentWins < previousWins) formTrend = "Tụt nhịp nhẹ";
-    else formTrend = "Giữ nhịp ổn";
-  }
-
-  const formPattern = recent.join("");
-  const formMap: Record<string, string> = {
-    WWWWW:"Hủy diệt", WWWWL:"Quá cháy", WWWLW:"Chững nhẹ", WWWLL:"Hạ nhiệt",
-    WWLWW:"Đang hăng", WWLWL:"Chưa ổn định", WWLLW:"Lúc hay lúc dở", WWLLL:"Rơi phong độ",
-    WLWWW:"Vào guồng", WLWWL:"Chệch nhịp nhẹ", WLWLW:"Thất thường", WLWLL:"Đuối cuối chặng",
-    WLLWW:"Lấy lại phong độ", WLLWL:"Gượng giữ nhịp", WLLLW:"Le lói hy vọng", WLLLL:"Lao dốc",
-    LWWWW:"Tăng tốc mạnh", LWWWL:"Chững lại nhẹ", LWWLW:"Chưa ổn định", LWWLL:"Mất nhịp",
-    LWLWW:"Bắt nhịp tốt", LWLWL:"Phập phù", LWLLW:"Còn hy vọng", LWLLL:"Xuống tay",
-    LLWWW:"Hồi sinh mạnh", LLWWL:"Hồi sinh rồi chững", LLWLW:"Chưa chắc chắn", LLWLL:"Sa sút",
-    LLLWW:"Có dấu hiệu hồi sinh", LLLWL:"Nhấp nhổm trở lại", LLLLW:"Vừa tỉnh giấc", LLLLL:"Khủng hoảng"
-  };
-  const formComment = formMap[formPattern] || (recent.length === 0 ? "Chưa có dữ liệu" : "Ổn định");
+  const formComment = FORM_LABELS[formPattern] || (recent.length === 0 ? "Chưa có dữ liệu" : "Đang gom mẫu");
+  const formTrend = selectInsight(candidates, `${playerId}|${formPattern}|${String(playerMatches[0]?.id || '')}|${String(playerMatches[0]?.date || '')}`);
 
   const partners = new Map<string, { wins: number, total: number }>();
   playerMatches.forEach(m => {

@@ -149,3 +149,12 @@ repo.
   desktop card label clipping.
 - Changed `Tuần này` summary logic to count the Monday-Sunday week in Vietnam
   time instead of depending on server-local week boundaries.
+
+### Form Insight Refresh
+
+- Rebuilt expanded leaderboard form text so the main form line uses all 32
+  latest-first W/L patterns correctly.
+- Replaced the old simple trend line with seeded data-driven comments using
+  streaks, last-3 momentum, score drama, score differential, volatility,
+  previous-5 comparison, partner stability, opponent difficulty, fine pressure,
+  and recent activity.

@@ -72,6 +72,12 @@ grid instead of four stacked single-column blocks.
 Keep each detail line short. Prefer concise text such as `Khong ngan ai`,
 `Khong keo free`, `Gap con rai rac`, `Drama dang tich tu`, `Dang len tay`,
 or `Tut nhip nhe`.
+The form block should separate the two ideas clearly:
+
+- main form line: status/title for the latest 5-match W/L pattern
+- supporting form line: short third-party style observation selected from data,
+  not a repeat of the main status
+
 Partner detail should also use the same compact four-line pattern when possible:
 label/icon, partner name, short win metric, and one short fun line such as
 `Danh chung rat ben` or `Cap nay kha on`.

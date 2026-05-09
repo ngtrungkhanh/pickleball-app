@@ -43,6 +43,8 @@ Read only when relevant:
 - Recent dev work moved score entry toward a custom mobile-first player picker,
   2-by-2 mobile summary cards, natural page scrolling for the leaderboard, and
   four-line expanded leaderboard detail with compact fun remarks.
+- Expanded leaderboard form remarks now read 5-match form newest-first and use
+  seeded data-driven notes so similar players do not always get identical text.
 - Local demo routes such as `/ui-demo` and `/picker-demo` may exist on one
   machine for review, but should not be pushed unless explicitly requested.
 

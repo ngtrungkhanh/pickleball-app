@@ -106,9 +106,16 @@ Expanded player detail currently shows:
 Expanded detail behavior:
 
 - Form compares the latest 5 matches with the previous 5 matches for the
-  same player when enough history exists. Use compact trend text such as
-  `Dang len tay`, `Giu nhip on`, or `Tut nhip nhe`; fall back to
-  `Cho them tran` when there is not enough history.
+  same player when enough history exists, but the current momentum always reads
+  latest match first.
+- The main form label is a fixed compact status for all 32 possible 5-match
+  W/L patterns, such as `Huy diet`, `Hoi sinh manh`, or `Khung hoang`.
+- The supporting form note is a seeded, data-driven third-party style comment.
+  It can use streak, last-3 momentum, score differential, close-game drama,
+  volatility, previous-5 comparison, partner stability, opponent difficulty,
+  fine pressure, and recent activity. It should be stable for the same player
+  state but varied enough that players with similar form do not all receive the
+  same note.
 - Form chips are ordered newest to oldest. The newest chip is visually
   highlighted; the last two older chips may be slightly dimmer.
 - Difficult/easy rival fallback considers both player match count and
