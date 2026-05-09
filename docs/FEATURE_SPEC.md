@@ -101,15 +101,15 @@ Expanded player detail currently shows:
 - toughest rival when at least 5 meetings and above 50% loss rate
 - easiest rival when at least 5 meetings and above 50% win rate
 
-Agreed follow-up behavior for expanded details:
+Expanded detail behavior:
 
-- Form should compare the latest 5 matches with the previous 5 matches for the
+- Form compares the latest 5 matches with the previous 5 matches for the
   same player when enough history exists. Use compact trend text such as
   `Dang len tay`, `Giu nhip on`, or `Tut nhip nhe`; fall back to
   `Cho them tran` when there is not enough history.
-- Form chips are ordered newest to oldest. The newest chip should be visually
+- Form chips are ordered newest to oldest. The newest chip is visually
   highlighted; the last two older chips may be slightly dimmer.
-- Difficult/easy rival fallback should consider both player match count and
+- Difficult/easy rival fallback considers both player match count and
   maximum meetings with a single rival, not only whether a qualified rival
   exists. Suggested buckets:
   - too little player data

@@ -122,3 +122,8 @@ repo.
   / `Khắc chế cứng` from easiest-rival stats.
 - Rebalanced score entry into winner, score, and loser columns on desktop while
   keeping mobile tap targets large.
+- Added a custom score-entry player picker with large touch targets, team-toned
+  active states, and `Khach` separated at the end of the list.
+- Removed nested leaderboard scrolling for the normal small member list.
+- Expanded detail cards now use compact four-line content, short metrics, fun
+  remarks, and form trend comparison against the previous 5 matches.

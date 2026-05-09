@@ -28,27 +28,40 @@ type Season = {
 type AdvancedStats = {
   recent?: string[];
   formComment?: string;
+  formTrend?: string;
   bestPartner?: {
     name: string;
     label: string;
     rate: number;
     wins: number;
     total: number;
+    note?: string;
   } | null;
+  bestPartnerFallback?: DetailFallback;
   toughestRival?: {
     name: string;
     label: string;
     lossRate: number;
     losses: number;
     total: number;
+    note?: string;
   } | null;
+  toughestRivalFallback?: DetailFallback;
   easiestRival?: {
     name: string;
     label: string;
     winRate: number;
     wins: number;
     total: number;
+    note?: string;
   } | null;
+  easiestRivalFallback?: DetailFallback;
+};
+
+type DetailFallback = {
+  main: string;
+  metric: string;
+  note: string;
 };
 
 function formatShortDate(value: unknown) {
@@ -109,6 +122,21 @@ function DetailTitle({
 
 function DetailPanel({ adv }: { adv: AdvancedStats }) {
   const recent = adv.recent?.length ? adv.recent : [];
+  const partnerFallback = adv.bestPartnerFallback || {
+    main: 'Chưa có cặp ăn ý',
+    metric: 'Đổi partner liên tục',
+    note: 'Chờ thêm trận chung',
+  };
+  const toughFallback = adv.toughestRivalFallback || {
+    main: 'Không ngán ai',
+    metric: 'Chưa ai bắt nạt được',
+    note: 'Tạm thời rất lì',
+  };
+  const easyFallback = adv.easiestRivalFallback || {
+    main: 'Không kèo free',
+    metric: 'Ai cũng phải đánh thật',
+    note: 'Chưa có con mồi',
+  };
 
   return (
     <div className="overflow-hidden bg-[#0f1b2e]/92" style={{ animation: 'expandDown 0.2s ease-out' }}>
@@ -131,8 +159,11 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
                   <span
                     key={x}
                     className={cn(
-                      'w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-black',
+                      'w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-black transition-opacity',
                       r === 'W' ? 'bg-green-500 text-black' : 'bg-red-500 text-white',
+                      x === 0 && 'ring-2 ring-white/60 ring-offset-1 ring-offset-[#0f1b2e]',
+                      x === 3 && 'opacity-80',
+                      x >= 4 && 'opacity-70',
                     )}
                   >
                     {r}
@@ -141,6 +172,9 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
               ) : (
                 <span className="text-xs sm:text-sm font-bold text-white/45">Chưa đủ dữ liệu</span>
               )}
+            </div>
+            <div className="min-w-0 w-full text-xs font-extrabold text-slate-300/80 leading-snug break-words">
+              {adv.formTrend || 'Chờ thêm trận'}
             </div>
           </div>
 
@@ -165,13 +199,17 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
                   'min-w-0 w-full text-xs font-extrabold leading-snug break-words',
                   adv.bestPartner.label === 'Cạ cứng' ? 'text-emerald-200' : 'text-primary/90',
                 )}>
-                  {Math.round(adv.bestPartner.rate)}% thắng • Thắng {adv.bestPartner.wins}/{adv.bestPartner.total} trận
+                  {Math.round(adv.bestPartner.rate)}% thắng • {adv.bestPartner.wins}/{adv.bestPartner.total}
+                </div>
+                <div className="min-w-0 w-full text-xs font-extrabold text-slate-300/80 leading-snug break-words">
+                  {adv.bestPartner.note || 'Cặp này khá ổn'}
                 </div>
               </>
             ) : (
               <>
-                <div className="text-sm sm:text-base font-black text-white/60">Chưa có cặp ăn ý</div>
-                <div className="text-xs font-bold text-slate-300/70">Cần trên 50% thắng và ít nhất 5 trận chung</div>
+                <div className="min-w-0 w-full text-sm sm:text-base font-black text-white/60 leading-snug break-words">{partnerFallback.main}</div>
+                <div className="min-w-0 w-full text-xs font-bold text-slate-300/75 leading-snug break-words">{partnerFallback.metric}</div>
+                <div className="min-w-0 w-full text-xs font-extrabold text-slate-300/70 leading-snug break-words">{partnerFallback.note}</div>
               </>
             )}
           </div>
@@ -186,13 +224,17 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
                   Gặp {adv.toughestRival.name}
                 </div>
                 <div className="min-w-0 w-full text-xs font-extrabold text-red-200/90 leading-snug break-words">
-                  {Math.round(adv.toughestRival.lossRate)}% thua • Thua {adv.toughestRival.losses}/{adv.toughestRival.total} trận
+                  {Math.round(adv.toughestRival.lossRate)}% thua • {adv.toughestRival.losses}/{adv.toughestRival.total}
+                </div>
+                <div className="min-w-0 w-full text-xs font-extrabold text-slate-300/80 leading-snug break-words">
+                  {adv.toughestRival.note || 'Kèo này hơi mệt'}
                 </div>
               </>
             ) : (
               <>
-                <div className="text-sm sm:text-base font-black text-white/60">Chưa có đối thủ áp đảo</div>
-                <div className="text-xs font-bold text-slate-300/70">Cần ít nhất 5 lần gặp</div>
+                <div className="min-w-0 w-full text-sm sm:text-base font-black text-white/60 leading-snug break-words">{toughFallback.main}</div>
+                <div className="min-w-0 w-full text-xs font-bold text-slate-300/75 leading-snug break-words">{toughFallback.metric}</div>
+                <div className="min-w-0 w-full text-xs font-extrabold text-slate-300/70 leading-snug break-words">{toughFallback.note}</div>
               </>
             )}
           </div>
@@ -207,13 +249,17 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
                   Gặp {adv.easiestRival.name}
                 </div>
                 <div className="min-w-0 w-full text-xs font-extrabold text-sky-100/90 leading-snug break-words">
-                  {Math.round(adv.easiestRival.winRate)}% thắng • Thắng {adv.easiestRival.wins}/{adv.easiestRival.total} trận
+                  {Math.round(adv.easiestRival.winRate)}% thắng • {adv.easiestRival.wins}/{adv.easiestRival.total}
+                </div>
+                <div className="min-w-0 w-full text-xs font-extrabold text-slate-300/80 leading-snug break-words">
+                  {adv.easiestRival.note || 'Cửa sáng hơn chút'}
                 </div>
               </>
             ) : (
               <>
-                <div className="text-sm sm:text-base font-black text-white/60">Chưa có kèo dễ rõ ràng</div>
-                <div className="text-xs font-bold text-slate-300/70">Cần trên 50% thắng và ít nhất 5 lần gặp</div>
+                <div className="min-w-0 w-full text-sm sm:text-base font-black text-white/60 leading-snug break-words">{easyFallback.main}</div>
+                <div className="min-w-0 w-full text-xs font-bold text-slate-300/75 leading-snug break-words">{easyFallback.metric}</div>
+                <div className="min-w-0 w-full text-xs font-extrabold text-slate-300/70 leading-snug break-words">{easyFallback.note}</div>
               </>
             )}
           </div>
@@ -331,7 +377,7 @@ export function Leaderboard({
         </div>
       </div>
 
-      <div className="hidden max-h-[34rem] overflow-auto sm:block">
+      <div className="hidden sm:block">
         <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: '8%' }} />
@@ -342,7 +388,7 @@ export function Leaderboard({
             <col style={{ width: '15%' }} />
             <col style={{ width: '15%' }} />
           </colgroup>
-          <thead className="sticky top-0 z-20">
+          <thead>
             <tr className="bg-slate-950/90 backdrop-blur">
               <th className="py-3 px-4 text-center text-xs 2xl:text-sm font-black uppercase tracking-widest text-slate-300">#</th>
               <th className="py-3 px-4 text-left text-xs 2xl:text-sm font-black uppercase tracking-widest text-slate-300">Thành viên</th>
@@ -399,7 +445,7 @@ export function Leaderboard({
         </table>
       </div>
 
-      <div className="max-h-[36rem] overflow-auto sm:hidden">
+      <div className="sm:hidden">
         {board.map((p, i) => {
           const exp = expandedId === p.id;
           const adv = getPlayerAdvancedStats(p.id, filtered, players);

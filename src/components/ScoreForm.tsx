@@ -1,8 +1,8 @@
 'use client';
-import { useState, useTransition, useRef, useEffect } from 'react';
+import { useState, useTransition, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { addMatchAction } from '@/app/actions';
-import { Minus, Plus, Trophy, Ghost, Send, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Minus, Plus, Trophy, Ghost, Send, RefreshCw, AlertCircle, CheckCircle2, Check, ChevronDown, Search, UserRound, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isGuestId } from '@/lib/guest';
 
@@ -17,6 +17,24 @@ type MatchSlots = {
   season: string;
 };
 
+type ScorePlayer = {
+  id: string;
+  name: string;
+  active?: boolean;
+  deleted_at?: unknown;
+};
+
+type RecentLocalMatch = {
+  key: string;
+  timestamp: number;
+};
+
+type ServerResult = {
+  success?: boolean;
+  skippedDuplicate?: boolean;
+  error?: string;
+};
+
 function teamKey(a: string, b: string): string {
   return [a, b].filter(Boolean).sort().join('|');
 }
@@ -27,10 +45,10 @@ function localDuplicateKey(slots: MatchSlots): string {
 
 function isDuplicateLocally(slots: MatchSlots): boolean {
   try {
-    const recent = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+    const recent = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') as RecentLocalMatch[];
     const key = localDuplicateKey(slots);
     const now = Date.now();
-    return recent.some((m: any) => (now - m.timestamp) / 60000 <= 15 && m.key === key);
+    return recent.some((m) => (now - m.timestamp) / 60000 <= 15 && m.key === key);
   } catch {
     return false;
   }
@@ -39,7 +57,7 @@ function isDuplicateLocally(slots: MatchSlots): boolean {
 function saveRecentLocal(slots: MatchSlots) {
   try {
     const key = localDuplicateKey(slots);
-    const prev: any[] = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+    const prev = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') as RecentLocalMatch[];
     localStorage.setItem(RECENT_KEY, JSON.stringify([{ key, timestamp: Date.now() }, ...prev].slice(0, 8)));
   } catch {}
 }
@@ -105,16 +123,153 @@ function ScoreStepper({ label, value, onChange }: { label: string; value: number
   );
 }
 
-const selectCls = [
-  'w-full h-12 rounded-xl px-3',
-  'bg-[#0f1a2c] border border-slate-500/25',
-  'text-sm font-bold text-white/90',
-  'focus:outline-none focus:border-primary/40 focus:bg-slate-900',
-  'transition-all cursor-pointer hover:border-white/25',
-  'appearance-none',
-].join(' ');
+function PlayerPicker({
+  label,
+  value,
+  players,
+  tone,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  players: ScorePlayer[];
+  tone: 'win' | 'lose';
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const selected = players.find(p => p.id === value);
+  const guest = players.find(p => isGuestId(p.id));
+  const members = players.filter(p => !isGuestId(p.id) && p.name.toLowerCase().includes(query.toLowerCase()));
+  const accent = tone === 'win'
+    ? {
+        label: 'text-green-300',
+        border: 'border-green-500/35',
+        bg: 'bg-green-500/5',
+        active: 'bg-green-500/15 text-green-100 border-green-400/40',
+        hover: 'hover:bg-green-500/10 hover:text-green-100',
+        ring: 'focus:ring-green-400/25',
+      }
+    : {
+        label: 'text-red-300',
+        border: 'border-red-500/35',
+        bg: 'bg-red-500/5',
+        active: 'bg-red-500/15 text-red-100 border-red-400/40',
+        hover: 'hover:bg-red-500/10 hover:text-red-100',
+        ring: 'focus:ring-red-400/25',
+      };
 
-export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { players: any[]; onAddMatch?: (m: any) => void; activeSeason?: string }) {
+  const choose = (id: string) => {
+    onChange(id);
+    setOpen(false);
+    setQuery('');
+  };
+
+  const list = (
+    <div className="max-h-[70vh] overflow-y-auto p-2">
+      <div className="relative mb-2">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Tìm thành viên..."
+          className="h-11 w-full rounded-xl border border-slate-500/25 bg-slate-950/65 pl-9 pr-3 text-sm font-bold text-white outline-none focus:border-primary/50"
+        />
+      </div>
+
+      <div className="space-y-1">
+        {members.map(player => {
+          const active = player.id === value;
+          return (
+            <button
+              key={player.id}
+              type="button"
+              onClick={() => choose(player.id)}
+              className={cn(
+                'flex min-h-14 w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-base font-black transition',
+                active ? accent.active : `border-transparent text-white ${accent.hover}`,
+              )}
+            >
+              <span className="min-w-0 break-words leading-5">{player.name}</span>
+              {active && <Check className="h-5 w-5 shrink-0" strokeWidth={3} />}
+            </button>
+          );
+        })}
+      </div>
+
+      {guest && (
+        <div className="mt-2 border-t border-slate-600/60 pt-2">
+          <button
+            type="button"
+            onClick={() => choose(guest.id)}
+            className={cn(
+              'flex min-h-14 w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-base font-black transition',
+              value === guest.id ? accent.active : 'border-transparent text-slate-200 hover:bg-slate-700/55 hover:text-white',
+            )}
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-slate-500/30 bg-slate-800">
+                <UserRound className="h-4 w-4 text-slate-300" />
+              </span>
+              <span className="min-w-0 break-words leading-5">Khách</span>
+            </span>
+            {value === guest.id && <Check className="h-5 w-5 shrink-0" strokeWidth={3} />}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="relative min-w-0">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={cn(
+          'flex min-h-12 w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left transition focus:outline-none focus:ring-2',
+          accent.border,
+          accent.bg,
+          accent.ring,
+        )}
+        aria-label={label}
+      >
+        <span className={cn('min-w-0 break-words text-sm font-bold leading-5', selected ? 'text-white' : 'text-slate-400')}>
+          {selected ? (isGuestId(selected.id) ? 'Khách' : selected.name) : 'Chọn người'}
+        </span>
+        <ChevronDown className="h-5 w-5 shrink-0 text-slate-300" />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[610] bg-black/55 backdrop-blur-sm md:hidden" onClick={() => setOpen(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-[620] overflow-hidden rounded-t-[2rem] border border-slate-500/25 bg-[#142034] shadow-[0_-24px_80px_rgba(0,0,0,0.45)] md:hidden">
+            <div className="flex items-center justify-between border-b border-slate-500/25 px-5 py-4">
+              <div>
+                <div className={cn('text-sm font-black uppercase tracking-[0.22em]', accent.label)}>{label}</div>
+                <div className="mt-1 text-xs font-bold text-slate-300/75">Chạm vào tên để chọn</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="grid h-10 w-10 place-items-center rounded-xl bg-white/[0.07] text-slate-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {list}
+          </div>
+
+          <div className="fixed inset-0 z-30 hidden md:block" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-[calc(100%+0.5rem)] z-40 hidden w-full min-w-72 overflow-hidden rounded-2xl border border-slate-500/25 bg-[#142034] shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:block">
+            {list}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { players: Array<Record<string, unknown>>; onAddMatch?: (m: Record<string, unknown>) => void; activeSeason?: string }) {
   const [, start] = useTransition();
   const router = useRouter();
   const [ui, setUi] = useState<'idle' | 'saved'>('idle');
@@ -131,7 +286,14 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
   const [nickname, setNickname] = useState('');
   const [deviceInfo, setDeviceInfo] = useState('');
 
-  const active = players.filter(p => p.active && !p.deleted_at);
+  const active: ScorePlayer[] = players
+    .filter(p => p.active && !p.deleted_at && p.id && p.name)
+    .map(p => ({
+      id: String(p.id),
+      name: String(p.name),
+      active: Boolean(p.active),
+      deleted_at: p.deleted_at,
+    }));
   const reset = () => { setWin1(''); setWin2(''); setLose1(''); setLose2(''); setWs(11); setLs(5); };
 
   type Slot = 'win1' | 'win2' | 'lose1' | 'lose2';
@@ -164,10 +326,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
         id = 'USR-' + Math.random().toString(36).substring(2, 6).toUpperCase();
         localStorage.setItem('pickleball_client_id', id);
       }
-      setClientId(id);
-
       const nick = localStorage.getItem('pickleball_client_nickname') || '';
-      setNickname(nick);
 
       const ua = navigator.userAgent;
       let dev = 'Device';
@@ -183,13 +342,17 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
       else if (ua.indexOf('Firefox') > -1) browser = 'Firefox';
       else if (ua.indexOf('Edge') > -1) browser = 'Edge';
 
-      setDeviceInfo(`${dev} - ${browser}`);
+      queueMicrotask(() => {
+        setClientId(id);
+        setNickname(nick);
+        setDeviceInfo(`${dev} - ${browser}`);
+      });
     } catch {}
   }, []);
 
   const fullIdentity = `${clientId}${nickname ? ` (${nickname})` : ''} [${deviceInfo || 'Unknown'}]`;
 
-  const handleServerResult = (r: any, fd: FormData) => {
+  const handleServerResult = useCallback((r: ServerResult | undefined, fd: FormData) => {
     if (r?.success) {
       clearPending();
       saveRecentLocal({
@@ -211,27 +374,27 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
     }
     setSync('error');
     setPendingFd(fd);
-  };
+  }, [activeSeason, router]);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(PENDING_KEY);
       if (!raw) return;
-      const parsed = JSON.parse(raw);
+      const parsed = JSON.parse(raw) as { match?: Record<string, unknown>; timestamp?: number };
       if (!parsed || !parsed.match) return;
       const { match, timestamp } = parsed;
-      if ((Date.now() - timestamp) / 60000 < 60) {
+      if (timestamp && (Date.now() - timestamp) / 60000 < 60) {
         const fd = new FormData();
         Object.entries(match).forEach(([k, v]) => { if (v) fd.append(k, String(v)); });
         if (!fd.get('created_by')) fd.append('created_by', fullIdentity);
-        setSync('syncing');
+        queueMicrotask(() => setSync('syncing'));
         start(async () => {
           const r = await addMatchAction(fd);
           handleServerResult(r, fd);
         });
       } else clearPending();
     } catch {}
-  }, [fullIdentity, activeSeason, router]);
+  }, [fullIdentity, handleServerResult]);
 
   const doSync = (fd: FormData) => {
     setSync('syncing');
@@ -282,14 +445,8 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
               <span className="text-[10px] font-black text-green-300 uppercase tracking-[0.24em]">Đội thắng</span>
             </div>
             <div className="space-y-3">
-              <select value={win1} onChange={e => setSlot('win1', e.target.value)} className={selectCls} required>
-                <option value="" disabled hidden>Chọn người</option>
-                {optionsFor('win1').map(p => <option key={p.id} value={p.id}>{isGuestId(p.id) ? 'Khách' : p.name}</option>)}
-              </select>
-              <select value={win2} onChange={e => setSlot('win2', e.target.value)} className={selectCls} required>
-                <option value="" disabled hidden>Chọn người</option>
-                {optionsFor('win2').map(p => <option key={p.id} value={p.id}>{isGuestId(p.id) ? 'Khách' : p.name}</option>)}
-              </select>
+              <PlayerPicker label="Người thắng 1" tone="win" value={win1} players={optionsFor('win1')} onChange={value => setSlot('win1', value)} />
+              <PlayerPicker label="Người thắng 2" tone="win" value={win2} players={optionsFor('win2')} onChange={value => setSlot('win2', value)} />
             </div>
           </div>
 
@@ -309,14 +466,8 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
               <Ghost className="w-4 h-4 text-red-400 opacity-60" />
             </div>
             <div className="space-y-3">
-              <select value={lose1} onChange={e => setSlot('lose1', e.target.value)} className={selectCls} required>
-                <option value="" disabled hidden>Chọn người</option>
-                {optionsFor('lose1').map(p => <option key={p.id} value={p.id}>{isGuestId(p.id) ? 'Khách' : p.name}</option>)}
-              </select>
-              <select value={lose2} onChange={e => setSlot('lose2', e.target.value)} className={selectCls} required>
-                <option value="" disabled hidden>Chọn người</option>
-                {optionsFor('lose2').map(p => <option key={p.id} value={p.id}>{isGuestId(p.id) ? 'Khách' : p.name}</option>)}
-              </select>
+              <PlayerPicker label="Người thua 1" tone="lose" value={lose1} players={optionsFor('lose1')} onChange={value => setSlot('lose1', value)} />
+              <PlayerPicker label="Người thua 2" tone="lose" value={lose2} players={optionsFor('lose2')} onChange={value => setSlot('lose2', value)} />
             </div>
           </div>
 

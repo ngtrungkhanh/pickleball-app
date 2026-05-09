@@ -24,7 +24,7 @@ export function SummaryGrid({ matches, loseMoney = 5000 }: SummaryGridProps) {
   ];
 
   return (
-    <div className="grid grid-cols-1 min-[420px]:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 w-full">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 w-full">
       {cards.map(({ Icon, color, label, big, unit }, i) => (
         <div
           key={i}
@@ -35,18 +35,18 @@ export function SummaryGrid({ matches, loseMoney = 5000 }: SummaryGridProps) {
             style={{ background: `radial-gradient(circle at 50% 0%, ${color}, transparent 80%)` }}
           />
 
-          <div className="relative z-10 min-h-16 sm:min-h-[68px] flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
+          <div className="relative z-10 min-h-[76px] sm:min-h-[68px] flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto">
               <div className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.08] border border-white/[0.12]">
                 <Icon className="w-3.5 h-3.5" style={{ color }} />
               </div>
-              <span className="text-xs sm:text-sm font-black text-slate-300 uppercase tracking-wide sm:tracking-widest whitespace-nowrap">
+              <span className="min-w-0 truncate text-[10px] min-[380px]:text-xs sm:text-sm font-black text-slate-300 uppercase tracking-wide sm:tracking-widest">
                 {label}
               </span>
             </div>
 
-            <div className="flex items-baseline justify-end gap-1.5 shrink-0">
-              <span className="text-2xl sm:text-3xl 2xl:text-4xl font-black text-white leading-none">
+            <div className="flex items-baseline justify-start sm:justify-end gap-1.5 shrink-0 min-w-0 w-full sm:w-auto">
+              <span className="min-w-0 break-words text-xl min-[380px]:text-2xl sm:text-3xl 2xl:text-4xl font-black text-white leading-none">
                 {big}
               </span>
               {unit && (
