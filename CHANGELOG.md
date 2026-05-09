@@ -137,7 +137,7 @@ repo.
 
 ### Dashboard Score Entry Tuning
 
-- Narrowed the desktop score-entry panel to about 80% of the dashboard width.
+- Narrowed the desktop score-entry panel to about 85% of the dashboard width.
 - Aligned desktop dashboard controls, summary, leaderboard, score entry, and
   recent history to the same compact content width while keeping mobile full
   width.
@@ -145,5 +145,7 @@ repo.
 - Made the score box larger and taller while keeping player-name fields more
   compact.
 - Increased the leaderboard Season title size.
+- Changed the summary fine total to compact notation such as `490k` to avoid
+  desktop card label clipping.
 - Changed `Tuần này` summary logic to count the Monday-Sunday week in Vietnam
   time instead of depending on server-local week boundaries.

@@ -116,10 +116,12 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
   - guest (`Khach`) appears last, separated by a divider and a small user icon
   - keep the existing duplicate-slot prevention and required-four-slots behavior
 - On desktop, keep the main dashboard content blocks aligned at the same
-  compact width, around 80% of the dashboard container. Mobile remains full
+  compact width, around 85% of the dashboard container. Mobile remains full
   width.
 - In score entry, make the score box prominent and keep player-name fields
   compact enough that text does not wrap awkwardly.
+- Summary fine total can use compact `k` notation such as `490k` to avoid
+  desktop card text clipping. Leaderboard player fines stay fully grouped.
 
 ## History
 

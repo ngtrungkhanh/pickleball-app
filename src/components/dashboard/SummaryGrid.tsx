@@ -7,6 +7,11 @@ type SummaryGridProps = {
   loseMoney?: number;
 };
 
+function formatCompactMoney(value: number) {
+  if (Math.abs(value) >= 1000) return `${Math.round(value / 1000)}k`;
+  return value.toLocaleString('vi-VN');
+}
+
 export function SummaryGrid({ matches, loseMoney = 5000 }: SummaryGridProps) {
   const s = getSeasonSummaryStats(matches, loseMoney);
 
@@ -17,7 +22,7 @@ export function SummaryGrid({ matches, loseMoney = 5000 }: SummaryGridProps) {
       Icon: Banknote,
       color: '#f59e0b',
       label: 'Tiền phạt',
-      big: s.totalMoney.toLocaleString('vi-VN'),
+      big: formatCompactMoney(s.totalMoney),
       unit: '',
     },
     { Icon: Zap, color: '#a78bfa', label: 'Tuần này', big: `${s.matchesThisWeek}`, unit: 'trận' },

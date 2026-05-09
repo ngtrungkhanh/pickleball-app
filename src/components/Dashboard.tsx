@@ -12,7 +12,7 @@ type Player = { id: string; name: string; active?: boolean; [key: string]: unkno
 type Match = { id?: string; date?: string; season?: string; [key: string]: unknown };
 type Season = { id: string; name: string; active?: boolean; start_date?: string };
 const EDIT_EVENT = 'pickleball-edit-mode-change';
-const DESKTOP_PANEL_WIDTH = 'mx-auto w-full lg:w-[80%]';
+const DESKTOP_PANEL_WIDTH = 'mx-auto w-full lg:w-[85%]';
 
 function subscribeEditMode(callback: () => void) {
   window.addEventListener('storage', callback);
