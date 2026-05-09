@@ -127,3 +127,5 @@ repo.
 - Removed nested leaderboard scrolling for the normal small member list.
 - Expanded detail cards now use compact four-line content, short metrics, fun
   remarks, and form trend comparison against the previous 5 matches.
+- Fixed the desktop score-entry player picker so its dropdown can extend outside
+  the score card instead of being clipped by the card container.
