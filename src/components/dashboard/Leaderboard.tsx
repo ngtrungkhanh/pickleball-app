@@ -339,7 +339,7 @@ export function Leaderboard({
           >
             <div className="flex items-center gap-2.5">
               <Sparkles className="w-4 h-4 text-primary opacity-50 group-hover:opacity-100 transition-opacity" />
-              <h2 className="text-lg sm:text-xl font-black text-white uppercase tracking-[0.25em] sm:tracking-[0.3em] leading-none">
+              <h2 className="text-xl sm:text-2xl 2xl:text-3xl font-black text-white uppercase tracking-[0.22em] sm:tracking-[0.28em] leading-none">
                 {currentSeason ?? 'Tổng hợp'}
               </h2>
               <Sparkles className="w-4 h-4 text-primary opacity-50 group-hover:opacity-100 transition-opacity" />

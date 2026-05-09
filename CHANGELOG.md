@@ -134,3 +134,13 @@ repo.
 
 - Cleaned up mojibake in Vietnamese admin/dashboard/action messages so UI and
   server-action errors render readable UTF-8 text.
+
+### Dashboard Score Entry Tuning
+
+- Narrowed the desktop score-entry panel to about 80% of the dashboard width.
+- Removed search from the score-entry player picker for the small member list.
+- Made the score box larger and taller while keeping player-name fields more
+  compact.
+- Increased the leaderboard Season title size.
+- Changed `Tuần này` summary logic to count the Monday-Sunday week in Vietnam
+  time instead of depending on server-local week boundaries.

@@ -25,6 +25,31 @@ type PrecalculatedStat = {
   money: number | string;
 };
 
+const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function getVietnamDateParts(date: Date) {
+  const shifted = new Date(date.getTime() + VIETNAM_OFFSET_MS);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth(),
+    date: shifted.getUTCDate(),
+    day: shifted.getUTCDay() || 7,
+  };
+}
+
+function getVietnamStartOfDayUtcMs(date: Date) {
+  const parts = getVietnamDateParts(date);
+  return Date.UTC(parts.year, parts.month, parts.date) - VIETNAM_OFFSET_MS;
+}
+
+function getVietnamWeekBoundsUtc(now = new Date()) {
+  const parts = getVietnamDateParts(now);
+  const startOfToday = getVietnamStartOfDayUtcMs(now);
+  const start = startOfToday - (parts.day - 1) * DAY_MS;
+  return { start, end: start + 7 * DAY_MS };
+}
+
 export function calculateLeaderboard(players: StatPlayer[], matches: StatMatch[], loseMoney: number = 5000, precalculatedStats?: PrecalculatedStat[]) {
   const stats = players.map(p => ({
     ...p,
@@ -103,13 +128,11 @@ export function getSeasonSummaryStats(matches: StatMatch[], loseMoney: number = 
 
   const matchDates = rankingMatches.map(m => new Date(String(m.date || '')).getTime()).sort((a, b) => a - b);
   const startDate = matchDates.length > 0 ? new Date(matchDates[0]) : null;
-  const seasonDays = startDate ? Math.max(1, Math.floor((Date.now() - startDate.getTime()) / 86400000) + 1) : 0;
+  const seasonDays = startDate ? Math.max(1, Math.floor((Date.now() - startDate.getTime()) / DAY_MS) + 1) : 0;
 
   const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const day = now.getDay() || 7;
-  const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day + 1).getTime();
-  const endOfWeek = startOfWeek + 7 * 86400000;
+  const startOfDay = getVietnamStartOfDayUtcMs(now);
+  const { start: startOfWeek, end: endOfWeek } = getVietnamWeekBoundsUtc(now);
 
   const matchesThisWeek = rankingMatches.filter(m => {
     const t = new Date(String(m.date || '')).getTime();

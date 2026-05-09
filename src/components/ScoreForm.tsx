@@ -2,7 +2,7 @@
 import { useState, useTransition, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { addMatchAction } from '@/app/actions';
-import { Minus, Plus, Trophy, Ghost, Send, RefreshCw, AlertCircle, CheckCircle2, Check, ChevronDown, Search, UserRound, X } from 'lucide-react';
+import { Minus, Plus, Trophy, Ghost, Send, RefreshCw, AlertCircle, CheckCircle2, Check, ChevronDown, UserRound, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isGuestId } from '@/lib/guest';
 
@@ -109,7 +109,7 @@ function ScoreStepper({ label, value, onChange }: { label: string; value: number
           value={value}
           onChange={e => { const n = parseInt(e.target.value, 10); if (!isNaN(n) && n >= 0) onChange(n); else if (e.target.value === '') onChange(0); }}
           onFocus={() => setTimeout(() => ref.current?.select(), 0)}
-          className="w-12 sm:w-16 text-center bg-transparent border-0 border-b-4 border-white/10 focus:border-primary/50 outline-none font-black text-white text-2xl sm:text-4xl transition-all py-1 tabular-nums"
+          className="w-14 sm:w-20 text-center bg-transparent border-0 border-b-4 border-white/10 focus:border-primary/50 outline-none font-black text-white text-4xl sm:text-5xl md:text-6xl transition-all py-1 tabular-nums"
           style={{ lineHeight: 1 }}
         />
 
@@ -137,10 +137,9 @@ function PlayerPicker({
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
   const selected = players.find(p => p.id === value);
   const guest = players.find(p => isGuestId(p.id));
-  const members = players.filter(p => !isGuestId(p.id) && p.name.toLowerCase().includes(query.toLowerCase()));
+  const members = players.filter(p => !isGuestId(p.id));
   const accent = tone === 'win'
     ? {
         label: 'text-green-300',
@@ -162,21 +161,10 @@ function PlayerPicker({
   const choose = (id: string) => {
     onChange(id);
     setOpen(false);
-    setQuery('');
   };
 
   const list = (
     <div className="max-h-[70vh] overflow-y-auto p-2">
-      <div className="relative mb-2">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Tìm thành viên..."
-          className="h-11 w-full rounded-xl border border-slate-500/25 bg-slate-950/65 pl-9 pr-3 text-sm font-bold text-white outline-none focus:border-primary/50"
-        />
-      </div>
-
       <div className="space-y-1">
         {members.map(player => {
           const active = player.id === value;
@@ -226,14 +214,14 @@ function PlayerPicker({
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          'flex min-h-12 w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left transition focus:outline-none focus:ring-2',
+          'flex min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left transition focus:outline-none focus:ring-2',
           accent.border,
           accent.bg,
           accent.ring,
         )}
         aria-label={label}
       >
-        <span className={cn('min-w-0 break-words text-sm font-bold leading-5', selected ? 'text-white' : 'text-slate-400')}>
+        <span className={cn('min-w-0 truncate text-xs sm:text-sm font-bold leading-5', selected ? 'text-white' : 'text-slate-400')}>
           {selected ? (isGuestId(selected.id) ? 'Khách' : selected.name) : 'Chọn người'}
         </span>
         <ChevronDown className="h-5 w-5 shrink-0 text-slate-300" />
@@ -246,7 +234,7 @@ function PlayerPicker({
             <div className="flex items-center justify-between border-b border-slate-500/25 px-5 py-4">
               <div>
                 <div className={cn('text-sm font-black uppercase tracking-[0.22em]', accent.label)}>{label}</div>
-                <div className="mt-1 text-xs font-bold text-slate-300/75">Chạm vào tên để chọn</div>
+                <div className="mt-1 text-xs font-bold text-slate-300/75">Chọn thành viên</div>
               </div>
               <button
                 type="button"
@@ -442,36 +430,36 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
   return (
     <>
       <SyncBadge state={sync} onRetry={() => { if (pendingFd) { doSync(pendingFd); setPendingFd(null); } }} />
-      <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-5">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 md:gap-5 items-center">
+      <form onSubmit={handleSubmit} className="p-3 sm:p-4 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,0.78fr)_18rem_minmax(0,0.78fr)] gap-3 md:gap-4 items-stretch">
 
-          <div className="min-w-0 rounded-2xl border border-green-500/35 bg-green-500/5 p-3 sm:p-4 space-y-3">
-            <div className="flex items-center gap-3">
+          <div className="min-w-0 rounded-2xl border border-green-500/35 bg-green-500/5 p-3 space-y-2">
+            <div className="flex items-center gap-2">
               <Trophy className="w-4 h-4 text-primary opacity-60" />
-              <span className="text-[10px] font-black text-green-300 uppercase tracking-[0.24em]">Đội thắng</span>
+              <span className="text-[10px] font-black text-green-300 uppercase tracking-[0.2em]">Đội thắng</span>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-2">
               <PlayerPicker label="Người thắng 1" tone="win" value={win1} players={optionsFor('win1')} onChange={value => setSlot('win1', value)} />
               <PlayerPicker label="Người thắng 2" tone="win" value={win2} players={optionsFor('win2')} onChange={value => setSlot('win2', value)} />
             </div>
           </div>
 
-          <div className="flex flex-col items-center">
-            <div className="w-full md:w-60 bg-black/45 rounded-2xl border border-slate-600/60 p-3 sm:p-4 flex items-center justify-center gap-3 sm:gap-4 shadow-inner">
+          <div className="flex min-w-0 flex-col items-center">
+            <div className="flex min-h-[122px] w-full items-center justify-center gap-3 rounded-2xl border border-slate-600/60 bg-black/45 p-3 shadow-inner md:min-h-full sm:gap-4">
               <ScoreStepper label="Thắng" value={ws} onChange={setWs} />
               <div className="pt-4">
-                <span className="text-slate-400/80 font-black text-2xl sm:text-3xl select-none leading-none">-</span>
+                <span className="text-slate-400/80 font-black text-3xl sm:text-4xl select-none leading-none">-</span>
               </div>
               <ScoreStepper label="Thua" value={ls} onChange={setLs} />
             </div>
           </div>
 
-          <div className="min-w-0 rounded-2xl border border-red-500/35 bg-red-500/5 p-3 sm:p-4 space-y-3">
-            <div className="flex items-center justify-center md:justify-end gap-3">
-              <span className="text-[10px] font-black text-red-300 uppercase tracking-[0.24em]">Đội thua</span>
+          <div className="min-w-0 rounded-2xl border border-red-500/35 bg-red-500/5 p-3 space-y-2">
+            <div className="flex items-center justify-center md:justify-end gap-2">
+              <span className="text-[10px] font-black text-red-300 uppercase tracking-[0.2em]">Đội thua</span>
               <Ghost className="w-4 h-4 text-red-400 opacity-60" />
             </div>
-            <div className="space-y-3">
+            <div className="space-y-2">
               <PlayerPicker label="Người thua 1" tone="lose" value={lose1} players={optionsFor('lose1')} onChange={value => setSlot('lose1', value)} />
               <PlayerPicker label="Người thua 2" tone="lose" value={lose2} players={optionsFor('lose2')} onChange={value => setSlot('lose2', value)} />
             </div>

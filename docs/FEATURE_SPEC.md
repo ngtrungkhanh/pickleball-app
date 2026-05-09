@@ -41,6 +41,8 @@ filters feel instant while Vercel/Postgres usage stays low.
 ## Dashboard Features
 
 - Summary metrics for current selected season or all-season view.
+- `Tuần này` counts matches from Monday 00:00 through Sunday 23:59:59 in
+  Vietnam time, not the last rolling 7 days.
 - Leaderboard with expandable player details.
 - Season selector, including seasons with 0 matches.
 - Recent history with compact mobile-safe match cards/rows.

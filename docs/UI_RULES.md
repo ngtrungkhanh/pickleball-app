@@ -108,11 +108,16 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
   - mobile opens a bottom sheet
   - desktop opens a popover
   - each player item should be at least about 56px tall for touch accuracy
+  - do not show a search field in the score-entry player picker for the current
+    small member list
   - winner picker uses green active/hover accents
   - loser picker uses red active/hover accents
   - real members appear first
   - guest (`Khach`) appears last, separated by a divider and a small user icon
   - keep the existing duplicate-slot prevention and required-four-slots behavior
+- On desktop score entry, keep the form panel narrower than the leaderboard,
+  around 80% width, make the score box prominent, and keep player-name fields
+  compact enough that text does not wrap awkwardly.
 
 ## History
 

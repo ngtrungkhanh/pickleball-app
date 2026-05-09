@@ -54,7 +54,8 @@ Read only when relevant:
 - Vercel hosting
 - Server actions for writes
 - Static/ISR-style reads where possible
-- `legacy/` is reference-only for old Apps Script behavior
+- `legacy/` is reference-only for old Apps Script behavior. Current app data
+  reads and writes Vercel Postgres; legacy Excel files are not the data source.
 
 ## Non-Negotiable Rules
 

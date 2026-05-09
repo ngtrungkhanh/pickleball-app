@@ -118,7 +118,7 @@ export default function Dashboard({
             </span>
             <h3 className="font-black text-[10px] sm:text-xs uppercase tracking-[0.4em] text-slate-300/70">Ghi kết quả</h3>
           </div>
-          <div className="relative z-30 rounded-2xl border border-slate-500/25 bg-[#142034]/95 overflow-visible">
+          <div className="relative z-30 mx-auto w-full lg:w-[80%] rounded-2xl border border-slate-500/25 bg-[#142034]/95 overflow-visible">
             <ScoreForm players={initialPlayers} onAddMatch={addLocalMatch} activeSeason={activeSeason} />
           </div>
         </div>
