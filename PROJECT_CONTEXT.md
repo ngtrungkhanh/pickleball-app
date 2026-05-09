@@ -45,6 +45,11 @@ Read only when relevant:
   four-line expanded leaderboard detail with compact fun remarks.
 - Expanded leaderboard form remarks now read 5-match form newest-first and use
   seeded data-driven notes so similar players do not always get identical text.
+- `/analysis` is currently a read-only analytics center with overview, player,
+  partner, opponent, trend placeholder, and match-history tabs. It preloads up
+  to 500 matches, then uses IndexedDB plus `getMatchesAfterAction` for local
+  cache/sync. The best next analysis work is replacing the trend placeholder and
+  bringing richer confidence-scored partner/opponent logic into matrix views.
 - Local demo routes such as `/ui-demo` and `/picker-demo` may exist on one
   machine for review, but should not be pushed unless explicitly requested.
 

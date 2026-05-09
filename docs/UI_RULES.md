@@ -158,3 +158,19 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
 - Analysis should stay read-only.
 - The sync/cache badge should stay small and unobtrusive.
 - Trend is currently a placeholder; do not present it as complete charting.
+- Current tabs are overview, player, partner, opponent, trend, and match
+  history. Preserve fast client-side tab switching.
+- The analysis page is denser than the dashboard and should feel like an
+  internal analytics tool, not a landing page.
+- Keep filters visible and compact: season selector first, then horizontal tabs.
+- Matrix tables can scroll horizontally when needed. Do not compress table text
+  into unreadable microcopy just to avoid horizontal scroll.
+- Player cards should keep short labels and stable card heights. Long player
+  names should truncate or wrap cleanly without overlapping metrics.
+- Future trend work should prefer simple, readable charts or dense stat tables:
+  ELO over time, rolling 5/10-match win rate, score differential, close-game
+  record, partner/opponent trend, fine trend, and activity cadence.
+- If adding drilldowns, keep mobile first: open detail as a modal/sheet or a
+  clearly separated section, not nested cards inside cards.
+- Review analysis copy for mojibake before expanding UI. Source strings should
+  be UTF-8 Vietnamese or intentional ASCII.

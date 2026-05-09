@@ -212,19 +212,67 @@ Standalone `/history`:
 
 `/analysis` is read-only and uses IndexedDB as a local cache for match history.
 
-Features:
+Current implementation files:
+
+- `src/app/analysis/page.tsx` - server route that loads players, matches,
+  config, and seasons.
+- `src/components/analysis/AnalysisCenter.tsx` - client UI, tabs, season
+  filtering, IndexedDB sync, and local analysis display.
+- `src/lib/analytics.ts` - ELO, player analysis, partner rows, opponent rows,
+  and display-name helpers.
+- `src/lib/db.ts` - IndexedDB helpers for local match cache.
+- `src/lib/stats.ts` - shared leaderboard and advanced stat logic used by both
+  dashboard and analysis.
+
+Current behavior:
 
 - season selector with all-season option
-- sync badge showing cached match count
-- overview tab: match count, active member count, top player, highest ELO
-- player tab: rank, ELO, streak, win rate, total matches, best partner, nemesis,
-  last match
-- partner matrix tab
-- opponent matrix tab
-- trend placeholder
-- searchable match history tab
+- sync/cache badge showing current cached match count
+- horizontal tabs: `Tong quan`, `Player`, `Partner`, `Opponent`, `Trend`,
+  `Match history`
+- overview tab: ranking match count, active member count, top leaderboard
+  player, highest ELO
+- player tab: selected player, leaderboard rank, ELO, current streak, win rate,
+  total matches, best partner, nemesis, and last match
+- partner matrix tab: pair rows with player, partner, total, wins, losses, rate
+- opponent matrix tab: opponent rows with player, opponent, total, wins, losses,
+  rate
+- trend tab: placeholder text only; charting is not implemented yet
+- match history tab: searchable list filtered by season and query
 
-ELO is currently calculated client-side from preloaded/cached matches.
+Current analysis rules:
+
+- Analysis is read-only. Do not add write controls here unless the user
+  explicitly changes the product direction.
+- Guest matches are excluded from ranking analytics through `isRankingMatch`.
+- The selected season filters all tabs. `Tong hop` uses all cached/preloaded
+  matches.
+- ELO is calculated client-side from ranking matches in chronological order.
+  Starting rating is `1000`, `K = 24`, team rating is average team ELO, and
+  winners gain the same delta that losers lose.
+- Partner and opponent matrix rows are currently simple win-rate matrices from
+  `src/lib/analytics.ts`; they do not yet use the richer confidence scoring from
+  dashboard expanded details.
+- Player tab calls `getPlayerAdvancedStats`, so it inherits the newer
+  dashboard logic for best partner, difficult rival, easy rival, and form
+  insight where those fields are exposed.
+- Match history currently shows up to 120 filtered rows.
+
+Known gaps / good next work:
+
+- Replace the `Trend` placeholder with real charts or dense trend tables.
+- Reuse or export the richer confidence scoring from `src/lib/stats.ts` so
+  Partner/Opponent matrix sorting can rank reliable `9/10`-style samples above
+  small perfect samples.
+- Add player-specific trend views: ELO over time, rolling 5/10-match win rate,
+  rolling score differential, close-game record, fine trend, and activity
+  cadence.
+- Add partner/opponent detail drilldowns from matrix rows if the UI stays
+  readable on mobile.
+- Review Vietnamese copy in `AnalysisCenter.tsx`; some strings may still need
+  UTF-8 cleanup before heavy UI work.
+- Keep analysis cheap: use preloaded/cached data and avoid polling or extra
+  Postgres calls for normal tab/filter changes.
 
 ## Do Not Break
 

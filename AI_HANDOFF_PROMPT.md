@@ -43,6 +43,8 @@ Recent behavior updates to remember:
 - If duplicate is detected in 15 minutes, UI asks for confirmation; server also re-checks and only accepts duplicate when `duplicate_confirmed=true`.
 - Admin has an `Import XLSX` button that uploads a local `.xlsx` file and replaces match history from sheet `MATCHES`.
 - XLSX import now auto-creates missing player IDs before inserting matches to avoid FK errors.
+- Dashboard expanded form/partner/rival/easy insights use seeded data-driven logic in `src/lib/stats.ts`; labels must stay short and directly understandable.
+- `/analysis` is read-only, preloads up to 500 matches, uses IndexedDB cache/sync, and still has a Trend placeholder. Read the Analysis Center sections in `docs/FEATURE_SPEC.md`, `docs/DATA_FLOW.md`, and `docs/UI_RULES.md` before extending it.
 
 Working rules:
 - Do not touch main unless the user explicitly asks for a release.

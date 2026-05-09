@@ -50,6 +50,9 @@ repo.
 
 - Added `/analysis` read-only analysis center with overview, player, partner,
   opponent, trend placeholder, and history views.
+- Documented the current analysis center in detail for handoff: server preload,
+  IndexedDB sync, read-only tabs, client-side ELO, matrix limitations, trend
+  placeholder, and recommended next analysis work.
 
 ### Cleanup
 

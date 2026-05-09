@@ -154,13 +154,63 @@ The analysis center uses IndexedDB:
 - database: `PickleballDB`
 - object store: `matches`
 
-Flow:
+Implementation files:
+
+- `src/components/analysis/AnalysisCenter.tsx`
+- `src/lib/db.ts`
+- `src/app/actions.ts` via `getMatchesAfterAction`
+- `src/app/analysis/page.tsx`
+
+Server preload:
+
+1. `/analysis` uses `revalidate = false`.
+2. The server route loads non-deleted players, up to 500 non-deleted matches,
+   config, and non-archived seasons.
+3. The route passes `players`, `matches`, `seasons`, `loseMoney`, and
+   `activeSeason` into `AnalysisCenter`.
+4. The route currently attempts lightweight schema/guest normalization, but
+   skips it in Preview when preview writes are blocked.
+
+Client sync flow:
 
 1. Load local matches from IndexedDB.
 2. If empty, seed from server-provided `initialMatches`.
-3. Ask server for matches after the latest local match id.
+3. Ask server for matches after the latest local match id via
+   `getMatchesAfterAction(lastId)`.
 4. Save new matches locally.
 5. Fall back to server-provided matches if sync fails.
+
+Important caveat:
+
+- `getMatchesAfterAction` looks up the date for `lastId` and returns matches
+  with `date > lastMatch.date`. This assumes local IndexedDB data is ordered
+  newest-first and that match ids can identify the newest cached row. If future
+  sync bugs appear, first verify IndexedDB sort order and whether edits/imports
+  can leave stale local rows.
+- The current sync appends/saves new matches, but it is not a full conflict
+  resolver. Full imports, deletes, or match edits can require cache refresh or
+  cache invalidation logic if stale analysis data is observed.
+
+Client analysis derivation:
+
+- `selectedSeason` filters cached/preloaded matches client-side.
+- `isRankingMatch` removes guest matches from ranking analytics.
+- `calculateLeaderboard` derives rank, wins, losses, win rate, and fines for
+  the selected match set.
+- `buildElo` derives client-side ELO from ranking matches using chronological
+  replay.
+- `buildPartnerRows` and `buildOpponentRows` derive matrix rows from ranking
+  matches.
+- `getPlayerAnalysis` combines leaderboard rank, player stats,
+  `getPlayerAdvancedStats`, recent matches, current streak, and last match.
+
+Cache and revalidation:
+
+- Match writes revalidate `/analysis` together with `/` and `/history`.
+- Analysis still prefers IndexedDB when local cached data exists, so future
+  agents should consider cache invalidation when adding destructive imports,
+  hard deletes, or bulk history edits.
+- Do not use IndexedDB as source of truth. Postgres remains authoritative.
 
 ## Vercel and Cache
 
