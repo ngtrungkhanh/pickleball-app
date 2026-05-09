@@ -158,3 +158,6 @@ repo.
   streaks, last-3 momentum, score drama, score differential, volatility,
   previous-5 comparison, partner stability, opponent difficulty, fine pressure,
   and recent activity.
+- Reweighted partner, difficult-rival, and easy-rival selection with sample
+  confidence, recent results, score differential, and close-game context instead
+  of sorting by raw win/loss rate alone.

@@ -127,6 +127,14 @@ Expanded detail behavior:
   - enough sample but no one dominates / no easy matchup
 - Qualified rival metrics should stay concise, for example `85% thua - 11/13`
   or `85% thang - 11/13`, instead of long sentences.
+- Partner selection uses a confidence score, not raw win rate only. Shared
+  matches, wins, recent pair form, score differential, and recent stability can
+  outrank a smaller perfect sample; for example `9/10` should generally beat
+  `5/5`.
+- Difficult and easy rival selection also uses confidence scoring with sample,
+  win/loss rate, recent results, score differential, and close-game context.
+  Notes should distinguish close losses from heavy losses and easy-looking
+  matchups from genuinely favorable score gaps.
 
 ## Seasons
 

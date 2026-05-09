@@ -711,6 +711,285 @@ function selectInsight(candidates: InsightCandidate[], seed: string) {
   return pickSeeded(topBand.map(candidate => candidate.text), seed) || 'Chưa lộ điểm dị';
 }
 
+function sampleConfidence(total: number) {
+  if (total >= 15) return 1.05;
+  if (total >= 10) return 1;
+  if (total >= 8) return 0.95;
+  if (total >= 6) return 0.85;
+  return 0.75;
+}
+
+function average(values: number[]) {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
+
+function scoreDiffBonus(avgDiff: number) {
+  if (avgDiff >= 5) return 8;
+  if (avgDiff >= 3) return 5;
+  if (avgDiff >= 1) return 2;
+  if (avgDiff <= -4) return -8;
+  if (avgDiff <= -2) return -6;
+  return 0;
+}
+
+type PairStat = {
+  id: string;
+  wins: number;
+  losses: number;
+  total: number;
+  diffs: number[];
+  recent: string[];
+  latestIndex: number;
+  recent10Count: number;
+};
+
+function createPairStat(id: string): PairStat {
+  return {
+    id,
+    wins: 0,
+    losses: 0,
+    total: 0,
+    diffs: [],
+    recent: [],
+    latestIndex: Number.POSITIVE_INFINITY,
+    recent10Count: 0,
+  };
+}
+
+function pushPairResult(stat: PairStat, result: string, diff: number, index: number) {
+  stat.total++;
+  if (result === 'W') stat.wins++;
+  if (result === 'L') stat.losses++;
+  stat.diffs.push(diff);
+  if (stat.recent.length < 5) stat.recent.push(result);
+  stat.latestIndex = Math.min(stat.latestIndex, index);
+  if (index < 10) stat.recent10Count++;
+}
+
+function partnerLabel(stat: PairStat & { rate: number; avgDiff: number }) {
+  if (stat.total >= 12 && stat.rate >= 70) return "Cặp ruột";
+  if (stat.total >= 8 && stat.rate >= 70) return "Cạ cứng";
+  if (stat.total >= 5 && stat.rate >= 80) return "Hợp vía";
+  if (stat.total >= 5 && stat.avgDiff >= 4) return "Đánh đôi có lực";
+  if (stat.total >= 8 && stat.rate >= 60) return "Đối tác tin cậy";
+  return "Đối tác ổn áp";
+}
+
+function partnerNote(stat: PairStat & { rate: number; avgDiff: number; score: number }, seed: string) {
+  const candidates: InsightCandidate[] = [];
+  const add = (category: InsightCategory, score: number, options: string[], salt: string) => {
+    candidates.push({ category, score, text: pickSeeded(options, `${seed}|partner|${category}|${salt}`) });
+  };
+  const recentWins = stat.recent.slice(0, 3).filter(r => r === 'W').length;
+
+  if (stat.total >= 10 && stat.rate >= 70) {
+    add('partner', 96, [
+      'Cặp này có số má',
+      'Đánh chung rất bén',
+      'Ghép vào là sáng',
+      'Nhìn khá hợp bài',
+      'Cặp này đáng tin',
+      'Độ ăn ý khá cao',
+      'Đánh đôi có nghề',
+      'Không phải ăn may',
+      'Sample khá chắc rồi',
+      'Có nền thật sự',
+    ], 'large-good');
+  }
+  if (stat.total >= 5 && stat.total < 8 && stat.rate >= 80) {
+    add('partner', 90, [
+      'Hợp vía thấy rõ',
+      'Ít trận nhưng xanh',
+      'Mẫu nhỏ mà thơm',
+      'Cặp này có duyên',
+      'Đang có mùi hợp',
+      'Cần thêm trận kiểm',
+      'Tín hiệu rất xanh',
+    ], 'small-hot');
+  }
+  if (recentWins >= 3) {
+    add('trend', 88, [
+      'Gần đây rất sáng',
+      'Mới đánh là xanh',
+      'Đà đôi đang nóng',
+      'Nhịp mới khá mượt',
+      'Mấy trận mới bén',
+      'Vừa ghép đã ổn',
+    ], 'recent-hot');
+  }
+  if (stat.avgDiff >= 3) {
+    add('score', 84, [
+      'Thắng thường khá thoáng',
+      'Điểm đôi đang lời',
+      'Kèo thắng có lực',
+      'Ít bị kéo sát',
+      'Đẩy điểm rất tốt',
+      'Game đôi khá sáng',
+    ], 'diff-good');
+  }
+  if (stat.recent.filter(r => r === 'W').length >= 2 && stat.diffs.filter(diff => diff > 0 && diff <= 2).length >= 2) {
+    add('score', 82, [
+      'Kèo căng vẫn qua',
+      'Đánh sát khá lì',
+      'Chốt game khá tỉnh',
+      'Cặp này chịu nhiệt',
+      'Sát nút vẫn xanh',
+    ], 'clutch');
+  }
+  if (stat.recent10Count >= 4) {
+    add('activity', 78, [
+      'Đánh chung khá đều',
+      'Ít đổi mà hiệu quả',
+      'Có vẻ vào bài',
+      'Nhịp đôi đang ổn',
+      'Cặp này dễ vào guồng',
+    ], 'stable');
+  }
+  if (candidates.length === 0) {
+    add('fallback', 60, [
+      'Ổn nhưng chưa áp đảo',
+      'Tin được, chưa bùng nổ',
+      'Cần thêm trận xanh',
+      'Đủ ổn để giữ',
+      'Chưa quá cháy, vẫn được',
+    ], 'default');
+  }
+
+  return selectInsight(candidates, `${seed}|partner-note|${stat.id}`);
+}
+
+function rivalLabel(stat: PairStat & { winRate: number; lossRate: number; avgDiff: number }, kind: 'tough' | 'easy') {
+  if (kind === 'tough') {
+    if (stat.total >= 10 && stat.lossRate >= 70) return "Thiên địch";
+    if (stat.avgDiff <= -4) return "Tường khó vượt";
+    if (stat.lossRate >= 65) return "Kèo ám ảnh";
+    if (stat.diffs.filter(diff => diff < 0 && diff >= -2).length >= 2) return "Cửa hẹp";
+    return "Kèo khó";
+  }
+
+  if (stat.total >= 10 && stat.winRate >= 75) return "Hợp bài";
+  if (stat.avgDiff >= 4) return "Kèo thuận tay";
+  if (stat.winRate >= 75) return "Cửa sáng";
+  if (stat.diffs.filter(diff => diff > 0 && diff <= 2).length >= 2) return "Kèo lì vẫn qua";
+  return "Kèo dễ";
+}
+
+function toughRivalNote(stat: PairStat & { lossRate: number; avgDiff: number; score: number }, seed: string) {
+  const candidates: InsightCandidate[] = [];
+  const add = (category: InsightCategory, score: number, options: string[], salt: string) => {
+    candidates.push({ category, score, text: pickSeeded(options, `${seed}|tough|${category}|${salt}`) });
+  };
+  const recentLosses = stat.recent.slice(0, 3).filter(r => r === 'L').length;
+  const closeLosses = stat.diffs.filter(diff => diff < 0 && diff >= -2).length;
+
+  if (recentLosses >= 3) {
+    add('streak', 94, [
+      'Gần đây hơi ám',
+      'Ba lần mới đỏ',
+      'Cần đổi bài gấp',
+      'Gặp lại hơi căng',
+      'Đang bị bắt nhịp',
+    ], 'recent-loss');
+  }
+  if (stat.lossRate >= 70 && stat.total >= 8) {
+    add('opponent', 92, [
+      'Gặp là hơi khó thở',
+      'Kèo này chưa dễ gỡ',
+      'Cửa thắng đang hẹp',
+      'Kèo này hơi ám',
+      'Drama còn tích tụ',
+      'Cần bài khác khi gặp',
+    ], 'high-loss');
+  }
+  if (stat.avgDiff <= -4) {
+    add('score', 88, [
+      'Điểm thường bị kéo xa',
+      'Hay bị bứt điểm sớm',
+      'Cần giữ điểm đầu',
+      'Khoảng cách hơi đau',
+      'Ván đỏ thường sâu',
+    ], 'deep-loss');
+  }
+  if (closeLosses >= 2) {
+    add('score', 90, [
+      'Thua sát nên còn cửa',
+      'Chỉ thiếu chút là xanh',
+      'Kèo căng chưa qua',
+      'Sát nút hơi tiếc',
+      'Có cửa nếu chốt tốt',
+    ], 'close-loss');
+  }
+  if (candidates.length === 0) {
+    add('fallback', 60, [
+      'Kèo này hơi mệt',
+      'Cần thêm trận giải mã',
+      'Gặp lại phải tỉnh',
+      'Chưa dễ vượt qua',
+      'Vẫn còn cửa gỡ',
+    ], 'default');
+  }
+
+  return selectInsight(candidates, `${seed}|tough-note|${stat.id}`);
+}
+
+function easyRivalNote(stat: PairStat & { winRate: number; avgDiff: number; score: number }, seed: string) {
+  const candidates: InsightCandidate[] = [];
+  const add = (category: InsightCategory, score: number, options: string[], salt: string) => {
+    candidates.push({ category, score, text: pickSeeded(options, `${seed}|easy|${category}|${salt}`) });
+  };
+  const recentWins = stat.recent.slice(0, 3).filter(r => r === 'W').length;
+  const closeWins = stat.diffs.filter(diff => diff > 0 && diff <= 2).length;
+
+  if (recentWins >= 3) {
+    add('streak', 94, [
+      'Gần đây toàn xanh',
+      'Gặp lại khá sáng',
+      'Mấy lần mới rất ổn',
+      'Đang có vía rõ',
+      'Nhịp gặp này tốt',
+    ], 'recent-win');
+  }
+  if (stat.winRate >= 75 && stat.total >= 8) {
+    add('opponent', 92, [
+      'Gặp là sáng cửa hơn',
+      'Kèo này khá thuận tay',
+      'Cửa này đang có vía',
+      'Gặp là dễ vào nhịp',
+      'Không hẳn dễ, nhưng hợp',
+      'Đúng bài nên dễ thở',
+    ], 'high-win');
+  }
+  if (stat.avgDiff >= 4) {
+    add('score', 88, [
+      'Điểm xanh thường dày',
+      'Thắng hay khá thoáng',
+      'Kéo điểm rất tốt',
+      'Kèo thắng có lực',
+      'Ít khi bị dí sát',
+    ], 'diff-good');
+  }
+  if (closeWins >= 2) {
+    add('score', 86, [
+      'Thắng sát nhưng đều',
+      'Kèo căng vẫn qua',
+      'Sát nút vẫn xanh',
+      'Chốt game khá tỉnh',
+      'Cửa hẹp vẫn qua',
+    ], 'close-win');
+  }
+  if (candidates.length === 0) {
+    add('fallback', 60, [
+      'Cửa sáng hơn chút',
+      'Kèo này có nét',
+      'Gặp lại khá tự tin',
+      'Có vẻ hợp bài',
+      'Vẫn cần giữ nhịp',
+    ], 'default');
+  }
+
+  return selectInsight(candidates, `${seed}|easy-note|${stat.id}`);
+}
+
 export function getPlayerAdvancedStats(playerId: string, matches: StatMatch[], players: StatPlayer[]) {
   const rankingMatches = matches.filter(isRankingMatch).sort((a, b) => matchTime(b) - matchTime(a));
   const playerMatches = rankingMatches.filter(m => 
@@ -727,69 +1006,101 @@ export function getPlayerAdvancedStats(playerId: string, matches: StatMatch[], p
   const formComment = FORM_LABELS[formPattern] || (recent.length === 0 ? "Chưa có dữ liệu" : "Đang gom mẫu");
   const formTrend = selectInsight(candidates, `${playerId}|${formPattern}|${String(playerMatches[0]?.id || '')}|${String(playerMatches[0]?.date || '')}`);
 
-  const partners = new Map<string, { wins: number, total: number }>();
-  playerMatches.forEach(m => {
-    const isWin = m.win_1 === playerId || m.win_2 === playerId;
-    const partnerId = isWin 
-      ? (m.win_1 === playerId ? m.win_2 : m.win_1)
-      : (m.lose_1 === playerId ? m.lose_2 : m.lose_1);
-    
-    const normalizedPartnerId = typeof partnerId === 'string' ? partnerId : '';
-    if (normalizedPartnerId && normalizedPartnerId !== GUEST_ID) {
-      const s = partners.get(normalizedPartnerId) || { wins: 0, total: 0 };
-      if (isWin) s.wins++;
-      s.total++;
-      partners.set(normalizedPartnerId, s);
-    }
+  const partnerSeed = `${playerId}|partner|${formPattern}|${String(playerMatches[0]?.id || '')}|${String(playerMatches[0]?.date || '')}`;
+  const partners = new Map<string, PairStat>();
+  playerMatches.forEach((match, index) => {
+    const partnerId = partnerForPlayer(match, playerId);
+    if (!partnerId) return;
+    const stat = partners.get(partnerId) || createPairStat(partnerId);
+    pushPairResult(stat, resultForPlayer(match, playerId), scoreDiffForPlayer(match, playerId), index);
+    partners.set(partnerId, stat);
   });
 
-  let bestPartner = null;
-  const sortedPartners = Array.from(partners.entries())
-    .map(([id, s]) => ({ id, ...s, rate: (s.wins / s.total) * 100 }))
-    .filter(x => x.total >= 5 && x.rate > 50)
-    .sort((a, b) => b.rate - a.rate || b.wins - a.wins || b.total - a.total);
+  const partnerStats = Array.from(partners.values()).map(stat => {
+    const rate = (stat.wins / stat.total) * 100;
+    const avgDiff = average(stat.diffs);
+    const recentWins = stat.recent.slice(0, 3).filter(r => r === 'W').length;
+    const recentBonus = recentWins >= 3 ? 8 : recentWins >= 2 ? 4 : stat.latestIndex > 9 ? -5 : 0;
+    const stabilityBonus = stat.recent10Count >= 4 ? 5 : 0;
+    const score = rate * sampleConfidence(stat.total)
+      + stat.wins * 1.6
+      + stat.total * 0.6
+      + recentBonus
+      + scoreDiffBonus(avgDiff)
+      + stabilityBonus;
 
-  if (sortedPartners.length > 0) {
-    bestPartner = sortedPartners[0];
-  }
+    return {
+      ...stat,
+      rate,
+      avgDiff,
+      score,
+      label: partnerLabel({ ...stat, rate, avgDiff }),
+      note: partnerNote({ ...stat, rate, avgDiff, score }, partnerSeed),
+    };
+  });
 
-  const rivals = new Map<string, { wins: number, losses: number, total: number }>();
-  playerMatches.forEach(m => {
-    const isWin = m.win_1 === playerId || m.win_2 === playerId;
-    const enemyTeam = isWin ? [m.lose_1, m.lose_2] : [m.win_1, m.win_2];
-    
-    enemyTeam.forEach(rivalId => {
-      const normalizedRivalId = typeof rivalId === 'string' ? rivalId : '';
-      if (normalizedRivalId && normalizedRivalId !== GUEST_ID) {
-        const s = rivals.get(normalizedRivalId) || { wins: 0, losses: 0, total: 0 };
-        if (isWin) s.wins++;
-        if (!isWin) s.losses++;
-        s.total++;
-        rivals.set(normalizedRivalId, s);
-      }
+  const bestPartner = partnerStats
+    .filter(stat => stat.total >= 5 && stat.rate > 50)
+    .sort((a, b) => b.score - a.score || b.wins - a.wins || b.total - a.total)[0] || null;
+
+  const rivalSeed = `${playerId}|rival|${formPattern}|${String(playerMatches[0]?.id || '')}|${String(playerMatches[0]?.date || '')}`;
+  const rivals = new Map<string, PairStat>();
+  playerMatches.forEach((match, index) => {
+    const result = resultForPlayer(match, playerId);
+    const diff = scoreDiffForPlayer(match, playerId);
+    opponentIdsForPlayer(match, playerId).forEach(rivalId => {
+      const stat = rivals.get(rivalId) || createPairStat(rivalId);
+      pushPairResult(stat, result, diff, index);
+      rivals.set(rivalId, stat);
     });
   });
 
-  let toughestRival = null;
-  const rivalStats = Array.from(rivals.entries())
-    .map(([id, s]) => ({ id, ...s, winRate: (s.wins / s.total) * 100, lossRate: (s.losses / s.total) * 100 }));
+  const rivalStats = Array.from(rivals.values()).map(stat => {
+    const winRate = (stat.wins / stat.total) * 100;
+    const lossRate = (stat.losses / stat.total) * 100;
+    const avgDiff = average(stat.diffs);
+    const recentWins = stat.recent.slice(0, 3).filter(r => r === 'W').length;
+    const recentLosses = stat.recent.slice(0, 3).filter(r => r === 'L').length;
+    const toughScore = lossRate * sampleConfidence(stat.total)
+      + stat.losses * 1.6
+      + stat.total * 0.6
+      + (recentLosses >= 3 ? 8 : recentLosses >= 2 ? 4 : 0)
+      + scoreDiffBonus(-avgDiff)
+      + (stat.diffs.filter(diff => diff < 0 && diff >= -2).length >= 2 ? 4 : 0);
+    const easyScore = winRate * sampleConfidence(stat.total)
+      + stat.wins * 1.6
+      + stat.total * 0.6
+      + (recentWins >= 3 ? 8 : recentWins >= 2 ? 4 : 0)
+      + scoreDiffBonus(avgDiff)
+      + (stat.diffs.filter(diff => diff > 0 && diff <= 2).length >= 2 ? 4 : 0);
+
+    return {
+      ...stat,
+      winRate,
+      lossRate,
+      avgDiff,
+      toughScore,
+      easyScore,
+    };
+  });
   const maxRivalMeetings = rivalStats.reduce((max, rival) => Math.max(max, rival.total), 0);
-  const sortedRivals = rivalStats
-    .filter(x => x.total >= 5 && x.lossRate > 50)
-    .sort((a, b) => b.lossRate - a.lossRate || b.losses - a.losses || b.total - a.total);
+  const toughestRival = rivalStats
+    .filter(stat => stat.total >= 5 && stat.lossRate > 50)
+    .map(stat => ({
+      ...stat,
+      label: rivalLabel(stat, 'tough'),
+      note: toughRivalNote({ ...stat, score: stat.toughScore }, rivalSeed),
+    }))
+    .sort((a, b) => b.toughScore - a.toughScore || b.losses - a.losses || b.total - a.total)[0] || null;
 
-  if (sortedRivals.length > 0) {
-    toughestRival = sortedRivals[0];
-  }
-
-  let easiestRival = null;
-  const sortedEasyRivals = rivalStats
-    .filter(x => x.total >= 5 && x.winRate > 50)
-    .sort((a, b) => b.winRate - a.winRate || b.wins - a.wins || b.total - a.total);
-
-  if (sortedEasyRivals.length > 0) {
-    easiestRival = sortedEasyRivals[0];
-  }
+  const easiestRival = rivalStats
+    .filter(stat => stat.total >= 5 && stat.winRate > 50)
+    .map(stat => ({
+      ...stat,
+      label: rivalLabel(stat, 'easy'),
+      note: easyRivalNote({ ...stat, score: stat.easyScore }, rivalSeed),
+    }))
+    .sort((a, b) => b.easyScore - a.easyScore || b.wins - a.wins || b.total - a.total)[0] || null;
 
   const getName = (id: string) => players.find(p => p.id === id)?.name || "Ẩn danh";
   const rivalFallback = (kind: 'tough' | 'easy') => {
@@ -820,10 +1131,10 @@ export function getPlayerAdvancedStats(playerId: string, matches: StatMatch[], p
       maxMeetings: maxRivalMeetings,
     },
     bestPartner: bestPartner ? {
+      ...bestPartner,
       name: getName(bestPartner.id),
-      label: bestPartner.rate > 70 ? "Cạ cứng" : "Đối tác tin cậy",
-      note: bestPartner.rate > 70 ? "Đánh chung rất bén" : "Cặp này khá ổn",
-      ...bestPartner
+      label: bestPartner.label,
+      note: bestPartner.note,
     } : null,
     bestPartnerFallback: {
       main: "Chưa có cặp ăn ý",
@@ -831,17 +1142,17 @@ export function getPlayerAdvancedStats(playerId: string, matches: StatMatch[], p
       note: "Chờ thêm trận chung",
     },
     toughestRival: toughestRival ? {
+      ...toughestRival,
       name: getName(toughestRival.id),
-      label: toughestRival.lossRate > 70 ? "Thiên địch" : "Kèo khó",
-      note: toughestRival.lossRate > 70 ? "Gặp là hơi rén" : "Kèo này hơi mệt",
-      ...toughestRival
+      label: toughestRival.label,
+      note: toughestRival.note,
     } : null,
     toughestRivalFallback: rivalFallback('tough'),
     easiestRival: easiestRival ? {
+      ...easiestRival,
       name: getName(easiestRival.id),
-      label: easiestRival.winRate > 70 ? "Khắc chế cứng" : "Kèo dễ",
-      note: easiestRival.winRate > 70 ? "Kèo thơm quen mặt" : "Cửa sáng hơn chút",
-      ...easiestRival
+      label: easiestRival.label,
+      note: easiestRival.note,
     } : null,
     easiestRivalFallback: rivalFallback('easy'),
   };

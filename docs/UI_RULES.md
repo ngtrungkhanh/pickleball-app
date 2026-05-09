@@ -81,6 +81,10 @@ The form block should separate the two ideas clearly:
 Partner detail should also use the same compact four-line pattern when possible:
 label/icon, partner name, short win metric, and one short fun line such as
 `Danh chung rat ben` or `Cap nay kha on`.
+Partner, difficult-rival, and easy-rival notes should be self-contained and
+data-aware. Avoid comments that only make sense if another hidden name or chart
+is visible. Prefer short observations about sample strength, recent results,
+close games, score gaps, or whether the matchup is favorable but still tight.
 
 Desktop leaderboard uses a table. Mobile leaderboard uses stacked rows.
 Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
