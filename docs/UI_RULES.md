@@ -38,8 +38,8 @@ targets.
 - Partner label can upgrade to `Ca cung`.
 - Keep short shorthands such as `W`, `L`, and `T` when they protect mobile
   layout.
-- Some source strings currently contain mojibake in code. Avoid adding new
-  mojibake. Prefer UTF-8-safe edits or ASCII docs if shell encoding is uncertain.
+- Source strings should render as UTF-8 Vietnamese or intentional ASCII. Avoid
+  adding mojibake; use ASCII docs if shell encoding is uncertain.
 
 ## Responsive Rules
 

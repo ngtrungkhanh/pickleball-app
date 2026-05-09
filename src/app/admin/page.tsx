@@ -111,10 +111,10 @@ export default function AdminPage() {
         setIsAuth(true);
         // loadData will be triggered by useEffect
       } else {
-        setMsg({ type: 'error', text: actionError(res, 'Máº­t kháº©u sai rá»“i sáº¿p Æ¡i!') });
+        setMsg({ type: 'error', text: actionError(res, 'Mật khẩu sai rồi sếp ơi!') });
       }
     } catch (err) {
-      setMsg({ type: 'error', text: 'Lá»—i káº¿t ná»‘i server.' });
+      setMsg({ type: 'error', text: 'Lỗi kết nối server.' });
     }
     setLoading(false);
   };
@@ -138,7 +138,7 @@ export default function AdminPage() {
       setMatches(m || []);
     } catch (err) {
       console.error('Admin Load Failed:', err);
-      setMsg({ type: 'error', text: 'KhÃ´ng thá»ƒ táº£i dá»¯ liá»‡u tá»« server.' });
+      setMsg({ type: 'error', text: 'Không thể tải dữ liệu từ server.' });
     }
     setLoading(false);
   };
@@ -749,4 +749,3 @@ export default function AdminPage() {
     </div>
   );
 }
-

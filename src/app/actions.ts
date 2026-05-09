@@ -44,7 +44,7 @@ async function ensureGuestPlayer() {
 
   const { rows } = await sql`
     SELECT id FROM players
-    WHERE lower(name) IN ('khÃ¡ch má»i', 'khach moi', 'guest')
+    WHERE lower(name) IN ('khách mời', 'khach moi', 'guest')
       AND id <> ${GUEST_ID}
   `;
 
@@ -108,7 +108,7 @@ export async function addMatchAction(formData: FormData) {
   const duplicate_confirmed = String(formData.get('duplicate_confirmed') || '').toLowerCase() === 'true';
 
   if (!win_1 || !win_2 || !lose_1 || !lose_2) {
-    return { error: 'Thieu nguoi choi. Can du 4 nguoi.' };
+    return { error: 'Thiếu người chơi. Cần đủ 4 người.' };
   }
 
   const normalizeTeam = (a?: string | null, b?: string | null) => [a || '', b || ''].filter(Boolean).sort().join('|');
@@ -165,7 +165,7 @@ export async function addMatchAction(formData: FormData) {
     return { success: true };
   } catch (error) {
     console.error('Failed to add match:', error);
-    return { error: 'Loi khi luu tran dau. Vui long thu lai.' };
+    return { error: 'Lỗi khi lưu trận đấu. Vui lòng thử lại.' };
   }
 }
 export async function deleteMatchAction(matchId: string) {
@@ -174,7 +174,7 @@ export async function deleteMatchAction(matchId: string) {
   try {
     await ensureSoftDeleteColumns();
     const { rows } = await sql`SELECT * FROM matches WHERE id = ${matchId}`;
-    if (rows.length === 0) return { error: 'KhÃ´ng tÃ¬m tháº¥y tráº­n Ä‘áº¥u' };
+    if (rows.length === 0) return { error: 'Không tìm thấy trận đấu' };
     const m = rows[0];
 
     const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
@@ -201,7 +201,7 @@ export async function deleteMatchAction(matchId: string) {
     return { success: true };
   } catch (error) {
     console.error('Failed to delete match:', error);
-    return { error: 'Lá»—i khi xÃ³a tráº­n Ä‘áº¥u' };
+    return { error: 'Lỗi khi xóa trận đấu' };
   }
 }
 
@@ -210,7 +210,7 @@ export async function addPlayerAction(formData: FormData) {
 
   try {
     const name = String(formData.get('name') || '').trim();
-    if (!name) return { error: 'TÃªn thÃ nh viÃªn khÃ´ng há»£p lá»‡' };
+    if (!name) return { error: 'Tên thành viên không hợp lệ' };
 
     const id = `P${Date.now().toString(36).slice(-7)}`.toUpperCase();
     await sql`INSERT INTO players (id, name, active) VALUES (${id}, ${name}, true)`;
@@ -222,7 +222,7 @@ export async function addPlayerAction(formData: FormData) {
     return { success: true };
   } catch (error) {
     console.error('Failed to add player:', error);
-    return { error: 'Lá»—i khi thÃªm thÃ nh viÃªn. Kiá»ƒm tra láº¡i database/setup.' };
+    return { error: 'Lỗi khi thêm thành viên. Kiểm tra lại database/setup.' };
   }
 }
 
@@ -233,7 +233,7 @@ export async function updatePlayerAction(formData: FormData) {
     const id = String(formData.get('id') || '');
     const name = String(formData.get('name') || '').trim();
     const active = String(formData.get('active') || 'true') === 'true';
-    if (!id || !name) return { error: 'ThÃ´ng tin thÃ nh viÃªn khÃ´ng há»£p lá»‡' };
+    if (!id || !name) return { error: 'Thông tin thành viên không hợp lệ' };
 
     if (isGuestId(id)) {
       await sql`UPDATE players SET name = ${GUEST_NAME}, active = ${active}, deleted_at = NULL WHERE id = ${GUEST_ID}`;
@@ -245,7 +245,7 @@ export async function updatePlayerAction(formData: FormData) {
     return { success: true };
   } catch (error) {
     console.error('Failed to update player:', error);
-    return { error: 'Lá»—i khi lÆ°u thÃ nh viÃªn. Kiá»ƒm tra láº¡i database/setup.' };
+    return { error: 'Lỗi khi lưu thành viên. Kiểm tra lại database/setup.' };
   }
 }
 
@@ -257,10 +257,10 @@ export async function updatePlayersAction(formData: FormData) {
     const names = formData.getAll('name').map(v => String(v).trim());
     const activeIds = new Set(formData.getAll('active').map(String));
 
-    if (ids.length !== names.length) return { error: 'Danh sÃ¡ch thÃ nh viÃªn khÃ´ng há»£p lá»‡' };
+    if (ids.length !== names.length) return { error: 'Danh sách thành viên không hợp lệ' };
 
     for (let i = 0; i < ids.length; i++) {
-      if (!ids[i] || !names[i]) return { error: 'TÃªn thÃ nh viÃªn khÃ´ng há»£p lá»‡' };
+      if (!ids[i] || !names[i]) return { error: 'Tên thành viên không hợp lệ' };
       const nextName = isGuestId(ids[i]) ? GUEST_NAME : names[i];
       await sql`UPDATE players SET name = ${nextName}, active = ${activeIds.has(ids[i])} WHERE id = ${ids[i]}`;
     }
@@ -270,7 +270,7 @@ export async function updatePlayersAction(formData: FormData) {
     return { success: true };
   } catch (error) {
     console.error('Failed to update players:', error);
-    return { error: 'Lá»—i khi lÆ°u danh sÃ¡ch. Kiá»ƒm tra láº¡i database/setup.' };
+    return { error: 'Lỗi khi lưu danh sách. Kiểm tra lại database/setup.' };
   }
 }
 
@@ -292,8 +292,8 @@ export async function deletePlayerAction(formData: FormData) {
 
   try {
     const id = String(formData.get('id') || '').trim();
-    if (isGuestId(id)) return { error: 'KhÃ´ng Ä‘Æ°á»£c xÃ³a KhÃ¡ch' };
-    if (!id) return { error: 'ThÃ nh viÃªn khÃ´ng há»£p lá»‡' };
+    if (isGuestId(id)) return { error: 'Không được xóa Khách' };
+    if (!id) return { error: 'Thành viên không hợp lệ' };
 
     await ensureArchiveTable();
     await ensureSoftDeleteColumns();
@@ -301,7 +301,7 @@ export async function deletePlayerAction(formData: FormData) {
 
     // Get player info
     const { rows: players } = await sql`SELECT * FROM players WHERE id = ${id}`;
-    if (players.length === 0) return { error: 'KhÃ´ng tÃ¬m tháº¥y thÃ nh viÃªn' };
+    if (players.length === 0) return { error: 'Không tìm thấy thành viên' };
 
     // Get all related matches
     const { rows: matches } = await sql`
@@ -338,7 +338,7 @@ export async function deletePlayerAction(formData: FormData) {
     return { success: true };
   } catch (error) {
     console.error('Failed to destructive delete player:', error);
-    return { error: 'Lá»—i khi xÃ³a thÃ nh viÃªn vÃ  dá»¯ liá»‡u liÃªn quan.' };
+    return { error: 'Lỗi khi xóa thành viên và dữ liệu liên quan.' };
   }
 }
 
@@ -347,7 +347,7 @@ export async function deleteSeasonAction(formData: FormData) {
 
   try {
     const name = String(formData.get('name') || '').trim();
-    if (!name) return { error: 'Season khÃ´ng há»£p lá»‡' };
+    if (!name) return { error: 'Season không hợp lệ' };
 
     await ensureArchiveTable();
 
@@ -381,7 +381,7 @@ export async function deleteSeasonAction(formData: FormData) {
     return { success: true };
   } catch (error) {
     console.error('Failed to delete season:', error);
-    return { error: 'Lá»—i khi xÃ³a Season.' };
+    return { error: 'Lỗi khi xóa Season.' };
   }
 }
 
@@ -424,7 +424,7 @@ export async function endSeasonAction() {
     return { success: true };
   } catch (error) {
     console.error('Failed to end season:', error);
-    return { error: 'Lá»—i khi káº¿t thÃºc Season.' };
+    return { error: 'Lỗi khi kết thúc Season.' };
   }
 }
 
@@ -434,7 +434,7 @@ export async function createSeasonAction(formData: FormData) {
   try {
     await ensureSeasonTable();
     const name = String(formData.get('name') || '').trim();
-    if (!name) return { error: 'TÃªn Season khÃ´ng há»£p lá»‡' };
+    if (!name) return { error: 'Tên Season không hợp lệ' };
 
     await sql`UPDATE seasons SET active = false WHERE active = true`;
     await sql`
@@ -449,7 +449,7 @@ export async function createSeasonAction(formData: FormData) {
     return { success: true };
   } catch (error) {
     console.error('Failed to create season:', error);
-    return { error: 'Lá»—i khi táº¡o Season.' };
+    return { error: 'Lỗi khi tạo Season.' };
   }
 }
 
@@ -459,7 +459,7 @@ export async function setActiveSeasonAction(formData: FormData) {
   try {
     await ensureSeasonTable();
     const name = String(formData.get('name') || '').trim();
-    if (!name) return { error: 'Season khÃ´ng há»£p lá»‡' };
+    if (!name) return { error: 'Season không hợp lệ' };
 
     await sql`UPDATE seasons SET active = false`;
     await sql`
@@ -474,7 +474,7 @@ export async function setActiveSeasonAction(formData: FormData) {
     return { success: true };
   } catch (error) {
     console.error('Failed to set active season:', error);
-    return { error: 'Lá»—i khi Ä‘áº·t Season kÃ­ch hoáº¡t.' };
+    return { error: 'Lỗi khi đặt Season kích hoạt.' };
   }
 }
 
@@ -484,7 +484,7 @@ export async function updateFineAction(formData: FormData) {
   try {
     const value = String(formData.get('lose_money') || '').trim();
     const amount = Number(value);
-    if (!Number.isFinite(amount) || amount < 0) return { error: 'Má»©c pháº¡t khÃ´ng há»£p lá»‡' };
+    if (!Number.isFinite(amount) || amount < 0) return { error: 'Mức phạt không hợp lệ' };
 
     await setConfigValue('lose_money', String(Math.round(amount)));
     revalidatePath('/');
@@ -492,7 +492,7 @@ export async function updateFineAction(formData: FormData) {
     return { success: true };
   } catch (error) {
     console.error('Failed to update fine:', error);
-    return { error: 'Lá»—i khi lÆ°u má»©c pháº¡t.' };
+    return { error: 'Lỗi khi lưu mức phạt.' };
   }
 }
 
@@ -570,7 +570,7 @@ export async function rebuildStatsAction() {
   } catch (error: unknown) {
     console.error('Rebuild failed:', error);
     const message = error instanceof Error ? error.message : String(error);
-    return { error: `Loi he thong: ${message}` };
+    return { error: `Lỗi hệ thống: ${message}` };
   }
 }
 
@@ -612,7 +612,7 @@ export async function restoreFromArchive(archiveId: number) {
 
   try {
     const { rows } = await sql`SELECT * FROM archives WHERE id = ${archiveId}`;
-    if (rows.length === 0) return { error: 'KhÃ´ng tÃ¬m tháº¥y dá»¯ liá»‡u lÆ°u trá»¯' };
+    if (rows.length === 0) return { error: 'Không tìm thấy dữ liệu lưu trữ' };
     
     const item = rows[0];
     const data = item.data;
@@ -637,7 +637,7 @@ export async function restoreFromArchive(archiveId: number) {
     return { success: true };
   } catch (error) {
     console.error('Restore failed:', error);
-    return { error: 'Lá»—i khi khÃ´i phá»¥c dá»¯ liá»‡u' };
+    return { error: 'Lỗi khi khôi phục dữ liệu' };
   }
 }
 
@@ -646,7 +646,7 @@ export async function verifyAdminAction(pass: string) {
   if (pass === adminPass) {
     return { success: true };
   }
-  return { success: false, error: 'Máº­t kháº©u sai' };
+  return { success: false, error: 'Mật khẩu sai' };
 }
 
 export async function getMatchesAfterAction(lastId: string) {
@@ -702,7 +702,7 @@ export async function togglePlayerActiveAction(playerId: string, active: boolean
     revalidatePath('/');
     return { success: true };
   } catch {
-    return { error: 'Loi khi cap nhat trang thai thanh vien' };
+    return { error: 'Lỗi khi cập nhật trạng thái thành viên' };
   }
 }
 
@@ -719,11 +719,11 @@ export async function updateMatchAction(formData: FormData) {
     const lose_score = parseInt(formData.get('lose_score') as string);
     const dateStr = String(formData.get('date') || '');
 
-    if (!id || !win_1 || !lose_1) return { error: 'ThÃ´ng tin tráº­n Ä‘áº¥u khÃ´ng há»£p lá»‡' };
+    if (!id || !win_1 || !lose_1) return { error: 'Thông tin trận đấu không hợp lệ' };
 
     // Get old match first to reverse stats
     const { rows } = await sql`SELECT * FROM matches WHERE id = ${id}`;
-    if (rows.length === 0) return { error: 'KhÃ´ng tÃ¬m tháº¥y tráº­n Ä‘áº¥u cÅ©' };
+    if (rows.length === 0) return { error: 'Không tìm thấy trận đấu cũ' };
     const old = rows[0];
 
     const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
@@ -768,7 +768,7 @@ export async function updateMatchAction(formData: FormData) {
   } catch (error: unknown) {
     console.error('Update match failed:', error);
     const message = error instanceof Error ? error.message : String(error);
-    return { error: `Loi khi sua tran dau: ${message}` };
+    return { error: `Lỗi khi sửa trận đấu: ${message}` };
   }
 }
 

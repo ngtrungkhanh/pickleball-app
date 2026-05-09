@@ -129,3 +129,8 @@ repo.
   remarks, and form trend comparison against the previous 5 matches.
 - Fixed the desktop score-entry player picker so its dropdown can extend outside
   the score card instead of being clipped by the card container.
+
+### Text Encoding Cleanup
+
+- Cleaned up mojibake in Vietnamese admin/dashboard/action messages so UI and
+  server-action errors render readable UTF-8 text.

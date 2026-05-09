@@ -12,6 +12,6 @@ export function shouldBlockPreviewWrites() {
 
 export function previewWriteBlockedResult() {
   return {
-    error: 'Preview dang dung chung database voi production. Da chan thao tac ghi de bao ve data that.',
+    error: 'Preview đang dùng chung database với production. Đã chặn thao tác ghi để bảo vệ data thật.',
   };
 }

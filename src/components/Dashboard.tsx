@@ -90,7 +90,7 @@ export default function Dashboard({
 
       {previewWritesBlocked && (
         <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-left text-xs font-bold text-amber-200">
-          Dev preview dang dung chung database voi production nen cac thao tac ghi/sua/xoa da bi khoa de bao ve data that.
+          Dev preview đang dùng chung database với production nên các thao tác ghi/sửa/xóa đã bị khóa để bảo vệ data thật.
         </div>
       )}
 
