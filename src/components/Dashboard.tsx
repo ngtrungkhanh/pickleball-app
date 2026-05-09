@@ -12,6 +12,7 @@ type Player = { id: string; name: string; active?: boolean; [key: string]: unkno
 type Match = { id?: string; date?: string; season?: string; [key: string]: unknown };
 type Season = { id: string; name: string; active?: boolean; start_date?: string };
 const EDIT_EVENT = 'pickleball-edit-mode-change';
+const DESKTOP_PANEL_WIDTH = 'mx-auto w-full lg:w-[80%]';
 
 function subscribeEditMode(callback: () => void) {
   window.addEventListener('storage', callback);
@@ -77,7 +78,7 @@ export default function Dashboard({
 
   return (
     <div className="space-y-5 transition-all duration-500 w-full">
-      <div className="flex items-center justify-end gap-2">
+      <div className={`${DESKTOP_PANEL_WIDTH} flex items-center justify-end gap-2`}>
         <Link href="/analysis" className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
           <BarChart3 className="w-4 h-4" />
           Trung tâm phân tích
@@ -89,28 +90,32 @@ export default function Dashboard({
       </div>
 
       {previewWritesBlocked && (
-        <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-left text-xs font-bold text-amber-200">
+        <div className={`${DESKTOP_PANEL_WIDTH} rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-left text-xs font-bold text-amber-200`}>
           Dev preview đang dùng chung database với production nên các thao tác ghi/sửa/xóa đã bị khóa để bảo vệ data thật.
         </div>
       )}
 
       {/* 1. Summary */}
-      <SummaryGrid players={initialPlayers} matches={viewedMatches} loseMoney={loseMoney} />
+      <div className={DESKTOP_PANEL_WIDTH}>
+        <SummaryGrid players={initialPlayers} matches={viewedMatches} loseMoney={loseMoney} />
+      </div>
 
       {/* 2. Leaderboard */}
-      <Leaderboard
-        players={initialPlayers}
-        matches={matches}
-        seasons={initialSeasons}
-        activeSeason={activeSeason}
-        selectedSeason={selectedSeason}
-        onSeasonChange={setSelectedSeason}
-        loseMoney={loseMoney}
-      />
+      <div className={DESKTOP_PANEL_WIDTH}>
+        <Leaderboard
+          players={initialPlayers}
+          matches={matches}
+          seasons={initialSeasons}
+          activeSeason={activeSeason}
+          selectedSeason={selectedSeason}
+          onSeasonChange={setSelectedSeason}
+          loseMoney={loseMoney}
+        />
+      </div>
 
       {/* 3. Score Form */}
       {canWrite && (
-        <div>
+        <div className={DESKTOP_PANEL_WIDTH}>
           <div className="flex items-center gap-2.5 px-1 mb-3">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
@@ -118,14 +123,16 @@ export default function Dashboard({
             </span>
             <h3 className="font-black text-[10px] sm:text-xs uppercase tracking-[0.4em] text-slate-300/70">Ghi kết quả</h3>
           </div>
-          <div className="relative z-30 mx-auto w-full lg:w-[80%] rounded-2xl border border-slate-500/25 bg-[#142034]/95 overflow-visible">
+          <div className="relative z-30 rounded-2xl border border-slate-500/25 bg-[#142034]/95 overflow-visible">
             <ScoreForm players={initialPlayers} onAddMatch={addLocalMatch} activeSeason={activeSeason} />
           </div>
         </div>
       )}
 
       {/* 4. Recent History */}
-      <RecentHistory matches={viewedMatches} players={initialPlayers} canEdit={canWrite} />
+      <div className={DESKTOP_PANEL_WIDTH}>
+        <RecentHistory matches={viewedMatches} players={initialPlayers} canEdit={canWrite} />
+      </div>
 
       <SettingsModal
         open={settingsOpen}

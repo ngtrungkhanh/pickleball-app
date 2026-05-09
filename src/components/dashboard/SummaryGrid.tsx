@@ -46,11 +46,11 @@ export function SummaryGrid({ matches, loseMoney = 5000 }: SummaryGridProps) {
             </div>
 
             <div className="flex items-baseline justify-start sm:justify-end gap-1.5 shrink-0 min-w-0 w-full sm:w-auto">
-              <span className="min-w-0 break-words text-xl min-[380px]:text-2xl sm:text-3xl 2xl:text-4xl font-black text-white leading-none">
+              <span className="min-w-0 break-words text-xl min-[380px]:text-2xl sm:text-3xl lg:text-2xl xl:text-3xl 2xl:text-4xl font-black text-white leading-none">
                 {big}
               </span>
               {unit && (
-                <span className="text-sm sm:text-base 2xl:text-lg font-extrabold text-slate-300 lowercase">
+                <span className="text-sm sm:text-base lg:text-sm xl:text-base 2xl:text-lg font-extrabold text-slate-300 lowercase">
                   {unit}
                 </span>
               )}

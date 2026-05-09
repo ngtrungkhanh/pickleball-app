@@ -138,6 +138,9 @@ repo.
 ### Dashboard Score Entry Tuning
 
 - Narrowed the desktop score-entry panel to about 80% of the dashboard width.
+- Aligned desktop dashboard controls, summary, leaderboard, score entry, and
+  recent history to the same compact content width while keeping mobile full
+  width.
 - Removed search from the score-entry player picker for the small member list.
 - Made the score box larger and taller while keeping player-name fields more
   compact.
