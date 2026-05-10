@@ -166,3 +166,10 @@ repo.
   of sorting by raw win/loss rate alone.
 - Simplified partner/rival/easy labels so they read as direct status text, not
   hidden-context slang.
+
+### Detail Insights Vocabulary Overhaul
+
+- Revamped "Dòng 2" descriptive labels in expanded leaderboard details to use more
+  consistent, easy-to-read Vietnamese sports terminology (e.g., "Cặp ruột" -> "Cặp bài trùng",
+  "Thiên địch" -> "Kị rơ", "Thua cách biệt" -> "Khắc chế cứng").
+- Significantly expanded variation arrays for footer notes across all four panels (Form, Partner, Tough Rival, Easy Rival) by adding 100+ new string variations to further reduce visible text repetition.

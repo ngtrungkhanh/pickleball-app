@@ -230,37 +230,37 @@ export function getSeasonSummaryStats(matches: StatMatch[], loseMoney: number = 
 }
 
 const FORM_LABELS: Record<string, string> = {
-  WWWWW: "Hủy diệt",
-  WWWWL: "Quá cháy",
+  WWWWW: "Bất bại",
+  WWWWL: "Đang cháy",
   WWWLW: "Vào guồng",
-  WWWLL: "Hồi sinh mạnh",
-  WWLWW: "Đang hăng",
+  WWWLL: "Bật dậy mạnh",
+  WWLWW: "Phong độ cao",
   WWLWL: "Giữ nhịp xanh",
-  WWLLW: "Vừa bật lại",
-  WWLLL: "Leo khỏi đáy",
+  WWLLW: "Vừa hồi lại",
+  WWLLL: "Bắt đầu hồi",
   WLWWW: "Vấp nhẹ",
   WLWWL: "Chệch nhịp nhẹ",
-  WLWLW: "Thắng thua đan xen",
+  WLWLW: "Thắng thua xen kẽ",
   WLWLL: "Có dấu hồi",
-  WLLWW: "Vừa tỉnh nhịp",
+  WLLWW: "Tỉnh giấc",
   WLLWL: "Tín hiệu xanh",
-  WLLLW: "Le lói",
-  WLLLL: "Cứu một nhịp",
-  LWWWW: "Đứt mạch thắng",
+  WLLLW: "Chớm hồi",
+  WLLLL: "Cắt mạch thua",
+  LWWWW: "Đứt chuỗi thắng",
   LWWWL: "Hạ nhiệt nhẹ",
-  LWWLW: "Chưa ổn định",
+  LWWLW: "Hụt đà hưng phấn",
   LWWLL: "Vừa hụt hơi",
   LWLWW: "Khựng nhẹ",
-  LWLWL: "Lúc sáng lúc tối",
+  LWLWL: "Bấp bênh",
   LWLLW: "Khó đoán",
   LWLLL: "Chông chênh",
   LLWWW: "Tụt nhịp",
   LLWWL: "Trượt form",
-  LLWLW: "Cứu chưa kịp",
+  LLWLW: "Hụt hơi",
   LLWLL: "Sa sút",
   LLLWW: "Rơi phong độ",
   LLLWL: "Lao dốc",
-  LLLLW: "Đỏ kéo dài",
+  LLLLW: "Rơi tự do",
   LLLLL: "Khủng hoảng",
 };
 
@@ -331,6 +331,10 @@ function createInsightCandidates({
       'Đánh thêm rồi tính',
       'Form còn đang giấu',
       'Chưa đủ mẫu đẹp',
+      'Đang gom dữ liệu',
+      'Cần thêm game kiểm',
+      'Chờ đủ 5 trận gần',
+      'Mẫu thử còn thiếu',
     ], 'short-sample');
     return { candidates, pattern, recent };
   }
@@ -345,6 +349,10 @@ function createInsightCandidates({
       'Cú quay xe đẹp',
       'Gần đây xanh hơn',
       'Mới thắng lại mượt',
+      'Bật dậy kịp lúc',
+      'Lấy lại đà thắng',
+      'Vừa kịp hồi sinh',
+      'Đang vào form lại',
     ], 'last3-recover');
   }
   if (last3Wins === 0 && recentWins >= 2) {
@@ -356,6 +364,11 @@ function createInsightCandidates({
       'Đà cuối hơi lệch',
       'Mới tụt khá rõ',
       'Game mới hơi đuối',
+      'Ba trận gần hụt hơi',
+      'Đuôi form kém sắc',
+      'Cần chặn đà rơi',
+      'Mới chựng lại chút',
+      'Khựng lại gần đây',
     ], 'last3-drop');
   }
   if (pattern === 'WLLLL') {
@@ -365,6 +378,11 @@ function createInsightCandidates({
       'Mới kéo lại điểm',
       'Vừa thở được chút',
       'Có tín hiệu xanh',
+      'Dứt được mạch thua',
+      'Phanh kịp đà rơi',
+      'Trận thắng quý giá',
+      'Vừa có tin vui',
+      'Gỡ gạc kịp thời',
     ], 'cut-red');
   }
   if (pattern === 'LWWWW') {
@@ -374,6 +392,11 @@ function createInsightCandidates({
       'Một đỏ chưa sao',
       'Mạch xanh vừa khựng',
       'Nền form vẫn ổn',
+      'Chút vấp nhỏ thôi',
+      'Mới đứt dây thắng',
+      'Trượt chân một nhịp',
+      'Vẫn trong tầm kiểm',
+      'Chỉ là tai nạn nhẹ',
     ], 'lost-streak');
   }
 
@@ -394,6 +417,12 @@ function createInsightCandidates({
         'Đang giữ nhiệt tốt',
         'Thắng liền có nét',
         'Phong độ đang thơm',
+        'Lên đồng thật sự',
+        'Chưa thấy điểm dừng',
+        'Đánh đâu thắng đó',
+        'Nhiệt đang cực cao',
+        'Quá khó để cản',
+        'Dây xanh rực rỡ',
       ], `win-streak-${streakCount}`);
     } else {
       add('streak', 94 + streakCount, [
@@ -410,6 +439,13 @@ function createInsightCandidates({
         'Cần kéo mood lên',
         'Phong độ hơi lạnh',
         'Cần thắng để thở',
+        'Chuỗi đen khó chịu',
+        'Đang bị kẹt nhịp',
+        'Dây đỏ đeo bám',
+        'Thời chưa tới rồi',
+        'Gặp chút vận hạn',
+        'Cố qua cơn bĩ cực',
+        'Cần đổi phong thủy',
       ], `loss-streak-${streakCount}`);
     }
   }
@@ -428,6 +464,10 @@ function createInsightCandidates({
       'Điểm cứ dí nhau',
       'Toàn trận đau tim',
       'Thắng thua sát mép',
+      'Tim đập thình thịch',
+      'Căng như dây đàn',
+      'Nín thở từng điểm',
+      'Rượt đuổi tỉ số gắt',
     ], 'close-games');
   }
   if (closeWins >= 2) {
@@ -444,6 +484,10 @@ function createInsightCandidates({
       'Chốt game khá tỉnh',
       'Thắng kiểu chịu lực',
       'Sát nút mà bén',
+      'Vua lội ngược dòng',
+      'Lạnh lùng dứt điểm',
+      'Bóp nghẹt phút chót',
+      'Lì lợm ăn tiền',
     ], 'close-wins');
   }
   if (closeLosses >= 2) {
@@ -460,6 +504,10 @@ function createInsightCandidates({
       'Cách thắng một nhịp',
       'Chưa hề vỡ trận',
       'Đỏ nhưng có nét',
+      'Hụt chút may mắn',
+      'Chưa đủ duyên ăn',
+      'Kém chút lạnh lùng',
+      'Thiếu một tí may',
     ], 'close-losses');
   }
   if (blowoutWins >= 2 || avgDiff >= 5) {
@@ -476,6 +524,10 @@ function createInsightCandidates({
       'Kèo thắng hơi lực',
       'Đẩy điểm khá xa',
       'Thắng không lăn tăn',
+      'Out trình nhẹ rồi',
+      'Dễ như ăn kẹo',
+      'Thắng đẹp miễn bàn',
+      'Bóp nghẹt đối thủ',
     ], 'dominance');
   }
   if (blowoutLosses >= 2 || avgDiff <= -5) {
@@ -491,6 +543,10 @@ function createInsightCandidates({
       'Ván đỏ hơi sâu',
       'Điểm rơi hơi nhanh',
       'Bị bứt hơi sớm',
+      'Khó đuổi kịp điểm',
+      'Mất thế trận sớm',
+      'Cần vá lại hàng thủ',
+      'Bể trận hơi nhanh',
     ], 'negative-diff');
   }
 
@@ -508,6 +564,10 @@ function createInsightCandidates({
       'Vừa bay vừa rơi',
       'Đang hơi khó đọc',
       'Bảng điện hơi loạn',
+      'Thất thường khó tả',
+      'Lúc lên voi xuống chó',
+      'Chưa biết đường nào',
+      'Nghiêng ngả khó tin',
     ], 'high-alternation');
   } else if (alternations >= 3) {
     add('volatile', 78, [
@@ -517,6 +577,9 @@ function createInsightCandidates({
       'Vẫn hơi khó đọc',
       'Form còn lắc nhẹ',
       'Nhịp chưa vào khuôn',
+      'Chưa thực sự ổn',
+      'Cần giữ nhịp hơn',
+      'Hơi bị chông chênh',
     ], 'mid-alternation');
   }
 
@@ -535,6 +598,10 @@ function createInsightCandidates({
         'Đang nhích lên nhẹ',
         'Form mới sáng hơn',
         'Cú cải thiện rõ',
+        'Đang dần lấy lại',
+        'Mới tiến bộ lên',
+        'Đang vượt ngưỡng cũ',
+        'Khởi sắc trông thấy',
       ], 'trend-up');
     } else if (deltaWins <= -2 || avgDiff - recentPrevDiff <= -4) {
       add('trend', 82, [
@@ -544,6 +611,10 @@ function createInsightCandidates({
         'Đang tụt khỏi nền',
         'Nền cũ hơi lung lay',
         'Cần giữ lại nhịp',
+        'Bị hụt hơi dần',
+        'Đang chiều hướng đi xuống',
+        'Đang trượt nhẹ',
+        'Kém hơn đợt trước',
       ], 'trend-down');
     } else if (recentWins >= 3) {
       add('trend', 72, [
@@ -551,6 +622,9 @@ function createInsightCandidates({
         'Nhịp ổn định dần',
         'Vẫn giữ được nhiệt',
         'Nền form khá ổn',
+        'Đang trụ vững vàng',
+        'Giữ vững thế trận',
+        'Ổn định không đổi',
       ], 'trend-stable-good');
     }
   }
@@ -575,6 +649,10 @@ function createInsightCandidates({
       'Đang thử nhiều bài',
       'Chưa ổn định cặp',
       'Partner xoay khá nhiều',
+      'Chưa chốt được cặp',
+      'Thử nghiệm nhiều đội hình',
+      'Xoay tua liên tục',
+      'Chưa tìm được cạ',
     ], 'partner-many');
   } else if (bestRecentPartner && bestRecentPartner.total >= 3 && bestRecentPartner.wins / bestRecentPartner.total >= 0.67) {
     add('partner', 74, [
@@ -584,6 +662,10 @@ function createInsightCandidates({
       'Ít đổi cặp hơn',
       'Nhịp đôi khá tốt',
       'Đánh đôi khá vào',
+      'Hợp tác khá ăn ý',
+      'Bắt nhịp đôi tốt',
+      'Phối hợp có nét',
+      'Di chuyển khá đồng đều',
     ], 'partner-good');
   } else if (bestRecentPartner && bestRecentPartner.total >= 3 && bestRecentPartner.wins / bestRecentPartner.total <= 0.34) {
     add('partner', 70, [
@@ -592,6 +674,10 @@ function createInsightCandidates({
       'Cặp kèo hơi lệch',
       'Nhịp đôi chưa mượt',
       'Đánh đôi còn chao',
+      'Chưa hiểu ý nhau',
+      'Cần giao tiếp tốt hơn',
+      'Giẫm chân nhẹ',
+      'Chưa khớp được nhịp',
     ], 'partner-rough');
   }
 
@@ -612,6 +698,10 @@ function createInsightCandidates({
       'Qua kèo khó đẹp',
       'Kèo cứng vẫn qua',
       'Lịch nặng vẫn xanh',
+      'Vượt chướng ngại vật ổn',
+      'Không ngán top trên',
+      'Chuyên gia diệt khổng lồ',
+      'Qua ải lớn trót lọt',
     ], 'hard-won');
   } else if (hardMatches >= 3) {
     add('opponent', 72, [
@@ -620,6 +710,10 @@ function createInsightCandidates({
       'Bị ép lịch hơi nặng',
       'Kèo vừa rồi không nhẹ',
       'Lịch đấu khá cay',
+      'Toàn gặp thứ dữ',
+      'Lịch đấu căng đét',
+      'Đụng độ hàng cứng',
+      'Bảng trắng lịch đen',
     ], 'hard-schedule');
   }
   if (easierMatches >= 3 && recentWins >= 4) {
@@ -628,6 +722,9 @@ function createInsightCandidates({
       'Cửa sáng tận dụng tốt',
       'Gặp dễ không phí',
       'Kèo vừa sức rất ổn',
+      'Ăn điểm nhẹ nhàng',
+      'Xử lý gọn gàng',
+      'Vượt ải khá êm',
     ], 'easy-won');
   } else if (easierMatches >= 3 && recentWins <= 2) {
     add('opponent', 70, [
@@ -635,6 +732,9 @@ function createInsightCandidates({
       'Kèo thơm hơi phí',
       'Cửa sáng chưa mở',
       'Kèo vừa sức còn chao',
+      'Đánh rơi điểm tiếc',
+      'Sẩy chân trận nhẹ',
+      'Chưa tận dụng tốt',
     ], 'easy-missed');
   }
 
@@ -648,6 +748,9 @@ function createInsightCandidates({
       'Ví cần hạ nhiệt',
       'Đỏ là ví đau',
       'Cần cứu cái ví',
+      'Mòn ví quá nhanh',
+      'Cái giá khá đắt',
+      'Phí chồng thêm phí',
     ], 'fine-pressure');
   }
 
@@ -767,11 +870,11 @@ function pushPairResult(stat: PairStat, result: string, diff: number, index: num
 }
 
 function partnerLabel(stat: PairStat & { rate: number; avgDiff: number }) {
-  if (stat.total >= 12 && stat.rate >= 70) return "Cặp ruột";
+  if (stat.total >= 12 && stat.rate >= 70) return "Cặp bài trùng";
   if (stat.total >= 8 && stat.rate >= 70) return "Cạ cứng";
-  if (stat.total >= 5 && stat.rate >= 80) return "Cặp hợp";
-  if (stat.total >= 5 && stat.avgDiff >= 4) return "Đôi có lực";
-  if (stat.total >= 8 && stat.rate >= 60) return "Đối tác tin cậy";
+  if (stat.total >= 5 && stat.rate >= 80) return "Hợp cạ";
+  if (stat.total >= 5 && stat.avgDiff >= 4) return "Cặp có lực";
+  if (stat.total >= 8 && stat.rate >= 60) return "Đồng đội tin cậy";
   return "Đối tác ổn";
 }
 
@@ -794,6 +897,9 @@ function partnerNote(stat: PairStat & { rate: number; avgDiff: number; score: nu
       'Không phải ăn may',
       'Sample khá chắc rồi',
       'Có nền thật sự',
+      'Sinergy cực kỳ tốt',
+      'Bài trùng của nhau',
+      'Hiểu ý nhau từng chút',
     ], 'large-good');
   }
   if (stat.total >= 5 && stat.total < 8 && stat.rate >= 80) {
@@ -805,6 +911,8 @@ function partnerNote(stat: PairStat & { rate: number; avgDiff: number; score: nu
       'Đang có mùi hợp',
       'Cần thêm trận kiểm',
       'Tín hiệu rất xanh',
+      'Vừa bắt nhịp đã nổ',
+      'Tiềm năng cặp này lớn',
     ], 'small-hot');
   }
   if (recentWins >= 3) {
@@ -815,6 +923,8 @@ function partnerNote(stat: PairStat & { rate: number; avgDiff: number; score: nu
       'Nhịp mới khá mượt',
       'Mấy trận mới bén',
       'Vừa ghép đã ổn',
+      'Mới đi dây thắng',
+      'Nhiệt cặp này đang lên',
     ], 'recent-hot');
   }
   if (stat.avgDiff >= 3) {
@@ -825,6 +935,8 @@ function partnerNote(stat: PairStat & { rate: number; avgDiff: number; score: nu
       'Ít bị kéo sát',
       'Đẩy điểm rất tốt',
       'Game đôi khá sáng',
+      'Điểm win đậm phết',
+      'Cách biệt khá an toàn',
     ], 'diff-good');
   }
   if (stat.recent.filter(r => r === 'W').length >= 2 && stat.diffs.filter(diff => diff > 0 && diff <= 2).length >= 2) {
@@ -834,6 +946,8 @@ function partnerNote(stat: PairStat & { rate: number; avgDiff: number; score: nu
       'Chốt game khá tỉnh',
       'Cặp này chịu nhiệt',
       'Sát nút vẫn xanh',
+      'Vượt bão phút cuối',
+      'Bản lĩnh cặp này cao',
     ], 'clutch');
   }
   if (stat.recent10Count >= 4) {
@@ -843,6 +957,8 @@ function partnerNote(stat: PairStat & { rate: number; avgDiff: number; score: nu
       'Có vẻ vào bài',
       'Nhịp đôi đang ổn',
       'Cặp này dễ vào guồng',
+      'Tương tác khá khớp',
+      'Hợp cạ ổn định',
     ], 'stable');
   }
   if (candidates.length === 0) {
@@ -860,18 +976,18 @@ function partnerNote(stat: PairStat & { rate: number; avgDiff: number; score: nu
 
 function rivalLabel(stat: PairStat & { winRate: number; lossRate: number; avgDiff: number }, kind: 'tough' | 'easy') {
   if (kind === 'tough') {
-    if (stat.total >= 10 && stat.lossRate >= 70) return "Thiên địch";
-    if (stat.avgDiff <= -4) return "Thua cách biệt";
-    if (stat.lossRate >= 65) return "Kèo rất khó";
-    if (stat.diffs.filter(diff => diff < 0 && diff >= -2).length >= 2) return "Thua sát";
-    return "Kèo khó";
+    if (stat.total >= 10 && stat.lossRate >= 70) return "Kị rơ";
+    if (stat.avgDiff <= -4) return "Khắc chế cứng";
+    if (stat.lossRate >= 65) return "Kèo khó xơi";
+    if (stat.diffs.filter(diff => diff < 0 && diff >= -2).length >= 2) return "Tiếc nuối";
+    return "Dưới cơ";
   }
 
-  if (stat.total >= 10 && stat.winRate >= 75) return "Kèo dễ";
-  if (stat.avgDiff >= 4) return "Thắng cách biệt";
-  if (stat.winRate >= 75) return "Cửa sáng";
-  if (stat.diffs.filter(diff => diff > 0 && diff <= 2).length >= 2) return "Thắng sát";
-  return "Kèo dễ";
+  if (stat.total >= 10 && stat.winRate >= 75) return "Kèo thơm";
+  if (stat.avgDiff >= 4) return "Trên cơ";
+  if (stat.winRate >= 75) return "Sáng cửa";
+  if (stat.diffs.filter(diff => diff > 0 && diff <= 2).length >= 2) return "Nhỉnh hơn chút";
+  return "Dễ thở";
 }
 
 function toughRivalNote(stat: PairStat & { lossRate: number; avgDiff: number; score: number }, seed: string) {
@@ -889,6 +1005,9 @@ function toughRivalNote(stat: PairStat & { lossRate: number; avgDiff: number; sc
       'Cần đổi bài gấp',
       'Gặp lại hơi căng',
       'Đang bị bắt nhịp',
+      'Chuỗi thua khá nhức',
+      'Cần xóa dớp đen',
+      'Ám ảnh mấy trận rồi',
     ], 'recent-loss');
   }
   if (stat.lossRate >= 70 && stat.total >= 8) {
@@ -899,6 +1018,8 @@ function toughRivalNote(stat: PairStat & { lossRate: number; avgDiff: number; sc
       'Kèo này hơi ám',
       'Drama còn tích tụ',
       'Cần bài khác khi gặp',
+      'Dớp này hơi nặng',
+      'Đúng đối cứng cựa',
     ], 'high-loss');
   }
   if (stat.avgDiff <= -4) {
@@ -917,6 +1038,8 @@ function toughRivalNote(stat: PairStat & { lossRate: number; avgDiff: number; sc
       'Kèo căng chưa qua',
       'Sát nút hơi tiếc',
       'Có cửa nếu chốt tốt',
+      'Đánh sát mép vẫn thua',
+      'Thiếu tí bứt phá',
     ], 'close-loss');
   }
   if (candidates.length === 0) {
@@ -947,6 +1070,8 @@ function easyRivalNote(stat: PairStat & { winRate: number; avgDiff: number; scor
       'Mấy lần mới rất ổn',
       'Đang có vía rõ',
       'Nhịp gặp này tốt',
+      'Nuốt gọn mấy trận gần',
+      'Vía đối đầu đang ngon',
     ], 'recent-win');
   }
   if (stat.winRate >= 75 && stat.total >= 8) {
@@ -957,6 +1082,8 @@ function easyRivalNote(stat: PairStat & { winRate: number; avgDiff: number; scor
       'Gặp là dễ vào nhịp',
       'Không dễ, nhưng thuận',
       'Đúng bài nên dễ thở',
+      'Đã tìm ra bài giải',
+      'Tự tin khi chạm mặt',
     ], 'high-win');
   }
   if (stat.avgDiff >= 4) {
