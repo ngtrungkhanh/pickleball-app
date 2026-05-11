@@ -25,8 +25,8 @@ const navItems = [
 
 // Matrix sub-tabs
 const matrixTabs = [
-  { id: 'partner', label: 'Bạn đánh cặp' },
-  { id: 'opponent', label: 'Đối thủ' },
+  { id: 'partner', label: 'Cặp bài trùng' },
+  { id: 'opponent', label: 'Kỵ rơ' },
 ];
 
 type Player = { id: string; name: string; active?: boolean };
@@ -155,9 +155,9 @@ export function AnalysisCenter({
   }, [board]);
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-slate-900">
       {/* Header */}
-      <div className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/[0.06]">
+      <div className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-xl border-b border-white/[0.08]">
         <div className="max-w-[1500px] mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <Link href="/" className="inline-flex items-center gap-2 text-sm font-black text-white/45 hover:text-primary transition-colors">
@@ -262,7 +262,7 @@ export function AnalysisCenter({
                   onClick={() => setActiveNav(item.id)}
                   className={cn(
                     "flex flex-col items-center gap-1 px-4 py-3 transition-all duration-200",
-                    isActive ? "text-primary" : "text-white/30 hover:text-white/60"
+                    isActive ? "text-primary" : "text-white/30 hover:text-white/80"
                   )}
                 >
                   <Icon className={cn("w-5 h-5 transition-transform", isActive && "scale-110")} />
@@ -593,7 +593,7 @@ function MatrixZone({
                   "rounded-2xl border p-4 transition-all hover:scale-[1.01]",
                   isGood 
                     ? "bg-gradient-to-r from-green-500/10 to-transparent border-green-500/30" 
-                    : "bg-slate-900/50 border-white/[0.08]"
+                    : "bg-slate-800 border-white/[0.08]"
                 )}
               >
                 <div className="flex items-center justify-between mb-3">
@@ -637,7 +637,7 @@ function MatrixZone({
           })}
         </div>
       ) : (
-        <div className="rounded-2xl border border-white/[0.08] bg-slate-900/50 p-8 text-center">
+        <div className="rounded-2xl border border-white/[0.08] bg-slate-800 p-8 text-center">
           <p className="text-white/40">Chưa có dữ liệu đối đầu</p>
         </div>
       )}
@@ -684,14 +684,14 @@ function HistoryZone({
             const isDominant = (match.win_score || 0) - (match.lose_score || 0) >= 5;
             
             return (
-              <div key={match.id || index} className="rounded-xl bg-slate-900/50 border border-white/[0.08] p-4">
+              <div key={match.id || index} className="rounded-xl bg-slate-800 border border-white/[0.08] p-4">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs text-white/40">{match.date?.split('T')[0]}</div>
                   <div className={cn(
                     "px-2 py-0.5 rounded-full text-xs font-bold",
                     isClose ? "bg-amber-500/20 text-amber-400" :
                     isDominant ? "bg-green-500/20 text-green-400" :
-                    "bg-slate-700 text-white/60"
+                    "bg-slate-700 text-white/80"
                   )}>
                     {isClose ? "Sát nút" : isDominant ? "Áp đảo" : "Bình thường"}
                   </div>
@@ -723,7 +723,7 @@ function HistoryZone({
           })}
         </div>
       ) : (
-        <div className="rounded-2xl border border-white/[0.08] bg-slate-900/50 p-8 text-center">
+        <div className="rounded-2xl border border-white/[0.08] bg-slate-800 p-8 text-center">
           <p className="text-white/40">Không tìm thấy trận đấu</p>
         </div>
       )}
@@ -760,7 +760,7 @@ function StatCard({ label, value, icon: Icon, color }: { label: string; value: a
 function BentoCard({ title, icon: Icon, children, className }: { title: string; icon: any; children: React.ReactNode; className?: string }) {
   return (
     <div className={cn(
-      "rounded-2xl border border-white/[0.08] bg-slate-900/50 p-5",
+      "rounded-2xl border border-white/[0.08] bg-slate-800 p-5",
       className
     )}>
       <div className="flex items-center gap-2 mb-4">
