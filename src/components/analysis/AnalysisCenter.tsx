@@ -42,7 +42,7 @@ type Match = {
   season?: string;
 };
 type Season = { id?: string; name: string; active?: boolean; start_date?: string };
-type Insight = { type: string; text: string; icon?: string };
+type Insight = { type: string; title?: string; text: string; icon?: string };
 
 export function AnalysisCenter({
   players,
@@ -314,9 +314,9 @@ function HubZone({
         {/* ELO Race (50%) */}
         <div className="space-y-4">
           <BentoCard title="Bảng xếp hạng ELO" icon={TrendingUp}>
-            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-              {board.slice(0, 15).map((player: any, index) => (
-                <div key={player.id} className="flex items-center gap-2 py-1 border-b border-white/5 last:border-0">
+            <div className="space-y-1">
+              {board.slice(0, 8).map((player: any, index) => (
+                <div key={player.id} className="flex items-center gap-2 py-3 border-b border-white/5 last:border-0">
                   <div className={cn(
                     "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shrink-0",
                     index === 0 ? "bg-amber-500/20 text-amber-400" :
@@ -344,17 +344,17 @@ function HubZone({
           <BentoCard title="Nhận xét chuyên gia" icon={Zap} className="border-primary/30 bg-primary/5">
             <div className="space-y-4">
               {insights.map((insight, index) => (
-                <div key={index} className="flex gap-4 p-4 rounded-2xl bg-slate-900/50 border border-white/[0.05] hover:border-primary/20 transition-colors group">
-                  <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                    {insight.type === 'hot_streak' ? <Flame className="w-5 h-5 text-orange-400" /> :
-                     insight.type === 'top_elo' ? <Crown className="w-5 h-5 text-amber-400" /> :
-                     insight.type === 'hot_partnership' ? <Heart className="w-5 h-5 text-pink-400" /> :
-                     insight.type === 'top_fine' ? <Trophy className="w-5 h-5 text-amber-400" /> :
-                     <Zap className="w-5 h-5 text-primary" />}
+                <div key={index} className="flex gap-4 p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-primary/20 transition-all group">
+                  <div className="mt-1 w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center shrink-0 text-lg group-hover:scale-110 transition-transform">
+                    {insight.type.includes('hot') ? '🔥' : insight.type.includes('cold') ? '🧊' : insight.type === 'top_fine' ? '💰' : '👑'}
                   </div>
                   <div className="flex-1">
-                    <div className="text-xs font-black text-white/40 uppercase mb-1 tracking-widest">Insight #{index+1}</div>
-                    <p className="text-white/90 text-sm font-medium leading-relaxed">{insight.text}</p>
+                    <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1">
+                      {insight.title || 'ĐIỂM NHẤN'}
+                    </div>
+                    <p className="text-sm font-bold text-white/90 leading-relaxed">
+                      {insight.text}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -523,9 +523,9 @@ function ProfileZone({
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* Left Column: Stats & Radar (50%) */}
-        <div className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Stats & Radar (4/12) */}
+        <div className="lg:col-span-4 space-y-4">
           <div className="bg-slate-900/50 rounded-2xl p-6 border border-white/[0.05]">
             <select
               value={playerId}
@@ -554,8 +554,8 @@ function ProfileZone({
           </div>
         </div>
 
-        {/* Right Column: Insights & Recent (50%) */}
-        <div className="space-y-4">
+        {/* Right Column: Insights & Recent (8/12) */}
+        <div className="lg:col-span-8 space-y-4">
           <div className="grid grid-cols-3 gap-3">
             <StatCard label="Chuỗi" value={analysis.streak || '--'} icon={Flame} color="orange" />
             <StatCard label="Tổng trận" value={stats?.total || 0} icon={Target} color="blue" />
@@ -594,7 +594,7 @@ function ProfileZone({
 
           <BentoCard title="Form gần đây" icon={History} className="bg-slate-900/40">
             {analysis.recent.slice(0, 3).length > 0 ? (
-              <div className="flex flex-col md:flex-row gap-4 overflow-x-auto pb-2 scrollbar-none">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {analysis.recent.slice(0, 3).map((match: any, i: number) => {
                   const isWinner = [match.win_1, match.win_2].includes(playerId);
                   const partnerId = isWinner 

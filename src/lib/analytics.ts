@@ -14,7 +14,7 @@ type Match = {
 };
 type LeaderboardRow = Player & { total: number; wins: number; losses: number; winRate: number; money: number };
 type MatrixRow = { player: string; partner?: string; opponent?: string; total: number; wins: number; losses: number; rate: number };
-type Insight = { type: string; text: string; icon?: string };
+type Insight = { type: string; title?: string; text: string; icon?: string };
 
 function ids(values: Array<string | null | undefined>) {
   return values.filter(Boolean) as string[];
@@ -188,6 +188,7 @@ export function buildOpponentRows(players: Player[], matches: Match[]) {
 }
 
 export function getName(players: Player[], id?: string | null) {
+  if (!players || !Array.isArray(players)) return id || '--';
   return players.find(p => p.id === id)?.name || id || '--';
 }
 
@@ -205,12 +206,14 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
       if (type === 'W') {
         insights.push({ 
           type: 'hot_streak', 
-          text: `${player.name} đang thắng ${count} trận liên tiếp (Tổng ${stats?.wins}W-${stats?.losses}L)! 🔥` 
+          title: '🔥 ĐANG VÀO FORM',
+          text: `${player.name} đang thắng ${count} trận liên tiếp (Tổng ${stats?.wins}W-${stats?.losses}L)!` 
         });
       } else {
         insights.push({ 
           type: 'cold_streak', 
-          text: `${player.name} đang thua ${count} trận liên tiếp. Cố lên, data đang là ${stats?.wins}W-${stats?.losses}L! 😔` 
+          title: '😔 CHUỖI ĐEN',
+          text: `${player.name} đang thua ${count} trận liên tiếp. Đang ở chuỗi ${stats?.wins}W-${stats?.losses}L!` 
         });
       }
     }
@@ -222,6 +225,7 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
     const best = hotPartners[0];
     insights.push({ 
       type: 'hot_partnership', 
+      title: '🤝 CẶP BÀI TRÙNG',
       text: `Cặp đôi ${best.player} + ${best.partner} cực ăn ý: ${best.rate}% thắng (${best.wins}W-${best.losses}L)!` 
     });
   }
@@ -230,7 +234,8 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
   if (topFines.length > 0 && topFines[0].money > 0) {
     insights.push({ 
       type: 'top_fine', 
-      text: `${topFines[0].name} đóng góp ${topFines[0].money.toLocaleString('vi-VN')}đ - "Nhà tài trợ vàng" của quỹ! 💸` 
+      title: '💸 NHÀ TÀI TRỢ VÀNG',
+      text: `${topFines[0].name} đóng góp ${topFines[0].money.toLocaleString('vi-VN')}đ cho quỹ phạt!` 
     });
   }
 
@@ -239,7 +244,8 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
     const playerName = players.find(p => p.id === topElo[0])?.name;
     insights.push({ 
       type: 'top_elo', 
-      text: `${playerName} đang thống trị BXH với ${topElo[1]} ELO. Ai sẽ lật đổ vương triều này? 👑` 
+      title: '👑 THỐNG TRỊ BXH',
+      text: `${playerName} đang đứng top với ${topElo[1]} ELO. Ai sẽ lật đổ vương triều này?` 
     });
   }
 
