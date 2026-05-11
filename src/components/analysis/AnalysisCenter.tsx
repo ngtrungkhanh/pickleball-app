@@ -234,6 +234,8 @@ export function AnalysisCenter({
             opponentRows={opponentRows}
             players={players}
             visiblePlayers={visiblePlayers}
+            playerId={playerId}
+            setPlayerId={setPlayerId}
           />
         )}
 
@@ -250,9 +252,9 @@ export function AnalysisCenter({
       </div>
 
       {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 backdrop-blur-xl border-t border-white/[0.08] safe-area-pb">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-xl border-t border-white/[0.08] safe-area-pb">
         <div className="max-w-[1500px] mx-auto px-2">
-          <div className="flex items-center justify-around">
+          <div className="flex items-center justify-around md:justify-center md:gap-12">
             {navItems.map(item => {
               const Icon = item.icon;
               const isActive = activeNav === item.id;
@@ -261,14 +263,14 @@ export function AnalysisCenter({
                   key={item.id}
                   onClick={() => setActiveNav(item.id)}
                   className={cn(
-                    "flex flex-col items-center gap-1 px-4 py-3 transition-all duration-200",
+                    "flex flex-col items-center gap-1 px-4 py-3 md:py-4 transition-all duration-200 relative group",
                     isActive ? "text-primary" : "text-white/30 hover:text-white/80"
                   )}
                 >
-                  <Icon className={cn("w-5 h-5 transition-transform", isActive && "scale-110")} />
-                  <span className="text-[10px] font-bold">{item.label}</span>
+                  <Icon className={cn("w-5 h-5 md:w-6 md:h-6 transition-transform", isActive && "scale-110")} />
+                  <span className="text-[10px] md:text-xs font-bold uppercase tracking-wider">{item.label}</span>
                   {isActive && (
-                    <div className="absolute bottom-0 w-12 h-0.5 bg-primary rounded-full" />
+                    <div className="absolute bottom-0 w-12 md:w-16 h-1 bg-primary rounded-full shadow-[0_0_10px_rgba(190,242,100,0.5)]" />
                   )}
                 </button>
               );
@@ -318,10 +320,10 @@ function HubZone({
 
       {/* Bento Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Top ELO Leaders */}
-        <BentoCard title="Top ELO" icon={TrendingUp} className="md:row-span-2">
-          <div className="space-y-3">
-            {topMovers.map((player, index) => (
+        {/* ELO Leaders */}
+        <BentoCard title="Bảng xếp hạng ELO" icon={TrendingUp} className="md:row-span-2">
+          <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+            {board.slice(0, 10).map((player: any, index) => (
               <div key={player.id} className="flex items-center gap-3">
                 <div className={cn(
                   "w-8 h-8 rounded-full flex items-center justify-center text-sm font-black",
@@ -399,9 +401,18 @@ function HubZone({
 
 
 function RadarChart({ data }: { data: { skill: number, brave: number, power: number, experience: number, stability: number } }) {
-  const points = [
-    { x: 50, y: 10 }, { x: 90, y: 35 }, { x: 75, y: 85 }, { x: 25, y: 85 }, { x: 10, y: 35 }
+  const labels = [
+    { name: 'Skill', angle: -90 },
+    { name: 'Brave', angle: -18 },
+    { name: 'Power', angle: 54 },
+    { name: 'Exp', angle: 126 },
+    { name: 'Stab', angle: 198 }
   ];
+
+  const points = labels.map((_, i) => {
+    const angle = (i * 72 - 90) * (Math.PI / 180);
+    return { x: 50 + 40 * Math.cos(angle), y: 50 + 40 * Math.sin(angle) };
+  });
   
   const getPoint = (val: number, index: number) => {
     const angle = (index * 72 - 90) * (Math.PI / 180);
@@ -413,11 +424,50 @@ function RadarChart({ data }: { data: { skill: number, brave: number, power: num
   const path = values.map((v, i) => getPoint(v, i)).join(' ');
 
   return (
-    <svg viewBox="0 0 100 100" className="w-full max-w-[250px] mx-auto">
-      <polygon points={points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#ffffff20" strokeWidth="0.5" />
-      <polygon points={path} fill="rgba(190, 242, 100, 0.4)" stroke="#bef264" strokeWidth="1" />
-      {values.map((v, i) => <circle key={i} cx={getPoint(v, i).split(',')[0]} cy={getPoint(v, i).split(',')[1]} r="2" fill="#bef264" />)}
-    </svg>
+    <div className="relative w-full max-w-[280px] mx-auto pt-6 pb-2">
+      <svg viewBox="0 0 100 100" className="w-full overflow-visible">
+        {/* Background webs */}
+        {[20, 40, 60, 80, 100].map(r => (
+          <polygon 
+            key={r}
+            points={labels.map((_, i) => {
+              const a = (i * 72 - 90) * (Math.PI / 180);
+              return `${50 + (r/100*40) * Math.cos(a)},${50 + (r/100*40) * Math.sin(a)}`;
+            }).join(' ')} 
+            fill="none" 
+            stroke="white" 
+            strokeOpacity="0.05" 
+            strokeWidth="0.5" 
+          />
+        ))}
+        {/* Axis lines */}
+        {points.map((p, i) => (
+          <line key={i} x1="50" y1="50" x2={p.x} y2={p.y} stroke="white" strokeOpacity="0.1" strokeWidth="0.5" />
+        ))}
+        {/* Data polygon */}
+        <polygon points={path} fill="rgba(190, 242, 100, 0.4)" stroke="#bef264" strokeWidth="1.5" />
+        {/* Labels */}
+        {labels.map((l, i) => {
+          const a = (i * 72 - 90) * (Math.PI / 180);
+          const x = 50 + 52 * Math.cos(a);
+          const y = 50 + 52 * Math.sin(a);
+          return (
+            <text 
+              key={i} 
+              x={x} 
+              y={y} 
+              fill="rgba(255,255,255,0.5)" 
+              fontSize="6" 
+              fontWeight="bold"
+              textAnchor="middle" 
+              dominantBaseline="middle"
+            >
+              {l.name}
+            </text>
+          );
+        })}
+      </svg>
+    </div>
   );
 }
 
@@ -539,18 +589,36 @@ function ProfileZone({
         </BentoCard>
       </div>
 
-      {analysis.lastMatch && (
-        <BentoCard title="Trận gần nhất" icon={History}>
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold text-white/80">
-              {getName(players, analysis.lastMatch.win_1)} - {getName(players, analysis.lastMatch.lose_1)}
-            </div>
-            <div className="text-2xl font-black text-white">
-              {analysis.lastMatch.win_score}-{analysis.lastMatch.lose_score}
-            </div>
+      <BentoCard title="Form gần đây (3 trận)" icon={History}>
+        {analysis.recent.slice(0, 3).length > 0 ? (
+          <div className="space-y-3">
+            {analysis.recent.slice(0, 3).map((match: any, i: number) => {
+              const isWinner = [match.win_1, match.win_2].includes(playerId);
+              return (
+                <div key={i} className="flex items-center justify-between border-b border-white/[0.05] last:border-0 pb-3 last:pb-0">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className={cn("px-2 py-0.5 rounded text-xs font-bold", isWinner ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400")}>
+                        {isWinner ? "THẮNG" : "THUA"}
+                      </span>
+                      <span className="text-sm font-semibold text-white/80">
+                        {match.win_score}-{match.lose_score}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs text-white/50 truncate">
+                      vs {isWinner ? 
+                        [getName(players, match.lose_1), getName(players, match.lose_2)].filter(Boolean).join(' & ') :
+                        [getName(players, match.win_1), getName(players, match.win_2)].filter(Boolean).join(' & ')}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </BentoCard>
-      )}
+        ) : (
+          <p className="text-white/40 text-sm text-center">Chưa có trận đấu nào</p>
+        )}
+      </BentoCard>
     </div>
   );
 }
@@ -566,6 +634,8 @@ function MatrixZone({
   opponentRows,
   players,
   visiblePlayers,
+  playerId,
+  setPlayerId,
 }: {
   matrixTab: string;
   setMatrixTab: (tab: string) => void;
@@ -573,13 +643,14 @@ function MatrixZone({
   opponentRows: any[];
   players: Player[];
   visiblePlayers: Player[];
+  playerId: string;
+  setPlayerId: (id: string) => void;
 }) {
   const rows = matrixTab === 'partner' ? partnerRows : opponentRows;
-  const selectedPlayerId = visiblePlayers[0]?.id || '';
 
   // Filter rows for selected player
   const playerRows = rows.filter(r => {
-    const playerName = visiblePlayers.find(p => p.id === selectedPlayerId)?.name;
+    const playerName = visiblePlayers.find(p => p.id === playerId)?.name;
     return r.player === playerName;
   });
 
@@ -593,6 +664,17 @@ function MatrixZone({
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+      {/* Player Selector */}
+      <div className="sticky top-[140px] z-40 bg-slate-900/95 backdrop-blur-lg py-3">
+        <select
+          value={playerId}
+          onChange={e => setPlayerId(e.target.value)}
+          className="w-full rounded-xl bg-slate-800 border border-white/[0.08] px-4 py-3 font-semibold text-white"
+        >
+          {visiblePlayers.map(p => <option key={p.id} value={p.id}>Góc nhìn của: {p.name}</option>)}
+        </select>
+      </div>
+
       {/* Sub-tabs */}
       <div className="flex gap-2 p-1 bg-slate-900 rounded-xl">
         {matrixTabs.map(tab => (
@@ -719,8 +801,12 @@ function HistoryZone({
             // Calculate Upset: winner has lower ELO
             const winnerIds = [match.win_1, match.win_2].filter(Boolean) as string[];
             const loserIds = [match.lose_1, match.lose_2].filter(Boolean) as string[];
-            const winnerAvgElo = winnerIds.reduce((sum, id) => sum + (elo.rating.get(id) || 1000), 0) / winnerIds.length;
-            const loserAvgElo = loserIds.reduce((sum, id) => sum + (elo.rating.get(id) || 1000), 0) / loserIds.length;
+            const winnerAvgElo = winnerIds.length > 0 
+              ? winnerIds.reduce((sum, id) => sum + (elo.rating.get(id) || 1000), 0) / winnerIds.length 
+              : 1000;
+            const loserAvgElo = loserIds.length > 0 
+              ? loserIds.reduce((sum, id) => sum + (elo.rating.get(id) || 1000), 0) / loserIds.length 
+              : 1000;
             const isUpset = loserAvgElo - winnerAvgElo >= 150 && isClose;
             
             // Determine primary tag

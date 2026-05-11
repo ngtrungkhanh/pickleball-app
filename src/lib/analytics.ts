@@ -171,34 +171,50 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
   board.forEach(player => {
     const playerAnalysis = getPlayerAnalysis(player.id, players, matches);
     const streakMatch = playerAnalysis.streak?.match(/^(\d+)(W|L)$/);
-    if (streakMatch && parseInt(streakMatch[1]) >= 4) {
+    if (streakMatch && parseInt(streakMatch[1]) >= 3) {
       const count = parseInt(streakMatch[1]);
       const type = streakMatch[2];
+      const stats = playerAnalysis.stats;
       if (type === 'W') {
-        insights.push({ type: 'hot_streak', text: `${player.name} đang thắng ${count} trận liên tiếp! 🔥` });
+        insights.push({ 
+          type: 'hot_streak', 
+          text: `${player.name} đang thắng ${count} trận liên tiếp (Tổng ${stats?.wins}W-${stats?.losses}L)! 🔥` 
+        });
       } else {
-        insights.push({ type: 'cold_streak', text: `${player.name} đang thua ${count} trận liên tiếp. Cố lên! 😔` });
+        insights.push({ 
+          type: 'cold_streak', 
+          text: `${player.name} đang thua ${count} trận liên tiếp. Cố lên, data đang là ${stats?.wins}W-${stats?.losses}L! 😔` 
+        });
       }
     }
   });
 
   const partnerRows = buildPartnerRows(players, matches);
-  const hotPartners = partnerRows.filter(r => r.rate >= 75 && r.total >= 5);
+  const hotPartners = partnerRows.filter(r => r.rate >= 70 && r.total >= 4);
   if (hotPartners.length > 0) {
     const best = hotPartners[0];
-    insights.push({ type: 'hot_partnership', text: `Cặp đôi ${best.player} + ${best.partner} cực ăn ý (${best.rate}% thắng)!` });
+    insights.push({ 
+      type: 'hot_partnership', 
+      text: `Cặp đôi ${best.player} + ${best.partner} cực ăn ý: ${best.rate}% thắng (${best.wins}W-${best.losses}L)!` 
+    });
   }
 
   const topFines = [...board].sort((a, b) => b.money - a.money).slice(0, 1);
   if (topFines.length > 0 && topFines[0].money > 0) {
-    insights.push({ type: 'top_fine', text: `${topFines[0].name} đóng góp ${topFines[0].money.toLocaleString('vi-VN')}đ - Chủ tịch quỹ! 💸` });
+    insights.push({ 
+      type: 'top_fine', 
+      text: `${topFines[0].name} đóng góp ${topFines[0].money.toLocaleString('vi-VN')}đ - "Nhà tài trợ vàng" của quỹ! 💸` 
+    });
   }
 
   const topElo = [...elo.rating.entries()].sort((a, b) => b[1] - a[1])[0];
   if (topElo) {
     const playerName = players.find(p => p.id === topElo[0])?.name;
-    insights.push({ type: 'top_elo', text: `${playerName} đang thống trị với ${topElo[1]} ELO. 👑` });
+    insights.push({ 
+      type: 'top_elo', 
+      text: `${playerName} đang thống trị BXH với ${topElo[1]} ELO. Ai sẽ lật đổ vương triều này? 👑` 
+    });
   }
 
-  return insights.slice(0, 5);
+  return insights.sort(() => Math.random() - 0.5).slice(0, 6);
 }
