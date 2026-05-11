@@ -63,6 +63,12 @@ export function AnalysisCenter({
   const [playerId, setPlayerId] = useState(visiblePlayers[0]?.id || '');
   const [query, setQuery] = useState('');
   const [selectedSeason, setSelectedSeason] = useState<string | null>(activeSeason);
+  const [insightKey, setInsightKey] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setInsightKey(k => k + 1), 120000); // 120s
+    return () => clearInterval(timer);
+  }, []);
   
   const [localMatches, setLocalMatches] = useState<Match[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -103,7 +109,7 @@ export function AnalysisCenter({
   const partnerRows = useMemo(() => buildPartnerRows(visiblePlayers, rankingMatches), [visiblePlayers, rankingMatches]);
   const opponentRows = useMemo(() => buildOpponentRows(visiblePlayers, rankingMatches), [visiblePlayers, rankingMatches]);
   const analysis = useMemo(() => getPlayerAnalysis(playerId, visiblePlayers, rankingMatches), [playerId, visiblePlayers, rankingMatches]);
-  const insights = useMemo(() => getInsights(board, elo, rankingMatches, players), [board, elo, rankingMatches, players]);
+  const insights = useMemo(() => getInsights(board, elo, rankingMatches, players), [board, elo, rankingMatches, players, insightKey]);
 
   const filteredHistory = activeMatches.filter(m => {
     if (!query.trim()) return true;
@@ -318,7 +324,7 @@ function HubZone({
               {board.slice(0, 8).map((player: any, index) => (
                 <div key={player.id} className="flex items-center gap-2 py-3 border-b border-white/5 last:border-0">
                   <div className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shrink-0",
+                    "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 shadow-inner",
                     index === 0 ? "bg-amber-500/20 text-amber-400" :
                     index === 1 ? "bg-slate-400/20 text-slate-300" :
                     index === 2 ? "bg-orange-600/20 text-orange-400" :
@@ -326,11 +332,11 @@ function HubZone({
                   )}>
                     {index + 1}
                   </div>
-                  <div className="flex-1 flex justify-between items-center min-w-0 pr-4">
-                    <div className="font-bold text-white text-sm truncate mr-4">{player.name}</div>
-                    <div className="text-sm font-black text-primary shrink-0 bg-primary/10 px-3 py-1 rounded-lg">{player.rating}</div>
+                  <div className="flex-1 flex items-center gap-3 min-w-0 pr-2">
+                    <div className="font-bold text-white text-sm truncate max-w-[150px]">{player.name}</div>
+                    <div className="text-sm font-black text-primary shrink-0">{player.rating}</div>
                   </div>
-                  <div className="w-20 h-6 shrink-0 hidden sm:block">
+                  <div className="w-28 h-8 shrink-0 hidden sm:block">
                     <EloSparkline history={elo.history} playerId={player.id} />
                   </div>
                 </div>
@@ -391,7 +397,7 @@ function RadarChart({ data }: { data: { attack: number, defense: number, brave: 
   }).join(' ');
 
   return (
-    <div className="relative w-full max-w-[220px] mx-auto pt-4 pb-2 group">
+    <div className="relative w-full max-w-[240px] aspect-square mx-auto pt-4 pb-2 group">
       <svg viewBox="0 0 100 100" className="w-full overflow-visible">
         {/* Background webs */}
         {[20, 40, 60, 80, 100].map(r => (
@@ -874,7 +880,7 @@ function HistoryZone({
             return (
               <div key={match.id || index} className="group relative bg-slate-800/40 rounded-2xl p-4 border border-white/[0.05] hover:border-white/10 transition-all">
                 <div className="flex items-center justify-between mb-3 text-[10px] font-black uppercase tracking-widest text-white/30">
-                  <span>{match.date?.split('T')[0]}</span>
+                  <span>{typeof match.date === 'string' ? match.date.split('T')[0] : (match.date ? new Date(match.date).toISOString().split('T')[0] : '')}</span>
                   <div className="flex gap-2">
                     {isUpset && <span className="text-red-400">⚡ Upset</span>}
                     {isClose && <span className="text-amber-400">🎯 Sát nút</span>}

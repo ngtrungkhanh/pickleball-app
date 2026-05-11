@@ -193,61 +193,74 @@ export function getName(players: Player[], id?: string | null) {
 }
 
 export function getInsights(board: any[], elo: any, matches: Match[], players: Player[]): Insight[] {
-  const insights: Insight[] = [];
+  let insights: Insight[] = [];
   if (!board || board.length === 0) return insights;
 
+  // 1. Phân tích phong độ & ELO
   board.forEach(player => {
-    const playerAnalysis = getPlayerAnalysis(player.id, players, matches);
-    const streakMatch = playerAnalysis.streak?.match(/^(\d+)(W|L)$/);
-    if (streakMatch && parseInt(streakMatch[1]) >= 3) {
+    const pAnalysis = getPlayerAnalysis(player.id, players, matches);
+    const stats = pAnalysis.stats;
+    if (!stats) return;
+
+    // Chuỗi thắng / thua
+    const streakMatch = pAnalysis.streak?.match(/^(\d+)(W|L)$/);
+    if (streakMatch) {
       const count = parseInt(streakMatch[1]);
-      const type = streakMatch[2];
-      const stats = playerAnalysis.stats;
-      if (type === 'W') {
-        insights.push({ 
-          type: 'hot_streak', 
-          title: '🔥 ĐANG VÀO FORM',
-          text: `${player.name} đang thắng ${count} trận liên tiếp (Tổng ${stats?.wins}W-${stats?.losses}L)!` 
-        });
-      } else {
-        insights.push({ 
-          type: 'cold_streak', 
-          title: '😔 CHUỖI ĐEN',
-          text: `${player.name} đang thua ${count} trận liên tiếp. Đang ở chuỗi ${stats?.wins}W-${stats?.losses}L!` 
-        });
+      if (streakMatch[2] === 'W' && count >= 2) {
+        insights.push({ type: 'hot_streak', title: '🔥 ĐANG VÀO FORM', text: `${player.name} đang thăng hoa với chuỗi thắng ${count} trận liên tiếp! (Tổng ${stats.wins}W-${stats.losses}L)` });
+      } else if (streakMatch[2] === 'L' && count >= 2) {
+        insights.push({ type: 'cold_streak', title: '😔 CHUỖI ĐEN', text: `${player.name} đang gặp khủng hoảng nhẹ khi thua ${count} trận liên tiếp.` });
       }
+    }
+
+    // Tỷ lệ thắng ấn tượng
+    const winRate = (stats.wins / stats.total) * 100;
+    if (stats.total >= 5 && winRate >= 70) {
+      insights.push({ type: 'top_elo', title: '⭐ KẺ HỦY DIỆT', text: `Với ${Math.round(winRate)}% tỉ lệ thắng, ${player.name} đang là nỗi khiếp sợ của mọi đối thủ.` });
+    }
+    
+    // Đánh lỳ (sát nút)
+    if (pAnalysis.radar.brave > 80) {
+      insights.push({ type: 'hot_streak', title: '🛡️ TÂM LÝ THÉP', text: `${player.name} tỏ ra cực kỳ bản lĩnh trong các pha đôi công sát nút (Điểm Lỳ: ${pAnalysis.radar.brave}).` });
     }
   });
 
+  // 2. Phân tích đối đầu (Cặp bài trùng & Kỵ rơ)
   const partnerRows = buildPartnerRows(players, matches);
-  const hotPartners = partnerRows.filter(r => r.rate >= 70 && r.total >= 4);
-  if (hotPartners.length > 0) {
-    const best = hotPartners[0];
-    insights.push({ 
-      type: 'hot_partnership', 
-      title: '🤝 CẶP BÀI TRÙNG',
-      text: `Cặp đôi ${best.player} + ${best.partner} cực ăn ý: ${best.rate}% thắng (${best.wins}W-${best.losses}L)!` 
-    });
-  }
+  partnerRows.filter(r => r.total >= 3).forEach(r => {
+    if (r.rate >= 80) {
+      insights.push({ type: 'hot_partnership', title: '🤝 CẶP ĐÔI HOÀN HẢO', text: `Cặp đôi ${r.player} & ${r.partner} cứ đánh chung là auto win (${r.rate}% win rate)!` });
+    } else if (r.rate <= 20) {
+      insights.push({ type: 'cold_streak', title: '💔 DẪM CHÂN NHAU', text: `${r.player} & ${r.partner} có vẻ khắc khẩu, đánh chung toàn thua (${r.rate}% win rate).` });
+    }
+  });
 
-  const topFines = [...board].sort((a, b) => b.money - a.money).slice(0, 1);
-  if (topFines.length > 0 && topFines[0].money > 0) {
-    insights.push({ 
-      type: 'top_fine', 
-      title: '💸 NHÀ TÀI TRỢ VÀNG',
-      text: `${topFines[0].name} đóng góp ${topFines[0].money.toLocaleString('vi-VN')}đ cho quỹ phạt!` 
-    });
+  const oppRows = buildOpponentRows(players, matches);
+  oppRows.filter(r => r.total >= 3).forEach(r => {
+    if (r.rate >= 80) {
+      insights.push({ type: 'hot_streak', title: '⚔️ THIÊN ĐỊCH', text: `${r.player} chính là cơn ác mộng của ${r.opponent} (${r.rate}% tỉ lệ hành hạ).` });
+    } else if (r.rate <= 20) {
+      insights.push({ type: 'cold_streak', title: '🛡️ KỴ RƠ NẶNG', text: `${r.player} cứ gặp ${r.opponent} là mất điện toàn tập (${r.rate}% win rate).` });
+    }
+  });
+
+  // 3. Phân tích tổng quan giải đấu
+  const totalFines = board.reduce((sum, p) => sum + p.money, 0);
+  if (totalFines > 0) {
+    const topFine = [...board].sort((a, b) => b.money - a.money)[0];
+    insights.push({ type: 'top_fine', title: '💸 NHÀ TÀI TRỢ VÀNG', text: `Quỹ giải đang khá no ấm nhờ sự cống hiến ${topFine.money.toLocaleString('vi-VN')}đ từ ${topFine.name}!` });
   }
 
   const topElo = [...elo.rating.entries()].sort((a, b) => b[1] - a[1])[0];
   if (topElo) {
     const playerName = players.find(p => p.id === topElo[0])?.name;
-    insights.push({ 
-      type: 'top_elo', 
-      title: '👑 THỐNG TRỊ BXH',
-      text: `${playerName} đang đứng top với ${topElo[1]} ELO. Ai sẽ lật đổ vương triều này?` 
-    });
+    insights.push({ type: 'top_elo', title: '👑 THỐNG TRỊ BXH', text: `${playerName} đang đứng trên đỉnh vinh quang với ${topElo[1]} ELO. Ai đủ sức hạ bệ?` });
+  }
+  
+  if (matches.length > 10) {
+     insights.push({ type: 'hot_partnership', title: '🎾 NHIỆT HUYẾT', text: `Toàn giải đã trải qua ${matches.length} trận đấu vô cùng căng thẳng và đầy cống hiến!` });
   }
 
+  // Shuffle và Random pick 6 insights
   return insights.sort(() => Math.random() - 0.5).slice(0, 6);
 }
