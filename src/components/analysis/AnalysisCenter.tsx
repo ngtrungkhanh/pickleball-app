@@ -25,8 +25,8 @@ const navItems = [
 
 // Matrix sub-tabs
 const matrixTabs = [
-  { id: 'partner', label: 'Cặp bài trùng' },
-  { id: 'opponent', label: 'Kỵ rơ' },
+  { id: 'partner', label: 'Hợp tác' },
+  { id: 'opponent', label: 'Đối đầu' },
 ];
 
 type Player = { id: string; name: string; active?: boolean };
@@ -310,15 +310,15 @@ function HubZone({
         <StatCard label="Quỹ phạt" value={`${(totalFines / 1000).toFixed(0)}k`} icon={Trophy} color="amber" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
-        {/* ELO Race (40%) */}
-        <div className="lg:col-span-2 space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* ELO Race (Cột hẹp hơn) */}
+        <div className="lg:col-span-4 space-y-4">
           <BentoCard title="Bảng xếp hạng ELO" icon={TrendingUp}>
-            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
               {board.slice(0, 15).map((player: any, index) => (
-                <div key={player.id} className="flex items-center gap-3">
+                <div key={player.id} className="flex items-center gap-2 py-1 border-b border-white/5 last:border-0">
                   <div className={cn(
-                    "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black shrink-0",
+                    "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black shrink-0",
                     index === 0 ? "bg-amber-500/20 text-amber-400" :
                     index === 1 ? "bg-slate-400/20 text-slate-300" :
                     index === 2 ? "bg-orange-600/20 text-orange-400" :
@@ -327,18 +327,20 @@ function HubZone({
                     {index + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-bold text-white text-sm truncate">{player.name}</div>
+                    <div className="font-bold text-white text-xs truncate">{player.name}</div>
                   </div>
-                  <div className="text-sm font-black text-white shrink-0">{player.rating}</div>
-                  <EloSparkline history={elo.history} playerId={player.id} />
+                  <div className="text-[11px] font-black text-primary shrink-0">{player.rating}</div>
+                  <div className="w-12 shrink-0">
+                    <EloSparkline history={elo.history} playerId={player.id} />
+                  </div>
                 </div>
               ))}
             </div>
           </BentoCard>
         </div>
 
-        {/* News Feed Insights (60%) */}
-        <div className="lg:col-span-3 space-y-4">
+        {/* News Feed Insights (Cột rộng hơn) */}
+        <div className="lg:col-span-8 space-y-4">
           <BentoCard title="Nhận xét chuyên gia" icon={Zap} className="border-primary/30 bg-primary/5">
             <div className="space-y-4">
               {insights.map((insight, index) => (
@@ -521,37 +523,39 @@ function ProfileZone({
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Left Column: Stats & Radar (40%) */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="bg-slate-900/50 rounded-2xl p-4 border border-white/[0.05]">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: Stats & Radar (Cân đối lại) */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="bg-slate-900/50 rounded-2xl p-6 border border-white/[0.05]">
             <select
               value={playerId}
               onChange={e => setPlayerId(e.target.value)}
-              className="w-full rounded-xl bg-slate-800 border border-white/[0.08] px-4 py-3 font-bold text-white mb-4 focus:ring-2 ring-primary/20 outline-none"
+              className="w-full rounded-xl bg-slate-800 border border-white/[0.08] px-4 py-3 font-bold text-white mb-6 focus:ring-2 ring-primary/20 outline-none"
             >
               {visiblePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
 
-            <div className="flex gap-3 mb-6">
-              <div className="flex-1 bg-slate-800/50 rounded-xl p-3 border border-primary/20 text-center">
-                <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest">ELO</div>
-                <div className="text-2xl font-black text-white">{currentElo}</div>
-                <div className="text-[10px] text-white/40 uppercase font-bold">Hạng #{rank}</div>
+            <div className="flex gap-4 mb-8">
+              <div className="flex-1 bg-slate-800/50 rounded-2xl p-4 border border-primary/20 text-center shadow-lg">
+                <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1">ELO Rating</div>
+                <div className="text-3xl font-black text-white italic">{currentElo}</div>
+                <div className="text-[10px] text-white/40 uppercase font-bold mt-1">Hạng #{rank}</div>
               </div>
-              <div className="flex-1 bg-slate-800/50 rounded-xl p-3 border border-green-500/20 text-center">
-                <div className="text-[10px] font-black text-green-400/60 uppercase tracking-widest">Win Rate</div>
-                <div className="text-2xl font-black text-white">{winRate}%</div>
-                <div className="text-[10px] text-white/40 uppercase font-bold">{stats?.wins}W - {stats?.losses}L</div>
+              <div className="flex-1 bg-slate-800/50 rounded-2xl p-4 border border-green-500/20 text-center shadow-lg">
+                <div className="text-[10px] font-black text-green-400/60 uppercase tracking-widest mb-1">Win Rate</div>
+                <div className="text-3xl font-black text-white italic">{winRate}%</div>
+                <div className="text-[10px] text-white/40 uppercase font-bold mt-1">{stats?.wins}W - {stats?.losses}L</div>
               </div>
             </div>
 
-            <RadarChart data={analysis.radar} />
+            <div className="px-4">
+              <RadarChart data={analysis.radar} />
+            </div>
           </div>
         </div>
 
-        {/* Right Column: Insights & Recent (60%) */}
-        <div className="lg:col-span-3 space-y-4">
+        {/* Right Column: Insights & Recent (Cân đối lại) */}
+        <div className="lg:col-span-7 space-y-4">
           <div className="grid grid-cols-3 gap-3">
             <StatCard label="Chuỗi" value={analysis.streak || '--'} icon={Flame} color="orange" />
             <StatCard label="Tổng trận" value={stats?.total || 0} icon={Target} color="blue" />
@@ -801,20 +805,24 @@ function HistoryZone({
 }) {
   const [filter, setFilter] = useState('all');
 
-  const processedHistory = filteredHistory.filter(m => {
-    const isClose = Math.abs((m.win_score || 0) - (m.lose_score || 0)) <= 2;
-    const isUpset = (() => {
-      const winnerIds = [m.win_1, m.win_2].filter(Boolean) as string[];
-      const loserIds = [m.lose_1, m.lose_2].filter(Boolean) as string[];
-      const winElo = winnerIds.length ? winnerIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / winnerIds.length : 1000;
-      const loseElo = loserIds.length ? loserIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / loserIds.length : 1000;
-      return loseElo - winElo >= 100 && isClose;
-    })();
+  const processedHistory = useMemo(() => {
+    return filteredHistory.filter(m => {
+      const isClose = Math.abs((m.win_score || 0) - (m.lose_score || 0)) <= 2;
+      const isUpset = (() => {
+        const winnerIds = [m.win_1, m.win_2].filter(Boolean) as string[];
+        const loserIds = [m.lose_1, m.lose_2].filter(Boolean) as string[];
+        if (!winnerIds.length || !loserIds.length) return false;
+        
+        const winElo = winnerIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / winnerIds.length;
+        const loseElo = loserIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / loserIds.length;
+        return loseElo - winElo >= 100 && isClose;
+      })();
 
-    if (filter === 'close') return isClose;
-    if (filter === 'upset') return isUpset;
-    return true;
-  });
+      if (filter === 'close') return isClose;
+      if (filter === 'upset') return isUpset;
+      return true;
+    });
+  }, [filteredHistory, filter, elo]);
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
