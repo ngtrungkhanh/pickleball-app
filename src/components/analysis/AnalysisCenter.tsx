@@ -335,7 +335,8 @@ function HubZone({
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-white truncate">{player.name}</div>
                 </div>
-                <div className="text-lg font-black text-white">{player.rating}</div>
+                <div className="text-lg font-black text-white mr-2">{player.rating}</div>
+                <EloSparkline history={elo.history} playerId={player.id} />
               </div>
             ))}
           </div>
@@ -416,6 +417,38 @@ function RadarChart({ data }: { data: { skill: number, brave: number, power: num
       <polygon points={points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#ffffff20" strokeWidth="0.5" />
       <polygon points={path} fill="rgba(190, 242, 100, 0.4)" stroke="#bef264" strokeWidth="1" />
       {values.map((v, i) => <circle key={i} cx={getPoint(v, i).split(',')[0]} cy={getPoint(v, i).split(',')[1]} r="2" fill="#bef264" />)}
+    </svg>
+  );
+}
+
+function EloSparkline({ history, playerId }: { history: any[], playerId: string }) {
+  const playerHistory = history
+    .filter(h => h.ratings[playerId] !== undefined)
+    .map(h => h.ratings[playerId])
+    .slice(-10); // Lấy 10 trận gần nhất
+
+  if (playerHistory.length < 2) return <div className="w-16 h-4 bg-white/5 rounded" />;
+
+  const min = Math.min(...playerHistory);
+  const max = Math.max(...playerHistory);
+  const range = max - min || 1;
+  
+  const points = playerHistory.map((val, i) => {
+    const x = (i / (playerHistory.length - 1)) * 60;
+    const y = 15 - ((val - min) / range) * 12;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <svg viewBox="0 0 60 15" className="w-16 h-4 overflow-visible">
+      <polyline
+        points={points}
+        fill="none"
+        stroke="#bef264"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -681,18 +714,39 @@ function HistoryZone({
             const loseTeam = [getName(players, match.lose_1), match.lose_2 ? getName(players, match.lose_2) : ''].filter(Boolean).join(' / ');
             const isClose = Math.abs((match.win_score || 0) - (match.lose_score || 0)) <= 2;
             const isDominant = (match.win_score || 0) - (match.lose_score || 0) >= 5;
+            const isCleanSheet = (match.lose_score || 0) === 0;
+            
+            // Calculate Upset: winner has lower ELO
+            const winnerIds = [match.win_1, match.win_2].filter(Boolean) as string[];
+            const loserIds = [match.lose_1, match.lose_2].filter(Boolean) as string[];
+            const winnerAvgElo = winnerIds.reduce((sum, id) => sum + (elo.rating.get(id) || 1000), 0) / winnerIds.length;
+            const loserAvgElo = loserIds.reduce((sum, id) => sum + (elo.rating.get(id) || 1000), 0) / loserIds.length;
+            const isUpset = loserAvgElo - winnerAvgElo >= 150 && isClose;
+            
+            // Determine primary tag
+            let tagLabel = 'Bình thường';
+            let tagClass = 'bg-slate-700 text-white/80';
+            
+            if (isCleanSheet) {
+              tagLabel = '🧹 Clean Sheet';
+              tagClass = 'bg-purple-500/20 text-purple-400';
+            } else if (isUpset) {
+              tagLabel = '⚡ Upset';
+              tagClass = 'bg-red-500/20 text-red-400';
+            } else if (isClose) {
+              tagLabel = 'Sát nút';
+              tagClass = 'bg-amber-500/20 text-amber-400';
+            } else if (isDominant) {
+              tagLabel = 'Áp đảo';
+              tagClass = 'bg-green-500/20 text-green-400';
+            }
             
             return (
               <div key={match.id || index} className="rounded-xl bg-slate-800 border border-white/[0.08] p-4">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs text-white/40">{match.date?.split('T')[0]}</div>
-                  <div className={cn(
-                    "px-2 py-0.5 rounded-full text-xs font-bold",
-                    isClose ? "bg-amber-500/20 text-amber-400" :
-                    isDominant ? "bg-green-500/20 text-green-400" :
-                    "bg-slate-700 text-white/80"
-                  )}>
-                    {isClose ? "Sát nút" : isDominant ? "Áp đảo" : "Bình thường"}
+                  <div className={cn('px-2 py-0.5 rounded-full text-xs font-bold', tagClass)}>
+                    {tagLabel}
                   </div>
                 </div>
                 
