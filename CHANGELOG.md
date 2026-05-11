@@ -133,6 +133,15 @@ repo.
 - Fixed the desktop score-entry player picker so its dropdown can extend outside
   the score card instead of being clipped by the card container.
 
+### Analysis Center Rebuild (Phase 1)
+
+- Rebuilt `/analysis` with a 4-zone mobile-first Bottom Navigation instead of 6 top tabs.
+- Implemented "Tổng quan" hub with Bento Grid layout featuring ELO leaders, hot streaks, top fine payers, and automated insights.
+- Implemented "Cá nhân" profile zone with hero stats, win rates, and best partner/nemesis cards.
+- Refactored "Đối đầu" matrix from tables to card-based list view for better mobile usability.
+- Added automated data-driven insights in `src/lib/analytics.ts` (getInsights).
+- Improved "Lịch sử" log with tag-based match highlights (Close Win, Dominant, etc.).
+
 ### Text Encoding Cleanup
 
 - Cleaned up mojibake in Vietnamese admin/dashboard/action messages so UI and

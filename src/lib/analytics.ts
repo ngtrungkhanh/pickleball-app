@@ -14,6 +14,7 @@ type Match = {
 };
 type LeaderboardRow = Player & { total: number; wins: number; losses: number; winRate: number; money: number };
 type MatrixRow = { player: string; partner?: string; opponent?: string; total: number; wins: number; losses: number; rate: number };
+type Insight = { type: string; text: string; icon?: string };
 
 const K = 24;
 
@@ -102,4 +103,77 @@ export function buildOpponentRows(players: Player[], matches: Match[]) {
 
 export function getName(players: Player[], id?: string | null) {
   return players.find(p => p.id === id)?.name || id || '--';
+}
+
+// Auto-generated insights from data
+export function getInsights(board: any[], elo: any, matches: Match[], players: Player[]): Insight[] {
+  const insights: Insight[] = [];
+  
+  if (!board || board.length === 0) return insights;
+
+  // Find hot streaks
+  board.forEach(player => {
+    const playerAnalysis = getPlayerAnalysis(player.id, players, matches);
+    const streakMatch = playerAnalysis.streak?.match(/^(\d+)(W|L)$/);
+    if (streakMatch && parseInt(streakMatch[1]) >= 4) {
+      const count = parseInt(streakMatch[1]);
+      const type = streakMatch[2];
+      if (type === 'W') {
+        insights.push({
+          type: 'hot_streak',
+          text: `${player.name} đang thắng ${count} trận liên tiếp! 🔥`,
+        });
+      } else {
+        insights.push({
+          type: 'cold_streak',
+          text: `${player.name} đang thua ${count} trận liên tiếp. Cần lấy lại tinh thần! 😔`,
+        });
+      }
+    }
+  });
+
+  // Find dominant partnerships
+  const partnerRows = buildPartnerRows(players, matches);
+  const hotPartners = partnerRows.filter(r => r.rate >= 75 && r.total >= 5);
+  if (hotPartners.length > 0) {
+    const best = hotPartners[0];
+    insights.push({
+      type: 'hot_partnership',
+      text: `Cặp đôi ${best.player} + ${best.partner} đang cháy với ${best.rate}% thắng (${best.total} trận)!`,
+    });
+  }
+
+  // Find top fine payers
+  const topFines = [...board].sort((a, b) => b.money - a.money).slice(0, 1);
+  if (topFines.length > 0 && topFines[0].money > 0) {
+    insights.push({
+      type: 'top_fine',
+      text: `${topFines[0].name} đã đóng ${topFines[0].money.toLocaleString('vi-VN')}đ tiền phạt - Thánh tài trợ! 💸`,
+    });
+  }
+
+  // Find ELO leaders
+  const topElo = [...elo.rating.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (topElo) {
+    const playerName = players.find(p => p.id === topElo[0])?.name;
+    insights.push({
+      type: 'top_elo',
+      text: `${playerName} dẫn đầu ELO với ${topElo[1]} điểm. 👑`,
+    });
+  }
+
+  // Find recent upsets (if enough data)
+  const recentMatches = matches.slice(0, 20);
+  const upsets = recentMatches.filter(m => {
+    const scoreDiff = (m.win_score || 0) - (m.lose_score || 0);
+    return scoreDiff <= 3 && scoreDiff > 0; // Close wins
+  });
+  if (upsets.length >= 3) {
+    insights.push({
+      type: 'competitive',
+      text: `${upsets.length} trận gần đây kết thúc sát nút! Căng thẳng! 💪`,
+    });
+  }
+
+  return insights.slice(0, 5); // Return max 5 insights
 }
