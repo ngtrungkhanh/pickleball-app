@@ -6,7 +6,7 @@ import {
   ArrowLeft, Search, RefreshCw, Database, 
   LayoutGrid, User, Swords, History,
   TrendingUp, TrendingDown, Flame, Trophy, Target,
-  ChevronRight, Star, Zap, Award
+  ChevronRight, Star, Zap, Award, Crown, Heart
 } from 'lucide-react';
 import { buildElo, buildOpponentRows, buildPartnerRows, getName, getPlayerAnalysis, getInsights } from '@/lib/analytics';
 import { calculateLeaderboard } from '@/lib/stats';
@@ -203,9 +203,6 @@ export function AnalysisCenter({
             board={board}
             rankingMatches={rankingMatches}
             visiblePlayers={visiblePlayers}
-            topMovers={topMovers}
-            topStreaks={topStreaks}
-            topFinePayers={topFinePayers}
             elo={elo}
             insights={insights}
             loseMoney={loseMoney}
@@ -236,6 +233,7 @@ export function AnalysisCenter({
             visiblePlayers={visiblePlayers}
             playerId={playerId}
             setPlayerId={setPlayerId}
+            analysis={analysis}
           />
         )}
 
@@ -650,6 +648,7 @@ function MatrixZone({
   visiblePlayers,
   playerId,
   setPlayerId,
+  analysis,
 }: {
   matrixTab: string;
   setMatrixTab: (tab: string) => void;
@@ -659,8 +658,11 @@ function MatrixZone({
   visiblePlayers: Player[];
   playerId: string;
   setPlayerId: (id: string) => void;
+  analysis: any;
 }) {
   const rows = matrixTab === 'partner' ? partnerRows : opponentRows;
+  const stats = analysis?.stats;
+  const winRate = stats ? Math.round((stats.wins / stats.total) * 100) : 0;
 
   // Filter rows for selected player
   const playerRows = rows.filter(r => {
