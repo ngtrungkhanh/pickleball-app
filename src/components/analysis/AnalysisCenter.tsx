@@ -396,6 +396,30 @@ function HubZone({
   );
 }
 
+
+function RadarChart({ data }: { data: { skill: number, brave: number, power: number, experience: number, stability: number } }) {
+  const points = [
+    { x: 50, y: 10 }, { x: 90, y: 35 }, { x: 75, y: 85 }, { x: 25, y: 85 }, { x: 10, y: 35 }
+  ];
+  
+  const getPoint = (val: number, index: number) => {
+    const angle = (index * 72 - 90) * (Math.PI / 180);
+    const r = (val / 100) * 40;
+    return `${50 + r * Math.cos(angle)},${50 + r * Math.sin(angle)}`;
+  };
+
+  const values = [data.skill, data.brave, data.power, data.experience, data.stability];
+  const path = values.map((v, i) => getPoint(v, i)).join(' ');
+
+  return (
+    <svg viewBox="0 0 100 100" className="w-full max-w-[250px] mx-auto">
+      <polygon points={points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#ffffff20" strokeWidth="0.5" />
+      <polygon points={path} fill="rgba(190, 242, 100, 0.4)" stroke="#bef264" strokeWidth="1" />
+      {values.map((v, i) => <circle key={i} cx={getPoint(v, i).split(',')[0]} cy={getPoint(v, i).split(',')[1]} r="2" fill="#bef264" />)}
+    </svg>
+  );
+}
+
 // ============================================
 // ZONE 2: PROFILE (Cá nhân)
 // ============================================
@@ -421,98 +445,72 @@ function ProfileZone({
   const stats = analysis.stats;
   const adv = analysis.adv;
 
-  // Calculate win rate
   const winRate = stats ? Math.round(stats.wins / stats.total * 100) : 0;
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      {/* Player Selector */}
-      <div className="sticky top-[140px] z-40 bg-slate-950/95 backdrop-blur-lg py-3">
+      <div className="sticky top-[140px] z-40 bg-slate-900/95 backdrop-blur-lg py-3">
         <select
           value={playerId}
           onChange={e => setPlayerId(e.target.value)}
-          className="w-full rounded-xl bg-slate-900 border border-white/[0.08] px-4 py-3 font-semibold text-white"
+          className="w-full rounded-xl bg-slate-800 border border-white/[0.08] px-4 py-3 font-semibold text-white"
         >
           {visiblePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
 
-      {/* Hero Stats */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/30 p-5 text-center">
+        <div className="rounded-2xl bg-slate-800 border border-primary/30 p-5 text-center">
           <div className="text-xs font-bold uppercase tracking-widest text-primary/60">ELO</div>
           <div className="mt-2 text-4xl font-black text-white">{currentElo}</div>
           <div className="mt-1 text-sm text-white/50">Rank #{rank}</div>
         </div>
-        <div className="rounded-2xl bg-gradient-to-br from-green-500/20 to-green-500/5 border border-green-500/30 p-5 text-center">
+        <div className="rounded-2xl bg-slate-800 border border-green-500/30 p-5 text-center">
           <div className="text-xs font-bold uppercase tracking-widest text-green-400/60">Win Rate</div>
           <div className="mt-2 text-4xl font-black text-white">{winRate}%</div>
           <div className="mt-1 text-sm text-white/50">{stats?.wins}W - {stats?.losses}L</div>
         </div>
       </div>
 
-      {/* Form & Streak */}
+      <BentoCard title="Phong cách chiến đấu" icon={Target}>
+        <RadarChart data={analysis.radar} />
+        <div className="grid grid-cols-2 gap-2 mt-4 text-xs text-center text-white/50">
+          <div>Skill | Brave</div>
+          <div>Power | Exp | Stab</div>
+        </div>
+      </BentoCard>
+
       <div className="grid grid-cols-3 gap-3">
         <StatCard label="Chuỗi" value={analysis.streak || '--'} icon={Flame} color="orange" />
         <StatCard label="Tổng trận" value={stats?.total || 0} icon={Target} color="blue" />
         <StatCard label="Tổng thắng" value={stats?.wins || 0} icon={Trophy} color="green" />
       </div>
 
-      {/* Relationships */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Best Partner */}
-        <BentoCard title="Bạn đánh cặp tốt nhất" icon={Star} className="border-green-500/30 bg-gradient-to-br from-green-500/10 to-transparent">
+        <BentoCard title="Bạn đánh cặp tốt nhất" icon={Star} className="border-green-500/30">
           {adv.bestPartner ? (
             <div className="text-center">
               <div className="text-2xl font-black text-white">{adv.bestPartner.name}</div>
               <div className="mt-1 text-green-400 font-bold">{Math.round(adv.bestPartner.rate)}% thắng</div>
-              <div className="mt-1 text-xs text-white/40">
-                {adv.bestPartner.wins}W / {adv.bestPartner.total} trận
-              </div>
             </div>
-          ) : (
-            <p className="text-white/40 text-sm text-center">Chưa đủ dữ liệu</p>
-          )}
+          ) : <p className="text-white/40 text-sm text-center">Chưa đủ dữ liệu</p>}
         </BentoCard>
 
-        {/* Nemesis */}
-        <BentoCard title="Kẻ thù khó nuốt" icon={Swords} className="border-red-500/30 bg-gradient-to-br from-red-500/10 to-transparent">
+        <BentoCard title="Kẻ thù khó nuốt" icon={Swords} className="border-red-500/30">
           {adv.toughestRival ? (
             <div className="text-center">
               <div className="text-2xl font-black text-white">{adv.toughestRival.name}</div>
               <div className="mt-1 text-red-400 font-bold">{Math.round(adv.toughestRival.lossRate)}% thua</div>
-              <div className="mt-1 text-xs text-white/40">
-                {adv.toughestRival.losses}L / {adv.toughestRival.total} trận
-              </div>
             </div>
-          ) : (
-            <p className="text-white/40 text-sm text-center">Chưa có đối thủ áp đảo</p>
-          )}
+          ) : <p className="text-white/40 text-sm text-center">Chưa có đối thủ áp đảo</p>}
         </BentoCard>
       </div>
 
-      {/* Easy Rival */}
-      {adv.easiestRival && (
-        <BentoCard title="Đối thủ dễ ăn" icon={Target} className="border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-transparent">
-          <div className="text-center">
-            <div className="text-2xl font-black text-white">{adv.easiestRival.name}</div>
-            <div className="mt-1 text-blue-400 font-bold">{Math.round(adv.easiestRival.rate)}% thắng</div>
-          </div>
-        </BentoCard>
-      )}
-
-      {/* Last Match */}
       {analysis.lastMatch && (
         <BentoCard title="Trận gần nhất" icon={History}>
           <div className="flex items-center justify-between">
-            <div>
-              <div className="font-bold text-white">
-                {getName(players, analysis.lastMatch.win_1)} / {getName(players, analysis.lastMatch.win_2)} 
-                <span className="text-green-400 mx-2">THẮNG</span>
-              </div>
-              <div className="text-sm text-white/50">
-                vs {getName(players, analysis.lastMatch.lose_1)} / {getName(players, analysis.lastMatch.lose_2)}
-              </div>
+            <div className="text-sm font-semibold text-white/80">
+              {getName(players, analysis.lastMatch.win_1)} - {getName(players, analysis.lastMatch.lose_1)}
             </div>
             <div className="text-2xl font-black text-white">
               {analysis.lastMatch.win_score}-{analysis.lastMatch.lose_score}
@@ -523,6 +521,7 @@ function ProfileZone({
     </div>
   );
 }
+
 
 // ============================================
 // ZONE 3: MATRIX (Đối đầu)
