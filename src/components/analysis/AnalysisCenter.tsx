@@ -19,7 +19,7 @@ import { isGuestId, isRankingMatch } from '@/lib/guest';
 const navItems = [
   { id: 'hub', label: 'Tổng quan', icon: LayoutGrid },
   { id: 'profile', label: 'Cá nhân', icon: User },
-  { id: 'matrix', label: 'Đối đầu', icon: Swords },
+  { id: 'matrix', label: 'Mạng lưới', icon: Swords },
   { id: 'history', label: 'Lịch sử', icon: History },
 ];
 
@@ -310,15 +310,15 @@ function HubZone({
         <StatCard label="Quỹ phạt" value={`${(totalFines / 1000).toFixed(0)}k`} icon={Trophy} color="amber" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-        {/* ELO Race (Cột hẹp hơn) */}
-        <div className="lg:col-span-4 space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        {/* ELO Race (50%) */}
+        <div className="space-y-4">
           <BentoCard title="Bảng xếp hạng ELO" icon={TrendingUp}>
             <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
               {board.slice(0, 15).map((player: any, index) => (
                 <div key={player.id} className="flex items-center gap-2 py-1 border-b border-white/5 last:border-0">
                   <div className={cn(
-                    "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black shrink-0",
+                    "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shrink-0",
                     index === 0 ? "bg-amber-500/20 text-amber-400" :
                     index === 1 ? "bg-slate-400/20 text-slate-300" :
                     index === 2 ? "bg-orange-600/20 text-orange-400" :
@@ -326,11 +326,11 @@ function HubZone({
                   )}>
                     {index + 1}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-white text-xs truncate">{player.name}</div>
+                  <div className="flex-1 flex justify-between items-center min-w-0 pr-4">
+                    <div className="font-bold text-white text-sm truncate mr-4">{player.name}</div>
+                    <div className="text-sm font-black text-primary shrink-0 bg-primary/10 px-3 py-1 rounded-lg">{player.rating}</div>
                   </div>
-                  <div className="text-[11px] font-black text-primary shrink-0">{player.rating}</div>
-                  <div className="w-12 shrink-0">
+                  <div className="w-20 h-6 shrink-0 hidden sm:block">
                     <EloSparkline history={elo.history} playerId={player.id} />
                   </div>
                 </div>
@@ -339,8 +339,8 @@ function HubZone({
           </BentoCard>
         </div>
 
-        {/* News Feed Insights (Cột rộng hơn) */}
-        <div className="lg:col-span-8 space-y-4">
+        {/* News Feed Insights (50%) */}
+        <div className="space-y-4">
           <BentoCard title="Nhận xét chuyên gia" icon={Zap} className="border-primary/30 bg-primary/5">
             <div className="space-y-4">
               {insights.map((insight, index) => (
@@ -391,7 +391,7 @@ function RadarChart({ data }: { data: { attack: number, defense: number, brave: 
   }).join(' ');
 
   return (
-    <div className="relative w-full max-w-[280px] mx-auto pt-8 pb-4 group">
+    <div className="relative w-full max-w-[220px] mx-auto pt-4 pb-2 group">
       <svg viewBox="0 0 100 100" className="w-full overflow-visible">
         {/* Background webs */}
         {[20, 40, 60, 80, 100].map(r => (
@@ -523,9 +523,9 @@ function ProfileZone({
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Stats & Radar (Cân đối lại) */}
-        <div className="lg:col-span-5 space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        {/* Left Column: Stats & Radar (50%) */}
+        <div className="space-y-4">
           <div className="bg-slate-900/50 rounded-2xl p-6 border border-white/[0.05]">
             <select
               value={playerId}
@@ -554,8 +554,8 @@ function ProfileZone({
           </div>
         </div>
 
-        {/* Right Column: Insights & Recent (Cân đối lại) */}
-        <div className="lg:col-span-7 space-y-4">
+        {/* Right Column: Insights & Recent (50%) */}
+        <div className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
             <StatCard label="Chuỗi" value={analysis.streak || '--'} icon={Flame} color="orange" />
             <StatCard label="Tổng trận" value={stats?.total || 0} icon={Target} color="blue" />
@@ -811,7 +811,7 @@ function HistoryZone({
       const isUpset = (() => {
         const winnerIds = [m.win_1, m.win_2].filter(Boolean) as string[];
         const loserIds = [m.lose_1, m.lose_2].filter(Boolean) as string[];
-        if (!winnerIds.length || !loserIds.length) return false;
+        if (!winnerIds.length || !loserIds.length || !elo?.rating) return false;
         
         const winElo = winnerIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / winnerIds.length;
         const loseElo = loserIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / loserIds.length;
@@ -865,8 +865,9 @@ function HistoryZone({
             const isUpset = (() => {
                const winnerIds = [match.win_1, match.win_2].filter(Boolean) as string[];
                const loserIds = [match.lose_1, match.lose_2].filter(Boolean) as string[];
-               const winElo = winnerIds.length ? winnerIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / winnerIds.length : 1000;
-               const loseElo = loserIds.length ? loserIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / loserIds.length : 1000;
+               if (!winnerIds.length || !loserIds.length || !elo?.rating) return false;
+               const winElo = winnerIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / winnerIds.length;
+               const loseElo = loserIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / loserIds.length;
                return loseElo - winElo >= 100 && isClose;
             })();
 
