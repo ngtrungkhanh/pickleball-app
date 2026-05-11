@@ -252,9 +252,9 @@ export function AnalysisCenter({
       </div>
 
       {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-xl border-t border-white/[0.08] safe-area-pb">
-        <div className="max-w-[1500px] mx-auto px-2">
-          <div className="flex items-center justify-around md:justify-center md:gap-12">
+      <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl safe-area-pb md:px-6">
+        <div className="max-w-[1500px] mx-auto">
+          <div className="flex items-center justify-around md:justify-center md:gap-8">
             {navItems.map(item => {
               const Icon = item.icon;
               const isActive = activeNav === item.id;
@@ -263,14 +263,14 @@ export function AnalysisCenter({
                   key={item.id}
                   onClick={() => setActiveNav(item.id)}
                   className={cn(
-                    "flex flex-col items-center gap-1 px-4 py-3 md:py-4 transition-all duration-200 relative group",
-                    isActive ? "text-primary" : "text-white/30 hover:text-white/80"
+                    "flex flex-col items-center gap-1 px-4 py-2.5 md:py-3 transition-all duration-300 relative group",
+                    isActive ? "text-primary" : "text-white/30 hover:text-white/60"
                   )}
                 >
                   <Icon className={cn("w-5 h-5 md:w-6 md:h-6 transition-transform", isActive && "scale-110")} />
-                  <span className="text-[10px] md:text-xs font-bold uppercase tracking-wider">{item.label}</span>
+                  <span className="text-[10px] md:text-[11px] font-black uppercase tracking-widest">{item.label}</span>
                   {isActive && (
-                    <div className="absolute bottom-0 w-12 md:w-16 h-1 bg-primary rounded-full shadow-[0_0_10px_rgba(190,242,100,0.5)]" />
+                    <div className="absolute -bottom-1 w-8 h-1 bg-primary rounded-full shadow-[0_0_15px_rgba(190,242,100,0.8)]" />
                   )}
                 </button>
               );
@@ -289,9 +289,6 @@ function HubZone({
   board,
   rankingMatches,
   visiblePlayers,
-  topMovers,
-  topStreaks,
-  topFinePayers,
   elo,
   insights,
   loseMoney,
@@ -299,9 +296,6 @@ function HubZone({
   board: any[];
   rankingMatches: Match[];
   visiblePlayers: Player[];
-  topMovers: any[];
-  topStreaks: any[];
-  topFinePayers: any[];
   elo: any;
   insights: Insight[];
   loseMoney: number;
@@ -318,113 +312,86 @@ function HubZone({
         <StatCard label="Quỹ phạt" value={`${(totalFines / 1000).toFixed(0)}k`} icon={Trophy} color="amber" />
       </div>
 
-      {/* Bento Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* ELO Leaders */}
-        <BentoCard title="Bảng xếp hạng ELO" icon={TrendingUp} className="md:row-span-2">
-          <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-            {board.slice(0, 10).map((player: any, index) => (
-              <div key={player.id} className="flex items-center gap-3">
-                <div className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center text-sm font-black",
-                  index === 0 ? "bg-amber-500/20 text-amber-400" :
-                  index === 1 ? "bg-slate-400/20 text-slate-300" :
-                  index === 2 ? "bg-orange-600/20 text-orange-400" :
-                  "bg-slate-800 text-white/50"
-                )}>
-                  {index + 1}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-white truncate">{player.name}</div>
-                </div>
-                <div className="text-lg font-black text-white mr-2">{player.rating}</div>
-                <EloSparkline history={elo.history} playerId={player.id} />
-              </div>
-            ))}
-          </div>
-        </BentoCard>
-
-        {/* Hot Streaks */}
-        <BentoCard title="Đang cháy" icon={Flame} className="bg-gradient-to-br from-orange-500/10 to-red-500/10 border-orange-500/20">
-          {topStreaks.length > 0 ? (
-            <div className="space-y-2">
-              {topStreaks.slice(0, 3).map(player => (
-                <div key={player.id} className="flex items-center justify-between">
-                  <span className="font-semibold text-white">{player.name}</span>
-                  <span className={cn(
-                    "px-2 py-0.5 rounded-full text-sm font-black",
-                    player.streakType === 'W' ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
+        {/* ELO Race (40%) */}
+        <div className="lg:col-span-2 space-y-4">
+          <BentoCard title="Bảng xếp hạng ELO" icon={TrendingUp}>
+            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+              {board.slice(0, 15).map((player: any, index) => (
+                <div key={player.id} className="flex items-center gap-3">
+                  <div className={cn(
+                    "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black shrink-0",
+                    index === 0 ? "bg-amber-500/20 text-amber-400" :
+                    index === 1 ? "bg-slate-400/20 text-slate-300" :
+                    index === 2 ? "bg-orange-600/20 text-orange-400" :
+                    "bg-slate-800 text-white/50"
                   )}>
-                    🔥 {player.streakCount} {player.streakType}
-                  </span>
+                    {index + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-white text-sm truncate">{player.name}</div>
+                  </div>
+                  <div className="text-sm font-black text-white shrink-0">{player.rating}</div>
+                  <EloSparkline history={elo.history} playerId={player.id} />
                 </div>
               ))}
             </div>
-          ) : (
-            <p className="text-white/40 text-sm">Chưa có chuỗi nào nổi bật</p>
-          )}
-        </BentoCard>
+          </BentoCard>
+        </div>
 
-        {/* Top Fine Payers */}
-        <BentoCard title="Thánh nộp phạt" icon={Trophy} className="bg-gradient-to-br from-amber-500/10 to-yellow-500/10 border-amber-500/20">
-          {topFinePayers.length > 0 ? (
-            <div className="space-y-2">
-              {topFinePayers.slice(0, 3).map((player, index) => (
-                <div key={player.id} className="flex items-center justify-between">
-                  <span className="font-semibold text-white">{player.name}</span>
-                  <span className="text-amber-400 font-bold">{player.money.toLocaleString('vi-VN')}đ</span>
+        {/* News Feed Insights (60%) */}
+        <div className="lg:col-span-3 space-y-4">
+          <BentoCard title="Nhận xét chuyên gia" icon={Zap} className="border-primary/30 bg-primary/5">
+            <div className="space-y-4">
+              {insights.map((insight, index) => (
+                <div key={index} className="flex gap-4 p-4 rounded-2xl bg-slate-900/50 border border-white/[0.05] hover:border-primary/20 transition-colors group">
+                  <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                    {insight.type === 'hot_streak' ? <Flame className="w-5 h-5 text-orange-400" /> :
+                     insight.type === 'top_elo' ? <Crown className="w-5 h-5 text-amber-400" /> :
+                     insight.type === 'hot_partnership' ? <Heart className="w-5 h-5 text-pink-400" /> :
+                     insight.type === 'top_fine' ? <Trophy className="w-5 h-5 text-amber-400" /> :
+                     <Zap className="w-5 h-5 text-primary" />}
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-xs font-black text-white/40 uppercase mb-1 tracking-widest">Insight #{index+1}</div>
+                    <p className="text-white/90 text-sm font-medium leading-relaxed">{insight.text}</p>
+                  </div>
                 </div>
               ))}
             </div>
-          ) : (
-            <p className="text-white/40 text-sm">Chưa có dữ liệu</p>
-          )}
-        </BentoCard>
+          </BentoCard>
+        </div>
       </div>
-
-      {/* Insights Stream */}
-      {insights.length > 0 && (
-        <BentoCard title="Nhận xét" icon={Zap} className="border-primary/30 bg-primary/5">
-          <div className="space-y-2">
-            {insights.slice(0, 5).map((insight, index) => (
-              <div key={index} className="flex items-start gap-2 text-sm">
-                <span className="text-primary mt-0.5">•</span>
-                <span className="text-white/70">{insight.text}</span>
-              </div>
-            ))}
-          </div>
-        </BentoCard>
-      )}
     </div>
   );
 }
 
 
-function RadarChart({ data }: { data: { skill: number, brave: number, power: number, experience: number, stability: number } }) {
+function RadarChart({ data }: { data: { attack: number, defense: number, brave: number, synergy: number, form: number, experience: number } }) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
   const labels = [
-    { name: 'Skill', angle: -90 },
-    { name: 'Brave', angle: -18 },
-    { name: 'Power', angle: 54 },
-    { name: 'Exp', angle: 126 },
-    { name: 'Stab', angle: 198 }
+    { name: 'Công', key: 'attack', desc: 'Sức mạnh tấn công: Dựa trên tỉ lệ ghi điểm thực tế.' },
+    { name: 'Thủ', key: 'defense', desc: 'Khả năng phòng ngự: Khả năng hạn chế đối thủ ghi điểm.' },
+    { name: 'Lỳ', key: 'brave', desc: 'Bản lĩnh: Tỉ lệ thắng trong các trận sát nút (chênh 1-2đ).' },
+    { name: 'Duyên', key: 'synergy', desc: 'Phối hợp: Khả năng giúp đồng đội phát huy sức mạnh.' },
+    { name: 'Form', key: 'form', desc: 'Phong độ: Tỉ lệ thắng trong 5 trận gần nhất.' }
   ];
 
-  const points = labels.map((_, i) => {
-    const angle = (i * 72 - 90) * (Math.PI / 180);
-    return { x: 50 + 40 * Math.cos(angle), y: 50 + 40 * Math.sin(angle) };
-  });
-  
   const getPoint = (val: number, index: number) => {
     const angle = (index * 72 - 90) * (Math.PI / 180);
     const r = (val / 100) * 40;
-    return `${50 + r * Math.cos(angle)},${50 + r * Math.sin(angle)}`;
+    return { x: 50 + r * Math.cos(angle), y: 50 + r * Math.sin(angle) };
   };
 
-  const values = [data.skill, data.brave, data.power, data.experience, data.stability];
-  const path = values.map((v, i) => getPoint(v, i)).join(' ');
+  const values = labels.map(l => (data as any)[l.key]);
+  const path = values.map((v, i) => {
+    const p = getPoint(v, i);
+    return `${p.x},${p.y}`;
+  }).join(' ');
 
   return (
-    <div className="relative w-full max-w-[280px] mx-auto pt-6 pb-2">
+    <div className="relative w-full max-w-[280px] mx-auto pt-8 pb-4 group">
       <svg viewBox="0 0 100 100" className="w-full overflow-visible">
         {/* Background webs */}
         {[20, 40, 60, 80, 100].map(r => (
@@ -441,32 +408,56 @@ function RadarChart({ data }: { data: { skill: number, brave: number, power: num
           />
         ))}
         {/* Axis lines */}
-        {points.map((p, i) => (
-          <line key={i} x1="50" y1="50" x2={p.x} y2={p.y} stroke="white" strokeOpacity="0.1" strokeWidth="0.5" />
-        ))}
+        {labels.map((_, i) => {
+          const a = (i * 72 - 90) * (Math.PI / 180);
+          return (
+            <line key={i} x1="50" y1="50" x2={50 + 40 * Math.cos(a)} y2={50 + 40 * Math.sin(a)} stroke="white" strokeOpacity="0.1" strokeWidth="0.5" />
+          );
+        })}
         {/* Data polygon */}
-        <polygon points={path} fill="rgba(190, 242, 100, 0.4)" stroke="#bef264" strokeWidth="1.5" />
-        {/* Labels */}
+        <polygon points={path} fill="rgba(190, 242, 100, 0.4)" stroke="#bef264" strokeWidth="1.5" className="transition-all duration-500" />
+        
+        {/* Labels & Interactive Points */}
         {labels.map((l, i) => {
           const a = (i * 72 - 90) * (Math.PI / 180);
           const x = 50 + 52 * Math.cos(a);
           const y = 50 + 52 * Math.sin(a);
+          const valPoint = getPoint(values[i], i);
+          
           return (
-            <text 
-              key={i} 
-              x={x} 
-              y={y} 
-              fill="rgba(255,255,255,0.5)" 
-              fontSize="6" 
-              fontWeight="bold"
-              textAnchor="middle" 
-              dominantBaseline="middle"
-            >
-              {l.name}
-            </text>
+            <g key={i} className="cursor-help" onMouseEnter={() => setHoveredIndex(i)} onMouseLeave={() => setHoveredIndex(null)}>
+              <text 
+                x={x} 
+                y={y} 
+                fill={hoveredIndex === i ? "#bef264" : "rgba(255,255,255,0.5)"}
+                fontSize="6" 
+                fontWeight="black"
+                textAnchor="middle" 
+                dominantBaseline="middle"
+                className="transition-colors uppercase tracking-tighter"
+              >
+                {l.name}
+              </text>
+              <circle cx={valPoint.x} cy={valPoint.y} r="2" fill="#bef264" className={cn("transition-all", hoveredIndex === i ? "r-3" : "r-1.5")} />
+              {/* Invisible touch area */}
+              <circle cx={x} cy={y} r="10" fill="transparent" />
+            </g>
           );
         })}
       </svg>
+
+      {/* Tooltip */}
+      <div className={cn(
+        "absolute -bottom-2 left-1/2 -translate-x-1/2 w-full bg-slate-800 border border-white/10 p-2 rounded-lg shadow-2xl transition-all duration-200 z-10",
+        hoveredIndex !== null ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"
+      )}>
+        {hoveredIndex !== null && (
+          <>
+            <div className="text-[10px] font-black text-primary uppercase mb-0.5">{labels[hoveredIndex].name} ({values[hoveredIndex]}đ)</div>
+            <div className="text-[9px] text-white/70 leading-tight">{labels[hoveredIndex].desc}</div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -531,94 +522,117 @@ function ProfileZone({
   const winRate = stats ? Math.round(stats.wins / stats.total * 100) : 0;
 
   return (
-    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="sticky top-[140px] z-40 bg-slate-900/95 backdrop-blur-lg py-3">
-        <select
-          value={playerId}
-          onChange={e => setPlayerId(e.target.value)}
-          className="w-full rounded-xl bg-slate-800 border border-white/[0.08] px-4 py-3 font-semibold text-white"
-        >
-          {visiblePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      </div>
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Left Column: Stats & Radar (40%) */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-slate-900/50 rounded-2xl p-4 border border-white/[0.05]">
+            <select
+              value={playerId}
+              onChange={e => setPlayerId(e.target.value)}
+              className="w-full rounded-xl bg-slate-800 border border-white/[0.08] px-4 py-3 font-bold text-white mb-4 focus:ring-2 ring-primary/20 outline-none"
+            >
+              {visiblePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-2xl bg-slate-800 border border-primary/30 p-5 text-center">
-          <div className="text-xs font-bold uppercase tracking-widest text-primary/60">ELO</div>
-          <div className="mt-2 text-4xl font-black text-white">{currentElo}</div>
-          <div className="mt-1 text-sm text-white/50">Rank #{rank}</div>
-        </div>
-        <div className="rounded-2xl bg-slate-800 border border-green-500/30 p-5 text-center">
-          <div className="text-xs font-bold uppercase tracking-widest text-green-400/60">Win Rate</div>
-          <div className="mt-2 text-4xl font-black text-white">{winRate}%</div>
-          <div className="mt-1 text-sm text-white/50">{stats?.wins}W - {stats?.losses}L</div>
-        </div>
-      </div>
-
-      <BentoCard title="Phong cách chiến đấu" icon={Target}>
-        <RadarChart data={analysis.radar} />
-        <div className="grid grid-cols-2 gap-2 mt-4 text-xs text-center text-white/50">
-          <div>Skill | Brave</div>
-          <div>Power | Exp | Stab</div>
-        </div>
-      </BentoCard>
-
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Chuỗi" value={analysis.streak || '--'} icon={Flame} color="orange" />
-        <StatCard label="Tổng trận" value={stats?.total || 0} icon={Target} color="blue" />
-        <StatCard label="Tổng thắng" value={stats?.wins || 0} icon={Trophy} color="green" />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <BentoCard title="Bạn đánh cặp tốt nhất" icon={Star} className="border-green-500/30">
-          {adv.bestPartner ? (
-            <div className="text-center">
-              <div className="text-2xl font-black text-white">{adv.bestPartner.name}</div>
-              <div className="mt-1 text-green-400 font-bold">{Math.round(adv.bestPartner.rate)}% thắng</div>
+            <div className="flex gap-3 mb-6">
+              <div className="flex-1 bg-slate-800/50 rounded-xl p-3 border border-primary/20 text-center">
+                <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest">ELO</div>
+                <div className="text-2xl font-black text-white">{currentElo}</div>
+                <div className="text-[10px] text-white/40 uppercase font-bold">Hạng #{rank}</div>
+              </div>
+              <div className="flex-1 bg-slate-800/50 rounded-xl p-3 border border-green-500/20 text-center">
+                <div className="text-[10px] font-black text-green-400/60 uppercase tracking-widest">Win Rate</div>
+                <div className="text-2xl font-black text-white">{winRate}%</div>
+                <div className="text-[10px] text-white/40 uppercase font-bold">{stats?.wins}W - {stats?.losses}L</div>
+              </div>
             </div>
-          ) : <p className="text-white/40 text-sm text-center">Chưa đủ dữ liệu</p>}
-        </BentoCard>
 
-        <BentoCard title="Kẻ thù khó nuốt" icon={Swords} className="border-red-500/30">
-          {adv.toughestRival ? (
-            <div className="text-center">
-              <div className="text-2xl font-black text-white">{adv.toughestRival.name}</div>
-              <div className="mt-1 text-red-400 font-bold">{Math.round(adv.toughestRival.lossRate)}% thua</div>
-            </div>
-          ) : <p className="text-white/40 text-sm text-center">Chưa có đối thủ áp đảo</p>}
-        </BentoCard>
-      </div>
+            <RadarChart data={analysis.radar} />
+          </div>
+        </div>
 
-      <BentoCard title="Form gần đây (3 trận)" icon={History}>
-        {analysis.recent.slice(0, 3).length > 0 ? (
-          <div className="space-y-3">
-            {analysis.recent.slice(0, 3).map((match: any, i: number) => {
-              const isWinner = [match.win_1, match.win_2].includes(playerId);
-              return (
-                <div key={i} className="flex items-center justify-between border-b border-white/[0.05] last:border-0 pb-3 last:pb-0">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className={cn("px-2 py-0.5 rounded text-xs font-bold", isWinner ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400")}>
-                        {isWinner ? "THẮNG" : "THUA"}
-                      </span>
-                      <span className="text-sm font-semibold text-white/80">
-                        {match.win_score}-{match.lose_score}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-xs text-white/50 truncate">
-                      vs {isWinner ? 
-                        [getName(players, match.lose_1), getName(players, match.lose_2)].filter(Boolean).join(' & ') :
-                        [getName(players, match.win_1), getName(players, match.win_2)].filter(Boolean).join(' & ')}
-                    </div>
+        {/* Right Column: Insights & Recent (60%) */}
+        <div className="lg:col-span-3 space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard label="Chuỗi" value={analysis.streak || '--'} icon={Flame} color="orange" />
+            <StatCard label="Tổng trận" value={stats?.total || 0} icon={Target} color="blue" />
+            <StatCard label="Kinh nghiệm" value={`${analysis.radar.experience}đ`} icon={Award} color="purple" />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <BentoCard title="Hợp vía nhất" icon={Star} className="border-green-500/10">
+              {adv.bestPartner ? (
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center text-xl font-black text-green-400">
+                    {adv.bestPartner.name[0]}
+                  </div>
+                  <div>
+                    <div className="text-lg font-black text-white">{adv.bestPartner.name}</div>
+                    <div className="text-xs text-green-400 font-bold uppercase tracking-wider">{Math.round(adv.bestPartner.rate)}% Thắng</div>
                   </div>
                 </div>
-              );
-            })}
+              ) : <p className="text-white/40 text-xs italic">Chưa đủ dữ liệu</p>}
+            </BentoCard>
+
+            <BentoCard title="Kỵ rơ nhất" icon={Swords} className="border-red-500/10">
+              {adv.toughestRival ? (
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center text-xl font-black text-red-400">
+                    {adv.toughestRival.name[0]}
+                  </div>
+                  <div>
+                    <div className="text-lg font-black text-white">{adv.toughestRival.name}</div>
+                    <div className="text-xs text-red-400 font-bold uppercase tracking-wider">{Math.round(adv.toughestRival.lossRate)}% Thua</div>
+                  </div>
+                </div>
+              ) : <p className="text-white/40 text-xs italic">Chưa có kỵ rơ</p>}
+            </BentoCard>
           </div>
-        ) : (
-          <p className="text-white/40 text-sm text-center">Chưa có trận đấu nào</p>
-        )}
-      </BentoCard>
+
+          <BentoCard title="Form gần đây" icon={History} className="bg-slate-900/40">
+            {analysis.recent.slice(0, 3).length > 0 ? (
+              <div className="flex flex-col md:flex-row gap-4 overflow-x-auto pb-2 scrollbar-none">
+                {analysis.recent.slice(0, 3).map((match: any, i: number) => {
+                  const isWinner = [match.win_1, match.win_2].includes(playerId);
+                  const partnerId = isWinner 
+                    ? [match.win_1, match.win_2].find(id => id !== playerId)
+                    : [match.lose_1, match.lose_2].find(id => id !== playerId);
+                  const opponents = isWinner 
+                    ? [match.lose_1, match.lose_2]
+                    : [match.win_1, match.win_2];
+
+                  return (
+                    <div key={i} className="flex-1 min-w-[240px] bg-slate-800/50 rounded-2xl p-4 border border-white/[0.05] hover:border-white/10 transition-all group">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className={cn(
+                          "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest",
+                          isWinner ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                        )}>
+                          {isWinner ? "Win" : "Loss"}
+                        </span>
+                        <span className="text-xl font-black text-white">{match.win_score}-{match.lose_score}</span>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-black text-primary">🤝</div>
+                          <span className="text-xs text-white/80 font-bold truncate">Bạn & {getName(players, partnerId)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center text-[10px] font-black text-red-400">⚔️</div>
+                          <span className="text-xs text-white/40 truncate">vs {opponents.filter(Boolean).map(id => getName(players, id)).join(' & ')}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-white/40 text-sm text-center py-8">Chưa có trận đấu nào</p>
+            )}
+          </BentoCard>
+        </div>
+      </div>
     </div>
   );
 }
@@ -663,98 +677,106 @@ function MatrixZone({
   });
 
   return (
-    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      {/* Player Selector */}
-      <div className="sticky top-[140px] z-40 bg-slate-900/95 backdrop-blur-lg py-3">
-        <select
-          value={playerId}
-          onChange={e => setPlayerId(e.target.value)}
-          className="w-full rounded-xl bg-slate-800 border border-white/[0.08] px-4 py-3 font-semibold text-white"
-        >
-          {visiblePlayers.map(p => <option key={p.id} value={p.id}>Góc nhìn của: {p.name}</option>)}
-        </select>
-      </div>
-
-      {/* Sub-tabs */}
-      <div className="flex gap-2 p-1 bg-slate-900 rounded-xl">
-        {matrixTabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setMatrixTab(tab.id)}
-            className={cn(
-              "flex-1 py-2.5 rounded-lg text-sm font-bold transition-all",
-              matrixTab === tab.id 
-                ? "bg-primary text-black shadow-lg" 
-                : "text-white/50 hover:text-white"
-            )}
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+      <div className="flex flex-col lg:flex-row items-center gap-4 mb-6">
+        <div className="w-full lg:w-72 bg-slate-900/50 rounded-2xl p-1 border border-white/[0.05]">
+          <select
+            value={playerId}
+            onChange={e => setPlayerId(e.target.value)}
+            className="w-full bg-transparent border-none px-4 py-3 font-black text-white outline-none"
           >
-            {tab.label}
-          </button>
-        ))}
+            {visiblePlayers.map(p => <option key={p.id} value={p.id} className="bg-slate-900">{p.name}</option>)}
+          </select>
+        </div>
+        <div className="flex gap-2 p-1 bg-slate-900 rounded-2xl border border-white/[0.05] flex-1 w-full lg:w-auto">
+          {matrixTabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setMatrixTab(tab.id)}
+              className={cn(
+                "flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                matrixTab === tab.id 
+                  ? "bg-primary text-black shadow-[0_0_20px_rgba(190,242,100,0.3)]" 
+                  : "text-white/30 hover:text-white/60"
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Matrix Cards */}
-      {sortedRows.length > 0 ? (
-        <div className="space-y-3">
-          {sortedRows.map((row, index) => {
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {sortedRows.length > 0 ? (
+          sortedRows.map((row, index) => {
             const otherName = matrixTab === 'partner' ? row.partner : row.opponent;
             const isGood = matrixTab === 'partner' ? row.rate >= 60 : row.rate <= 40;
+            // Impact Calculation (Relative to user's avg winrate)
+            const impact = matrixTab === 'partner' ? (row.rate - winRate) : (winRate - row.rate);
             
             return (
               <div 
                 key={index}
                 className={cn(
-                  "rounded-2xl border p-4 transition-all hover:scale-[1.01]",
-                  isGood 
-                    ? "bg-gradient-to-r from-green-500/10 to-transparent border-green-500/30" 
-                    : "bg-slate-800 border-white/[0.08]"
+                  "rounded-2xl border p-5 transition-all hover:scale-[1.02] bg-slate-800/50 relative overflow-hidden group",
+                  isGood ? "border-green-500/20" : "border-white/[0.05]"
                 )}
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
+                {isGood && <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/5 blur-3xl rounded-full" />}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-4">
                     <div className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center text-lg font-black",
-                      isGood ? "bg-green-500/20 text-green-400" : "bg-slate-700 text-white/70"
+                      "w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-black transition-transform group-hover:rotate-12",
+                      isGood ? "bg-green-500/20 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.2)]" : "bg-slate-700 text-white/40"
                     )}>
                       {otherName?.[0]?.toUpperCase()}
                     </div>
                     <div>
-                      <div className="font-bold text-white">{otherName}</div>
-                      <div className="text-xs text-white/40">{row.total} trận</div>
+                      <div className="font-black text-white text-lg">{otherName}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">{row.total} trận</span>
+                        {Math.abs(impact) > 5 && (
+                          <span className={cn(
+                            "text-[10px] font-black px-1.5 py-0.5 rounded",
+                            impact > 0 ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                          )}>
+                            {impact > 0 ? "+" : ""}{Math.round(impact)}% Impact
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div className={cn(
-                    "text-2xl font-black",
-                    isGood ? "text-green-400" : "text-white/70"
-                  )}>
-                    {row.rate}%
+                  <div className="text-right">
+                    <div className={cn("text-3xl font-black", isGood ? "text-green-400" : "text-white")}>
+                      {row.rate}%
+                    </div>
+                    <div className="text-[10px] font-bold text-white/30 uppercase">Win Rate</div>
                   </div>
                 </div>
                 
-                {/* Progress Bar */}
-                <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-2.5 bg-slate-900 rounded-full overflow-hidden mb-3 border border-white/5">
                   <div 
                     className={cn(
-                      "h-full rounded-full transition-all duration-500",
-                      isGood ? "bg-gradient-to-r from-green-500 to-green-400" : "bg-gradient-to-r from-slate-600 to-slate-500"
+                      "h-full rounded-full transition-all duration-1000",
+                      isGood ? "bg-gradient-to-r from-green-500 to-green-400" : "bg-slate-600"
                     )}
                     style={{ width: `${row.rate}%` }}
                   />
                 </div>
                 
-                <div className="flex justify-between mt-2 text-xs text-white/40">
-                  <span>{row.wins} thắng</span>
-                  <span>{row.losses} thua</span>
+                <div className="flex justify-between text-[10px] font-black uppercase tracking-wider">
+                  <span className="text-green-500/70">{row.wins} Thắng</span>
+                  <span className="text-red-500/70">{row.losses} Thua</span>
                 </div>
               </div>
             );
-          })}
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-white/[0.08] bg-slate-800 p-8 text-center">
-          <p className="text-white/40">Chưa có dữ liệu đối đầu</p>
-        </div>
-      )}
+          })
+        ) : (
+          <div className="md:col-span-2 rounded-3xl border border-white/[0.05] bg-slate-900/30 p-12 text-center">
+            <p className="text-white/20 font-bold uppercase tracking-widest">Chưa đủ dữ liệu phân tích</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -775,97 +797,104 @@ function HistoryZone({
   players: Player[];
   elo: any;
 }) {
+  const [filter, setFilter] = useState('all');
+
+  const processedHistory = filteredHistory.filter(m => {
+    const isClose = Math.abs((m.win_score || 0) - (m.lose_score || 0)) <= 2;
+    const isUpset = (() => {
+      const winnerIds = [m.win_1, m.win_2].filter(Boolean) as string[];
+      const loserIds = [m.lose_1, m.lose_2].filter(Boolean) as string[];
+      const winElo = winnerIds.length ? winnerIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / winnerIds.length : 1000;
+      const loseElo = loserIds.length ? loserIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / loserIds.length : 1000;
+      return loseElo - winElo >= 100 && isClose;
+    })();
+
+    if (filter === 'close') return isClose;
+    if (filter === 'upset') return isUpset;
+    return true;
+  });
+
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
-        <input
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Tìm trận đấu..."
-          className="w-full rounded-xl bg-slate-900 border border-white/[0.08] py-3 pl-12 pr-4 text-white placeholder:text-white/30"
-        />
+      <div className="flex flex-col gap-3">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Tìm theo tên cầu thủ..."
+            className="w-full rounded-2xl bg-slate-900/50 border border-white/[0.05] py-3 pl-12 pr-4 text-white placeholder:text-white/20 outline-none focus:ring-2 ring-primary/20"
+          />
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {[
+            { id: 'all', label: 'Tất cả' },
+            { id: 'close', label: 'Sát nút ⚡' },
+            { id: 'upset', label: 'Lật kèo 🏆' }
+          ].map(f => (
+            <button
+              key={f.id}
+              onClick={() => setFilter(f.id)}
+              className={cn(
+                "px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all",
+                filter === f.id ? "bg-primary text-black shadow-lg" : "bg-slate-800 text-white/40 border border-white/5"
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Timeline */}
-      {filteredHistory.length > 0 ? (
-        <div className="space-y-3">
-          {filteredHistory.slice(0, 100).map((match, index) => {
-            const winTeam = [getName(players, match.win_1), match.win_2 ? getName(players, match.win_2) : ''].filter(Boolean).join(' / ');
-            const loseTeam = [getName(players, match.lose_1), match.lose_2 ? getName(players, match.lose_2) : ''].filter(Boolean).join(' / ');
+      <div className="space-y-3">
+        {processedHistory.length > 0 ? (
+          processedHistory.slice(0, 50).map((match, index) => {
+            const winNames = [getName(players, match.win_1), getName(players, match.win_2)].filter(n => n !== '--').join(' & ');
+            const loseNames = [getName(players, match.lose_1), getName(players, match.lose_2)].filter(n => n !== '--').join(' & ');
             const isClose = Math.abs((match.win_score || 0) - (match.lose_score || 0)) <= 2;
-            const isDominant = (match.win_score || 0) - (match.lose_score || 0) >= 5;
-            const isCleanSheet = (match.lose_score || 0) === 0;
-            
-            // Calculate Upset: winner has lower ELO
-            const winnerIds = [match.win_1, match.win_2].filter(Boolean) as string[];
-            const loserIds = [match.lose_1, match.lose_2].filter(Boolean) as string[];
-            const winnerAvgElo = winnerIds.length > 0 
-              ? winnerIds.reduce((sum, id) => sum + (elo.rating.get(id) || 1000), 0) / winnerIds.length 
-              : 1000;
-            const loserAvgElo = loserIds.length > 0 
-              ? loserIds.reduce((sum, id) => sum + (elo.rating.get(id) || 1000), 0) / loserIds.length 
-              : 1000;
-            const isUpset = loserAvgElo - winnerAvgElo >= 150 && isClose;
-            
-            // Determine primary tag
-            let tagLabel = 'Bình thường';
-            let tagClass = 'bg-slate-700 text-white/80';
-            
-            if (isCleanSheet) {
-              tagLabel = '🧹 Clean Sheet';
-              tagClass = 'bg-purple-500/20 text-purple-400';
-            } else if (isUpset) {
-              tagLabel = '⚡ Upset';
-              tagClass = 'bg-red-500/20 text-red-400';
-            } else if (isClose) {
-              tagLabel = 'Sát nút';
-              tagClass = 'bg-amber-500/20 text-amber-400';
-            } else if (isDominant) {
-              tagLabel = 'Áp đảo';
-              tagClass = 'bg-green-500/20 text-green-400';
-            }
-            
+            const isUpset = (() => {
+               const winnerIds = [match.win_1, match.win_2].filter(Boolean) as string[];
+               const loserIds = [match.lose_1, match.lose_2].filter(Boolean) as string[];
+               const winElo = winnerIds.length ? winnerIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / winnerIds.length : 1000;
+               const loseElo = loserIds.length ? loserIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / loserIds.length : 1000;
+               return loseElo - winElo >= 100 && isClose;
+            })();
+
             return (
-              <div key={match.id || index} className="rounded-xl bg-slate-800 border border-white/[0.08] p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-xs text-white/40">{match.date?.split('T')[0]}</div>
-                  <div className={cn('px-2 py-0.5 rounded-full text-xs font-bold', tagClass)}>
-                    {tagLabel}
+              <div key={match.id || index} className="group relative bg-slate-800/40 rounded-2xl p-4 border border-white/[0.05] hover:border-white/10 transition-all">
+                <div className="flex items-center justify-between mb-3 text-[10px] font-black uppercase tracking-widest text-white/30">
+                  <span>{match.date?.split('T')[0]}</span>
+                  <div className="flex gap-2">
+                    {isUpset && <span className="text-red-400">⚡ Upset</span>}
+                    {isClose && <span className="text-amber-400">🎯 Sát nút</span>}
                   </div>
                 </div>
                 
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 text-right pr-3">
-                    <div className="font-semibold text-green-400 truncate">{winTeam}</div>
-                    <div className="text-xs text-white/40">Thắng</div>
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 text-right min-w-0">
+                    <div className="text-sm font-bold text-white truncate">{winNames}</div>
+                    <div className="text-[10px] font-black text-green-500/60 uppercase tracking-tighter">Winners</div>
                   </div>
                   
-                  <div className="px-4 py-2 bg-slate-800 rounded-xl">
-                    <div className="text-xl font-black text-white">
-                      {match.win_score}-{match.lose_score}
-                    </div>
+                  <div className="w-16 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-white/5 shadow-inner">
+                    <span className="text-lg font-black text-white italic">{match.win_score}:{match.lose_score}</span>
                   </div>
                   
-                  <div className="flex-1 text-left pl-3">
-                    <div className="font-semibold text-red-400 truncate">{loseTeam}</div>
-                    <div className="text-xs text-white/40">Thua</div>
+                  <div className="flex-1 text-left min-w-0">
+                    <div className="text-sm font-bold text-white/60 truncate">{loseNames}</div>
+                    <div className="text-[10px] font-black text-red-500/60 uppercase tracking-tighter">Losers</div>
                   </div>
                 </div>
-                
-                {match.season && match.season !== 'Season 1' && (
-                  <div className="mt-2 text-xs text-white/30">{match.season}</div>
-                )}
               </div>
             );
-          })}
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-white/[0.08] bg-slate-800 p-8 text-center">
-          <p className="text-white/40">Không tìm thấy trận đấu</p>
-        </div>
-      )}
+          })
+        ) : (
+          <div className="py-20 text-center">
+             <div className="text-white/10 font-black text-4xl mb-2">EMPTY</div>
+             <p className="text-white/30 text-xs font-bold uppercase tracking-widest">Không tìm thấy trận đấu phù hợp</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

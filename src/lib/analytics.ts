@@ -86,7 +86,6 @@ export function getPlayerAnalysis(playerId: string, players: Player[], matches: 
   const streak = (() => {
     let count = 0;
     let type = '';
-    // matches are newest first
     for (const m of playerMatches) {
       const result = ids([m.win_1, m.win_2]).includes(playerId) ? 'W' : 'L';
       if (!type) type = result;
@@ -96,29 +95,57 @@ export function getPlayerAnalysis(playerId: string, players: Player[], matches: 
     return count ? `${count}${type}` : '--';
   })();
 
-  // Radar Data (0-100 scale)
+  // 1. Công (Attack): Points scored vs Max possible (11 per match)
+  const pointsScored = playerMatches.reduce((sum, m) => {
+    const isWin = ids([m.win_1, m.win_2]).includes(playerId);
+    return sum + (isWin ? (m.win_score || 0) : (m.lose_score || 0));
+  }, 0);
+  const attackScore = playerMatches.length > 0 ? (pointsScored / (playerMatches.length * 11)) * 100 : 0;
+
+  // 2. Thủ (Defense): Points conceded
+  const pointsConceded = playerMatches.reduce((sum, m) => {
+    const isWin = ids([m.win_1, m.win_2]).includes(playerId);
+    return sum + (isWin ? (m.lose_score || 0) : (m.win_score || 0));
+  }, 0);
+  const defenseScore = playerMatches.length > 0 ? Math.max(0, 100 - (pointsConceded / (playerMatches.length * 11)) * 100) : 0;
+
+  // 3. Lỳ (Brave/Clutch): Close matches win rate
   const closeMatches = playerMatches.filter(m => Math.abs((m.win_score || 0) - (m.lose_score || 0)) <= 2);
   const closeWins = closeMatches.filter(m => ids([m.win_1, m.win_2]).includes(playerId)).length;
-  const clutchRate = closeMatches.length > 0 ? (closeWins / closeMatches.length) * 100 : 50;
+  const braveScore = closeMatches.length > 0 ? (closeWins / closeMatches.length) * 100 : 50;
 
-  const dominantMatches = playerMatches.filter(m => {
-    const isWinner = ids([m.win_1, m.win_2]).includes(playerId);
-    const diff = Math.abs((m.win_score || 0) - (m.lose_score || 0));
-    return isWinner && diff >= 5;
+  // 4. Duyên (Synergy): Average win rate of partners when playing with you
+  const partnerStats = new Map<string, { total: number, wins: number }>();
+  playerMatches.forEach(m => {
+    const winTeam = ids([m.win_1, m.win_2]);
+    const loseTeam = ids([m.lose_1, m.lose_2]);
+    const isWin = winTeam.includes(playerId);
+    const partnerId = isWin ? winTeam.find(id => id !== playerId) : loseTeam.find(id => id !== playerId);
+    if (partnerId) {
+      const curr = partnerStats.get(partnerId) || { total: 0, wins: 0 };
+      partnerStats.set(partnerId, { total: curr.total + 1, wins: curr.wins + (isWin ? 1 : 0) });
+    }
   });
-  const dominantRate = playerMatches.length > 0 ? (dominantMatches.length / playerMatches.length) * 100 : 0;
+  let totalWR = 0;
+  let pCount = 0;
+  partnerStats.forEach(s => { totalWR += (s.wins / s.total) * 100; pCount++; });
+  const synergyScore = pCount > 0 ? totalWR / pCount : 50;
+
+  // 5. Form (Recent): Last 5 matches win rate
+  const last5 = playerMatches.slice(0, 5);
+  const last5Wins = last5.filter(m => ids([m.win_1, m.win_2]).includes(playerId)).length;
+  const formScore = last5.length > 0 ? (last5Wins / last5.length) * 100 : 50;
+
+  // 6. Exp: Log-based (Capped at 50 matches for 100 pts)
+  const expScore = stats ? Math.min(100, Math.log10(stats.total + 1) * 58.7) : 0;
 
   const radar = {
-    skill: stats ? Math.min(100, stats.winRate) : 0,
-    brave: clutchRate,
-    power: dominantRate,
-    experience: stats ? Math.min(100, (stats.total / 50) * 100) : 0,
-    stability: (() => {
-      if (playerMatches.length < 5) return 50;
-      const last5 = playerMatches.slice(0, 5).map(m => ids([m.win_1, m.win_2]).includes(playerId) ? 1 : 0);
-      const wins = last5.filter(x => x === 1).length;
-      return (wins / 5) * 100;
-    })()
+    attack: Math.round(attackScore),
+    defense: Math.round(defenseScore),
+    brave: Math.round(braveScore),
+    synergy: Math.round(synergyScore),
+    form: Math.round(formScore),
+    experience: Math.round(expScore)
   };
 
   return { rank, stats, adv, recent: playerMatches.slice(0, 10), lastMatch: playerMatches[0] ?? null, streak, radar };
