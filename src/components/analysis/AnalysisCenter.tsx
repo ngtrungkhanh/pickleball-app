@@ -63,8 +63,10 @@ export function AnalysisCenter({
   const [query, setQuery] = useState('');
   const [selectedSeason, setSelectedSeason] = useState<string | null>(activeSeason);
   const [insightKey, setInsightKey] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const timer = setInterval(() => setInsightKey(k => k + 1), 120000); // 120s
     return () => clearInterval(timer);
   }, []);
@@ -218,6 +220,7 @@ export function AnalysisCenter({
             elo={elo}
             insights={insights}
             loseMoney={loseMoney}
+            mounted={mounted}
           />
         )}
 
@@ -291,6 +294,7 @@ function HubZone({
   elo,
   insights,
   loseMoney,
+  mounted,
 }: {
   board: any[];
   rankingMatches: Match[];
@@ -298,6 +302,7 @@ function HubZone({
   elo: any;
   insights: Insight[];
   loseMoney: number;
+  mounted: boolean;
 }) {
   const totalFines = rankingMatches.filter(m => m.lose_1 && !isGuestId(m.lose_1)).length * loseMoney;
 
@@ -341,21 +346,32 @@ function HubZone({
         {/* News Feed Insights (50%) */}
         <BentoCard title="Nhận xét chuyên gia" icon={Zap} className="border-primary/30 bg-primary/5 flex flex-col h-full">
           <div className="space-y-3 flex-1 overflow-y-auto pr-1 custom-scrollbar">
-            {insights.map((insight, index) => (
-              <div key={index} className="flex gap-3 p-3 rounded-xl bg-slate-900/50 border border-white/5 hover:border-primary/20 transition-all group">
-                <div className="mt-0.5 w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center shrink-0 text-base group-hover:scale-110 transition-transform">
-                  {insight.type.includes('hot') ? '🔥' : insight.type.includes('cold') ? '🧊' : insight.type === 'top_fine' ? '💰' : '👑'}
-                </div>
-                <div className="flex-1">
-                  <div className="text-[9px] font-black text-primary/60 uppercase tracking-widest mb-0.5">
-                    {insight.title || 'ĐIỂM NHẤN'}
-                  </div>
-                  <p className="text-sm sm:text-base font-bold text-white/90 leading-relaxed">
-                    {insight.text}
-                  </p>
-                </div>
+            {!mounted ? (
+              <div className="flex items-center justify-center h-full text-white/30 text-sm italic font-bold">
+                Đang tổng hợp dữ liệu...
               </div>
-            ))}
+            ) : insights.map((insight, index) => {
+              const rawTitle = insight.title || 'ĐIỂM NHẤN';
+              const firstSpaceIdx = rawTitle.indexOf(' ');
+              const icon = (firstSpaceIdx > 0 && firstSpaceIdx <= 3) ? rawTitle.substring(0, firstSpaceIdx) : '👑';
+              const textTitle = (firstSpaceIdx > 0 && firstSpaceIdx <= 3) ? rawTitle.substring(firstSpaceIdx + 1) : rawTitle;
+
+              return (
+                <div key={index} className="flex gap-3 p-3 rounded-xl bg-slate-900/50 border border-white/5 hover:border-primary/20 transition-all group">
+                  <div className="mt-0.5 w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center shrink-0 text-xl shadow-inner border border-white/5 group-hover:scale-110 transition-transform">
+                    {icon}
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-0.5">
+                      {textTitle}
+                    </div>
+                    <p className="text-sm sm:text-base font-bold text-white/90 leading-relaxed">
+                      {insight.text}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </BentoCard>
       </div>
