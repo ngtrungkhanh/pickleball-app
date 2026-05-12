@@ -36,8 +36,15 @@ export function generateAdvancedInsights(
     insights.push({ type, title, text: randomText, playersInvolved: involved, category });
   };
 
+  const getDay = (date: any) => {
+    if (!date) return '';
+    if (typeof date === 'string') return date.split('T')[0];
+    if (date instanceof Date) return date.toISOString().split('T')[0];
+    return String(date).split('T')[0];
+  };
+
   // 1. PRE-CALCULATE GLOBAL STATS
-  const allDays = new Set(matches.map(m => (m.date || '').split('T')[0]));
+  const allDays = new Set(matches.map(m => getDay(m.date)));
   const totalDays = allDays.size;
 
   const playerStats = new Map<string, {
@@ -71,7 +78,7 @@ export function generateAdvancedInsights(
     const ls = m.lose_score || 0;
     const scoreDiff = ws - ls;
     const isDeuce = ws > 11;
-    const day = (m.date || '').split('T')[0];
+    const day = getDay(m.date);
     
     // Upsets check (WinProb < 35%)
     const exp = m.id ? matchExpected.get(m.id) : undefined;
