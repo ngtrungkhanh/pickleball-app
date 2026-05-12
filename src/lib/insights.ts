@@ -313,6 +313,7 @@ export function generateAdvancedInsights(
   const finalInsights: Insight[] = [];
   const playerMentions = new Map<string, number>();
   const usedCategories = new Map<string, Set<string>>(); // player -> Set of categories
+  const usedTypes = new Set<string>(); // Global Set of insight types (e.g., 'clutch', 'deuce')
 
   // Shuffle insights for randomness
   const shuffled = insights.sort(() => 0.5 - Math.random());
@@ -323,16 +324,24 @@ export function generateAdvancedInsights(
     const involved = ins.playersInvolved.filter(Boolean) as string[];
     let canAdd = true;
 
-    for (const p of involved) {
-      const mentions = playerMentions.get(p) || 0;
-      if (mentions >= 2) { canAdd = false; break; }
-      
-      const cats = usedCategories.get(p) || new Set();
-      if (cats.has(ins.category)) { canAdd = false; break; }
+    // Prevent same type of insight from appearing twice (e.g., two "Vua chốt hạ")
+    if (usedTypes.has(ins.type)) {
+      canAdd = false;
+    }
+
+    if (canAdd) {
+      for (const p of involved) {
+        const mentions = playerMentions.get(p) || 0;
+        if (mentions >= 2) { canAdd = false; break; }
+        
+        const cats = usedCategories.get(p) || new Set();
+        if (cats.has(ins.category)) { canAdd = false; break; }
+      }
     }
 
     if (canAdd) {
       finalInsights.push({ type: ins.type, title: ins.title, text: ins.text, playersInvolved: ins.playersInvolved });
+      usedTypes.add(ins.type);
       for (const p of involved) {
         playerMentions.set(p, (playerMentions.get(p) || 0) + 1);
         if (!usedCategories.has(p)) usedCategories.set(p, new Set());
