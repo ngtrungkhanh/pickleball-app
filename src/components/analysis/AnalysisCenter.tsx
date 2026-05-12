@@ -318,7 +318,7 @@ function HubZone({
             {board.slice(0, 8).map((player: any, index) => (
               <div key={player.id} className="flex items-center gap-2 py-2 border-b border-white/5 last:border-0">
                 <div className={cn(
-                  "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 shadow-inner",
+                  "w-9 h-9 rounded-full flex items-center justify-center text-base font-black shrink-0 shadow-inner",
                   index === 0 ? "bg-amber-500/20 text-amber-400" :
                   index === 1 ? "bg-slate-400/20 text-slate-300" :
                   index === 2 ? "bg-orange-600/20 text-orange-400" :
