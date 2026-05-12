@@ -182,3 +182,11 @@ repo.
   consistent, easy-to-read Vietnamese sports terminology (e.g., "Cặp ruột" -> "Cặp bài trùng",
   "Thiên địch" -> "Kị rơ", "Thua cách biệt" -> "Khắc chế cứng").
 - Significantly expanded variation arrays for footer notes across all four panels (Form, Partner, Tough Rival, Easy Rival) by adding 100+ new string variations to further reduce visible text repetition.
+### Analysis Center UI Refinements (Phase 2)
+
+- Removed redundant "Lịch sử" (History) tab to focus on deep analytics (history is already managed on the main dashboard).
+- Synchronized component heights in Hub and Profile zones for better visual balance on Desktop/2K screens.
+- Enlarged Radar Chart on Desktop for improved readability.
+- Added current ELO ratings directly into the Hub leaderboard list.
+- Compressed vertical whitespace in ELO and Insight lists.
+- Fixed layout shifting in "Form gần đây" cards by standardizing heights and flex behavior.

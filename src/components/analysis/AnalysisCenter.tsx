@@ -20,7 +20,6 @@ const navItems = [
   { id: 'hub', label: 'Tổng quan', icon: LayoutGrid },
   { id: 'profile', label: 'Cá nhân', icon: User },
   { id: 'matrix', label: 'Mạng lưới', icon: Swords },
-  { id: 'history', label: 'Lịch sử', icon: History },
 ];
 
 // Matrix sub-tabs
@@ -242,17 +241,6 @@ export function AnalysisCenter({
             analysis={analysis}
           />
         )}
-
-        {/* ZONE 4: History (Lịch sử) */}
-        {activeNav === 'history' && (
-          <HistoryZone
-            query={query}
-            setQuery={setQuery}
-            filteredHistory={filteredHistory}
-            players={players}
-            elo={elo}
-          />
-        )}
       </div>
 
       {/* Bottom Navigation */}
@@ -316,57 +304,53 @@ function HubZone({
         <StatCard label="Quỹ phạt" value={`${(totalFines / 1000).toFixed(0)}k`} icon={Trophy} color="amber" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
         {/* ELO Race (50%) */}
-        <div className="space-y-4">
-          <BentoCard title="Bảng xếp hạng ELO" icon={TrendingUp}>
-            <div className="space-y-1">
-              {board.slice(0, 8).map((player: any, index) => (
-                <div key={player.id} className="flex items-center gap-2 py-3 border-b border-white/5 last:border-0">
-                  <div className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 shadow-inner",
-                    index === 0 ? "bg-amber-500/20 text-amber-400" :
-                    index === 1 ? "bg-slate-400/20 text-slate-300" :
-                    index === 2 ? "bg-orange-600/20 text-orange-400" :
-                    "bg-slate-800 text-white/50"
-                  )}>
-                    {index + 1}
-                  </div>
-                  <div className="flex-1 flex items-center gap-3 min-w-0 pr-2">
-                    <div className="font-bold text-white text-sm truncate max-w-[150px]">{player.name}</div>
-                    <div className="text-sm font-black text-primary shrink-0">{player.rating}</div>
-                  </div>
-                  <div className="w-28 h-8 shrink-0 hidden sm:block">
-                    <EloSparkline history={elo.history} playerId={player.id} />
-                  </div>
+        <BentoCard title="Bảng xếp hạng ELO" icon={TrendingUp} className="flex flex-col h-full">
+          <div className="space-y-0.5 flex-1">
+            {board.slice(0, 8).map((player: any, index) => (
+              <div key={player.id} className="flex items-center gap-2 py-2 border-b border-white/5 last:border-0">
+                <div className={cn(
+                  "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 shadow-inner",
+                  index === 0 ? "bg-amber-500/20 text-amber-400" :
+                  index === 1 ? "bg-slate-400/20 text-slate-300" :
+                  index === 2 ? "bg-orange-600/20 text-orange-400" :
+                  "bg-slate-800 text-white/50"
+                )}>
+                  {index + 1}
                 </div>
-              ))}
-            </div>
-          </BentoCard>
-        </div>
+                <div className="flex-1 flex items-center justify-between min-w-0 pr-4">
+                  <div className="font-bold text-white text-sm truncate">{player.name}</div>
+                  <div className="text-sm font-black text-primary shrink-0 ml-2">{player.rating}</div>
+                </div>
+                <div className="w-20 h-6 shrink-0 hidden sm:block">
+                  <EloSparkline history={elo.history} playerId={player.id} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </BentoCard>
 
         {/* News Feed Insights (50%) */}
-        <div className="space-y-4">
-          <BentoCard title="Nhận xét chuyên gia" icon={Zap} className="border-primary/30 bg-primary/5">
-            <div className="space-y-4">
-              {insights.map((insight, index) => (
-                <div key={index} className="flex gap-4 p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-primary/20 transition-all group">
-                  <div className="mt-1 w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center shrink-0 text-lg group-hover:scale-110 transition-transform">
-                    {insight.type.includes('hot') ? '🔥' : insight.type.includes('cold') ? '🧊' : insight.type === 'top_fine' ? '💰' : '👑'}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1">
-                      {insight.title || 'ĐIỂM NHẤN'}
-                    </div>
-                    <p className="text-sm font-bold text-white/90 leading-relaxed">
-                      {insight.text}
-                    </p>
-                  </div>
+        <BentoCard title="Nhận xét chuyên gia" icon={Zap} className="border-primary/30 bg-primary/5 flex flex-col h-full">
+          <div className="space-y-3 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+            {insights.map((insight, index) => (
+              <div key={index} className="flex gap-3 p-3 rounded-xl bg-slate-900/50 border border-white/5 hover:border-primary/20 transition-all group">
+                <div className="mt-0.5 w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center shrink-0 text-base group-hover:scale-110 transition-transform">
+                  {insight.type.includes('hot') ? '🔥' : insight.type.includes('cold') ? '🧊' : insight.type === 'top_fine' ? '💰' : '👑'}
                 </div>
-              ))}
-            </div>
-          </BentoCard>
-        </div>
+                <div className="flex-1">
+                  <div className="text-[9px] font-black text-primary/60 uppercase tracking-widest mb-0.5">
+                    {insight.title || 'ĐIỂM NHẤN'}
+                  </div>
+                  <p className="text-xs font-bold text-white/90 leading-relaxed">
+                    {insight.text}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </BentoCard>
       </div>
     </div>
   );
@@ -386,7 +370,7 @@ function RadarChart({ data }: { data: { attack: number, defense: number, brave: 
 
   const getPoint = (val: number, index: number) => {
     const angle = (index * 72 - 90) * (Math.PI / 180);
-    const r = (val / 100) * 40;
+    const r = (val / 100) * 42;
     return { x: 50 + r * Math.cos(angle), y: 50 + r * Math.sin(angle) };
   };
 
@@ -397,7 +381,7 @@ function RadarChart({ data }: { data: { attack: number, defense: number, brave: 
   }).join(' ');
 
   return (
-    <div className="relative w-full max-w-[240px] aspect-square mx-auto pt-4 pb-2 group">
+    <div className="relative w-full max-w-[320px] aspect-square mx-auto pt-6 pb-2 group">
       <svg viewBox="0 0 100 100" className="w-full overflow-visible">
         {/* Background webs */}
         {[20, 40, 60, 80, 100].map(r => (
@@ -529,10 +513,10 @@ function ProfileZone({
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
         {/* Left Column: Stats & Radar (4/12) */}
-        <div className="lg:col-span-4 space-y-4">
-          <div className="bg-slate-900/50 rounded-2xl p-6 border border-white/[0.05]">
+        <div className="lg:col-span-4 flex flex-col">
+          <div className="bg-slate-900/50 rounded-2xl p-6 border border-white/[0.05] h-full flex flex-col">
             <select
               value={playerId}
               onChange={e => setPlayerId(e.target.value)}
@@ -554,14 +538,14 @@ function ProfileZone({
               </div>
             </div>
 
-            <div className="px-4">
+            <div className="px-4 flex-1 flex items-center">
               <RadarChart data={analysis.radar} />
             </div>
           </div>
         </div>
 
         {/* Right Column: Insights & Recent (8/12) */}
-        <div className="lg:col-span-8 space-y-4">
+        <div className="lg:col-span-8 space-y-4 flex flex-col">
           <div className="grid grid-cols-3 gap-3">
             <StatCard label="Chuỗi" value={analysis.streak || '--'} icon={Flame} color="orange" />
             <StatCard label="Tổng trận" value={stats?.total || 0} icon={Target} color="blue" />
@@ -569,7 +553,7 @@ function ProfileZone({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <BentoCard title="Hợp vía nhất" icon={Star} className="border-green-500/10">
+            <BentoCard title="Hợp vía nhất" icon={Star} className="border-green-500/10 min-h-[100px] flex flex-col justify-center">
               {adv.bestPartner ? (
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center text-xl font-black text-green-400">
@@ -583,7 +567,7 @@ function ProfileZone({
               ) : <p className="text-white/40 text-xs italic">Chưa đủ dữ liệu</p>}
             </BentoCard>
 
-            <BentoCard title="Kỵ rơ nhất" icon={Swords} className="border-red-500/10">
+            <BentoCard title="Kỵ rơ nhất" icon={Swords} className="border-red-500/10 min-h-[100px] flex flex-col justify-center">
               {adv.toughestRival ? (
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center text-xl font-black text-red-400">
@@ -598,9 +582,9 @@ function ProfileZone({
             </BentoCard>
           </div>
 
-          <BentoCard title="Form gần đây" icon={History} className="bg-slate-900/40">
+          <BentoCard title="Form gần đây" icon={History} className="bg-slate-900/40 flex-1">
             {analysis.recent.slice(0, 3).length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
                 {analysis.recent.slice(0, 3).map((match: any, i: number) => {
                   const isWinner = [match.win_1, match.win_2].includes(playerId);
                   const partnerId = isWinner 
@@ -611,7 +595,7 @@ function ProfileZone({
                     : [match.win_1, match.win_2];
 
                   return (
-                    <div key={i} className="flex-1 min-w-[240px] bg-slate-800/50 rounded-2xl p-4 border border-white/[0.05] hover:border-white/10 transition-all group">
+                    <div key={i} className="flex-1 min-w-[200px] bg-slate-800/50 rounded-2xl p-4 border border-white/[0.05] hover:border-white/10 transition-all group flex flex-col justify-between">
                       <div className="flex items-center justify-between mb-3">
                         <span className={cn(
                           "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest",
@@ -636,7 +620,9 @@ function ProfileZone({
                 })}
               </div>
             ) : (
-              <p className="text-white/40 text-sm text-center py-8">Chưa có trận đấu nào</p>
+              <div className="h-32 flex items-center justify-center">
+                <p className="text-white/40 text-sm italic">Chưa có trận đấu nào</p>
+              </div>
             )}
           </BentoCard>
         </div>
@@ -793,128 +779,6 @@ function MatrixZone({
   );
 }
 
-// ============================================
-// ZONE 4: HISTORY (Lịch sử)
-// ============================================
-function HistoryZone({
-  query,
-  setQuery,
-  filteredHistory,
-  players,
-  elo,
-}: {
-  query: string;
-  setQuery: (q: string) => void;
-  filteredHistory: Match[];
-  players: Player[];
-  elo: any;
-}) {
-  const [filter, setFilter] = useState('all');
-
-  const processedHistory = useMemo(() => {
-    return filteredHistory.filter(m => {
-      const isClose = Math.abs((m.win_score || 0) - (m.lose_score || 0)) <= 2;
-      const isUpset = (() => {
-        const winnerIds = [m.win_1, m.win_2].filter(Boolean) as string[];
-        const loserIds = [m.lose_1, m.lose_2].filter(Boolean) as string[];
-        if (!winnerIds.length || !loserIds.length || !elo?.rating) return false;
-        
-        const winElo = winnerIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / winnerIds.length;
-        const loseElo = loserIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / loserIds.length;
-        return loseElo - winElo >= 100 && isClose;
-      })();
-
-      if (filter === 'close') return isClose;
-      if (filter === 'upset') return isUpset;
-      return true;
-    });
-  }, [filteredHistory, filter, elo]);
-
-  return (
-    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="flex flex-col gap-3">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
-          <input
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Tìm theo tên cầu thủ..."
-            className="w-full rounded-2xl bg-slate-900/50 border border-white/[0.05] py-3 pl-12 pr-4 text-white placeholder:text-white/20 outline-none focus:ring-2 ring-primary/20"
-          />
-        </div>
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-          {[
-            { id: 'all', label: 'Tất cả' },
-            { id: 'close', label: 'Sát nút ⚡' },
-            { id: 'upset', label: 'Lật kèo 🏆' }
-          ].map(f => (
-            <button
-              key={f.id}
-              onClick={() => setFilter(f.id)}
-              className={cn(
-                "px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all",
-                filter === f.id ? "bg-primary text-black shadow-lg" : "bg-slate-800 text-white/40 border border-white/5"
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {processedHistory.length > 0 ? (
-          processedHistory.slice(0, 50).map((match, index) => {
-            const winNames = [getName(players, match.win_1), getName(players, match.win_2)].filter(n => n !== '--').join(' & ');
-            const loseNames = [getName(players, match.lose_1), getName(players, match.lose_2)].filter(n => n !== '--').join(' & ');
-            const isClose = Math.abs((match.win_score || 0) - (match.lose_score || 0)) <= 2;
-            const isUpset = (() => {
-               const winnerIds = [match.win_1, match.win_2].filter(Boolean) as string[];
-               const loserIds = [match.lose_1, match.lose_2].filter(Boolean) as string[];
-               if (!winnerIds.length || !loserIds.length || !elo?.rating) return false;
-               const winElo = winnerIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / winnerIds.length;
-               const loseElo = loserIds.reduce((s, id) => s + (elo.rating.get(id) || 1000), 0) / loserIds.length;
-               return loseElo - winElo >= 100 && isClose;
-            })();
-
-            return (
-              <div key={match.id || index} className="group relative bg-slate-800/40 rounded-2xl p-4 border border-white/[0.05] hover:border-white/10 transition-all">
-                <div className="flex items-center justify-between mb-3 text-[10px] font-black uppercase tracking-widest text-white/30">
-                  <span>{typeof match.date === 'string' ? match.date.split('T')[0] : (match.date ? new Date(match.date).toISOString().split('T')[0] : '')}</span>
-                  <div className="flex gap-2">
-                    {isUpset && <span className="text-red-400">⚡ Upset</span>}
-                    {isClose && <span className="text-amber-400">🎯 Sát nút</span>}
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-4">
-                  <div className="flex-1 text-right min-w-0">
-                    <div className="text-sm font-bold text-white truncate">{winNames}</div>
-                    <div className="text-[10px] font-black text-green-500/60 uppercase tracking-tighter">Winners</div>
-                  </div>
-                  
-                  <div className="w-16 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-white/5 shadow-inner">
-                    <span className="text-lg font-black text-white italic">{match.win_score}:{match.lose_score}</span>
-                  </div>
-                  
-                  <div className="flex-1 text-left min-w-0">
-                    <div className="text-sm font-bold text-white/60 truncate">{loseNames}</div>
-                    <div className="text-[10px] font-black text-red-500/60 uppercase tracking-tighter">Losers</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="py-20 text-center">
-             <div className="text-white/10 font-black text-4xl mb-2">EMPTY</div>
-             <p className="text-white/30 text-xs font-bold uppercase tracking-widest">Không tìm thấy trận đấu phù hợp</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ============================================
 // SHARED COMPONENTS
