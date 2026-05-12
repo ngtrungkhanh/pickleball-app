@@ -320,8 +320,8 @@ function HubZone({
                   {index + 1}
                 </div>
                 <div className="flex-1 flex items-center justify-between min-w-0 pr-4">
-                  <div className="font-bold text-white text-sm truncate">{player.name}</div>
-                  <div className="text-sm font-black text-primary shrink-0 ml-2">{player.rating}</div>
+                  <div className="font-bold text-white text-base truncate">{player.name}</div>
+                  <div className="text-base font-black text-primary shrink-0 ml-2">{player.rating}</div>
                 </div>
                 <div className="w-20 h-6 shrink-0 hidden sm:block">
                   <EloSparkline history={elo.history} playerId={player.id} />
@@ -343,7 +343,7 @@ function HubZone({
                   <div className="text-[9px] font-black text-primary/60 uppercase tracking-widest mb-0.5">
                     {insight.title || 'ĐIỂM NHẤN'}
                   </div>
-                  <p className="text-xs font-bold text-white/90 leading-relaxed">
+                  <p className="text-sm sm:text-base font-bold text-white/90 leading-relaxed">
                     {insight.text}
                   </p>
                 </div>
@@ -582,9 +582,9 @@ function ProfileZone({
             </BentoCard>
           </div>
 
-          <BentoCard title="Form gần đây" icon={History} className="bg-slate-900/40 flex-1">
+          <BentoCard title="Form gần đây" icon={History} className="bg-slate-900/40">
             {analysis.recent.slice(0, 3).length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {analysis.recent.slice(0, 3).map((match: any, i: number) => {
                   const isWinner = [match.win_1, match.win_2].includes(playerId);
                   const partnerId = isWinner 
@@ -595,24 +595,24 @@ function ProfileZone({
                     : [match.win_1, match.win_2];
 
                   return (
-                    <div key={i} className="flex-1 min-w-[200px] bg-slate-800/50 rounded-2xl p-4 border border-white/[0.05] hover:border-white/10 transition-all group flex flex-col justify-between">
-                      <div className="flex items-center justify-between mb-3">
+                    <div key={i} className="flex-1 min-w-[200px] bg-slate-800/50 rounded-2xl p-5 border border-white/[0.05] hover:border-white/10 transition-all group flex flex-col gap-4">
+                      <div className="flex items-center justify-between">
                         <span className={cn(
-                          "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest",
+                          "px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
                           isWinner ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
                         )}>
                           {isWinner ? "Win" : "Loss"}
                         </span>
-                        <span className="text-xl font-black text-white">{match.win_score}-{match.lose_score}</span>
+                        <span className="text-2xl font-black text-white italic">{match.win_score}-{match.lose_score}</span>
                       </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-black text-primary">🤝</div>
-                          <span className="text-xs text-white/80 font-bold truncate">Bạn & {getName(players, partnerId)}</span>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs">🤝</div>
+                          <span className="text-sm text-white font-bold truncate">Bạn & {getName(players, partnerId)}</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center text-[10px] font-black text-red-400">⚔️</div>
-                          <span className="text-xs text-white/40 truncate">vs {opponents.filter(Boolean).map(id => getName(players, id)).join(' & ')}</span>
+                        <div className="flex items-center gap-3">
+                          <div className="w-6 h-6 rounded-full bg-red-500/20 flex items-center justify-center text-xs">⚔️</div>
+                          <span className="text-sm text-white/50 font-medium truncate">vs {opponents.filter(Boolean).map(id => getName(players, id)).join(' & ')}</span>
                         </div>
                       </div>
                     </div>
@@ -620,7 +620,7 @@ function ProfileZone({
                 })}
               </div>
             ) : (
-              <div className="h-32 flex items-center justify-center">
+              <div className="py-12 flex items-center justify-center">
                 <p className="text-white/40 text-sm italic">Chưa có trận đấu nào</p>
               </div>
             )}
