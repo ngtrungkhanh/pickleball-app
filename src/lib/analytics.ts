@@ -316,11 +316,11 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
     // 6. Clutch King (High Bản lĩnh)
     if (pAnalysis.radar.brave >= 80 && stats.total >= 5) {
       addInsight('clutch_king', '👑 ÔNG VUA BẢN LĨNH', [
-        `${player.name} luôn biết cách tỏa sáng ở những thời khắc khó khăn nhất. ELO không là gì cả!`,
-        `Chuyên gia diệt gã khổng lồ! ${player.name} cực kỳ nguy hiểm khi nằm ở cửa dưới.`,
-        `Bản lĩnh thi đấu của ${player.name} là không thể đùa được, luôn vượt qua mọi kỳ vọng.`,
-        `${player.name} có một cái đầu lạnh, chuyên gia lật kèo và gánh tạ trong những trận cầu đinh.`,
-        `Tinh thần thép giúp ${player.name} đạt điểm Bản lĩnh chót vót. Càng áp lực đánh càng hay.`
+        `${player.name} luôn biết cách tỏa sáng ở những thời khắc khó khăn nhất với điểm Bản lĩnh đạt ${pAnalysis.radar.brave}/100.`,
+        `Chuyên gia diệt gã khổng lồ! ${player.name} cực kỳ nguy hiểm khi nằm ở cửa dưới (Bản lĩnh: ${pAnalysis.radar.brave}đ).`,
+        `Bản lĩnh thi đấu của ${player.name} là không thể đùa được (${pAnalysis.radar.brave}đ), luôn vượt qua mọi kỳ vọng.`,
+        `${player.name} có một cái đầu lạnh, chuyên gia lật kèo và gánh tạ với chỉ số Bản lĩnh chót vót ${pAnalysis.radar.brave}/100.`,
+        `Tinh thần thép giúp ${player.name} đạt điểm Bản lĩnh ${pAnalysis.radar.brave}đ. Càng áp lực đánh càng hay.`
       ]);
     }
   });
@@ -330,33 +330,33 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
   // 7. Cặp đôi hoàn hảo (WR >= 75%, impact positive, total >= 3)
   partnerRows.filter(r => r.total >= 3 && r.rate >= 75).slice(0, 3).forEach(r => {
     addInsight('partnership_good', '🤝 CẶP BÀI TRÙNG', [
-      `Cặp đôi ${r.player} & ${r.partner} cứ ráp vào nhau là có ${r.rate}% win rate. Phép thuật là đây!`,
-      `Sự bọc lót giữa ${r.player} và ${r.partner} đạt độ hoàn hảo, tỉ lệ thắng lên tới ${r.rate}%.`,
-      `Không một kẽ hở! ${r.player} & ${r.partner} đang là cặp đôi ăn ý nhất giải (${r.rate}% W).`,
+      `Cặp đôi ${r.player} & ${r.partner} cứ ráp vào nhau là có ${r.rate}% win rate (thắng ${r.wins}/${r.total} trận). Phép thuật là đây!`,
+      `Sự bọc lót giữa ${r.player} và ${r.partner} đạt độ hoàn hảo, tỉ lệ thắng lên tới ${r.rate}% sau ${r.total} trận.`,
+      `Không một kẽ hở! ${r.player} & ${r.partner} đang là cặp đôi ăn ý nhất giải (thắng ${r.wins} trong ${r.total} trận).`,
       `${r.player} và ${r.partner} sinh ra là để đánh chung. Con số ${r.rate}% chiến thắng không hề biết nói dối.`,
-      `Đối đầu với ${r.player} và ${r.partner} lúc này là một bài toán khó với winrate cặp đôi lên tới ${r.rate}%.`
+      `Đối đầu với ${r.player} và ${r.partner} lúc này là một bài toán khó với winrate cặp đôi lên tới ${r.rate}% (${r.wins}W-${r.total - r.wins}L).`
     ]);
   });
 
   // 8. Báo thủ (Impact <= -20)
   partnerRows.filter(r => r.total >= 3 && (r.impact ?? 0) <= -20).slice(0, 3).forEach(r => {
     addInsight('anchor', '⚓ BÁO THỦ', [
-      `${r.player} dường như đang bị "phong ấn" sức mạnh khi đánh cặp chung với ${r.partner}.`,
-      `Có vẻ ${r.partner} là một quả tạ khá nặng khiến phong độ của ${r.player} sụt giảm mạnh.`,
-      `${r.player} và ${r.partner} đang giẫm chân nhau trên sân, hiệu suất cặp đôi âm nặng!`,
-      `Đánh lẻ thì hay mà cứ ghép cặp là gãy. ${r.player} & ${r.partner} thực sự là một sự kết hợp thảm họa.`,
-      `Áp lực tàng hình đang đè nặng lên vai ${r.player} mỗi khi phải đánh chung với ${r.partner}.`
+      `${r.player} dường như đang bị "phong ấn" sức mạnh khi đánh cặp chung với ${r.partner} (Hiệu suất giảm ${Math.abs(r.impact!)}%).`,
+      `Có vẻ ${r.partner} là một quả tạ khá nặng khiến phong độ của ${r.player} sụt giảm mạnh tới ${Math.abs(r.impact!)}% so với trung bình.`,
+      `${r.player} và ${r.partner} đang giẫm chân nhau trên sân, hiệu suất cặp đôi âm nặng (-${Math.abs(r.impact!)}%).`,
+      `Đánh lẻ thì hay mà cứ ghép cặp là gãy. ${r.player} & ${r.partner} kéo lùi hiệu suất của nhau tới ${Math.abs(r.impact!)}%.`,
+      `Áp lực tàng hình đang đè nặng lên vai ${r.player} mỗi khi phải đánh chung với ${r.partner} (Impact: -${Math.abs(r.impact!)}%).`
     ]);
   });
 
   // 9. Gánh Tạ (Impact >= 20)
   partnerRows.filter(r => r.total >= 3 && (r.impact ?? 0) >= 20).slice(0, 3).forEach(r => {
     addInsight('carry_god', '🏋️ THẦN GÁNH TẠ', [
-      `${r.partner} thực sự là Thần Tài, kéo phong độ của ${r.player} lên một tầm cao mới.`,
-      `Bình thường đánh dở nhưng cứ cặp với ${r.partner} là ${r.player} auto win. Quá ảo diệu!`,
-      `${r.partner} đã gánh vác và bao sân quá tốt, giúp ${r.player} vượt rào giới hạn bản thân.`,
-      `Hiệu suất của ${r.player} tăng vọt khi có ${r.partner} chống lưng. Một sự buff sức mạnh đáng sợ!`,
-      `${r.partner} đích thị là Bùa Hộ Mệnh mà ${r.player} luôn khao khát được đánh chung.`
+      `${r.partner} thực sự là Thần Tài, kéo phong độ của ${r.player} tăng thêm ${r.impact}% so với bình thường.`,
+      `Bình thường đánh dở nhưng cứ cặp với ${r.partner} là ${r.player} auto win (Hiệu suất tăng ${r.impact}%). Quá ảo diệu!`,
+      `${r.partner} đã gánh vác và bao sân quá tốt, giúp hiệu suất của ${r.player} vượt rào thêm ${r.impact}%.`,
+      `Hiệu suất của ${r.player} tăng vọt thêm ${r.impact}% khi có ${r.partner} chống lưng. Một sự buff sức mạnh đáng sợ!`,
+      `${r.partner} đích thị là Bùa Hộ Mệnh mà ${r.player} luôn khao khát được đánh chung (Impact: +${r.impact}%).`
     ]);
   });
 
@@ -365,11 +365,11 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
   // 10. Kẻ thù truyền kiếp (WR >= 80%, >= 3 matches)
   oppRows.filter(r => r.total >= 3 && r.rate >= 80).slice(0, 3).forEach(r => {
     addInsight('rivalry_good', '⚔️ THIÊN ĐỊCH', [
-      `${r.player} chính là cơn ác mộng lớn nhất của ${r.opponent} (${r.rate}% áp đảo).`,
-      `Cứ gặp ${r.opponent} là ${r.player} lại đánh như lên đồng, tỉ lệ thắng lên tới ${r.rate}%.`,
-      `${r.player} đã bắt bài hoàn toàn lối chơi của ${r.opponent}. Cửa thắng cho ${r.opponent} là quá hẹp.`,
-      `Một sự hủy diệt tàn nhẫn! ${r.player} gần như không cho ${r.opponent} một cơ hội phản kháng nào.`,
-      `${r.opponent} chắc chắn sẽ phải run sợ mỗi khi thấy ${r.player} đứng ở bên kia lưới.`
+      `${r.player} chính là cơn ác mộng lớn nhất của ${r.opponent} với tỉ lệ thắng áp đảo ${r.rate}% (thắng ${r.wins}/${r.total} trận).`,
+      `Cứ gặp ${r.opponent} là ${r.player} lại đánh như lên đồng, giành chiến thắng tới ${r.wins} trong tổng số ${r.total} lần đụng độ.`,
+      `${r.player} đã bắt bài hoàn toàn lối chơi của ${r.opponent}. Cửa thắng cho ${r.opponent} là quá hẹp (${r.rate}% thua).`,
+      `Một sự hủy diệt tàn nhẫn! ${r.player} không cho ${r.opponent} cơ hội phản kháng nào (thắng ${r.wins}-${r.total - r.wins}).`,
+      `${r.opponent} chắc chắn sẽ phải run sợ mỗi khi thấy ${r.player} đứng ở bên kia lưới (${r.rate}% W).`
     ]);
   });
 
