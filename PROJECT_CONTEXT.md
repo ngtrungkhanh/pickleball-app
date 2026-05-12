@@ -45,7 +45,8 @@ Read only when relevant:
   four-line expanded leaderboard detail with compact fun remarks.
 - Expanded leaderboard form remarks now read 5-match form newest-first and use
   seeded data-driven notes so similar players do not always get identical text.
-- `/analysis` is a read-only analytics center rebuilt with a 4-zone Bottom Navigation (Hub, Profile, Matrix, Log). It preloads up to 500 matches, uses IndexedDB plus `getMatchesAfterAction` for local cache/sync. It features automated data-driven insights, Bento Grid overview, and mobile-first card views for player relationships.
+- `/analysis` is a read-only analytics center rebuilt with a 3-zone Bottom Navigation (Hub, Profile, Matrix). It features automated data-driven insights (15 triggers with randomized variations), ELO-based Performance Scores (Delta Hiệu Suất for Matrix Impact), and a 6-axis Radar Chart.
+- Admin dashboard supports both `.xlsx` bulk migration and `.json` full database backup/restore mechanisms.
 - Local demo routes such as `/ui-demo` and `/picker-demo` may exist on one
   machine for review, but should not be pushed unless explicitly requested.
 

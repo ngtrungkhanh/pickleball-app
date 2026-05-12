@@ -13,7 +13,8 @@ import {
   ArrowLeft,
   Search,
   RefreshCw,
-  Upload
+  Upload,
+  Download
 } from 'lucide-react';
 import {
   getAuditLogs,
@@ -151,6 +152,81 @@ export default function AdminPage() {
     a.href = url;
     a.download = `pickleball_backup_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
+  };
+
+  const deferImportJson = (file: File | null) => {
+    if (!file) return;
+    setTimeout(() => {
+      void onRestoreJson(file);
+    }, 0);
+  };
+
+  const openFallbackJsonPicker = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.style.position = 'fixed';
+    input.style.left = '-9999px';
+    input.onchange = () => {
+      const file = input.files?.[0] || null;
+      input.remove();
+      deferImportJson(file);
+    };
+    document.body.appendChild(input);
+    input.click();
+  };
+
+  const onPickJson = async () => {
+    const picker = (window as FilePickerWindow).showOpenFilePicker;
+    if (!picker) {
+      openFallbackJsonPicker();
+      return;
+    }
+
+    try {
+      const [handle] = await picker({
+        multiple: false,
+        types: [
+          {
+            description: 'JSON Backup',
+            accept: {
+              'application/json': ['.json'],
+            },
+          },
+        ],
+      });
+      deferImportJson(handle ? await handle.getFile() : null);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setMsg({ type: 'error', text: 'Không thể mở file JSON.' });
+    }
+  };
+
+  const onRestoreJson = async (file: File | null) => {
+    if (!file) return;
+    if (!confirm('Khôi phục sẽ xóa TOÀN BỘ dữ liệu hiện tại và thay thế bằng dữ liệu từ file Backup. Bạn có CHẮC CHẮN muốn tiếp tục?')) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/restore', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok) {
+        setMsg({ type: 'error', text: json?.error || 'Khôi phục thất bại.' });
+      } else {
+        // Run rebuild stats after a successful restore
+        await rebuildStatsAction();
+        setMsg({ type: 'success', text: `Khôi phục dữ liệu thành công!` });
+        await loadData();
+      }
+    } catch {
+      setMsg({ type: 'error', text: 'Lỗi kết nối khi khôi phục.' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const onRebuild = () => {
@@ -375,11 +451,14 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <button onClick={onPickXlsx} className="px-5 py-3 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-orange-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
               <Upload className="w-4 h-4" /> Import XLSX
             </button>
-            <button onClick={onBackup} className="px-5 py-3 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
+            <button onClick={onPickJson} className="px-5 py-3 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
+              <Download className="w-4 h-4" /> Khôi phục Backup
+            </button>
+            <button onClick={onBackup} className="px-5 py-3 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
               <Database className="w-4 h-4" /> Sao lưu dữ liệu
             </button>
             <button onClick={onRebuild} className="px-5 py-3 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">

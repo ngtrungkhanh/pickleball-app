@@ -112,10 +112,10 @@ export function AnalysisCenter({
     })).sort((a, b) => b.rating - a.rating);
   }, [players, activeMatches, elo, loseMoney]);
 
-  const partnerRows = useMemo(() => buildPartnerRows(visiblePlayers, rankingMatches), [visiblePlayers, rankingMatches]);
+  const partnerRows = useMemo(() => buildPartnerRows(visiblePlayers, rankingMatches, elo.matchExpected), [visiblePlayers, rankingMatches, elo.matchExpected]);
   const opponentRows = useMemo(() => buildOpponentRows(visiblePlayers, rankingMatches), [visiblePlayers, rankingMatches]);
-  const analysis = useMemo(() => getPlayerAnalysis(playerId, visiblePlayers, rankingMatches), [playerId, visiblePlayers, rankingMatches]);
-  const insights = useMemo(() => getInsights(board, elo, rankingMatches, players), [board, elo, rankingMatches, players, insightKey]);
+  const analysis = useMemo(() => getPlayerAnalysis(playerId, visiblePlayers, rankingMatches, elo.matchExpected), [playerId, visiblePlayers, rankingMatches, elo.matchExpected]);
+  const insights = useMemo(() => getInsights(board, elo, rankingMatches, players, elo.matchExpected), [board, elo, rankingMatches, players, elo.matchExpected, insightKey]);
 
   const filteredHistory = activeMatches.filter(m => {
     if (!query.trim()) return true;
@@ -142,12 +142,12 @@ export function AnalysisCenter({
   const topStreaks = useMemo(() => {
     return board
       .filter(p => {
-        const playerAnalysis = getPlayerAnalysis(p.id, players, rankingMatches);
+        const playerAnalysis = getPlayerAnalysis(p.id, players, rankingMatches, elo.matchExpected);
         const streakMatch = playerAnalysis.streak?.match(/^(\d+)(W|L)$/);
         return streakMatch && parseInt(streakMatch[1]) >= 3;
       })
       .map(p => {
-        const playerAnalysis = getPlayerAnalysis(p.id, players, rankingMatches);
+        const playerAnalysis = getPlayerAnalysis(p.id, players, rankingMatches, elo.matchExpected);
         const streakMatch = playerAnalysis.streak?.match(/^(\d+)(W|L)$/);
         return {
           ...p,
@@ -157,7 +157,7 @@ export function AnalysisCenter({
       })
       .sort((a, b) => b.streakCount - a.streakCount)
       .slice(0, 5);
-  }, [board, players, rankingMatches]);
+  }, [board, players, rankingMatches, elo.matchExpected]);
 
   // Top fine payers
   const topFinePayers = useMemo(() => {
@@ -370,13 +370,14 @@ function RadarChart({ data }: { data: { attack: number, defense: number, brave: 
   const labels = [
     { name: 'Công', key: 'attack', desc: 'Sức mạnh tấn công: Dựa trên tỉ lệ ghi điểm thực tế.' },
     { name: 'Thủ', key: 'defense', desc: 'Khả năng phòng ngự: Khả năng hạn chế đối thủ ghi điểm.' },
-    { name: 'Lỳ', key: 'brave', desc: 'Bản lĩnh: Tỉ lệ thắng trong các trận sát nút (chênh 1-2đ).' },
-    { name: 'Duyên', key: 'synergy', desc: 'Phối hợp: Khả năng giúp đồng đội phát huy sức mạnh.' },
-    { name: 'Form', key: 'form', desc: 'Phong độ: Tỉ lệ thắng trong 5 trận gần nhất.' }
+    { name: 'Bản lĩnh', key: 'brave', desc: 'Vượt kỳ vọng: Thắng kèo khó hoặc gánh đồng đội ELO thấp.' },
+    { name: 'Phong độ', key: 'form', desc: 'Chuỗi thành tích: Tỉ lệ thắng trong 5 trận gần nhất.' },
+    { name: 'Phối hợp', key: 'synergy', desc: 'Ăn ý: Tỉ lệ thắng trung bình của đồng đội khi chơi cùng.' },
+    { name: 'Nhiệt huyết', key: 'experience', desc: 'Độ chăm chỉ: Tần suất ra sân thi đấu trong 7 ngày qua.' }
   ];
 
   const getPoint = (val: number, index: number) => {
-    const angle = (index * 72 - 90) * (Math.PI / 180);
+    const angle = (index * 60 - 90) * (Math.PI / 180);
     const r = (val / 100) * 42;
     return { x: 50 + r * Math.cos(angle), y: 50 + r * Math.sin(angle) };
   };
@@ -395,7 +396,7 @@ function RadarChart({ data }: { data: { attack: number, defense: number, brave: 
           <polygon 
             key={r}
             points={labels.map((_, i) => {
-              const a = (i * 72 - 90) * (Math.PI / 180);
+              const a = (i * 60 - 90) * (Math.PI / 180);
               return `${50 + (r/100*40) * Math.cos(a)},${50 + (r/100*40) * Math.sin(a)}`;
             }).join(' ')} 
             fill="none" 
@@ -406,7 +407,7 @@ function RadarChart({ data }: { data: { attack: number, defense: number, brave: 
         ))}
         {/* Axis lines */}
         {labels.map((_, i) => {
-          const a = (i * 72 - 90) * (Math.PI / 180);
+          const a = (i * 60 - 90) * (Math.PI / 180);
           return (
             <line key={i} x1="50" y1="50" x2={50 + 40 * Math.cos(a)} y2={50 + 40 * Math.sin(a)} stroke="white" strokeOpacity="0.1" strokeWidth="0.5" />
           );
@@ -416,7 +417,7 @@ function RadarChart({ data }: { data: { attack: number, defense: number, brave: 
         
         {/* Labels & Interactive Points */}
         {labels.map((l, i) => {
-          const a = (i * 72 - 90) * (Math.PI / 180);
+          const a = (i * 60 - 90) * (Math.PI / 180);
           const x = 50 + 52 * Math.cos(a);
           const y = 50 + 52 * Math.sin(a);
           const valPoint = getPoint(values[i], i);
@@ -436,25 +437,30 @@ function RadarChart({ data }: { data: { attack: number, defense: number, brave: 
                 {l.name}
               </text>
               <circle cx={valPoint.x} cy={valPoint.y} r="2" fill="#bef264" className={cn("transition-all", hoveredIndex === i ? "r-3" : "r-1.5")} />
-              {/* Invisible touch area */}
-              <circle cx={x} cy={y} r="10" fill="transparent" />
+              <circle cx={x} cy={y} r="15" fill="transparent" />
             </g>
           );
         })}
       </svg>
 
       {/* Tooltip */}
-      <div className={cn(
-        "absolute -bottom-2 left-1/2 -translate-x-1/2 w-full bg-slate-800 border border-white/10 p-2 rounded-lg shadow-2xl transition-all duration-200 z-10",
-        hoveredIndex !== null ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"
-      )}>
-        {hoveredIndex !== null && (
-          <>
-            <div className="text-[10px] font-black text-primary uppercase mb-0.5">{labels[hoveredIndex].name} ({values[hoveredIndex]}đ)</div>
-            <div className="text-[9px] text-white/70 leading-tight">{labels[hoveredIndex].desc}</div>
-          </>
-        )}
-      </div>
+      {hoveredIndex !== null && (
+        <div 
+          className="pointer-events-none absolute w-max max-w-[200px] bg-slate-800 border border-primary/30 p-2.5 rounded-xl shadow-2xl z-50 text-center animate-in fade-in zoom-in-95 duration-200"
+          style={{
+            left: `${50 + 52 * Math.cos((hoveredIndex * 60 - 90) * (Math.PI / 180))}%`,
+            top: `${50 + 52 * Math.sin((hoveredIndex * 60 - 90) * (Math.PI / 180))}%`,
+            transform: 'translate(-50%, -120%)'
+          }}
+        >
+          <div className="text-[10px] font-black text-primary uppercase tracking-widest mb-1">
+            {labels[hoveredIndex].name} ({values[hoveredIndex]}đ)
+          </div>
+          <div className="text-xs font-bold text-white/80 leading-snug">
+            {labels[hoveredIndex].desc}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -556,7 +562,7 @@ function ProfileZone({
           <div className="grid grid-cols-3 gap-3">
             <StatCard label="Chuỗi" value={analysis.streak || '--'} icon={Flame} color="orange" />
             <StatCard label="Tổng trận" value={stats?.total || 0} icon={Target} color="blue" />
-            <StatCard label="Kinh nghiệm" value={`${analysis.radar.experience}đ`} icon={Award} color="purple" />
+            <StatCard label="Nhiệt huyết" value={`${analysis.radar.experience}đ`} icon={Award} color="purple" />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -723,12 +729,14 @@ function MatrixZone({
               <div 
                 key={index}
                 className={cn(
-                  "rounded-2xl border p-5 transition-all hover:scale-[1.02] bg-slate-800/50 relative overflow-hidden group",
+                  "rounded-2xl border p-5 transition-all hover:scale-[1.02] bg-slate-800/50 relative group",
                   isGood ? "border-green-500/20" : "border-white/[0.05]"
                 )}
               >
-                {isGood && <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/5 blur-3xl rounded-full" />}
-                <div className="flex items-center justify-between mb-4">
+                <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
+                  {isGood && <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/5 blur-3xl rounded-full" />}
+                </div>
+                <div className="flex items-center justify-between mb-4 relative z-10">
                   <div className="flex items-center gap-4">
                     <div className={cn(
                       "w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-black transition-transform group-hover:rotate-12",
@@ -740,22 +748,44 @@ function MatrixZone({
                       <div className="font-black text-white text-lg">{otherName}</div>
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">{row.total} trận</span>
-                        {Math.abs(impact) > 5 && (
-                          <span className={cn(
-                            "text-[10px] font-black px-1.5 py-0.5 rounded",
-                            impact > 0 ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
-                          )}>
-                            {impact > 0 ? "+" : ""}{Math.round(impact)}% Impact
-                          </span>
+                        {row.impact !== undefined && Math.abs(row.impact) > 5 && (
+                          <div className="relative group/pill">
+                            <span className={cn(
+                              "text-[10px] font-black px-2 py-0.5 rounded-full cursor-help transition-all shadow-sm border",
+                              row.impact > 0 ? "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30" 
+                                             : "bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30"
+                            )}>
+                              {row.impact > 0 ? "Hợp cạ" : "Kỵ cạ"} {Math.abs(row.impact)}%
+                            </span>
+                            
+                            {/* 3-layer Tooltip */}
+                            <div className="absolute bottom-full right-0 mb-2 w-max max-w-[250px] bg-slate-800 border border-white/10 rounded-xl shadow-2xl p-3 opacity-0 group-hover/pill:opacity-100 pointer-events-none transition-all duration-200 z-50 origin-bottom-right scale-95 group-hover/pill:scale-100">
+                              <div className="flex items-center gap-2 mb-1.5 border-b border-white/5 pb-1.5">
+                                <div className="text-base">{row.impact > 0 ? "💪" : "⚓"}</div>
+                                <div className={cn("text-xs font-black uppercase tracking-widest", row.impact > 0 ? "text-green-400" : "text-red-400")}>
+                                  {row.impact > 0 ? "Cặp Bài Trùng" : "Dẫm Chân Nhau"}
+                                </div>
+                              </div>
+                              <div className="text-[11px] text-white/90 font-medium leading-relaxed mb-2">
+                                {row.impact > 0 
+                                  ? `Khi đánh chung, ${otherName} giúp hiệu suất của bạn tăng thêm ${Math.abs(row.impact)}% so với mức trung bình.`
+                                  : `Khi đánh chung, ${otherName} kéo hiệu suất của bạn giảm đi ${Math.abs(row.impact)}% so với mức trung bình.`}
+                              </div>
+                              <div className="text-[9px] text-white/40 font-mono tracking-tighter bg-black/20 p-1.5 rounded flex justify-between">
+                                <span>Baseline: {(row.baselinePs ?? 0)}%</span>
+                                <span>Đánh chung: {(row.partnerPs ?? 0)}%</span>
+                              </div>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right relative z-10">
                     <div className={cn("text-3xl font-black", isGood ? "text-green-400" : "text-white")}>
                       {row.rate}%
                     </div>
-                    <div className="text-[10px] font-bold text-white/30 uppercase">Win Rate</div>
+                    <div className="text-[10px] font-bold text-white/30 uppercase">{matrixTab === 'partner' ? 'Hợp tác' : 'Đối đầu'}</div>
                   </div>
                 </div>
                 

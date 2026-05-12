@@ -190,3 +190,15 @@ repo.
 - Added current ELO ratings directly into the Hub leaderboard list.
 - Compressed vertical whitespace in ELO and Insight lists.
 - Fixed layout shifting in "Form gần đây" cards by standardizing heights and flex behavior.
+
+### Analysis Center Algorithms & UX (Phase 3)
+
+- Implemented "Delta Hiệu Suất" algorithm to measure Synergy (Impact) between players using ELO-based expected win probabilities (Chronological Match-by-Match tracking).
+- Replaced basic radar stats with "Bản lĩnh" (Clutch performance over expected ELO) and "Nhiệt huyết" (Activity in the last 7 days). Radar chart now dynamically supports 6 metrics.
+- Upgraded the Matrix UI with color-coded Impact pills ("Hợp cạ" / "Kỵ cạ") and a 3-layer floating tooltip (Emotion - Insight - Data).
+- Resolved Tooltip UI flickering using absolute positioning with `pointer-events-none` over expanded hitboxes.
+- Expanded the Hub Insights engine to 15 unique logic triggers (Hot streak, Rivalry, Clutch King, Carry God, Anchor, etc.) with over 100 randomized text variations to prevent stale content.
+
+### Admin Tools
+
+- Added full database JSON Restore (`POST /api/restore`) to complement existing JSON Backup functionality, preventing data loss.
