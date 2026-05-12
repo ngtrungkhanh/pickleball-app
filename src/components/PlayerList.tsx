@@ -1,6 +1,6 @@
 'use client';
 import { User, UserX } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, getAvatarLetter } from '@/lib/utils';
 
 export function PlayerList({ players }: { players: any[] }) {
   if (!players || players.length === 0) {
@@ -24,7 +24,7 @@ export function PlayerList({ players }: { players: any[] }) {
               "w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-inner",
               p.active ? "bg-gradient-to-br from-primary to-accent" : "bg-secondary-foreground/30"
             )}>
-              {p.name.charAt(0).toUpperCase()}
+              {getAvatarLetter(p.name)}
             </div>
             <div>
               <p className="font-bold text-lg leading-tight">{p.name}</p>
