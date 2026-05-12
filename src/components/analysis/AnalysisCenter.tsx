@@ -373,7 +373,7 @@ function RadarChart({ data }: { data: { attack: number, defense: number, brave: 
     { name: 'Bản lĩnh', key: 'brave', desc: 'Vượt kỳ vọng: Thắng kèo khó hoặc gánh đồng đội ELO thấp.' },
     { name: 'Phong độ', key: 'form', desc: 'Chuỗi thành tích: Tỉ lệ thắng trong 5 trận gần nhất.' },
     { name: 'Phối hợp', key: 'synergy', desc: 'Ăn ý: Tỉ lệ thắng trung bình của đồng đội khi chơi cùng.' },
-    { name: 'Nhiệt huyết', key: 'experience', desc: 'Độ chăm chỉ: Tần suất ra sân thi đấu trong 7 ngày qua.' }
+    { name: 'Nhiệt huyết', key: 'experience', desc: 'Độ chăm chỉ: Tần suất ra sân thi đấu so với người đi nhiều nhất giải.' }
   ];
 
   const getPoint = (val: number, index: number) => {

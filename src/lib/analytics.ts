@@ -155,12 +155,13 @@ export function getPlayerAnalysis(playerId: string, players: Player[], matches: 
   const last5Wins = last5.filter(m => ids([m.win_1, m.win_2]).includes(playerId)).length;
   const formScore = last5.length > 0 ? (last5Wins / last5.length) * 100 : 50;
 
-  // 6. Nhiệt huyết (Activity in last 7 days)
-  const now = new Date();
-  const last7DaysDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const recentMatches = playerMatches.filter(m => new Date(m.date || '') >= last7DaysDate);
-  // 10 matches in a week is 100%
-  const expScore = Math.min(100, (recentMatches.length / 10) * 100);
+  // 6. Nhiệt huyết (Activity relative to the most active player)
+  let maxMatches = 1;
+  players.forEach(p => {
+    const pMatches = matches.filter(m => ids([m.win_1, m.win_2, m.lose_1, m.lose_2]).includes(p.id)).length;
+    if (pMatches > maxMatches) maxMatches = pMatches;
+  });
+  const expScore = Math.min(100, (playerMatches.length / maxMatches) * 100);
 
   const radar = {
     attack: Math.round(attackScore),
