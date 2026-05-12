@@ -103,8 +103,15 @@ export function AnalysisCenter({
   const rankingMatches = activeMatches.filter(isRankingMatch);
   const seasonOptions = Array.from(new Set([activeSeason, ...seasons.map(s => s.name), ...allMatches.map(m => m.season || 'Season 1')].filter(Boolean)));
 
-  const board = useMemo(() => calculateLeaderboard(players, activeMatches, loseMoney).filter(p => !isGuestId(p.id)), [players, activeMatches, loseMoney]);
   const elo = useMemo(() => buildElo(visiblePlayers, rankingMatches), [visiblePlayers, rankingMatches]);
+  const board = useMemo(() => {
+    const rawBoard = calculateLeaderboard(players, activeMatches, loseMoney).filter(p => !isGuestId(p.id));
+    return rawBoard.map(p => ({
+      ...p,
+      rating: elo.rating.get(p.id) || 1000
+    })).sort((a, b) => b.rating - a.rating);
+  }, [players, activeMatches, elo, loseMoney]);
+
   const partnerRows = useMemo(() => buildPartnerRows(visiblePlayers, rankingMatches), [visiblePlayers, rankingMatches]);
   const opponentRows = useMemo(() => buildOpponentRows(visiblePlayers, rankingMatches), [visiblePlayers, rankingMatches]);
   const analysis = useMemo(() => getPlayerAnalysis(playerId, visiblePlayers, rankingMatches), [playerId, visiblePlayers, rankingMatches]);
@@ -320,8 +327,8 @@ function HubZone({
                   {index + 1}
                 </div>
                 <div className="flex-1 flex items-center justify-between min-w-0 pr-4">
-                  <div className="font-bold text-white text-base truncate">{player.name}</div>
-                  <div className="text-base font-black text-primary shrink-0 ml-2">{player.rating}</div>
+                  <div className="font-black text-white text-xl truncate">{player.name}</div>
+                  <div className="text-xl font-black text-primary shrink-0 ml-2">{player.rating}</div>
                 </div>
                 <div className="w-20 h-6 shrink-0 hidden sm:block">
                   <EloSparkline history={elo.history} playerId={player.id} />
