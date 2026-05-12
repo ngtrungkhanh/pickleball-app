@@ -216,19 +216,40 @@ export function buildPartnerRows(players: Player[], matches: Match[], matchExpec
   return rows.sort((a, b) => b.rate - a.rate || b.total - a.total);
 }
 
-export function buildOpponentRows(players: Player[], matches: Match[]) {
+export function buildOpponentRows(players: Player[], matches: Match[], matchExpected: Map<string, { winProb: number, loseProb: number }>) {
   const rows: MatrixRow[] = [];
   players.forEach(player => {
+    const playerAllMatches = matches.filter(m => ids([m.win_1, m.win_2, m.lose_1, m.lose_2]).includes(player.id));
+    const baselinePs = calculatePS(player.id, playerAllMatches, matchExpected);
+
     players.filter(p => p.id !== player.id).forEach(opponent => {
       let total = 0;
       let wins = 0;
+      const opponentMatches: Match[] = [];
+
       matches.forEach(m => {
         const winTeam = ids([m.win_1, m.win_2]);
         const loseTeam = ids([m.lose_1, m.lose_2]);
-        if (winTeam.includes(player.id) && loseTeam.includes(opponent.id)) { total++; wins++; }
-        if (loseTeam.includes(player.id) && winTeam.includes(opponent.id)) total++;
+        if (winTeam.includes(player.id) && loseTeam.includes(opponent.id)) { total++; wins++; opponentMatches.push(m); }
+        if (loseTeam.includes(player.id) && winTeam.includes(opponent.id)) { total++; opponentMatches.push(m); }
       });
-      if (total > 0) rows.push({ player: player.name, opponent: opponent.name, total, wins, losses: total - wins, rate: Math.round((wins / total) * 100) });
+
+      if (total > 0) {
+        const opponentPs = calculatePS(player.id, opponentMatches, matchExpected);
+        const impact = total >= 3 ? (opponentPs - baselinePs) * 100 : undefined;
+
+        rows.push({ 
+          player: player.name, 
+          opponent: opponent.name, 
+          total, 
+          wins, 
+          losses: total - wins, 
+          rate: Math.round((wins / total) * 100),
+          impact: impact !== undefined ? Math.round(impact) : undefined,
+          baselinePs: Math.round(baselinePs * 100),
+          partnerPs: Math.round(opponentPs * 100)
+        });
+      }
     });
   });
   return rows.sort((a, b) => b.total - a.total || b.rate - a.rate);
@@ -240,13 +261,13 @@ export function getName(players: Player[], id?: string | null) {
 }
 
 export function getInsights(board: any[], elo: any, matches: Match[], players: Player[], matchExpected: Map<string, { winProb: number, loseProb: number }>): Insight[] {
-  const insights: Insight[] = [];
-  if (!board || board.length === 0) return insights;
+  type LocalInsight = Insight & { playersInvolved: (string | undefined)[] };
+  const insights: LocalInsight[] = [];
+  if (!board || board.length === 0) return [];
 
-  // 15 Triggers x ~5 variations
-  const addInsight = (type: string, title: string, texts: string[]) => {
+  const addInsight = (type: string, title: string, texts: string[], playersInvolved: (string | undefined)[] = []) => {
     const randomText = texts[Math.floor(Math.random() * texts.length)];
-    insights.push({ type, title, text: randomText });
+    insights.push({ type, title, text: randomText, playersInvolved });
   };
 
   board.forEach(player => {
@@ -264,7 +285,7 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
         `Phong độ của ${player.name} đang ở đỉnh cao, ${c} đối thủ gần nhất đều phải ôm hận.`,
         `${player.name} đang thăng hoa với chuỗi thắng ${c} trận. Hãy xem ai có thể cản bước!`,
         `Máy ghi điểm mang tên ${player.name} đã thông nòng với ${c} chiến thắng liên tiếp.`
-      ]);
+      ], [player.name]);
     }
 
     // 2. Cold Streak
@@ -276,7 +297,7 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
         `${player.name} đang lạc lối với ${c} trận thua. Đã đến lúc đổi phong thủy?`,
         `Có vẻ ${player.name} đang bị vận đen đeo bám suốt ${c} trận qua.`,
         `Chuỗi ${c} trận không biết mùi chiến thắng. ${player.name} cần một trận đấu gỡ gạc lại danh dự!`
-      ]);
+      ], [player.name]);
     }
 
     // 3. Kẻ Hủy Diệt (Top WR >= 70%, >= 8 matches)
@@ -288,7 +309,7 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
         `Hiệu suất ${Math.round(winRate)}% của ${player.name} là một con số mà ai cũng khao khát.`,
         `${player.name} đang thống trị sân bóng với ${Math.round(winRate)}% chiến thắng. Đẳng cấp quá khác biệt.`,
         `Không thể cản phá! ${player.name} càn quét mọi đối thủ với tỉ lệ thắng ${Math.round(winRate)}%.`
-      ]);
+      ], [player.name]);
     }
 
     // 4. Đang chật vật (WR <= 30%, >= 5 matches)
@@ -299,7 +320,7 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
         `Chỉ đạt ${Math.round(winRate)}% tỉ lệ thắng, ${player.name} cần tập trung cao độ hơn ở các trận tới.`,
         `${player.name} đang là mỏ điểm của giải đấu với mức winrate khiêm tốn ${Math.round(winRate)}%.`,
         `Báo động đỏ cho ${player.name} khi tỉ lệ thắng chỉ quanh quẩn ở mức ${Math.round(winRate)}%.`
-      ]);
+      ], [player.name]);
     }
 
     // 5. Cày cuốc (>= 15 matches)
@@ -310,7 +331,7 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
         `Thể lực vô cực! ${player.name} đã bào mòn sân bóng suốt ${stats.total} trận.`,
         `${player.name} chính là linh hồn của phong trào với ${stats.total} lần xỏ giày ra sân.`,
         `Bền bỉ như một cỗ máy, ${player.name} đã thi đấu tổng cộng ${stats.total} trận.`
-      ]);
+      ], [player.name]);
     }
 
     // 6. Clutch King (High Bản lĩnh)
@@ -321,32 +342,32 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
         `Bản lĩnh thi đấu của ${player.name} là không thể đùa được (${pAnalysis.radar.brave}đ), luôn vượt qua mọi kỳ vọng.`,
         `${player.name} có một cái đầu lạnh, chuyên gia lật kèo và gánh tạ với chỉ số Bản lĩnh chót vót ${pAnalysis.radar.brave}/100.`,
         `Tinh thần thép giúp ${player.name} đạt điểm Bản lĩnh ${pAnalysis.radar.brave}đ. Càng áp lực đánh càng hay.`
-      ]);
+      ], [player.name]);
     }
   });
 
   const partnerRows = buildPartnerRows(players, matches, matchExpected);
   
   // 7. Cặp đôi hoàn hảo (WR >= 75%, impact positive, total >= 3)
-  partnerRows.filter(r => r.total >= 3 && r.rate >= 75).slice(0, 3).forEach(r => {
+  partnerRows.filter(r => r.total >= 3 && r.rate >= 75 && (r.impact ?? 0) > 10).slice(0, 3).forEach(r => {
     addInsight('partnership_good', '🤝 CẶP BÀI TRÙNG', [
       `Cặp đôi ${r.player} & ${r.partner} cứ ráp vào nhau là có ${r.rate}% win rate (thắng ${r.wins}/${r.total} trận). Phép thuật là đây!`,
       `Sự bọc lót giữa ${r.player} và ${r.partner} đạt độ hoàn hảo, tỉ lệ thắng lên tới ${r.rate}% sau ${r.total} trận.`,
       `Không một kẽ hở! ${r.player} & ${r.partner} đang là cặp đôi ăn ý nhất giải (thắng ${r.wins} trong ${r.total} trận).`,
       `${r.player} và ${r.partner} sinh ra là để đánh chung. Con số ${r.rate}% chiến thắng không hề biết nói dối.`,
       `Đối đầu với ${r.player} và ${r.partner} lúc này là một bài toán khó với winrate cặp đôi lên tới ${r.rate}% (${r.wins}W-${r.total - r.wins}L).`
-    ]);
+    ], [r.player, r.partner]);
   });
 
-  // 8. Báo thủ (Impact <= -20)
-  partnerRows.filter(r => r.total >= 3 && (r.impact ?? 0) <= -20).slice(0, 3).forEach(r => {
+  // 8. Báo thủ (Impact <= -15)
+  partnerRows.filter(r => r.total >= 3 && (r.impact ?? 0) <= -15).slice(0, 3).forEach(r => {
     addInsight('anchor', '⚓ BÁO THỦ', [
       `${r.player} dường như đang bị "phong ấn" sức mạnh khi đánh cặp chung với ${r.partner} (Hiệu suất giảm ${Math.abs(r.impact!)}%).`,
       `Có vẻ ${r.partner} là một quả tạ khá nặng khiến phong độ của ${r.player} sụt giảm mạnh tới ${Math.abs(r.impact!)}% so với trung bình.`,
       `${r.player} và ${r.partner} đang giẫm chân nhau trên sân, hiệu suất cặp đôi âm nặng (-${Math.abs(r.impact!)}%).`,
       `Đánh lẻ thì hay mà cứ ghép cặp là gãy. ${r.player} & ${r.partner} kéo lùi hiệu suất của nhau tới ${Math.abs(r.impact!)}%.`,
       `Áp lực tàng hình đang đè nặng lên vai ${r.player} mỗi khi phải đánh chung với ${r.partner} (Impact: -${Math.abs(r.impact!)}%).`
-    ]);
+    ], [r.player, r.partner]);
   });
 
   // 9. Gánh Tạ (Impact >= 20)
@@ -357,23 +378,56 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
       `${r.partner} đã gánh vác và bao sân quá tốt, giúp hiệu suất của ${r.player} vượt rào thêm ${r.impact}%.`,
       `Hiệu suất của ${r.player} tăng vọt thêm ${r.impact}% khi có ${r.partner} chống lưng. Một sự buff sức mạnh đáng sợ!`,
       `${r.partner} đích thị là Bùa Hộ Mệnh mà ${r.player} luôn khao khát được đánh chung (Impact: +${r.impact}%).`
-    ]);
+    ], [r.player, r.partner]);
   });
 
-  const oppRows = buildOpponentRows(players, matches);
+  // 10. Tròn Vai (Neutral Partnership)
+  partnerRows.filter(r => r.total >= 5 && Math.abs(r.impact ?? 0) <= 5).slice(0, 3).forEach(r => {
+    addInsight('partnership_neutral', '⚖️ TRÒN VAI', [
+      `${r.player} và ${r.partner} là một cặp đôi ổn định. Không ai gánh ai, cũng không ai làm tạ.`,
+      `Đánh chung ${r.total} trận, ${r.player} và ${r.partner} thi đấu đúng với phong độ vốn có (Impact quanh 0%).`,
+      `Sự kết hợp giữa ${r.player} và ${r.partner} diễn ra khá mượt mà, thành tích phản ánh đúng thực lực hai bên.`,
+      `${r.player} & ${r.partner} chơi tròn vai cùng nhau, thắng ${r.wins}/${r.total} trận mà không có sự đột biến nào bất thường.`,
+      `Cứ ráp chung là thi đấu cực kỳ an toàn. ${r.player} và ${r.partner} luôn hoàn thành tốt nhiệm vụ trên sân.`
+    ], [r.player, r.partner]);
+  });
+
+  const oppRows = buildOpponentRows(players, matches, matchExpected);
   
-  // 10. Kẻ thù truyền kiếp (WR >= 80%, >= 3 matches)
-  oppRows.filter(r => r.total >= 3 && r.rate >= 80).slice(0, 3).forEach(r => {
+  // 11. Kẻ thù truyền kiếp (Impact >= 10%)
+  oppRows.filter(r => r.total >= 3 && (r.impact ?? 0) >= 10).slice(0, 3).forEach(r => {
     addInsight('rivalry_good', '⚔️ THIÊN ĐỊCH', [
       `${r.player} chính là cơn ác mộng lớn nhất của ${r.opponent} với tỉ lệ thắng áp đảo ${r.rate}% (thắng ${r.wins}/${r.total} trận).`,
       `Cứ gặp ${r.opponent} là ${r.player} lại đánh như lên đồng, giành chiến thắng tới ${r.wins} trong tổng số ${r.total} lần đụng độ.`,
       `${r.player} đã bắt bài hoàn toàn lối chơi của ${r.opponent}. Cửa thắng cho ${r.opponent} là quá hẹp (${r.rate}% thua).`,
       `Một sự hủy diệt tàn nhẫn! ${r.player} không cho ${r.opponent} cơ hội phản kháng nào (thắng ${r.wins}-${r.total - r.wins}).`,
       `${r.opponent} chắc chắn sẽ phải run sợ mỗi khi thấy ${r.player} đứng ở bên kia lưới (${r.rate}% W).`
-    ]);
+    ], [r.player, r.opponent]);
   });
 
-  // 11. Nhà tài trợ
+  // 12. Bị Át Vía (Impact <= -10%)
+  oppRows.filter(r => r.total >= 3 && (r.impact ?? 0) <= -10).slice(0, 3).forEach(r => {
+    addInsight('rivalry_bad', '🛡️ BỊ ÁT VÍA', [
+      `Cứ đứng bên kia lưới là cóng tâm lý! ${r.player} thường xuyên thi đấu dưới sức mỗi khi gặp ${r.opponent} (Giảm ${Math.abs(r.impact!)}% hiệu suất).`,
+      `${r.opponent} dường như là khắc tinh của ${r.player}. Cửa thắng vô cùng hẹp (${r.rate}% W).`,
+      `Mỗi khi gặp ${r.opponent}, ${r.player} lại đánh mất chính mình và để thua tới ${r.losses}/${r.total} trận đụng độ.`,
+      `Kỵ rơ hoàn toàn! ${r.player} luôn gặp khó khăn và đánh giá thấp khả năng của bản thân mỗi khi đối đầu ${r.opponent}.`,
+      `${r.player} cần một chiến thuật hoàn toàn mới nếu muốn vượt qua ngọn núi mang tên ${r.opponent}.`
+    ], [r.player, r.opponent]);
+  });
+
+  // 13. Cân Kèo (Neutral Rivalry)
+  oppRows.filter(r => r.total >= 5 && Math.abs(r.impact ?? 0) <= 5).slice(0, 3).forEach(r => {
+    addInsight('rivalry_neutral', '🤝 CÂN KÈO', [
+      `${r.player} và ${r.opponent} có vẻ là kỳ phùng địch thủ, thành tích đối đầu sau ${r.total} trận bám sát với ELO hai bên.`,
+      `Không có bất ngờ nào xảy ra khi ${r.player} gặp ${r.opponent}. Tỉ lệ thắng thua hoàn toàn đúng với trình độ hiện tại.`,
+      `Cặp đấu giữa ${r.player} và ${r.opponent} diễn ra vô cùng sòng phẳng. Đẳng cấp hai bên đã được thể hiện đúng mức.`,
+      `${r.player} đối đầu ${r.opponent} là một kèo đấu phản ánh chân thực nhất sức mạnh và kỹ năng của cả hai.`,
+      `Với ${r.total} lần chạm trán, ${r.player} và ${r.opponent} luôn duy trì một phong độ chuẩn mực khi gặp nhau.`
+    ], [r.player, r.opponent]);
+  });
+
+  // 14. Nhà tài trợ
   const totalFines = board.reduce((sum, p) => sum + p.money, 0);
   if (totalFines > 0) {
     const topFine = [...board].sort((a, b) => b.money - a.money)[0];
@@ -384,35 +438,61 @@ export function getInsights(board: any[], elo: any, matches: Match[], players: P
         `${topFine.name} đánh bóng thì ít mà đóng họ thì nhiều. Đích thị là thẻ đen của giải!`,
         `Ban tổ chức vô cùng hoan nghênh tinh thần "Thua không quỵt" của nhà tài trợ ${topFine.name}.`,
         `Đừng buồn vì thua, ${topFine.name} hãy vui vì mình đã làm giàu cho quỹ liên hoan của cả hội!`
-      ]);
+      ], [topFine.name]);
     }
   }
 
-  // 12. Top ELO
+  // 15. Top ELO
   const topElo = [...elo.rating.entries()].sort((a, b) => b[1] - a[1])[0];
   if (topElo) {
     const playerName = players.find(p => p.id === topElo[0])?.name;
-    addInsight('elo_king', '👑 THỐNG TRỊ ELO', [
-      `${playerName} đang ngồi chễm chệ trên đỉnh vương quyền với ${topElo[1]} ELO. Ai sẽ lật đổ?`,
-      `Mức ELO ${topElo[1]} của ${playerName} là minh chứng cho một đẳng cấp out trình hoàn toàn.`,
-      `${playerName} đang cô đơn trên đỉnh cao danh vọng. Cần lắm một thế lực mới trỗi dậy!`,
-      `Với ${topElo[1]} ELO, ${playerName} chính là "Trùm cuối" mà ai cũng muốn đánh bại.`,
-      `BXH đang bị thống trị bởi bàn tay sắt của ${playerName}. Liệu ngai vàng có đổi chủ?`
-    ]);
+    if (playerName) {
+      addInsight('elo_king', '👑 THỐNG TRỊ ELO', [
+        `${playerName} đang ngồi chễm chệ trên đỉnh vương quyền với ${topElo[1]} ELO. Ai sẽ lật đổ?`,
+        `Mức ELO ${topElo[1]} của ${playerName} là minh chứng cho một đẳng cấp out trình hoàn toàn.`,
+        `${playerName} đang cô đơn trên đỉnh cao danh vọng. Cần lắm một thế lực mới trỗi dậy!`,
+        `Với ${topElo[1]} ELO, ${playerName} chính là "Trùm cuối" mà ai cũng muốn đánh bại.`,
+        `BXH đang bị thống trị bởi bàn tay sắt của ${playerName}. Liệu ngai vàng có đổi chủ?`
+      ], [playerName]);
+    }
   }
 
-  // Randomize and limit
+  // Group by type and pick 1 random variation per type
   const grouped = insights.reduce((acc, item) => {
     (acc[item.type] = acc[item.type] || []).push(item);
     return acc;
-  }, {} as Record<string, Insight[]>);
+  }, {} as Record<string, LocalInsight[]>);
 
-  const finalInsights: Insight[] = [];
+  const finalInsights: LocalInsight[] = [];
   Object.values(grouped).forEach(list => {
-    finalInsights.push(...list.sort(() => Math.random() - 0.5).slice(0, 1)); // Pick 1 variation per trigger
+    finalInsights.push(...list.sort(() => Math.random() - 0.5).slice(0, 1));
   });
 
-  // Shuffle and pick 6 insights
+  // Shuffle and apply Diversity Filter
   const shuffled = finalInsights.sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, 6);
+  const selected: Insight[] = [];
+  const usedPlayers = new Set<string>();
+
+  for (const item of shuffled) {
+    if (selected.length >= 6) break;
+    // Primary subject is the first player involved
+    const primary = item.playersInvolved[0];
+    if (primary && usedPlayers.has(primary)) continue;
+    
+    selected.push({ type: item.type, title: item.title, text: item.text });
+    if (primary) usedPlayers.add(primary);
+  }
+
+  // Fallback: If we couldn't find 6 unique, fill with remaining insights allowing duplicates
+  if (selected.length < 6) {
+    for (const item of shuffled) {
+      if (selected.length >= 6) break;
+      if (!selected.some(s => s.text === item.text)) {
+        selected.push({ type: item.type, title: item.title, text: item.text });
+      }
+    }
+  }
+
+  return selected;
 }
+

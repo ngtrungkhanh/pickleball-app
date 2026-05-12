@@ -28,8 +28,14 @@ export async function POST(request: Request) {
 
     const { players = [], matches = [], logs = [], archives = [], seasons = [] } = data;
 
-    // 1. Restore Seasons
+    // Delete in reverse dependency order to prevent FK violations
+    await sql`DELETE FROM audit_logs`;
+    await sql`DELETE FROM archives`;
+    await sql`DELETE FROM matches`;
+    await sql`DELETE FROM players`;
     await sql`DELETE FROM seasons`;
+
+    // 1. Restore Seasons
     for (const s of seasons) {
       await sql`
         INSERT INTO seasons (id, name, start_date, end_date, active, archived, created_at)
@@ -38,7 +44,6 @@ export async function POST(request: Request) {
     }
 
     // 2. Restore Players
-    await sql`DELETE FROM players`;
     for (const p of players) {
       await sql`
         INSERT INTO players (id, name, active, deleted_at, delete_group_id)
@@ -47,7 +52,6 @@ export async function POST(request: Request) {
     }
 
     // 3. Restore Matches
-    await sql`DELETE FROM matches`;
     for (const m of matches) {
       await sql`
         INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by, deleted_at, delete_group_id)
@@ -56,7 +60,6 @@ export async function POST(request: Request) {
     }
 
     // 4. Restore Archives
-    await sql`DELETE FROM archives`;
     for (const a of archives) {
       await sql`
         INSERT INTO archives (type, original_id, name, data, deleted_at)
@@ -64,8 +67,7 @@ export async function POST(request: Request) {
       `;
     }
 
-    // 5. Restore Logs (append or replace? usually replace to exactly match backup)
-    await sql`DELETE FROM audit_logs`;
+    // 5. Restore Logs
     for (const l of logs) {
       await sql`
         INSERT INTO audit_logs (id, action_type, details, created_at)

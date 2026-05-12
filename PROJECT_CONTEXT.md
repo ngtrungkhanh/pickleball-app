@@ -50,6 +50,14 @@ Read only when relevant:
 - Local demo routes such as `/ui-demo` and `/picker-demo` may exist on one
   machine for review, but should not be pushed unless explicitly requested.
 
+## Current Pending Tasks (Next Session)
+
+- **Restore API Fix**: Fix FK constraint in `/api/restore/route.ts` by deleting tables in correct order (`matches` -> `players` -> `seasons`).
+- **Matrix Zone Neutral Pills**: Add neutral grey pills for impacts between -5% and 5% ("Tròn Vai" for Partners, "Cân Kèo" for Opponents).
+- **Rivalry Impact**: Calculate Opponent Impact (Actual WR - Expected WR) and display "Khắc Chế" / "Át Vía" pills in the Opponent matrix tab.
+- **Insights Diversity Filter**: Implement a Set-based filter in `getInsights` to ensure no player appears more than once as the main subject on the Hub board.
+- **Expand to 15 Insights**: Implement 15 complete triggers (Individual, Partnership, Rivalry, Fun) with explicit metrics injected into the text.
+
 ## Architecture Snapshot
 
 - Next.js App Router

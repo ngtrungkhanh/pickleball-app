@@ -113,7 +113,7 @@ export function AnalysisCenter({
   }, [players, activeMatches, elo, loseMoney]);
 
   const partnerRows = useMemo(() => buildPartnerRows(visiblePlayers, rankingMatches, elo.matchExpected), [visiblePlayers, rankingMatches, elo.matchExpected]);
-  const opponentRows = useMemo(() => buildOpponentRows(visiblePlayers, rankingMatches), [visiblePlayers, rankingMatches]);
+  const opponentRows = useMemo(() => buildOpponentRows(visiblePlayers, rankingMatches, elo.matchExpected), [visiblePlayers, rankingMatches, elo.matchExpected]);
   const analysis = useMemo(() => getPlayerAnalysis(playerId, visiblePlayers, rankingMatches, elo.matchExpected), [playerId, visiblePlayers, rankingMatches, elo.matchExpected]);
   const insights = useMemo(() => getInsights(board, elo, rankingMatches, players, elo.matchExpected), [board, elo, rankingMatches, players, elo.matchExpected, insightKey]);
 
@@ -748,32 +748,56 @@ function MatrixZone({
                       <div className="font-black text-white text-lg">{otherName}</div>
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">{row.total} trận</span>
-                        {row.impact !== undefined && Math.abs(row.impact) > 5 && (
+                        {row.impact !== undefined && (
                           <div className="relative group/pill">
-                            <span className={cn(
-                              "text-[10px] font-black px-2 py-0.5 rounded-full cursor-help transition-all shadow-sm border",
-                              row.impact > 0 ? "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30" 
-                                             : "bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30"
-                            )}>
-                              {row.impact > 0 ? "Hợp cạ" : "Kỵ cạ"} {Math.abs(row.impact)}%
-                            </span>
+                            {matrixTab === 'partner' ? (
+                              <span className={cn(
+                                "text-[10px] font-black px-2 py-0.5 rounded-full cursor-help transition-all shadow-sm border",
+                                Math.abs(row.impact) <= 5 ? "bg-slate-700/50 text-slate-300 border-slate-600 hover:bg-slate-700" :
+                                row.impact > 0 ? "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30" 
+                                               : "bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30"
+                              )}>
+                                {Math.abs(row.impact) <= 5 ? "Tròn vai" : row.impact > 0 ? `Hợp cạ ${Math.abs(row.impact)}%` : `Kỵ cạ ${Math.abs(row.impact)}%`}
+                              </span>
+                            ) : (
+                              <span className={cn(
+                                "text-[10px] font-black px-2 py-0.5 rounded-full cursor-help transition-all shadow-sm border",
+                                Math.abs(row.impact) <= 5 ? "bg-slate-700/50 text-slate-300 border-slate-600 hover:bg-slate-700" :
+                                row.impact > 0 ? "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30" 
+                                               : "bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30"
+                              )}>
+                                {Math.abs(row.impact) <= 5 ? "Cân kèo" : row.impact > 0 ? `Ăn chặt ${Math.abs(row.impact)}%` : `Át vía ${Math.abs(row.impact)}%`}
+                              </span>
+                            )}
                             
                             {/* 3-layer Tooltip */}
                             <div className="absolute bottom-full right-0 mb-2 w-max max-w-[250px] bg-slate-800 border border-white/10 rounded-xl shadow-2xl p-3 opacity-0 group-hover/pill:opacity-100 pointer-events-none transition-all duration-200 z-50 origin-bottom-right scale-95 group-hover/pill:scale-100">
                               <div className="flex items-center gap-2 mb-1.5 border-b border-white/5 pb-1.5">
-                                <div className="text-base">{row.impact > 0 ? "💪" : "⚓"}</div>
-                                <div className={cn("text-xs font-black uppercase tracking-widest", row.impact > 0 ? "text-green-400" : "text-red-400")}>
-                                  {row.impact > 0 ? "Cặp Bài Trùng" : "Dẫm Chân Nhau"}
+                                <div className="text-base">{Math.abs(row.impact) <= 5 ? "⚖️" : row.impact > 0 ? "💪" : "⚓"}</div>
+                                <div className={cn("text-xs font-black uppercase tracking-widest", Math.abs(row.impact) <= 5 ? "text-slate-300" : row.impact > 0 ? "text-green-400" : "text-red-400")}>
+                                  {matrixTab === 'partner' 
+                                    ? (Math.abs(row.impact) <= 5 ? "Tròn Vai" : row.impact > 0 ? "Cặp Bài Trùng" : "Dẫm Chân Nhau")
+                                    : (Math.abs(row.impact) <= 5 ? "Cân Tài Cân Sức" : row.impact > 0 ? "Khắc Chế Cứng" : "Bị Khớp Tâm Lý")}
                                 </div>
                               </div>
                               <div className="text-[11px] text-white/90 font-medium leading-relaxed mb-2">
-                                {row.impact > 0 
-                                  ? `Khi đánh chung, ${otherName} giúp hiệu suất của bạn tăng thêm ${Math.abs(row.impact)}% so với mức trung bình.`
-                                  : `Khi đánh chung, ${otherName} kéo hiệu suất của bạn giảm đi ${Math.abs(row.impact)}% so với mức trung bình.`}
+                                {matrixTab === 'partner' ? (
+                                  Math.abs(row.impact) <= 5 
+                                    ? `Hai người thi đấu đúng với phong độ vốn có (Impact: ${row.impact}%). Không ai gánh ai, cũng không ai làm tạ.`
+                                    : row.impact > 0 
+                                      ? `Khi đánh chung, ${otherName} giúp hiệu suất của bạn tăng thêm ${Math.abs(row.impact)}% so với mức trung bình.`
+                                      : `Khi đánh chung, ${otherName} kéo hiệu suất của bạn giảm đi ${Math.abs(row.impact)}% so với mức trung bình.`
+                                ) : (
+                                  Math.abs(row.impact) <= 5
+                                    ? `Thành tích đối đầu phản ánh đúng trình độ (ELO) hiện tại của hai bên (Impact: ${row.impact}%).`
+                                    : row.impact > 0
+                                      ? `Bạn thường thi đấu vượt ${Math.abs(row.impact)}% khả năng mỗi khi đối đầu với người này.`
+                                      : `Bạn thường thi đấu dưới sức (giảm ${Math.abs(row.impact)}% hiệu suất) mỗi khi gặp người này.`
+                                )}
                               </div>
                               <div className="text-[9px] text-white/40 font-mono tracking-tighter bg-black/20 p-1.5 rounded flex justify-between">
-                                <span>Baseline: {(row.baselinePs ?? 0)}%</span>
-                                <span>Đánh chung: {(row.partnerPs ?? 0)}%</span>
+                                <span>Baseline PS: {(row.baselinePs ?? 0)}%</span>
+                                <span>Thực tế PS: {(row.partnerPs ?? 0)}%</span>
                               </div>
                             </div>
                           </div>
