@@ -254,7 +254,22 @@ export function generateAdvancedInsights(
     if (stats.deuceMatches >= 3) {
       addInsight('deuce', '🥵 KẺ ĐAM MÊ DEUCE', [
         `Không Deuce không về! ${p.name} có tới ${stats.deuceMatches} trận mắc hội chứng kéo dài tỉ số vượt mốc 11.`,
-        `Vua dây dưa! Đánh với ${p.name} thì xác định phải bào thể lực với ${stats.deuceMatches} trận đấu nghẹt thở extra point.`
+        `Vua dây dưa! Đánh với ${p.name} thì xác định phải bào thể lực với ${stats.deuceMatches} trận đấu nghẹt thở extra point.`,
+        `Chỉ thích thắng ở điểm số 12 trở lên. ${p.name} đã ${stats.deuceMatches} lần khiến khán giả đau tim vì thói quen giằng co.`,
+        `Đam mê Extra Point! ${p.name} là nguyên nhân chính khiến sân bị lố giờ nghỉ với ${stats.deuceMatches} trận cầu dai dẳng.`,
+        `Thắng nhanh thì chê, phải kéo đến Deuce mới chịu. ${p.name} đã nướng bóng và thời gian trong ${stats.deuceMatches} trận giằng co.`
+      ], [p.name], 'individual');
+    }
+
+    // 🩹 Tai Nạn Giao Thông
+    const lastMatch = stats.lastMatchDate ? matches.find(m => getDay(m.date) === stats.lastMatchDate && [m.lose_1, m.lose_2].includes(p.id)) : null;
+    if (lastMatch && (lastMatch.lose_score || 0) <= 2) {
+      addInsight('bagel', '🩹 TAI NẠN GIAO THÔNG', [
+        `Trận thua thảm họa chỉ ghi được ${lastMatch.lose_score} điểm vừa qua quả thực là một tai nạn giao thông của ${p.name}.`,
+        `Sập nguồn đột ngột! ${p.name} vừa trải qua một trận đấu quên mang theo nhịp điệu khi chỉ lên được ${lastMatch.lose_score} điểm.`,
+        `Chỉ vớt vát được ${lastMatch.lose_score} điểm danh dự, trận thua thảm họa vừa rồi chắc chắn sẽ khiến ${p.name} mất ngủ đêm nay.`,
+        `Cần một chầu bia để giải đen gấp cho ${p.name} sau trận đấu "cất vợt" kết thúc với ${lastMatch.lose_score} điểm ít ỏi.`,
+        `Không thể nhận ra ${p.name} trong trận đấu bị dội gáo nước lạnh vừa rồi, chỉ kịp ghi ${lastMatch.lose_score} điểm trước khi rời sân.`
       ], [p.name], 'individual');
     }
   });
