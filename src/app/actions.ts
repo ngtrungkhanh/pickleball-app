@@ -741,7 +741,18 @@ export async function updateMatchAction(formData: FormData) {
     if (old.lose_2) await updatePlayerStatsIncremental(old.lose_2, old.season, 0, 0, -lose_money);
 
     // 2. Update match details
-    const dateVal = dateStr ? new Date(dateStr) : new Date(old.date);
+    let dateVal: Date;
+    if (dateStr && dateStr.includes('T')) {
+      // datetime-local gửi về dạng "YYYY-MM-DDTHH:mm" (local time của user)
+      // Thêm timezone +07:00 để JavaScript parse đúng giờ Việt Nam, rồi convert sang UTC để lưu
+      const [datePart, timePart] = dateStr.split('T');
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hour, minute] = timePart.split(':').map(Number);
+      const isoString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+07:00`;
+      dateVal = new Date(isoString);
+    } else {
+      dateVal = new Date(old.date);
+    }
     await sql`
       UPDATE matches 
       SET win_1 = ${win_1}, win_2 = ${win_2}, lose_1 = ${lose_1}, lose_2 = ${lose_2}, 
