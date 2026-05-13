@@ -202,15 +202,16 @@ Client analysis derivation:
   rows before ELO, player metrics, partner edges, opponent edges, and insights
   are derived.
 - ELO replay uses chronological order and stores per-match expected
-  probabilities for Performance Score calculations.
+  probabilities plus the two teams' pre-match ELO averages. User-facing copy
+  should phrase this as `tỷ lệ thắng dự tính` or `kỳ vọng từ ELO trước trận`.
 - Player metrics derive wins, losses, win rate, current streak, recent form,
   points scored, points conceded, average conceded, attack, defense, brave,
   synergy, activity, fines, and recent matches directly from match rows.
-- Partner and opponent rows are directed edges keyed by player id. They include
-  record, rate, average score diff, baseline Performance Score, matchup
-  Performance Score, impact, confidence, and label.
+- Partner and opponent rows are directed edges keyed by player id and only count
+  matches where that player actually appears. They include record, rate,
+  average score diff, expected-result delta, confidence, and label.
 - Hub insight candidates are generated from the same snapshot in
-  `src/lib/insights.ts`; rules carry `rarity` and `weight` metadata for future
+  `src/lib/insights.ts`; rules carry rarity/frequency/appearance metadata for
   feed tuning.
 
 Cache and revalidation:

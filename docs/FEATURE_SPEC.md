@@ -259,18 +259,23 @@ Current analysis rules:
 - Defense uses average points conceded per match, not low points scored or low
   activity.
 - Partner and opponent network rows use directed edges keyed by player id, not
-  display name. Each edge includes sample size, record, win rate, score diff,
-  baseline Performance Score, matchup Performance Score, impact, confidence,
-  and label.
-- Impact means the player's Performance Score delta for that partner/opponent
-  relative to their own baseline. UI should phrase it as points of performance
-  such as `+18 điểm hiệu suất`, not as a raw percentage.
-- Hub insights are generated from the same snapshot with `rarity` and `weight`
-  metadata so rare events can be prioritized over always-available facts.
+  display name. Each edge only counts matches where that player actually
+  appears and includes sample size, record, win rate, score diff,
+  expected-result delta, confidence, and label.
+- Expected-result delta compares the real result with the ELO-based win
+  expectation before each match. UI and Hub comments should phrase it as
+  `cao hơn kỳ vọng từ ELO 18 điểm` or `thấp hơn kỳ vọng từ ELO 18 điểm`, not as
+  `baseline`, `impact`, or a raw percentage.
+- Hub insights are generated from the same snapshot with
+  rarity/frequency/appearance metadata so rare events can be prioritized over
+  always-available facts.
 - Hub insight copy that mentions win rate should include record context such as
   `wins/total` or `wins-total record`. Strong dominance wording should be
   reserved for players whose overall record/ELO supports that framing; otherwise
   describe dominant wins as isolated score highlights.
+- The first full insight dictionary target is 52 scenarios with one strong
+  evidence-backed sentence each. Expand to 4-5 variants per scenario only after
+  data correctness and tone are verified.
 
 Known gaps / good next work:
 

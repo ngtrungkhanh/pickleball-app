@@ -3,6 +3,10 @@
 This plan tracks the agreed rewrite for `/analysis` and the Hub insight feed.
 Keep it current while implementing so future sessions do not drift.
 
+Important follow-up: the current implemented registry is not the final 50-rule
+scope. Use `docs/ANALYSIS_INSIGHTS_50_RULE_PLAN.md` as the canonical plan for
+the next rewrite pass.
+
 ## Goals
 
 - Make one analysis core the source of truth for all `/analysis` calculations.

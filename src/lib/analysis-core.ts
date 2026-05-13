@@ -19,7 +19,12 @@ export type AnalysisMatch = {
   deleted_at?: unknown;
 };
 
-export type MatchExpected = Map<string, { winProb: number; loseProb: number }>;
+export type MatchExpected = Map<string, {
+  winProb: number;
+  loseProb: number;
+  winRating: number;
+  loseRating: number;
+}>;
 
 export type EloResult = {
   rating: Map<string, number>;
@@ -60,8 +65,17 @@ export type PlayerMetrics = AnalysisPlayer & {
   dominantLosses: number;
   deuceMatches: number;
   bagelLosses: number;
+  lowScoreLosses: number;
+  avgWinDiff: number;
+  avgLossDiff: number;
   upsetWins: number;
   upsetLosses: number;
+  recentEloDelta: number;
+  winsVsHigherElo: number;
+  lossesVsHigherElo: number;
+  totalVsHigherElo: number;
+  winsVsLowerElo: number;
+  totalVsLowerElo: number;
   alternations: number;
 };
 
@@ -204,6 +218,7 @@ function pointsConcededByPlayer(match: AnalysisMatch, playerId: string) {
 }
 
 function partnerForPlayer(match: AnalysisMatch, playerId: string) {
+  if (!playerInMatch(match, playerId)) return '';
   const partnerId = resultForPlayer(match, playerId) === 'W'
     ? (match.win_1 === playerId ? match.win_2 : match.win_1)
     : (match.lose_1 === playerId ? match.lose_2 : match.lose_1);
@@ -211,10 +226,27 @@ function partnerForPlayer(match: AnalysisMatch, playerId: string) {
 }
 
 function opponentIdsForPlayer(match: AnalysisMatch, playerId: string) {
+  if (!playerInMatch(match, playerId)) return [];
   const opponents = resultForPlayer(match, playerId) === 'W'
     ? [match.lose_1, match.lose_2]
     : [match.win_1, match.win_2];
   return opponents.filter((id): id is string => typeof id === 'string' && !isGuestId(id));
+}
+
+function expectedForPlayer(match: AnalysisMatch, playerId: string, matchExpected: MatchExpected) {
+  if (!match.id || !playerInMatch(match, playerId)) return null;
+  const expected = matchExpected.get(match.id);
+  if (!expected) return null;
+  return resultForPlayer(match, playerId) === 'W' ? expected.winProb : expected.loseProb;
+}
+
+function teamRatingForPlayer(match: AnalysisMatch, playerId: string, matchExpected: MatchExpected) {
+  if (!match.id || !playerInMatch(match, playerId)) return null;
+  const expected = matchExpected.get(match.id);
+  if (!expected) return null;
+  return resultForPlayer(match, playerId) === 'W'
+    ? { own: expected.winRating, opponent: expected.loseRating }
+    : { own: expected.loseRating, opponent: expected.winRating };
 }
 
 function countCurrentStreak(results: Array<'W' | 'L'>) {
@@ -260,7 +292,7 @@ export function buildAnalysisElo(players: AnalysisPlayer[], matches: AnalysisMat
     const expected = 1 / (1 + Math.pow(10, (loseAvg - winAvg) / 400));
 
     if (match.id) {
-      matchExpected.set(match.id, { winProb: expected, loseProb: 1 - expected });
+      matchExpected.set(match.id, { winProb: expected, loseProb: 1 - expected, winRating: winAvg, loseRating: loseAvg });
     }
 
     const getK = (id: string) => {
@@ -323,19 +355,19 @@ function edgeExplanation(kind: AnalysisEdgeKind, otherName: string, impact: numb
   const absImpact = Math.abs(impact);
   if (kind === 'partner') {
     if (Math.abs(impact) <= 5) {
-      return `Đánh chung với ${otherName}, hiệu suất gần như đúng mức bình thường.`;
+      return `Đánh chung với ${otherName}, kết quả gần đúng mức kỳ vọng từ ELO.`;
     }
     return impact > 0
-      ? `Đánh chung với ${otherName}, hiệu suất cao hơn bình thường ${absImpact} điểm.`
-      : `Đánh chung với ${otherName}, hiệu suất thấp hơn bình thường ${absImpact} điểm.`;
+      ? `Đánh chung với ${otherName}, kết quả cao hơn kỳ vọng từ ELO ${absImpact} điểm.`
+      : `Đánh chung với ${otherName}, kết quả thấp hơn kỳ vọng từ ELO ${absImpact} điểm.`;
   }
 
   if (Math.abs(impact) <= 5) {
-    return `Gặp ${otherName}, hiệu suất gần như đúng mức bình thường.`;
+    return `Gặp ${otherName}, kết quả gần đúng mức kỳ vọng từ ELO.`;
   }
   return impact > 0
-    ? `Gặp ${otherName}, hiệu suất cao hơn bình thường ${absImpact} điểm.`
-    : `Gặp ${otherName}, hiệu suất thấp hơn bình thường ${absImpact} điểm.`;
+    ? `Gặp ${otherName}, kết quả cao hơn kỳ vọng từ ELO ${absImpact} điểm.`
+    : `Gặp ${otherName}, kết quả thấp hơn kỳ vọng từ ELO ${absImpact} điểm.`;
 }
 
 function edgeConfidence(total: number, rate: number, avgDiff: number, impact: number, recentResults: Array<'W' | 'L'>) {
@@ -346,6 +378,17 @@ function edgeConfidence(total: number, rate: number, avgDiff: number, impact: nu
     + Math.abs(avgDiff) * 1.5
     + Math.abs(impact) * 0.8
     + recentBonus;
+}
+
+function ratingAtOrBefore(history: EloResult['history'], playerId: string, time: number) {
+  let value: number | null = null;
+  history.forEach(point => {
+    const pointTime = new Date(point.date || '').getTime() || 0;
+    if (pointTime <= time && typeof point.ratings[playerId] === 'number') {
+      value = point.ratings[playerId];
+    }
+  });
+  return value;
 }
 
 function buildPlayerMetrics(
@@ -377,6 +420,11 @@ function buildPlayerMetrics(
     const dominantLosses = diffs.filter(diff => diff <= -7).length;
     const deuceMatches = playerMatches.filter(match => numberValue(match.win_score) > 11).length;
     const bagelLosses = playerMatches.filter(match => resultForPlayer(match, player.id) === 'L' && numberValue(match.lose_score) <= 2).length;
+    const lowScoreLosses = playerMatches.filter(match => resultForPlayer(match, player.id) === 'L' && numberValue(match.lose_score) <= 4).length;
+    const winDiffs = diffs.filter(diff => diff > 0);
+    const lossDiffs = diffs.filter(diff => diff < 0);
+    const avgWinDiff = average(winDiffs);
+    const avgLossDiff = Math.abs(average(lossDiffs));
     const dailyCounts = new Map<string, number>();
 
     playerMatches.forEach(match => {
@@ -387,14 +435,22 @@ function buildPlayerMetrics(
 
     const upsetWins = playerMatches.filter(match => {
       if (!match.id || resultForPlayer(match, player.id) !== 'W') return false;
-      const expected = elo.matchExpected.get(match.id);
-      return Boolean(expected && expected.winProb < 0.3);
+      const expected = expectedForPlayer(match, player.id, elo.matchExpected);
+      return expected !== null && expected < 0.3;
     }).length;
     const upsetLosses = playerMatches.filter(match => {
       if (!match.id || resultForPlayer(match, player.id) !== 'L') return false;
-      const expected = elo.matchExpected.get(match.id);
-      return Boolean(expected && expected.loseProb > 0.7);
+      const expected = expectedForPlayer(match, player.id, elo.matchExpected);
+      return expected !== null && expected > 0.7;
     }).length;
+    const teamRatingRows = playerMatches
+      .map(match => ({ match, ratings: teamRatingForPlayer(match, player.id, elo.matchExpected) }))
+      .filter((row): row is { match: AnalysisMatch; ratings: { own: number; opponent: number } } => Boolean(row.ratings));
+    const vsHigher = teamRatingRows.filter(row => row.ratings.own < row.ratings.opponent);
+    const vsLower = teamRatingRows.filter(row => row.ratings.own > row.ratings.opponent);
+    const winsVsHigherElo = vsHigher.filter(row => resultForPlayer(row.match, player.id) === 'W').length;
+    const lossesVsHigherElo = vsHigher.length - winsVsHigherElo;
+    const winsVsLowerElo = vsLower.filter(row => resultForPlayer(row.match, player.id) === 'W').length;
 
     const streak = countCurrentStreak(playerMatches.slice(0, 20).map(match => resultForPlayer(match, player.id)));
     const last5 = playerMatches.slice(0, 5);
@@ -417,6 +473,11 @@ function buildPlayerMetrics(
     const lastMatch = playerMatches[0] || null;
     const lastMatchDate = lastMatch?.date || '';
     const lastMatchMs = lastMatch ? matchTime(lastMatch) : 0;
+    const oldRecentMatch = playerMatches[Math.min(9, playerMatches.length - 1)] || null;
+    const oldRecentRating = oldRecentMatch && playerMatches.length >= 5
+      ? ratingAtOrBefore(elo.history, player.id, matchTime(oldRecentMatch))
+      : null;
+    const recentEloDelta = oldRecentRating === null ? 0 : (elo.rating.get(player.id) ?? 1000) - oldRecentRating;
     const daysAbsent = lastMatchMs > 0 ? Math.floor((now.getTime() - lastMatchMs) / 86400000) : null;
     const money = visibleMatches.reduce((sum, match) => {
       return sum + ([match.lose_1, match.lose_2].includes(player.id) && !isGuestId(player.id) ? loseMoney : 0);
@@ -456,8 +517,17 @@ function buildPlayerMetrics(
       dominantLosses,
       deuceMatches,
       bagelLosses,
+      lowScoreLosses,
+      avgWinDiff,
+      avgLossDiff,
       upsetWins,
       upsetLosses,
+      recentEloDelta,
+      winsVsHigherElo,
+      lossesVsHigherElo,
+      totalVsHigherElo: vsHigher.length,
+      winsVsLowerElo,
+      totalVsLowerElo: vsLower.length,
       alternations: countAlternations(recentResults),
     } satisfies PlayerMetrics;
   });
@@ -651,6 +721,37 @@ export function buildAnalysisSnapshot(
     opponentEdges,
     profiles,
   };
+}
+
+export function verifyAnalysisSnapshot(snapshot: AnalysisSnapshot) {
+  const errors: string[] = [];
+
+  snapshot.playerMetrics.forEach(metric => {
+    const partnerTotalMax = Math.max(0, ...snapshot.partnerEdges.filter(edge => edge.playerId === metric.id).map(edge => edge.total));
+    const opponentTotalMax = Math.max(0, ...snapshot.opponentEdges.filter(edge => edge.playerId === metric.id).map(edge => edge.total));
+    if (partnerTotalMax > metric.total) {
+      errors.push(`${metric.name}: partner edge ${partnerTotalMax} exceeds real total ${metric.total}`);
+    }
+    if (opponentTotalMax > metric.total) {
+      errors.push(`${metric.name}: opponent edge ${opponentTotalMax} exceeds real total ${metric.total}`);
+    }
+  });
+
+  snapshot.partnerEdges.forEach(edge => {
+    const directMatches = snapshot.rankingMatches.filter(match => partnerForPlayer(match, edge.playerId) === edge.otherId);
+    if (directMatches.length !== edge.total) {
+      errors.push(`${edge.playerName} + ${edge.otherName}: edge total ${edge.total} differs from direct count ${directMatches.length}`);
+    }
+  });
+
+  snapshot.opponentEdges.forEach(edge => {
+    const directMatches = snapshot.rankingMatches.filter(match => opponentIdsForPlayer(match, edge.playerId).includes(edge.otherId));
+    if (directMatches.length !== edge.total) {
+      errors.push(`${edge.playerName} vs ${edge.otherName}: edge total ${edge.total} differs from direct count ${directMatches.length}`);
+    }
+  });
+
+  return errors;
 }
 
 export function edgeRecord(edge: AnalysisEdge) {

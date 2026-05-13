@@ -29,6 +29,8 @@ Read only when relevant:
 - `docs/DATA_FLOW.md` for database, server actions, cache, localStorage, and
   match save flow.
 - `docs/UI_RULES.md` for layout, wording, responsive behavior, and visual rules.
+- `docs/ANALYSIS_INSIGHTS_50_RULE_PLAN.md` before changing `/analysis`
+  insight logic or copy.
 
 ## Product Priorities
 
@@ -58,6 +60,9 @@ Read only when relevant:
 - **UI/UX Refinement**: Implement "Sports Ticker" style (marquee) or dynamic Flash Cards for displaying the generated Insights on the Home screen.
 - **Analysis Copy Review**: Review Hub insight comment tone on Vercel Preview
   after the shared analysis core has real dev data.
+- **Analysis Insights Rewrite**: Before further implementation, follow
+  `docs/ANALYSIS_INSIGHTS_50_RULE_PLAN.md`; the next pass must fix
+  partner/opponent edge counting and implement the 50+ planned scenarios.
 - **Merge & Deploy**: Validate `dev` on Vercel preview, then merge to `main`.
 
 ## Architecture Snapshot

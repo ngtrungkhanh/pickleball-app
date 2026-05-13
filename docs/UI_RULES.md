@@ -161,13 +161,14 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
 - The analysis page is denser than the dashboard and should feel like an
   internal analytics tool, not a landing page.
 - Keep filters visible and compact: season selector first, then zone controls.
-- Network (`Mạng lưới`) cards should explain impact values directly:
+- Network (`Mạng lưới`) cards should explain expected-result deltas directly:
   - Use labels such as `Hợp cạ`, `Kỵ cạ`, `Kèo thơm`, `Kèo khó`, `Tròn vai`,
     and `Cân kèo`.
   - Show record evidence such as `7W-2L · 78% · 9 trận`.
-  - Explain impact as a Performance Score delta, for example `Đánh chung với
-    A, hiệu suất cao hơn bình thường 18 điểm.`
-  - Do not present impact as a raw percent.
+  - Explain the value as an ELO expectation gap, for example `Đánh chung với
+    A, kết quả cao hơn kỳ vọng từ ELO 18 điểm.`
+  - Do not present the value as a raw percent, and do not use user-facing words
+    such as `baseline`, `impact`, or `deuce`.
   - Do not add extra joke/commentary lines to Network cards in this pass; keep
     the card focused on metric meaning.
 - Player cards should keep short labels and stable card heights. Long player

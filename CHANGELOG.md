@@ -220,3 +220,11 @@ repo.
 - Hardened Hub insight copy rules so win-rate comments include record context
   and dominant-win comments are toned down when the player's overall record/ELO
   does not support a strong "hủy diệt" framing.
+- Fixed partner/opponent edge counting so a player is only counted in matches
+  where they actually appear, preventing impossible matchup records that exceed
+  the player's real match total.
+- Rebuilt the Hub insight registry to the 52-scenario first pass from
+  `docs/ANALYSIS_INSIGHTS_50_RULE_PLAN.md`, with one evidence-backed sentence
+  per scenario and rarity/frequency/appearance metadata for feed selection.
+- Rephrased user-facing ELO expectation deltas as `cao hơn/thấp hơn kỳ vọng từ
+  ELO X điểm` instead of raw `baseline`, `impact`, or machine-prediction wording.
