@@ -282,7 +282,7 @@ export function generateAdvancedInsights(
     const maxMatchesInDay = Math.max(...Array.from(matchesByDay.values()), 0);
     if (maxMatchesInDay >= 5) {
       addInsight('ironman', '🚜 TRÂU CÀY', [
-        `Nền tảng thể lực vô cực! ${p.name} giữ kỷ lục xỏ giày ra sân tới ${maxMatchesInDay} trận chỉ trong một buổi.`,
+        `Thể lực bền bỉ đáng nể! ${p.name} giữ kỷ lục ra sân tới ${maxMatchesInDay} trận chỉ trong một buổi.`,
         `Đánh không biết mệt! ${p.name} đã bào mòn sân bóng với ${maxMatchesInDay} trận liên tiếp trong ngày hôm đó.`,
         `Cỗ máy chạy bằng cơm mang tên ${p.name} vừa hoàn tất ${maxMatchesInDay} trận đấu cực căng trong một buổi.`,
         `Ban tổ chức xin trao giải "Người cõi trên" cho ${p.name} vì thể lực bào ${maxMatchesInDay} trận/ngày.`,
@@ -415,11 +415,11 @@ export function generateAdvancedInsights(
     // 🔥 PHÁ ĐẬP (Kịch bản #40)
     if (stats.dominantWins >= 5) {
       addInsight('smash', '🔥 PHÁ ĐẬP', [
-        `${p.name} tạo sức ép khủng khiếp với ${stats.dominantWins} trận thắng cách biệt lớn.`,
+        `${p.name} tạo sức ép ấn tượng với ${stats.dominantWins} trận thắng cách biệt lớn.`,
         `Sức mạnh của ${p.name} được thể hiện qua ${stats.dominantWins} chiến thắng áp đảo.`,
-        `${p.name} "nghiền nát" đối thủ với ${stats.dominantWins} trận thắng đậm.`,
-        `Phong độ "phá đảo" của ${p.name} thể hiện qua ${stats.dominantWins} lần thắng cách biệt.`,
-        `${p.name} tạo "cơn bão" với ${stats.dominantWins} trận thắng thuyết phục.`
+        `${p.name} vượt trội hơn đối thủ với ${stats.dominantWins} trận thắng đậm.`,
+        `Phong độ ấn tượng của ${p.name} thể hiện qua ${stats.dominantWins} lần thắng cách biệt.`,
+        `${p.name} để lại dấu ấn mạnh với ${stats.dominantWins} trận thắng thuyết phục.`
       ], [p.name], 'individual');
     }
 
@@ -677,8 +677,8 @@ export function generateAdvancedInsights(
         ], [n1, n2], 'partnership');
       } else if (wr <= 25) {
         addInsight('bad_synergy', '⚓ DẪM CHÂN NHAU', [
-          `${n1} và ${n2} dường như chưa tìm được tiếng nói chung, thường xuyên giẫm chân nhau khiến tỉ lệ thắng rớt xuống ${Math.round(wr)}%.`,
-          `Khắc rơ lối chơi! Việc ${n1} ghép cặp với ${n2} đang tự làm khó cả hai với vỏn vẹn ${Math.round(wr)}% win rate.`
+          `${n1} và ${n2} dường như chưa tìm được tiếng nói chung, thường xuyên giẫm chân nhau khiến tỉ lệ thắng chỉ đạt ${Math.round(wr)}%.`,
+          `Khắc rơi lối chơi! Việc ${n1} ghép cặp với ${n2} đang tự làm khó cả hai với vỏn vẹn ${Math.round(wr)}% win rate.`
         ], [n1, n2], 'partnership');
       } else if (wr >= 45 && wr <= 55) {
         addInsight('neutral_duo', '⚖️ TRÒN VAI', [
