@@ -499,6 +499,149 @@ export function generateAdvancedInsights(
         `Đạt thành tựu hàng đầu với tỉ lệ thắng ${Math.round(playerWinRate)}% của ${p.name}.`
       ], [p.name], 'individual');
     }
+
+    // 🧹 DỌN DẸP (Kịch bản #36)
+    if (stats.closeLosses > 0 && stats.dominantWins > 0) {
+      addInsight('balance', '🧹 DỌN DẸP', [
+        `${p.name} đang cân bằng giữa thắng và thua – ${stats.dominantWins} thắng áp đảo vs ${stats.closeLosses} thua sát nút.`,
+        `${p.name} cần duy trì sự cân đối giữa các trận thắng áp đảo và thua sát nút.`,
+        `Hiệu suất của ${p.name} phản ánh sự cân đối: ${stats.dominantWins} thắng đậm / ${stats.closeLosses} thua gần.`,
+        `${p.name} đang có lịch trình đồng đều giữa thắng đậm và thua gần.`,
+        `Cân bằng giữa chiến thắng và thất bại của ${p.name} hiển thị qua ${stats.dominantWins} và ${stats.closeLosses}.`
+      ], [p.name], 'individual');
+    }
+
+    // 🌪️ XÁO TRỘN (Kịch bản #37)
+    if (stats.dominantLosses >= 3) {
+      addInsight('chaos', '🌪️ XÁO TRỘN', [
+        `${p.name} để lại dấu ấn với ${stats.dominantLosses} trận thua áp đảo.`,
+        `${p.name} đã tạo ra sự hỗn loạn qua ${stats.dominantLosses} lần thua đậm.`,
+        `Mỗi khi ${p.name} thua áp đảo ${stats.dominantLosses} lần, bảng xếp hạng rung chuyển.`,
+        `Đối thủ cảm nhận sự xáo trộn khi ${p.name} có ${stats.dominantLosses} thua đậm.`,
+        `${p.name} để lại dấu ấn "xáo trộn" trong vòng đấu với ${stats.dominantLosses} trận thua áp đảo.`
+      ], [p.name], 'individual');
+    }
+
+    // 💡 TRÍ TUỆ (Kịch bản #38)
+    if (stats.deuceMatches >= 2) {
+      addInsight('smart', '💡 TRÍ TUỆ', [
+        `${p.name} thể hiện trí tuệ khi vượt qua Deuce ${stats.deuceMatches} lần.`,
+        `Chiến thuật thông minh của ${p.name} giúp thắng Deuce ${stats.deuceMatches} lần.`,
+        `${p.name} dựa vào trí tuệ để thắng các điểm Deuce ${stats.deuceMatches} lần.`,
+        `Số lần Deuce ${stats.deuceMatches} cho thấy ${p.name} biết cách chiến thuật.`,
+        `${p.name} thể hiện trí tuệ qua ${stats.deuceMatches} lần Deuce thành công.`
+      ], [p.name], 'individual');
+    }
+
+    // 🎲 RỦI RO THẤP (Kịch bản #39)
+    if (stats.totalPoints < 30) {
+      addInsight('risk_low', '🎲 RỦI RO THẤP', [
+        `${p.name} có mức rủi ro thấp với chỉ ${stats.totalPoints} điểm tổng cộng.`,
+        `Những trận đấu của ${p.name} ít biến động điểm số → rủi ro giảm thiểu.`,
+        `${p.name} đang chơi "an toàn" với tổng điểm chỉ ${stats.totalPoints}.`,
+        `Tổng điểm ${stats.totalPoints} cho thấy ${p.name} không mạo hiểm.`,
+        `${p.name} có chiến thuật "không rủi ro" với chỉ ${stats.totalPoints} điểm.`
+      ], [p.name], 'individual');
+    }
+
+    // 🤝 HỢP TÁC (Kịch bản #43)
+    if (stats.totalMatches >= 8 && stats.closeWins >= 3 && stats.dominantWins >= 3) {
+      addInsight('cooperate', '🤝 HỢP TÁC', [
+        `${p.name} và đồng đội cùng thắng ${stats.closeWins + stats.dominantWins} lần.`,
+        `${p.name} thể hiện tinh thần đồng đội qua ${stats.closeWins + stats.dominantWins} chiến thắng.`,
+        `Đội ngũ của ${p.name} cùng nhau giành ${stats.closeWins + stats.dominantWins} chiến thắng.`,
+        `Số thắng cộng đồng của ${p.name} là ${stats.closeWins + stats.dominantWins} – minh chứng hợp tác.`,
+        `${p.name} và đồng đội ghi được ${stats.closeWins + stats.dominantWins} chiến thắng chung.`
+      ], [p.name], 'partnership');
+    }
+
+    // 📊 THỐNG KÊ (Kịch bản #47)
+    if (stats.totalMatches >= 5) {
+      addInsight('stats_overview', '📊 THỐNG KÊ', [
+        `${p.name} đã tham gia ${stats.totalMatches} trận, tổng cộng ghi ${stats.totalPoints} điểm.`,
+        `Số trận của ${p.name}: ${stats.totalMatches}, điểm trung bình ${Math.round(stats.totalPoints / stats.totalMatches)}.`,
+        `Thống kê ${p.name}: ${stats.totalMatches} trận, ${stats.totalPoints} điểm.`,
+        `${p.name} có trung bình ${Math.round(stats.totalPoints / stats.totalMatches)} điểm/trận.`,
+        `Dữ liệu ${p.name}: ${stats.totalMatches} trận, ${stats.totalPoints} điểm tổng cộng.`
+      ], [p.name], 'individual');
+    }
+
+    // 🧱 Bị Khớp Tâm Lý (Kịch bản #30)
+    const mentalBlockPerc = stats.totalMatches > 0 ? ((stats.closeLosses + stats.dominantLosses) / stats.totalMatches) * 100 : 0;
+    if (stats.totalMatches >= 5 && mentalBlockPerc >= 50) {
+      addInsight('mental_block', '🧱 BỊ KHỚP TÂM LÝ', [
+        `${p.name} có vẻ đang gặp khó khăn tâm lý khi đối mặt với một số đối thủ nhất định – tỉ lệ khớp tâm lý ${Math.round(mentalBlockPerc)}%.`,
+        `Có thể thấy ${p.name} tỏ ra e ngại khi gặp một số tay đấm cụ thể với tỉ lệ ${Math.round(mentalBlockPerc)}% bất lợi.`,
+        `Phong độ của ${p.name} bị ảnh hưởng bởi yếu tố tâm lý với tỉ lệ ${Math.round(mentalBlockPerc)}%.`,
+        `${p.name} cần vượt qua rào cản tâm lý khi đối đầu với một số đối thủ nhất định (${Math.round(mentalBlockPerc)}% bất lợi).`,
+        `Một số đối thủ dường như "khớp" với lối chơi của ${p.name} với tỉ lệ ${Math.round(mentalBlockPerc)}%.`
+      ], [p.name], 'individual');
+    }
+
+    // ⚔️ Cân Kèo (Kịch bản #31)
+    if (matchExpected.has(p.id)) {
+      const { winProb, loseProb } = matchExpected.get(p.id)!;
+      const oddsDiff = winProb - loseProb;
+      if (Math.abs(oddsDiff) >= 0.2) {
+        const sentiment = oddsDiff > 0 ? 'khả quan' : 'thận trọng';
+        addInsight('odds', '⚔️ CÂN KÈO', [
+          `Dựa trên ELO, ${p.name} được đánh giá có cơ hội thắng khoảng ${Math.round(winProb * 100)}%.`,
+          `Theo tính toán máy, ${p.name} có ${Math.round(winProb * 100)}% cơ hội thắng và ${Math.round(loseProb * 100)}% có thể thua.`,
+          `Đối với ${p.name}, tỉ lệ kỳ vọng là ${Math.round(winProb * 100)}% thắng – triển vọng khá ${sentiment}.`,
+          `Máy tính dự đoán ${p.name} có khoảng ${Math.round(winProb * 100)}% khả năng giành chiến thắng.`,
+          `Căn cứ vào ELO, ${p.name} nằm ở thế ${sentiment} với tỉ lệ kỳ vọng ${Math.round(winProb * 100)}%.`
+        ], [p.name], 'fun');
+      }
+    }
+
+    // 🏃‍♂️ Đối Thủ Đánh Lớn (Kịch bản #32)
+    if (stats.totalMatches >= 5) {
+      const opponents = board.filter(q => q.id !== p.id);
+      opponents.forEach(op => {
+        const oppStats = playerStats.get(op.id);
+        if (!oppStats) return;
+        const oppWR = oppStats.totalMatches > 0 ? ((oppStats.closeWins + oppStats.dominantWins) / oppStats.totalMatches) * 100 : 0;
+        if (oppWR >= 70 && oppStats.totalMatches >= 3) {
+          addInsight('rival_powerhouse', '🏃‍♂️ ĐỐI THỦ MẠNH', [
+            `${op.name} là một đối thủ đáng gờm với tỉ lệ thắng ${Math.round(oppWR)}% – cần chú ý khi đấu.`,
+            `${op.name} đang có phong độ cực cao với ${Math.round(oppWR)}% chiến thắng – đối thủ không hề dễ chơi.`,
+            `Với ${Math.round(oppWR)}% thắng, ${op.name} cho thấy đẳng cấp vượt trội trong thời gian gần đây.`,
+            `${op.name} đang là "quái vật" trên sân với tỉ lệ thắng ${Math.round(oppWR)}%.`,
+            `Cẩn thận với ${op.name} – đối thủ này đang sở hữu ${Math.round(oppWR)}% thắng.`
+          ], [p.name, op.name], 'rivalry');
+        }
+      });
+    }
+
+    // 🪂 Đối Thủ Yếu Hơn (Kịch bản #33)
+    if (stats.totalMatches >= 5) {
+      const opponents = board.filter(q => q.id !== p.id);
+      opponents.forEach(op => {
+        const oppStats = playerStats.get(op.id);
+        if (!oppStats) return;
+        const oppWR = oppStats.totalMatches > 0 ? ((oppStats.closeWins + oppStats.dominantWins) / oppStats.totalMatches) * 100 : 0;
+        if (oppWR <= 30 && oppStats.totalMatches >= 3) {
+          addInsight('underdog', '🪂 ĐỐI THỦ YẾU', [
+            `${op.name} có vẻ đang gặp khó khăn với tỉ lệ thắng chỉ ${Math.round(oppWR)}%.`,
+            `${op.name} là đối thủ ${p.name} có thể tự tin đấu với tỉ lệ thắng ${Math.round(oppWR)}%.`,
+            `Với ${Math.round(oppWR)}% thắng, ${op.name} dường như đang trong giai đoạn khó khăn.`,
+            `${op.name} cần cải thiện nhiều khi tỉ lệ thắng chỉ dừng ở ${Math.round(oppWR)}%.`,
+            `${p.name} có thể tận dụng phong độ yếu của ${op.name} (${Math.round(oppWR)}% thắng) để gia tăng chiến thắng.`
+          ], [p.name, op.name], 'rivalry');
+        }
+      });
+    }
+
+    // 🏁 KẾT THÚC (Kịch bản #50)
+    if (stats.totalMatches >= 30) {
+      addInsight('finish', '🏁 KẾT THÚC HÀNH TRÌNH', [
+        `${p.name} đã có một hành trình dài với ${stats.totalMatches} trận đấu – kinh nghiệm dồi dào!`,
+        `Sau ${stats.totalMatches} trận, ${p.name} đã tích lũy được rất nhiều bài học quý giá.`,
+        `${p.name} hoàn thành giai đoạn kinh nghiệm với ${stats.totalMatches} trận trên sân Pickleball.`,
+        `Hành trình Pickleball của ${p.name} đã ghi dấu ấn qua ${stats.totalMatches} trận đấu.`,
+        `${p.name} đã chứng tỏ sự bền bỉ với ${stats.totalMatches} trận tham gia – một người chơi thực thụ.`
+      ], [p.name], 'individual');
+    }
   });
 
   // 3. GENERATE PARTNER & RIVAL INSIGHTS
