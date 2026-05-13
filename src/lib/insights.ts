@@ -672,8 +672,8 @@ export function generateAdvancedInsights(
 
       if (wr >= 75) {
         addInsight('perfect_duo', '🤝 CẶP BÀI TRÙNG', [
-          `Cứ ráp ${n1} & ${n2} vào nhau là nắm chắc phần thắng. Phép thuật tạo ra tỉ lệ thắng ${Math.round(wr)}% là đây!`,
-          `Sự bọc lót giữa ${n1} và ${n2} đạt độ hoàn hảo, dường như họ đọc được suy nghĩ của nhau để vươn tới win rate ${Math.round(wr)}%.`
+          `Cứ ráp ${n1} & ${n2} vào nhau là nắm chắc phần thắng. Phép thuật tạo ra tỉ lệ thắng chung ${Math.round(wr)}% là đây!`,
+          `Sự bọc lót giữa ${n1} và ${n2} đạt độ hoàn hảo, dường như họ đọc được suy nghĩ của nhau, mang về tỉ lệ thắng chung lên tới ${Math.round(wr)}%.`
         ], [n1, n2], 'partnership');
       } else if (wr <= 25) {
         addInsight('bad_synergy', '⚓ DẪM CHÂN NHAU', [

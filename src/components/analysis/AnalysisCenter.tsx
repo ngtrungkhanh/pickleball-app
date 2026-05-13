@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { buildElo, buildOpponentRows, buildPartnerRows, getName, getPlayerAnalysis, getInsights } from '@/lib/analytics';
 import { calculateLeaderboard } from '@/lib/stats';
-import { cn } from '@/lib/utils';
+import { cn, getAvatarLetter } from '@/lib/utils';
 import { getLocalMatches, saveMatchesLocal } from '@/lib/db';
 import { getMatchesAfterAction } from '@/app/actions';
 import { isGuestId, isRankingMatch } from '@/lib/guest';
@@ -586,7 +586,7 @@ function ProfileZone({
               {adv.bestPartner ? (
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center text-xl font-black text-green-400">
-                    {adv.bestPartner.name[0]}
+                    {getAvatarLetter(adv.bestPartner.name)}
                   </div>
                   <div>
                     <div className="text-lg font-black text-white">{adv.bestPartner.name}</div>
@@ -600,7 +600,7 @@ function ProfileZone({
               {adv.toughestRival ? (
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center text-xl font-black text-red-400">
-                    {adv.toughestRival.name[0]}
+                    {getAvatarLetter(adv.toughestRival.name)}
                   </div>
                   <div>
                     <div className="text-lg font-black text-white">{adv.toughestRival.name}</div>
@@ -758,7 +758,7 @@ function MatrixZone({
                       "w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-black transition-transform group-hover:rotate-12",
                       isGood ? "bg-green-500/20 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.2)]" : "bg-slate-700 text-white/40"
                     )}>
-                      {otherName?.[0]?.toUpperCase()}
+                      {getAvatarLetter(otherName || '')}
                     </div>
                     <div>
                       <div className="font-black text-white text-lg">{otherName}</div>
