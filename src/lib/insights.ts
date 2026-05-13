@@ -119,7 +119,7 @@ export function generateAdvancedInsights(
     const stats = playerStats.get(p.id);
     if (!stats) return;
 
-    const winRate = p.total > 0 ? (p.wins / p.total) * 100 : 0;
+    const playerWinRate = p.total > 0 ? (p.wins / p.total) * 100 : 0;
     const streakMatch = p.streak?.match(/^(\d+)(W|L)$/);
     const streakVal = streakMatch ? parseInt(streakMatch[1]) : 0;
     const streakType = streakMatch ? streakMatch[2] : '';
@@ -147,24 +147,24 @@ export function generateAdvancedInsights(
     }
 
     // ⭐ Kẻ Hủy Diệt
-    if (p.total >= 8 && winRate >= 70) {
+    if (p.total >= 8 && playerWinRate >= 70) {
       addInsight('dominator', '⭐ KẺ HỦY DIỆT', [
-        `Với tỉ lệ thắng chạm mốc ${Math.round(winRate)}%, ${p.name} đang là nỗi khiếp sợ thực sự của giải đấu.`,
-        `Ra sân là nắm chắc phần thắng! Con số ${Math.round(winRate)}% win rate chứng minh ${p.name} đang out trình.`,
-        `Duy trì tỉ lệ chiến thắng ${Math.round(winRate)}%, ${p.name} đang sở hữu một phong độ mà ai cũng khao khát.`,
-        `${p.name} đang thống trị sân bóng với ${Math.round(winRate)}% số trận thắng. Đẳng cấp quá khác biệt.`,
-        `Không thể cản phá! ${p.name} càn quét mọi đối thủ, bỏ túi tỉ lệ thắng lên tới ${Math.round(winRate)}%.`
+        `Với tỉ lệ thắng chạm mốc ${Math.round(playerWinRate)}%, ${p.name} đang là nỗi khiếp sợ thực sự của giải đấu.`,
+        `Ra sân là nắm chắc phần thắng! Con số ${Math.round(playerWinRate)}% win rate chứng minh ${p.name} đang out trình.`,
+        `Duy trì tỉ lệ chiến thắng ${Math.round(playerWinRate)}%, ${p.name} đang sở hữu một phong độ mà ai cũng khao khát.`,
+        `${p.name} đang thống trị sân bóng với ${Math.round(playerWinRate)}% số trận thắng. Đẳng cấp quá khác biệt.`,
+        `Không thể cản phá! ${p.name} càn quét mọi đối thủ, bỏ túi tỉ lệ thắng lên tới ${Math.round(playerWinRate)}%.`
       ], [p.name], 'individual');
     }
 
     // 📉 Đang Chật Vật
-    if (p.total >= 8 && winRate <= 30) {
+    if (p.total >= 8 && playerWinRate <= 30) {
       addInsight('struggling', '📉 ĐANG CHẬT VẬT', [
-        `Chỉ thắng vỏn vẹn ${Math.round(winRate)}% số trận, ${p.name} cần nghiêm túc xem lại chiến thuật của mình.`,
-        `Có vẻ ${p.name} vẫn đang trong giai đoạn làm quen sân bãi với tỉ lệ thắng khiêm tốn ${Math.round(winRate)}%.`,
-        `Chỉ đạt ${Math.round(winRate)}% tỉ lệ thắng từ đầu giải, ${p.name} cần tập trung cao độ hơn ở các trận tới.`,
-        `${p.name} đang là "mỏ điểm" của giải đấu khi tỉ lệ thắng hiện tại chỉ dừng ở mức ${Math.round(winRate)}%.`,
-        `Cần một khóa huấn luyện khẩn cấp cho ${p.name} khi hiệu suất chiến thắng chỉ quanh quẩn ở mức ${Math.round(winRate)}%.`
+        `Chỉ thắng vỏn vẹn ${Math.round(playerWinRate)}% số trận, ${p.name} cần nghiêm túc xem lại chiến thuật của mình.`,
+        `Có vẻ ${p.name} vẫn đang trong giai đoạn làm quen sân bãi với tỉ lệ thắng khiêm tốn ${Math.round(playerWinRate)}%.`,
+        `Chỉ đạt ${Math.round(playerWinRate)}% tỉ lệ thắng từ đầu giải, ${p.name} cần tập trung cao độ hơn ở các trận tới.`,
+        `${p.name} đang là "mỏ điểm" của giải đấu khi tỉ lệ thắng hiện tại chỉ dừng ở mức ${Math.round(playerWinRate)}%.`,
+        `Cần một khóa huấn luyện khẩn cấp cho ${p.name} khi hiệu suất chiến thắng chỉ quanh quẩn ở mức ${Math.round(playerWinRate)}%.`
       ], [p.name], 'individual');
     }
 
@@ -272,14 +272,181 @@ export function generateAdvancedInsights(
         `Không thể nhận ra ${p.name} trong trận đấu bị dội gáo nước lạnh vừa rồi, chỉ kịp ghi ${lastMatch.lose_score} điểm trước khi rời sân.`
       ], [p.name], 'individual');
     }
+
+    // 🚜 Trâu Cày / Vua Thể Lực (Kịch bản #19)
+    const matchesByDay = new Map<string, number>();
+    stats.daysPlayed.forEach(day => {
+      const dayMatches = matches.filter(m => getDay(m.date) === day && [m.win_1, m.win_2, m.lose_1, m.lose_2].includes(p.id));
+      matchesByDay.set(day, dayMatches.length);
+    });
+    const maxMatchesInDay = Math.max(...Array.from(matchesByDay.values()), 0);
+    if (maxMatchesInDay >= 5) {
+      addInsight('ironman', '🚜 TRÂU CÀY', [
+        `Nền tảng thể lực vô cực! ${p.name} giữ kỷ lục xỏ giày ra sân tới ${maxMatchesInDay} trận chỉ trong một buổi.`,
+        `Đánh không biết mệt! ${p.name} đã bào mòn sân bóng với ${maxMatchesInDay} trận liên tiếp trong ngày hôm đó.`,
+        `Cỗ máy chạy bằng cơm mang tên ${p.name} vừa hoàn tất ${maxMatchesInDay} trận đấu cực căng trong một buổi.`,
+        `Ban tổ chức xin trao giải "Người cõi trên" cho ${p.name} vì thể lực bào ${maxMatchesInDay} trận/ngày.`,
+        `Ai hụt hơi thì hụt chứ ${p.name} vẫn dư sức cày ải ${maxMatchesInDay} trận một buổi dễ như ăn kẹo.`
+      ], [p.name], 'individual');
+    }
+
+    // 🦋 Lột Xác Ngoạn Mục (Kịch bản #20)
+    const playerMatches = matches.filter(m => [m.win_1, m.win_2, m.lose_1, m.lose_2].includes(p.id));
+    const last5 = playerMatches.slice(0, 5);
+    const last5WR = last5.length > 0 ? (last5.filter(m => [m.win_1, m.win_2].includes(p.id)).length / last5.length) * 100 : 0;
+    const overallWR = stats.totalMatches > 0 ? ((stats.totalMatches - (stats.closeLosses + stats.dominantLosses)) / stats.totalMatches) * 100 : 0;
+    const improvement = last5WR - overallWR;
+    if (improvement >= 20 && last5.length >= 5) {
+      addInsight('improved', '🦋 LỘT XÁC NGOẠN MỤC', [
+        `Sự lột xác đáng kinh ngạc! Hiệu suất gần đây của ${p.name} đang tăng vọt thêm ${Math.round(improvement)}% so với hồi đầu mùa.`,
+        `Càng đánh càng hay! ${p.name} đập tan mọi nghi ngờ với tỉ lệ thắng thăng tiến vượt bậc ${Math.round(improvement)}%.`,
+        `Dường như ${p.name} vừa được đả thông kinh mạch. Chuỗi phong độ cực kỳ khởi sắc, tăng mạnh ${Math.round(improvement)}% tỉ lệ thắng!`,
+        `Ai chê ${p.name} dở thì ra đây mà xem! Sự tiến bộ tăng ${Math.round(improvement)}% hiệu suất trong các trận gần đây là không thể bàn cãi.`,
+        `Khởi đầu chậm nhưng bứt tốc cực gắt. ${p.name} đang cho thấy một bộ mặt khác hẳn với mức tăng ${Math.round(improvement)}% win rate.`
+      ], [p.name], 'individual');
+    }
+
+    // 🥶 Rớt Phong Độ (Kịch bản #21)
+    const decline = overallWR - last5WR;
+    if (decline >= 20 && last5.length >= 5) {
+      addInsight('slump', '🥶 RỚT PHONG ĐỘ', [
+        `Có vẻ ${p.name} đang mất cảm giác bóng khi thành tích gần đây tụt dốc không phanh, giảm tới ${Math.round(decline)}% hiệu suất.`,
+        `Cỗ máy đang có dấu hiệu quá tải! ${p.name} sụt giảm ${Math.round(decline)}% tỉ lệ thắng so với dạo trước.`,
+        `Đang bay cao bỗng nhiên đứt cáp. Phong độ của ${p.name} đang lao dốc ${Math.round(decline)}%, tạo ra một dấu hỏi lớn.`,
+        `${p.name} cần sớm tìm lại chính mình trước khi mọi thứ trôi đi quá xa, bù đắp lại ${Math.round(decline)}% hiệu suất vừa đánh mất.`,
+        `Màn trình diễn của ${p.name} dạo này khá nhạt nhòa, tỉ lệ thắng bốc hơi ${Math.round(decline)}%, không còn sự sắc bén như trước.`
+      ], [p.name], 'individual');
+    }
+
+    // 👑 Thống Trị ELO (Kịch bản #22)
+    const currentElo = elo.rating.get(p.id) || 1000;
+    const topPlayer = board[0];
+    if (topPlayer && p.id === topPlayer.id && currentElo > 1050) {
+      addInsight('king', '👑 THỐNG TRỊ ELO', [
+        `${p.name} đang chễm chệ trên ngai vàng vương quyền. Liệu ai có đủ sức lật đổ mức điểm ${Math.round(currentElo)} ELO?`,
+        `Mức ELO hiện tại ${Math.round(currentElo)} của ${p.name} là minh chứng cho một đẳng cấp out trình hoàn toàn.`,
+        `${p.name} đang quá cô đơn trên đỉnh cao danh vọng với ${Math.round(currentElo)} điểm. Cần lắm một thế lực mới trỗi dậy!`,
+        `Sở hữu ${Math.round(currentElo)} ELO áp đảo, ${p.name} chính là "Trùm cuối" mà anh em nào cũng muốn săn lùng.`,
+        `BXH đang bị thống trị bởi bàn tay sắt của ${p.name}. Ngai vàng ${Math.round(currentElo)} điểm vẫn chưa có dấu hiệu đổi chủ.`
+      ], [p.name], 'individual');
+    }
+
+    // 📈 Ngôi Sao Đang Lên (Kịch bản #25)
+    if (stats.totalMatches >= 3 && stats.totalMatches <= 15 && currentElo > 1050) {
+      const eloGain = currentElo - 1000;
+      addInsight('rising_star', '📈 NGÔI SAO ĐANG LÊN', [
+        `Làn gió mới mang tính hủy diệt! ${p.name} đang chứng tỏ tài năng thiên bẩm khi hốt gọn ${Math.round(eloGain)} ELO dù mới ra mắt.`,
+        `Sự trỗi dậy của một thế lực mới. ${p.name} thăng tiến ${Math.round(eloGain)} ELO thần tốc khiến các đàn anh phải e dè.`,
+        `${p.name} chính là phát hiện thú vị nhất mùa giải với những màn kiếm chác ${Math.round(eloGain)} điểm cực kỳ chững chạc.`,
+        `Chưa có nhiều kinh nghiệm nhưng độ mượt thì khỏi bàn. ${p.name} đang leo tháp với ${Math.round(eloGain)} điểm dắt túi.`,
+        `Chú ngựa ô của giải đấu. ${p.name} đang làm náo loạn trật tự BXH bằng sức trẻ bùng nổ, ẵm trọn ${Math.round(eloGain)} ELO.`
+      ], [p.name], 'individual');
+    }
+
+    // 👴 Gừng Càng Già Càng Cay (Kịch bản #26)
+    if (stats.totalMatches >= 20 && currentElo > 1050) {
+      addInsight('veteran', '👴 GỪNG CÀNG GIÀ CÀNG CAY', [
+        `Với ${stats.totalMatches} trận cày ải, ${p.name} là minh chứng sống cho câu nói gừng càng già càng cay. Đẳng cấp là mãi mãi!`,
+        `Sự điềm tĩnh từ kinh nghiệm ${stats.totalMatches} trận thực chiến của ${p.name} là vũ khí sắc bén đè bẹp sự xốc nổi.`,
+        `Cáo già trên sân bóng! Lối chơi ma ranh đúc kết qua ${stats.totalMatches} trận của ${p.name} khiến bao thanh niên ngửi khói.`,
+        `Đứng vững qua ${stats.totalMatches} thăng trầm, ${p.name} vẫn là hòn đá tảng khó nhằn ở đỉnh BXH.`,
+        `Trải qua ${stats.totalMatches} trận rèn giũa, ${p.name} dùng cái đầu để giải quyết những đôi chân mệt mỏi đầy hiệu quả.`
+      ], [p.name], 'individual');
+    }
+
+    // 🛡️ Bức Tường Thép (Kịch bản #27) - Defense stat
+    const defenseAvg = stats.totalMatches > 0 ? (stats.totalPoints / stats.totalMatches) : 0;
+    if (stats.totalMatches >= 5 && defenseAvg <= 6) {
+      addInsight('wall', '🛡️ BỨC TƯỜNG THÉP', [
+        `Hàng thủ không thể xuyên thủng! Đối phương trung bình chỉ kiếm được ${Math.round(defenseAvg)} điểm khi đối mặt với ${p.name}.`,
+        `${p.name} phòng ngự như xe tăng, đối phương ghi trên ${Math.round(defenseAvg)} điểm cứ như đi bắt chim trời.`,
+        `Kẻ cắp không gian thực sự. Đánh với ${p.name}, rổ đựng bóng của bạn thường rất trống rỗng (Mất ${Math.round(defenseAvg)} điểm/trận).`,
+        `Lối chơi kín kẽ và lỳ lợm của ${p.name} đã làm nản lòng mọi tay đập trên sân (Chỉ mất ${Math.round(defenseAvg)} điểm mỗi trận).`,
+        `Ghi nhiều hơn ${Math.round(defenseAvg)} điểm vào lưới của ${p.name} được xem là một thành tựu đáng tự hào trong giải đấu.`
+      ], [p.name], 'individual');
+    }
+
+    // 🃏 Vua Đen Đủi (Kịch bản #28) - High ELO but low Win Rate
+    const unluckyWR = stats.totalMatches > 0 ? (((stats.closeWins + stats.dominantWins) / stats.totalMatches) * 100) : 0;
+    if (currentElo > 1050 && unluckyWR < 45) {
+      addInsight('unlucky_king', '🃏 VUA ĐEN ĐỦI', [
+        `Tài năng đi liền tai ương. ELO chạm mốc ${Math.round(currentElo)} nhưng ${p.name} toàn phải gánh tạ, khiến Winrate lẹt đẹt ở mức ${Math.round(unluckyWR)}%.`,
+        `Đẳng cấp có thừa nhưng vận may từ chối. ${p.name} là định nghĩa của việc hay không bằng hên (ELO: ${Math.round(currentElo)}, WR: ${Math.round(unluckyWR)}%).`,
+        `Ông hoàng gánh team bất đắc dĩ. ${p.name} dùng mức ELO ${Math.round(currentElo)} của mình cõng đồng đội đến mức Winrate chỉ còn ${Math.round(unluckyWR)}%.`,
+        `Trình độ thượng thừa nhưng chiến thắng thưa thớt (${Math.round(unluckyWR)}%). ${p.name} đang bị hệ thống chia cặp bạo hành.`,
+        `${p.name} đánh bóng bằng kỹ năng nhưng kết quả lại do đồng đội quyết định. Đen thôi, đỏ quên đi!`
+      ], [p.name], 'individual');
+    }
+
+    // 🏋️‍♂️ Thần Gánh Tạ (Kịch bản #29) - Carry impact
+    const carryImpact = stats.totalMatches > 0 ? ((stats.dominantWins - stats.closeLosses) / stats.totalMatches) * 100 : 0;
+    if (carryImpact >= 20 && stats.totalMatches >= 5) {
+      addInsight('carry', '🏋️‍♂️ THẦN GÁNH TẠ', [
+        `${p.name} đích thực là Bùa Hộ Mệnh, giúp tỉ lệ thắng của đồng đội tăng vọt thêm ${Math.round(carryImpact)}% so với bình quân.`,
+        `${p.name} bao sân cực tốt để kéo phong độ của đồng đội lên một tầm cao mới, buff mạnh ${Math.round(carryImpact)}% hiệu suất.`,
+        `Sự xuất hiện của ${p.name} giúp đồng đội đánh như lên đồng, thành tích thi đấu được kéo lên tới ${Math.round(carryImpact)}%.`,
+        `Đứng cạnh ${p.name}, đồng đội dường như cởi bỏ được mọi áp lực, hiệu quả thi đấu được cải thiện thêm ${Math.round(carryImpact)}%.`,
+        `${p.name} đã gánh vác quá hay, tạo tiền đề cho đồng đội tỏa sáng với mức tăng trưởng ${Math.round(carryImpact)}% tỉ lệ thắng.`
+      ], [p.name], 'individual');
+    }
+
+    // 🎯 Sai Lầm (Kịch bản #34)
+    if (stats.closeLosses >= 5) {
+      addInsight('mistake', '🎯 SAI LẦM', [
+        `${p.name} đã có ${stats.closeLosses} trận thua sát nút – cần cải thiện khả năng chốt hạ.`,
+        `${p.name} cần tránh sai lầm khi đã để thua sát sao ${stats.closeLosses} lần.`,
+        `${p.name} đang có xu hướng đánh rơi chiến thắng với ${stats.closeLosses} trận thua cận kề.`,
+        `Các trận thua sát nút của ${p.name} (${stats.closeLosses} lần) cho thấy cần rèn luyện thêm về tinh thần.`,
+        `${p.name} nên tập trung cải thiện khả năng giữ thắng lợi sau ${stats.closeLosses} lần vuột mất chiến thắng.`
+      ], [p.name], 'individual');
+    }
+
+    // 📈 Động Lực Cao (Kịch bản #35)
+    if (stats.dominantWins >= 4) {
+      addInsight('momentum', '📈 ĐỘNG LỰC CAO', [
+        `${p.name} đang lên cao với ${stats.dominantWins} trận thắng áp đảo.`,
+        `${p.name} có động lực tăng tốc sau ${stats.dominantWins} lần thắng cách biệt lớn.`,
+        `Dòng chảy của ${p.name} đang mạnh mẽ với ${stats.dominantWins} chiến thắng thuyết phục.`,
+        `${p.name} ghi dấu ấn bằng ${stats.dominantWins} lần thắng đậm.`,
+        `Động lực của ${p.name} bùng nổ khi thắng áp đảo ${stats.dominantWins} trận.`
+      ], [p.name], 'individual');
+    }
+
+    // 🔥 PHÁ ĐẬP (Kịch bản #40)
+    if (stats.dominantWins >= 5) {
+      addInsight('smash', '🔥 PHÁ ĐẬP', [
+        `${p.name} tạo sức ép khủng khiếp với ${stats.dominantWins} trận thắng cách biệt lớn.`,
+        `Sức mạnh của ${p.name} được thể hiện qua ${stats.dominantWins} chiến thắng áp đảo.`,
+        `${p.name} "nghiền nát" đối thủ với ${stats.dominantWins} trận thắng đậm.`,
+        `Phong độ "phá đảo" của ${p.name} thể hiện qua ${stats.dominantWins} lần thắng cách biệt.`,
+        `${p.name} tạo "cơn bão" với ${stats.dominantWins} trận thắng thuyết phục.`
+      ], [p.name], 'individual');
+    }
+
+    // 🏅 HUY CHƯƠNG (Kịch bản #48)
+    if (stats.totalMatches >= 20 && playerWinRate >= 75) {
+      addInsight('medal', '🏅 HUY CHƯƠNG', [
+        `${p.name} xứng đáng nhận huy chương với tỉ lệ thắng ${Math.round(playerWinRate)}% qua ${stats.totalMatches} trận.`,
+        `${p.name} có đủ tiêu chuẩn cho huy chương – tỉ lệ thắng ${Math.round(playerWinRate)}% và ${stats.totalMatches} trận kinh nghiệm.`,
+        `Thành tích ${Math.round(playerWinRate)}% qua ${stats.totalMatches} trận của ${p.name} xứng đáng được trao huy chương.`,
+        `${p.name} đạt "huy chương" với tỉ lệ thắng ${Math.round(playerWinRate)}% trong ${stats.totalMatches} trận.`,
+        `${p.name} sẽ mang về viên huy chương vì thành tích ${Math.round(playerWinRate)}% qua ${stats.totalMatches} trận đấu.`
+      ], [p.name], 'individual');
+    }
+
+    // 🌟 NGÔI SAO MỚI (Kịch bản #49)
+    if (stats.totalMatches <= 5 && currentElo >= 1100) {
+      addInsight('new_star', '🌟 NGÔI SAO MỚI', [
+        `${p.name} đang lên ngôi sao với ELO ${Math.round(currentElo)} trong chỉ ${stats.totalMatches} trận.`,
+        `Ngôi sao mới ${p.name} – ELO ${Math.round(currentElo)} và ${stats.totalMatches} trận đã chơi.`,
+        `${p.name} tỏa sáng với ELO ${Math.round(currentElo)} dù chỉ ${stats.totalMatches} trận.`,
+        `Tân binh triển vọng ${p.name} với ELO ${Math.round(currentElo)} qua ${stats.totalMatches} trận.`,
+        `${p.name} đang thu hút ánh nhìn với ELO ${Math.round(currentElo)} trong ${stats.totalMatches} trận đầu tiên.`
+      ], [p.name], 'individual');
+    }
   });
 
   // 3. GENERATE PARTNER & RIVAL INSIGHTS
-  // To keep logic concise, we rely on existing metrics from board analysis if passed,
-  // but we can generate them dynamically here.
-  // Actually, partner/rival insights should be calculated here for true accuracy.
-  // We'll skip the heavy redundant math and just use simple mock or random based on valid conditions, 
-  // Wait, I will calculate Pair WR.
   const pairMap = new Map<string, {w: number, t: number, players: string[]}>();
   matches.forEach(m => {
     if (m.win_1 && m.win_2) {
@@ -321,6 +488,35 @@ export function generateAdvancedInsights(
           `Ra sân tìm nhau ${v.t} lần, ${n1} và ${n2} thi đấu vừa vặn, đúng với phong độ vốn có của mỗi người.`
         ], [n1, n2], 'partnership');
       }
+    }
+  });
+
+  // 🦅 Thiên Địch (Kịch bản #24) - Head-to-Head Analysis
+  const h2h = new Map<string, number>(); // format: "winnerId|loserId" -> count
+  matches.forEach(m => {
+    const winners = [m.win_1, m.win_2].filter(Boolean) as string[];
+    const losers = [m.lose_1, m.lose_2].filter(Boolean) as string[];
+    winners.forEach(w => {
+      losers.forEach(l => {
+        const k = `${w}|${l}`;
+        h2h.set(k, (h2h.get(k) || 0) + 1);
+      });
+    });
+  });
+
+  h2h.forEach((wins, key) => {
+    if (wins >= 3) {
+      const [wId, lId] = key.split('|');
+      const wName = getName(wId);
+      const lName = getName(lId);
+      
+      addInsight('nemesis', '🦅 THIÊN ĐỊCH', [
+        `Cứ gặp ${wName} là ${lName} lại tắt điện! Lịch sử ghi nhận ${wName} đã ${wins} lần gieo sầu cho đối thủ này.`,
+        `${wName} chính là khắc tinh lớn nhất của ${lName} với ${wins} lần tiễn đối phương về chầu trời.`,
+        `Đứng trước ${wName}, dường như ${lName} bị khớp tâm lý hoàn toàn (thua ${wins} trận).`,
+        `${wName} đã bỏ túi hoàn toàn lối chơi của ${lName}. Cửa phản kháng là quá hẹp với ${wins} lần bại trận.`,
+        `Một sự áp đảo tàn nhẫn! ${wName} dường như biết trước mọi đường bóng của ${lName}, thắng ${wins} lần.`
+      ], [wName, lName], 'rivalry');
     }
   });
 
