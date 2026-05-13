@@ -154,17 +154,22 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
 
 ## Analysis UI
 
-- Analysis has horizontal tabs.
+- Analysis uses a 3-zone bottom navigation: `Tổng quan`, `Cá nhân`, and
+  `Mạng lưới`.
 - Analysis should stay read-only.
 - The sync/cache badge should stay small and unobtrusive.
-- Trend is currently a placeholder; do not present it as complete charting.
-- Current tabs are overview, player, partner, opponent, trend, and match
-  history. Preserve fast client-side tab switching.
 - The analysis page is denser than the dashboard and should feel like an
   internal analytics tool, not a landing page.
-- Keep filters visible and compact: season selector first, then horizontal tabs.
-- Matrix tables can scroll horizontally when needed. Do not compress table text
-  into unreadable microcopy just to avoid horizontal scroll.
+- Keep filters visible and compact: season selector first, then zone controls.
+- Network (`Mạng lưới`) cards should explain impact values directly:
+  - Use labels such as `Hợp cạ`, `Kỵ cạ`, `Kèo thơm`, `Kèo khó`, `Tròn vai`,
+    and `Cân kèo`.
+  - Show record evidence such as `7W-2L · 78% · 9 trận`.
+  - Explain impact as a Performance Score delta, for example `Đánh chung với
+    A, hiệu suất cao hơn bình thường 18 điểm.`
+  - Do not present impact as a raw percent.
+  - Do not add extra joke/commentary lines to Network cards in this pass; keep
+    the card focused on metric meaning.
 - Player cards should keep short labels and stable card heights. Long player
   names should truncate or wrap cleanly without overlapping metrics.
 - Future trend work should prefer simple, readable charts or dense stat tables:

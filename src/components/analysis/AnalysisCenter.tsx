@@ -1,19 +1,20 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, type ReactNode } from 'react';
 import Link from 'next/link';
-import { 
-  ArrowLeft, Search, RefreshCw, Database, 
+import {
+  ArrowLeft, RefreshCw, Database,
   LayoutGrid, User, Swords, History,
-  TrendingUp, TrendingDown, Flame, Trophy, Target,
-  ChevronRight, Star, Zap, Award, Crown, Heart
+  TrendingUp, Flame, Trophy, Target,
+  Star, Zap, Award,
+  type LucideIcon
 } from 'lucide-react';
-import { buildElo, buildOpponentRows, buildPartnerRows, getName, getPlayerAnalysis, getInsights } from '@/lib/analytics';
-import { calculateLeaderboard } from '@/lib/stats';
+import { buildAnalysisSnapshot, edgeRecord, getAnalysisName, type AnalysisEdge, type EloResult, type PlayerMetrics, type PlayerProfile } from '@/lib/analysis-core';
+import { generateInsightsFromSnapshot } from '@/lib/insights';
 import { cn, getAvatarLetter } from '@/lib/utils';
 import { getLocalMatches, saveMatchesLocal } from '@/lib/db';
 import { getMatchesAfterAction } from '@/app/actions';
-import { isGuestId, isRankingMatch } from '@/lib/guest';
+import { isGuestId, loserFineCount } from '@/lib/guest';
 
 // Navigation tabs - 4 zones instead of 6
 const navItems = [
@@ -42,6 +43,8 @@ type Match = {
 };
 type Season = { id?: string; name: string; active?: boolean; start_date?: string };
 type Insight = { type: string; title?: string; text: string; icon?: string };
+type RadarData = { attack: number; defense: number; brave: number; synergy: number; form: number; experience: number };
+type EloHistory = Array<{ date: string; ratings: Record<string, number> }>;
 
 export function AnalysisCenter({
   players,
@@ -60,16 +63,7 @@ export function AnalysisCenter({
   const [matrixTab, setMatrixTab] = useState('partner');
   const visiblePlayers = players.filter(p => p.active !== false && !isGuestId(p.id));
   const [playerId, setPlayerId] = useState(visiblePlayers[0]?.id || '');
-  const [query, setQuery] = useState('');
   const [selectedSeason, setSelectedSeason] = useState<string | null>(activeSeason);
-  const [insightKey, setInsightKey] = useState(0);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    const timer = setInterval(() => setInsightKey(k => k + 1), 120000); // 120s
-    return () => clearInterval(timer);
-  }, []);
   
   const [localMatches, setLocalMatches] = useState<Match[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -102,71 +96,16 @@ export function AnalysisCenter({
 
   const allMatches = localMatches.length > 0 ? localMatches : initialMatches;
   const activeMatches = selectedSeason === null ? allMatches : allMatches.filter(m => (m.season || 'Season 1') === selectedSeason);
-  const rankingMatches = activeMatches.filter(isRankingMatch);
   const seasonOptions = Array.from(new Set([activeSeason, ...seasons.map(s => s.name), ...allMatches.map(m => m.season || 'Season 1')].filter(Boolean)));
 
-  const elo = useMemo(() => buildElo(visiblePlayers, rankingMatches), [visiblePlayers, rankingMatches]);
-  const board = useMemo(() => {
-    const rawBoard = calculateLeaderboard(players, activeMatches, loseMoney).filter(p => !isGuestId(p.id));
-    return rawBoard.map(p => ({
-      ...p,
-      rating: elo.rating.get(p.id) || 1000
-    })).sort((a, b) => b.rating - a.rating);
-  }, [players, activeMatches, elo, loseMoney]);
-
-  const partnerRows = useMemo(() => buildPartnerRows(visiblePlayers, rankingMatches, elo.matchExpected), [visiblePlayers, rankingMatches, elo.matchExpected]);
-  const opponentRows = useMemo(() => buildOpponentRows(visiblePlayers, rankingMatches, elo.matchExpected), [visiblePlayers, rankingMatches, elo.matchExpected]);
-  const analysis = useMemo(() => getPlayerAnalysis(playerId, visiblePlayers, rankingMatches, elo.matchExpected), [playerId, visiblePlayers, rankingMatches, elo.matchExpected]);
-  const insights = useMemo(() => getInsights(board, elo, rankingMatches, players, elo.matchExpected), [board, elo, rankingMatches, players, elo.matchExpected, insightKey]);
-
-  const filteredHistory = activeMatches.filter(m => {
-    if (!query.trim()) return true;
-    const text = [m.season, getName(players, m.win_1), getName(players, m.win_2), getName(players, m.lose_1), getName(players, m.lose_2)]
-      .join(' ')
-      .toLowerCase();
-    return text.includes(query.toLowerCase());
-  });
-
-  // Top ELO movers (this season)
-  const topMovers = useMemo(() => {
-    const sorted = [...elo.rating.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([id, rating]) => ({
-        id,
-        name: visiblePlayers.find(p => p.id === id)?.name || id,
-        rating,
-      }));
-    return sorted;
-  }, [elo, visiblePlayers]);
-
-  // Top streaks
-  const topStreaks = useMemo(() => {
-    return board
-      .filter(p => {
-        const playerAnalysis = getPlayerAnalysis(p.id, players, rankingMatches, elo.matchExpected);
-        const streakMatch = playerAnalysis.streak?.match(/^(\d+)(W|L)$/);
-        return streakMatch && parseInt(streakMatch[1]) >= 3;
-      })
-      .map(p => {
-        const playerAnalysis = getPlayerAnalysis(p.id, players, rankingMatches, elo.matchExpected);
-        const streakMatch = playerAnalysis.streak?.match(/^(\d+)(W|L)$/);
-        return {
-          ...p,
-          streakCount: streakMatch ? parseInt(streakMatch[1]) : 0,
-          streakType: streakMatch ? streakMatch[2] : 'W',
-        };
-      })
-      .sort((a, b) => b.streakCount - a.streakCount)
-      .slice(0, 5);
-  }, [board, players, rankingMatches, elo.matchExpected]);
-
-  // Top fine payers
-  const topFinePayers = useMemo(() => {
-    return [...board]
-      .sort((a, b) => b.money - a.money)
-      .slice(0, 5);
-  }, [board]);
+  const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(visiblePlayers, activeMatches, loseMoney), [visiblePlayers, activeMatches, loseMoney]);
+  const rankingMatches = analysisSnapshot.rankingMatches;
+  const elo = analysisSnapshot.elo;
+  const board = analysisSnapshot.board;
+  const partnerRows = analysisSnapshot.partnerEdges;
+  const opponentRows = analysisSnapshot.opponentEdges;
+  const analysis = analysisSnapshot.profiles.get(playerId) || analysisSnapshot.profiles.get(visiblePlayers[0]?.id || '');
+  const insights = useMemo(() => generateInsightsFromSnapshot(analysisSnapshot), [analysisSnapshot]);
 
   return (
     <div className="min-h-screen bg-slate-900">
@@ -220,7 +159,6 @@ export function AnalysisCenter({
             elo={elo}
             insights={insights}
             loseMoney={loseMoney}
-            mounted={mounted}
           />
         )}
 
@@ -233,7 +171,6 @@ export function AnalysisCenter({
             analysis={analysis}
             elo={elo}
             players={players}
-            rankingMatches={rankingMatches}
           />
         )}
 
@@ -244,11 +181,9 @@ export function AnalysisCenter({
             setMatrixTab={setMatrixTab}
             partnerRows={partnerRows}
             opponentRows={opponentRows}
-            players={players}
             visiblePlayers={visiblePlayers}
             playerId={playerId}
             setPlayerId={setPlayerId}
-            analysis={analysis}
           />
         )}
       </div>
@@ -294,17 +229,15 @@ function HubZone({
   elo,
   insights,
   loseMoney,
-  mounted,
 }: {
-  board: any[];
+  board: PlayerMetrics[];
   rankingMatches: Match[];
   visiblePlayers: Player[];
-  elo: any;
+  elo: EloResult;
   insights: Insight[];
   loseMoney: number;
-  mounted: boolean;
 }) {
-  const totalFines = rankingMatches.filter(m => m.lose_1 && !isGuestId(m.lose_1)).length * loseMoney;
+  const totalFines = rankingMatches.reduce((sum, match) => sum + loserFineCount(match), 0) * loseMoney;
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -320,7 +253,7 @@ function HubZone({
         {/* ELO Race (50%) */}
         <BentoCard title="Bảng xếp hạng ELO" icon={TrendingUp} className="flex flex-col h-full">
           <div className="space-y-0.5 flex-1">
-            {board.slice(0, 8).map((player: any, index) => (
+            {board.slice(0, 8).map((player, index) => (
               <div key={player.id} className="flex items-center gap-2 py-2 border-b border-white/5 last:border-0">
                 <div className={cn(
                   "w-9 h-9 rounded-full flex items-center justify-center text-base font-black shrink-0 shadow-inner",
@@ -346,9 +279,9 @@ function HubZone({
         {/* News Feed Insights (50%) */}
         <BentoCard title="Nhận xét chuyên gia" icon={Zap} className="border-primary/30 bg-primary/5 flex flex-col h-full">
           <div className="space-y-3 flex-1 overflow-y-auto pr-1 custom-scrollbar">
-            {!mounted ? (
+            {insights.length === 0 ? (
               <div className="flex items-center justify-center h-full text-white/30 text-sm italic font-bold">
-                Đang tổng hợp dữ liệu...
+                Chưa đủ dữ liệu nổi bật
               </div>
             ) : insights.map((insight, index) => {
               const rawTitle = insight.title || 'ĐIỂM NHẤN';
@@ -380,10 +313,10 @@ function HubZone({
 }
 
 
-function RadarChart({ data }: { data: { attack: number, defense: number, brave: number, synergy: number, form: number, experience: number } }) {
+function RadarChart({ data }: { data: RadarData }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  const labels = [
+  const labels: Array<{ name: string; key: keyof RadarData; desc: string }> = [
     { name: 'Công', key: 'attack', desc: 'Sức mạnh tấn công: Dựa trên tỉ lệ ghi điểm thực tế.' },
     { name: 'Thủ', key: 'defense', desc: 'Khả năng phòng ngự: Khả năng hạn chế đối thủ ghi điểm.' },
     { name: 'Bản lĩnh', key: 'brave', desc: 'Vượt kỳ vọng: Thắng kèo khó hoặc gánh đồng đội ELO thấp.' },
@@ -398,7 +331,7 @@ function RadarChart({ data }: { data: { attack: number, defense: number, brave: 
     return { x: 50 + r * Math.cos(angle), y: 50 + r * Math.sin(angle) };
   };
 
-  const values = labels.map(l => (data as any)[l.key]);
+  const values = labels.map(l => data[l.key]);
   const path = values.map((v, i) => {
     const p = getPoint(v, i);
     return `${p.x},${p.y}`;
@@ -481,7 +414,7 @@ function RadarChart({ data }: { data: { attack: number, defense: number, brave: 
   );
 }
 
-function EloSparkline({ history, playerId }: { history: any[], playerId: string }) {
+function EloSparkline({ history, playerId }: { history: EloHistory; playerId: string }) {
   const playerHistory = history
     .filter(h => h.ratings[playerId] !== undefined)
     .map(h => h.ratings[playerId])
@@ -523,22 +456,21 @@ function ProfileZone({
   analysis,
   elo,
   players,
-  rankingMatches,
 }: {
   playerId: string;
   setPlayerId: (id: string) => void;
   visiblePlayers: Player[];
-  analysis: any;
-  elo: any;
+  analysis?: PlayerProfile;
+  elo: EloResult;
   players: Player[];
-  rankingMatches: Match[];
 }) {
   const currentElo = elo.rating.get(playerId) ?? 1000;
-  const rank = analysis.rank || '--';
-  const stats = analysis.stats;
-  const adv = analysis.adv;
+  const rank = analysis?.rank || '--';
+  const stats = analysis?.stats;
+  const bestPartner = analysis?.bestPartner;
+  const toughestOpponent = analysis?.toughestOpponent;
 
-  const winRate = stats ? Math.round(stats.wins / stats.total * 100) : 0;
+  const winRate = stats && stats.total > 0 ? Math.round(stats.wins / stats.total * 100) : 0;
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -568,7 +500,7 @@ function ProfileZone({
             </div>
 
             <div className="px-4 flex-1 flex items-center">
-              <RadarChart data={analysis.radar} />
+              <RadarChart data={analysis?.radar || { attack: 0, defense: 0, brave: 0, synergy: 50, form: 50, experience: 0 }} />
             </div>
           </div>
         </div>
@@ -576,35 +508,37 @@ function ProfileZone({
         {/* Right Column: Insights & Recent (8/12) */}
         <div className="lg:col-span-8 space-y-4 flex flex-col">
           <div className="grid grid-cols-3 gap-3">
-            <StatCard label="Chuỗi" value={analysis.streak || '--'} icon={Flame} color="orange" />
+            <StatCard label="Chuỗi" value={analysis?.streak || '--'} icon={Flame} color="orange" />
             <StatCard label="Tổng trận" value={stats?.total || 0} icon={Target} color="blue" />
-            <StatCard label="Nhiệt huyết" value={`${analysis.radar.experience}đ`} icon={Award} color="purple" />
+            <StatCard label="Nhiệt huyết" value={`${analysis?.radar?.experience || 0}đ`} icon={Award} color="purple" />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <BentoCard title="Hợp vía nhất" icon={Star} className="border-green-500/10 min-h-[100px] flex flex-col justify-center">
-              {adv.bestPartner ? (
+              {bestPartner ? (
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center text-xl font-black text-green-400">
-                    {getAvatarLetter(adv.bestPartner.name)}
+                    {getAvatarLetter(bestPartner.otherName)}
                   </div>
                   <div>
-                    <div className="text-lg font-black text-white">{adv.bestPartner.name}</div>
-                    <div className="text-xs text-green-400 font-bold uppercase tracking-wider">{Math.round(adv.bestPartner.rate)}% Thắng</div>
+                    <div className="text-lg font-black text-white">{bestPartner.otherName}</div>
+                    <div className="text-xs text-green-400 font-bold uppercase tracking-wider">{edgeRecord(bestPartner)}</div>
+                    <div className="text-[11px] text-white/40 font-bold mt-1">{bestPartner.impact >= 0 ? '+' : ''}{bestPartner.impact} điểm hiệu suất</div>
                   </div>
                 </div>
               ) : <p className="text-white/40 text-xs italic">Chưa đủ dữ liệu</p>}
             </BentoCard>
 
             <BentoCard title="Kỵ rơ nhất" icon={Swords} className="border-red-500/10 min-h-[100px] flex flex-col justify-center">
-              {adv.toughestRival ? (
+              {toughestOpponent ? (
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center text-xl font-black text-red-400">
-                    {getAvatarLetter(adv.toughestRival.name)}
+                    {getAvatarLetter(toughestOpponent.otherName)}
                   </div>
                   <div>
-                    <div className="text-lg font-black text-white">{adv.toughestRival.name}</div>
-                    <div className="text-xs text-red-400 font-bold uppercase tracking-wider">{Math.round(adv.toughestRival.lossRate)}% Thua</div>
+                    <div className="text-lg font-black text-white">{toughestOpponent.otherName}</div>
+                    <div className="text-xs text-red-400 font-bold uppercase tracking-wider">{edgeRecord(toughestOpponent)}</div>
+                    <div className="text-[11px] text-white/40 font-bold mt-1">{toughestOpponent.impact} điểm hiệu suất</div>
                   </div>
                 </div>
               ) : <p className="text-white/40 text-xs italic">Chưa có kỵ rơ</p>}
@@ -612,9 +546,9 @@ function ProfileZone({
           </div>
 
           <BentoCard title="Form gần đây" icon={History} className="bg-slate-900/40">
-            {analysis.recent.slice(0, 3).length > 0 ? (
+            {(analysis?.recent || []).slice(0, 3).length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {analysis.recent.slice(0, 3).map((match: any, i: number) => {
+                {(analysis?.recent || []).slice(0, 3).map((match: Match, i: number) => {
                   const isWinner = [match.win_1, match.win_2].includes(playerId);
                   const partnerId = isWinner 
                     ? [match.win_1, match.win_2].find(id => id !== playerId)
@@ -637,11 +571,11 @@ function ProfileZone({
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
                           <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs">🤝</div>
-                          <span className="text-sm text-white font-bold truncate">Bạn & {getName(players, partnerId)}</span>
+                          <span className="text-sm text-white font-bold truncate">Bạn & {getAnalysisName(players, partnerId)}</span>
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="w-6 h-6 rounded-full bg-red-500/20 flex items-center justify-center text-xs">⚔️</div>
-                          <span className="text-sm text-white/50 font-medium truncate">vs {opponents.filter(Boolean).map(id => getName(players, id)).join(' & ')}</span>
+                          <span className="text-sm text-white/50 font-medium truncate">vs {opponents.filter(Boolean).map(id => getAnalysisName(players, id)).join(' & ')}</span>
                         </div>
                       </div>
                     </div>
@@ -669,38 +603,29 @@ function MatrixZone({
   setMatrixTab,
   partnerRows,
   opponentRows,
-  players,
   visiblePlayers,
   playerId,
   setPlayerId,
-  analysis,
 }: {
   matrixTab: string;
   setMatrixTab: (tab: string) => void;
-  partnerRows: any[];
-  opponentRows: any[];
-  players: Player[];
+  partnerRows: AnalysisEdge[];
+  opponentRows: AnalysisEdge[];
   visiblePlayers: Player[];
   playerId: string;
   setPlayerId: (id: string) => void;
-  analysis: any;
 }) {
   const rows = matrixTab === 'partner' ? partnerRows : opponentRows;
-  const stats = analysis?.stats;
-  const winRate = stats ? Math.round((stats.wins / stats.total) * 100) : 0;
 
   // Filter rows for selected player
-  const playerRows = rows.filter(r => {
-    const playerName = visiblePlayers.find(p => p.id === playerId)?.name;
-    return r.player === playerName;
-  });
+  const playerRows = rows.filter(r => r.playerId === playerId);
 
-  // Sort by confidence
+  // Sort by confidence/impact so small perfect samples do not dominate.
   const sortedRows = [...playerRows].sort((a, b) => {
     if (matrixTab === 'partner') {
-      return b.rate - a.rate || b.total - a.total;
+      return b.confidence - a.confidence || b.total - a.total;
     }
-    return a.rate - b.rate || b.total - a.total; // Opponents: lowest rate first
+    return Math.abs(b.impact) - Math.abs(a.impact) || b.total - a.total || b.confidence - a.confidence;
   });
 
   return (
@@ -736,106 +661,76 @@ function MatrixZone({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {sortedRows.length > 0 ? (
           sortedRows.map((row, index) => {
-            const otherName = matrixTab === 'partner' ? row.partner : row.opponent;
-            const isGood = matrixTab === 'partner' ? row.rate >= 60 : row.rate <= 40;
-            // Impact Calculation (Relative to user's avg winrate)
-            const impact = matrixTab === 'partner' ? (row.rate - winRate) : (winRate - row.rate);
+            const otherName = row.otherName;
+            const impact = row.impact || 0;
+            const isNeutral = row.total < 4 || Math.abs(impact) <= 5;
+            const isPositive = !isNeutral && impact > 0;
+            const isNegative = !isNeutral && impact < 0;
+            const badgeText = row.total < 4
+              ? 'Ít dữ liệu'
+              : `${row.label} ${impact > 0 ? '+' : ''}${impact}`;
             
             return (
               <div 
                 key={index}
                 className={cn(
                   "rounded-2xl border p-5 transition-all hover:scale-[1.02] bg-slate-800/50 relative group",
-                  isGood ? "border-green-500/20" : "border-white/[0.05]"
+                  isPositive ? "border-green-500/20" : isNegative ? "border-red-500/20" : "border-white/[0.05]"
                 )}
               >
                 <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
-                  {isGood && <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/5 blur-3xl rounded-full" />}
+                  {isPositive && <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/5 blur-3xl rounded-full" />}
+                  {isNegative && <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/5 blur-3xl rounded-full" />}
                 </div>
                 <div className="flex items-center justify-between mb-4 relative z-10">
                   <div className="flex items-center gap-4">
                     <div className={cn(
                       "w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-black transition-transform group-hover:rotate-12",
-                      isGood ? "bg-green-500/20 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.2)]" : "bg-slate-700 text-white/40"
+                      isPositive ? "bg-green-500/20 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.2)]" :
+                      isNegative ? "bg-red-500/20 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.2)]" :
+                      "bg-slate-700 text-white/40"
                     )}>
                       {getAvatarLetter(otherName || '')}
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="font-black text-white text-lg">{otherName}</div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">{row.total} trận</span>
-                        {row.impact !== undefined && (
-                          <div className="relative group/pill">
-                            {matrixTab === 'partner' ? (
-                              <span className={cn(
-                                "text-[10px] font-black px-2 py-0.5 rounded-full cursor-help transition-all shadow-sm border",
-                                Math.abs(row.impact) <= 5 ? "bg-slate-700/50 text-slate-300 border-slate-600 hover:bg-slate-700" :
-                                row.impact > 0 ? "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30" 
-                                               : "bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30"
-                              )}>
-                                {Math.abs(row.impact) <= 5 ? "Tròn vai" : row.impact > 0 ? `Hợp cạ ${Math.abs(row.impact)}%` : `Kỵ cạ ${Math.abs(row.impact)}%`}
-                              </span>
-                            ) : (
-                              <span className={cn(
-                                "text-[10px] font-black px-2 py-0.5 rounded-full cursor-help transition-all shadow-sm border",
-                                Math.abs(row.impact) <= 5 ? "bg-slate-700/50 text-slate-300 border-slate-600 hover:bg-slate-700" :
-                                row.impact > 0 ? "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30" 
-                                               : "bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30"
-                              )}>
-                                {Math.abs(row.impact) <= 5 ? "Cân kèo" : row.impact > 0 ? `Ăn chặt ${Math.abs(row.impact)}%` : `Át vía ${Math.abs(row.impact)}%`}
-                              </span>
-                            )}
-                            
-                            {/* 3-layer Tooltip */}
-                            <div className="absolute bottom-full right-0 mb-2 w-max max-w-[250px] bg-slate-800 border border-white/10 rounded-xl shadow-2xl p-3 opacity-0 group-hover/pill:opacity-100 pointer-events-none transition-all duration-200 z-50 origin-bottom-right scale-95 group-hover/pill:scale-100">
-                              <div className="flex items-center gap-2 mb-1.5 border-b border-white/5 pb-1.5">
-                                <div className="text-base">{Math.abs(row.impact) <= 5 ? "⚖️" : row.impact > 0 ? "💪" : "⚓"}</div>
-                                <div className={cn("text-xs font-black uppercase tracking-widest", Math.abs(row.impact) <= 5 ? "text-slate-300" : row.impact > 0 ? "text-green-400" : "text-red-400")}>
-                                  {matrixTab === 'partner' 
-                                    ? (Math.abs(row.impact) <= 5 ? "Tròn Vai" : row.impact > 0 ? "Cặp Bài Trùng" : "Dẫm Chân Nhau")
-                                    : (Math.abs(row.impact) <= 5 ? "Cân Tài Cân Sức" : row.impact > 0 ? "Khắc Chế Cứng" : "Bị Khớp Tâm Lý")}
-                                </div>
-                              </div>
-                              <div className="text-[11px] text-white/90 font-medium leading-relaxed mb-2">
-                                {matrixTab === 'partner' ? (
-                                  Math.abs(row.impact) <= 5 
-                                    ? `Hai người thi đấu đúng với phong độ vốn có (Impact: ${row.impact}%). Không ai gánh ai, cũng không ai làm tạ.`
-                                    : row.impact > 0 
-                                      ? `Khi đánh chung, ${otherName} giúp hiệu suất của bạn tăng thêm ${Math.abs(row.impact)}% so với mức trung bình.`
-                                      : `Khi đánh chung, ${otherName} kéo hiệu suất của bạn giảm đi ${Math.abs(row.impact)}% so với mức trung bình.`
-                                ) : (
-                                  Math.abs(row.impact) <= 5
-                                    ? `Thành tích đối đầu phản ánh đúng trình độ (ELO) hiện tại của hai bên (Impact: ${row.impact}%).`
-                                    : row.impact > 0
-                                      ? `Bạn thường thi đấu vượt ${Math.abs(row.impact)}% khả năng mỗi khi đối đầu với người này.`
-                                      : `Bạn thường thi đấu dưới sức (giảm ${Math.abs(row.impact)}% hiệu suất) mỗi khi gặp người này.`
-                                )}
-                              </div>
-                              <div className="text-[9px] text-white/40 font-mono tracking-tighter bg-black/20 p-1.5 rounded flex justify-between">
-                                <span>Baseline PS: {(row.baselinePs ?? 0)}%</span>
-                                <span>Thực tế PS: {(row.partnerPs ?? 0)}%</span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <span className={cn(
+                          "text-[10px] font-black px-2 py-0.5 rounded-full border",
+                          isPositive ? "bg-green-500/20 text-green-400 border-green-500/30" :
+                          isNegative ? "bg-red-500/20 text-red-400 border-red-500/30" :
+                          "bg-slate-700/50 text-slate-300 border-slate-600"
+                        )}>
+                          {badgeText}
+                        </span>
+                        <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">{edgeRecord(row)}</span>
                       </div>
                     </div>
                   </div>
                   <div className="text-right relative z-10">
-                    <div className={cn("text-3xl font-black", isGood ? "text-green-400" : "text-white")}>
-                      {row.rate}%
+                    <div className={cn("text-3xl font-black", isPositive ? "text-green-400" : isNegative ? "text-red-400" : "text-white")}>
+                      {Math.round(row.rate)}%
                     </div>
                     <div className="text-[10px] font-bold text-white/30 uppercase">{matrixTab === 'partner' ? 'Hợp tác' : 'Đối đầu'}</div>
                   </div>
+                </div>
+                <div className="relative z-10 text-xs font-semibold text-white/55 leading-relaxed mb-3 min-h-[34px]">
+                  {row.explanation}
+                </div>
+                <div className="relative z-10 text-[10px] text-white/35 font-mono tracking-tight bg-black/20 p-2 rounded-lg flex justify-between mb-3">
+                  <span>Baseline {row.baselinePs}</span>
+                  <span>Thực tế {row.actualPs}</span>
                 </div>
                 
                 <div className="h-2.5 bg-slate-900 rounded-full overflow-hidden mb-3 border border-white/5">
                   <div 
                     className={cn(
                       "h-full rounded-full transition-all duration-1000",
-                      isGood ? "bg-gradient-to-r from-green-500 to-green-400" : "bg-slate-600"
+                      isPositive ? "bg-gradient-to-r from-green-500 to-green-400" :
+                      isNegative ? "bg-gradient-to-r from-red-500 to-red-400" :
+                      "bg-slate-600"
                     )}
-                    style={{ width: `${row.rate}%` }}
+                    style={{ width: `${Math.max(4, Math.min(100, row.rate))}%` }}
                   />
                 </div>
                 
@@ -860,7 +755,7 @@ function MatrixZone({
 // ============================================
 // SHARED COMPONENTS
 // ============================================
-function StatCard({ label, value, icon: Icon, color }: { label: string; value: any; icon: any; color: string }) {
+function StatCard({ label, value, icon: Icon, color }: { label: string; value: ReactNode; icon: LucideIcon; color: string }) {
   const colorClasses: Record<string, string> = {
     primary: "bg-primary/10 border-primary/30 text-primary",
     blue: "bg-blue-500/10 border-blue-500/30 text-blue-400",
@@ -883,7 +778,7 @@ function StatCard({ label, value, icon: Icon, color }: { label: string; value: a
   );
 }
 
-function BentoCard({ title, icon: Icon, children, className }: { title: string; icon: any; children: React.ReactNode; className?: string }) {
+function BentoCard({ title, icon: Icon, children, className }: { title: string; icon: LucideIcon; children: ReactNode; className?: string }) {
   return (
     <div className={cn(
       "rounded-2xl border border-white/[0.08] bg-slate-800 p-5",

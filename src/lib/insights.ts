@@ -1,770 +1,756 @@
-export type Player = { id: string; name: string; active?: boolean };
-export type Match = {
-  id?: string;
-  date?: string;
-  win_1?: string;
-  win_2?: string | null;
-  lose_1?: string;
-  lose_2?: string | null;
-  win_score?: number;
-  lose_score?: number;
-  season?: string;
-};
+import {
+  buildAnalysisSnapshot,
+  edgeRecord,
+  type AnalysisMatch,
+  type AnalysisPlayer,
+  type AnalysisSnapshot,
+  type PlayerMetrics,
+} from './analysis-core';
 
 export type Insight = {
   type: string;
   title: string;
   text: string;
-  playersInvolved: (string | undefined)[];
+  playersInvolved: string[];
+  rarity?: InsightRarity;
+  weight?: number;
 };
 
-type InsightCategory = 'individual' | 'partnership' | 'rivalry' | 'fun';
-type LocalInsight = Insight & { category: InsightCategory };
+type InsightGroup = 'form' | 'elo' | 'partner' | 'opponent' | 'score' | 'fun' | 'activity';
+type InsightRarity = 'common' | 'uncommon' | 'rare' | 'epic';
+
+type InsightCandidate = Insight & {
+  group: InsightGroup;
+  participantIds: string[];
+  priority: number;
+  metricScore: number;
+};
+
+type TextContext = Record<string, string | number>;
+
+const RARITY_SCORE: Record<InsightRarity, number> = {
+  common: 0,
+  uncommon: 8,
+  rare: 16,
+  epic: 26,
+};
+
+function seededIndex(seed: string, length: number) {
+  if (length <= 1) return 0;
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index++) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash) % length;
+}
+
+function fillTemplate(template: string, context: TextContext) {
+  return Object.entries(context).reduce((text, [key, value]) => {
+    return text.replaceAll(`{${key}}`, String(value));
+  }, template);
+}
+
+function pickText(type: string, participants: string[], templates: string[], context: TextContext) {
+  const seed = `${type}|${participants.join('|')}|${Object.values(context).join('|')}`;
+  return fillTemplate(templates[seededIndex(seed, templates.length)], context);
+}
+
+function namesFor(snapshot: AnalysisSnapshot, ids: string[]) {
+  return ids.map(id => snapshot.metrics.get(id)?.name || snapshot.visiblePlayers.find(player => player.id === id)?.name || id);
+}
+
+function addCandidate(
+  target: InsightCandidate[],
+  snapshot: AnalysisSnapshot,
+  config: {
+    type: string;
+    title: string;
+    group: InsightGroup;
+    rarity: InsightRarity;
+    weight: number;
+    priority: number;
+    metricScore?: number;
+    participantIds: string[];
+    context: TextContext;
+    templates: string[];
+  }
+) {
+  const playersInvolved = namesFor(snapshot, config.participantIds);
+  target.push({
+    type: config.type,
+    title: config.title,
+    text: pickText(config.type, config.participantIds, config.templates, config.context),
+    playersInvolved,
+    rarity: config.rarity,
+    weight: config.weight,
+    group: config.group,
+    participantIds: config.participantIds,
+    priority: config.priority,
+    metricScore: config.metricScore || 0,
+  });
+}
+
+function rounded(value: number) {
+  return Math.round(value);
+}
+
+function abs(value: number) {
+  return Math.abs(Math.round(value));
+}
+
+function isEnough(metric: PlayerMetrics, min = 5) {
+  return metric.total >= min;
+}
+
+function addPlayerCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnapshot) {
+  const activeMetrics = snapshot.playerMetrics.filter(metric => metric.total > 0);
+  const topAttack = [...activeMetrics].filter(metric => metric.total >= 8).sort((a, b) => b.attackScore - a.attackScore)[0];
+  const topActivity = [...activeMetrics].sort((a, b) => b.total - a.total)[0];
+  const topElo = snapshot.board[0];
+  const secondElo = snapshot.board[1];
+
+  if (topElo && topElo.total >= 8) {
+    const gap = topElo.rating - (secondElo?.rating || 1000);
+    addCandidate(candidates, snapshot, {
+      type: 'elo_king',
+      title: '👑 ÔNG TRÙM ELO',
+      group: 'elo',
+      rarity: gap >= 40 ? 'rare' : 'common',
+      weight: gap >= 40 ? 8 : 2,
+      priority: gap >= 40 ? 82 : 60,
+      metricScore: gap,
+      participantIds: [topElo.id],
+      context: { name: topElo.name, elo: topElo.rating, gap: Math.max(0, gap) },
+      templates: [
+        '{name} đang giữ nóc ELO với {elo} điểm, bỏ nhóm sau {gap} điểm. Muốn lật kèo này chắc phải đánh thật tỉnh.',
+        'Ngai ELO đang nằm trong tay {name}: {elo} điểm và cách người bám đuổi {gap} điểm.',
+        '{name} đang làm chủ bảng ELO với {elo} điểm. Khoảng cách {gap} điểm đủ để anh em phải tính kèo kỹ hơn.',
+        'BXH ELO hiện gọi tên {name}. {elo} điểm, hơn nhóm sau {gap} điểm, không phải tự nhiên mà đứng đầu.',
+      ],
+    });
+  }
+
+  activeMetrics.forEach(metric => {
+    if (metric.streakType === 'W' && metric.streakCount >= 4) {
+      addCandidate(candidates, snapshot, {
+        type: 'hot_streak',
+        title: '🔥 ĐANG CHÁY MÁY',
+        group: 'form',
+        rarity: metric.streakCount >= 6 ? 'epic' : 'rare',
+        weight: 10,
+        priority: 90 + metric.streakCount,
+        metricScore: metric.streakCount,
+        participantIds: [metric.id],
+        context: { name: metric.name, count: metric.streakCount },
+        templates: [
+          '{name} đang thắng liền {count} trận, bóng sang bên kia là có mùi sập hầm.',
+          'Chuỗi {count} trận xanh của {name} đang nóng thật sự. Ai bắt cặp đối đầu nhớ chuẩn bị thở oxy.',
+          '{name} vào form hơi gắt: {count} trận thắng liên tiếp, đánh đâu cũng thấy có cửa đóng hòm.',
+          'Mạch thắng {count} trận đưa {name} lên chế độ cháy máy, nhìn là biết đang rất khó cản.',
+        ],
+      });
+    }
+
+    if (metric.streakType === 'L' && metric.streakCount >= 4) {
+      addCandidate(candidates, snapshot, {
+        type: 'cold_streak',
+        title: '🧯 SẬP HẦM LIÊN TỤC',
+        group: 'form',
+        rarity: metric.streakCount >= 6 ? 'epic' : 'rare',
+        weight: 10,
+        priority: 88 + metric.streakCount,
+        metricScore: metric.streakCount,
+        participantIds: [metric.id],
+        context: { name: metric.name, count: metric.streakCount },
+        templates: [
+          '{name} đang đỏ liền {count} trận. Có lẽ phải đi giải hạn trước khi vào kèo tiếp.',
+          '{count} trận thua liên tiếp khiến {name} hơi sập hầm, cần một trận xanh để lấy lại vía.',
+          'Vía đang hơi nặng với {name}: {count} trận chưa thoát đỏ, nhìn điểm là thấy cần oxy.',
+          '{name} kẹt chuỗi thua {count} trận. Không phải hết trình, nhưng mood sân đang hơi tối.',
+        ],
+      });
+    }
+
+    if (metric.total >= 5 && metric.formScore === 100) {
+      addCandidate(candidates, snapshot, {
+        type: 'perfect_form5',
+        title: '🚀 5 TRẬN TOÀN XANH',
+        group: 'form',
+        rarity: 'epic',
+        weight: 10,
+        priority: 94,
+        metricScore: metric.formScore,
+        participantIds: [metric.id],
+        context: { name: metric.name },
+        templates: [
+          '5 trận gần nhất của {name} toàn thắng. Form này không còn là nóng tay, đây là cháy sân.',
+          '{name} vừa quét sạch 5 trận gần nhất, anh em gặp kèo này phải tính đường né gió.',
+          'Phong độ gần đây của {name} là 5/5 xanh. Ráp vào team nào cũng thấy có mùi thắng.',
+          '{name} đang bứt tốc rõ rệt: 5 trận gần nhất không rơi một trận nào.',
+        ],
+      });
+    }
+
+    if (metric.total >= 5 && metric.formScore === 0) {
+      addCandidate(candidates, snapshot, {
+        type: 'zero_form5',
+        title: '🫠 5 TRẬN TOÀN ĐỎ',
+        group: 'form',
+        rarity: 'epic',
+        weight: 10,
+        priority: 93,
+        metricScore: 100,
+        participantIds: [metric.id],
+        context: { name: metric.name },
+        templates: [
+          '5 trận gần nhất của {name} toàn đỏ. Giai đoạn này cần một kèo giải hạn đúng nghĩa.',
+          '{name} đang ngộp thở với 5 trận gần nhất không có xanh, nhìn lịch sử là thấy hơi đau.',
+          'Chuỗi form gần đây của {name} hơi tối: 0/5 trận thắng, cần kéo mood lại gấp.',
+          '{name} đang có 5 trận gần nhất toàn thua. Không vỡ trận thì cũng đang rất cần đổi vía.',
+        ],
+      });
+    }
+
+    if (metric.upsetWins > 0) {
+      addCandidate(candidates, snapshot, {
+        type: 'upset_hero',
+        title: '🎯 VUA GẠT GIÒ',
+        group: 'elo',
+        rarity: metric.upsetWins >= 2 ? 'epic' : 'rare',
+        weight: 9,
+        priority: 88 + metric.upsetWins * 4,
+        metricScore: metric.upsetWins,
+        participantIds: [metric.id],
+        context: { name: metric.name, count: metric.upsetWins },
+        templates: [
+          '{name} có {count} lần thắng cửa dưới dưới 30%. Máy tính đo một kiểu, lên sân lại lật kèo một kiểu.',
+          'Đừng nhìn kèo máy mà khinh {name}: đã {count} lần gạt giò cửa trên thành công.',
+          '{name} đúng chất thợ săn kèo khó, {count} lần thắng khi xác suất ban đầu dưới 30%.',
+          'Kèo càng bị đánh giá thấp, {name} càng dễ lên đồng: {count} cú lật kèo cửa dưới đã được ghi nhận.',
+        ],
+      });
+    }
+
+    if (metric.upsetLosses > 0) {
+      addCandidate(candidates, snapshot, {
+        type: 'upset_victim',
+        title: '💥 NẠN NHÂN ĐỊA CHẤN',
+        group: 'elo',
+        rarity: metric.upsetLosses >= 2 ? 'rare' : 'uncommon',
+        weight: 7,
+        priority: 78 + metric.upsetLosses * 3,
+        metricScore: metric.upsetLosses,
+        participantIds: [metric.id],
+        context: { name: metric.name, count: metric.upsetLosses },
+        templates: [
+          '{name} đã {count} lần thua khi cửa thắng trên 70%. Kèo tưởng thơm mà hóa ra sập hầm.',
+          'Máy tính từng ưu ái {name}, nhưng sân phủi không dễ đoán: {count} lần cửa trên vẫn rơi điểm.',
+          '{name} có {count} trận bị lật dù xác suất thắng rất cao. Đây là loại đau mà bảng số biết nói.',
+          '{count} lần thua cửa trên khiến {name} phải dè chừng, vì kèo đẹp chưa chắc đã dễ ăn.',
+        ],
+      });
+    }
+
+    if (metric.total >= 20 && Math.abs(metric.rating - 1000) <= 20) {
+      addCandidate(candidates, snapshot, {
+        type: 'gatekeeper',
+        title: '🧱 NGƯỜI GIỮ CỔNG',
+        group: 'elo',
+        rarity: 'uncommon',
+        weight: 5,
+        priority: 70,
+        metricScore: metric.total,
+        participantIds: [metric.id],
+        context: { name: metric.name, total: metric.total, elo: metric.rating },
+        templates: [
+          '{name} đã đánh {total} trận mà ELO vẫn quanh {elo}. Không lên nóc, không rơi đáy, đúng chuẩn giữ cổng.',
+          '{total} trận trôi qua, {name} vẫn neo ELO ở {elo}. Ai muốn test trình trung bình cứ tìm kèo này.',
+          '{name} là mốc kiểm định rất ổn: {total} trận, ELO {elo}, thắng thua đủ để đo tay anh em.',
+          'ELO {elo} sau {total} trận biến {name} thành cửa kiểm tra phong độ khá chuẩn cho cả sân.',
+        ],
+      });
+    }
+
+    if (topAttack?.id === metric.id && metric.attackScore >= 90) {
+      addCandidate(candidates, snapshot, {
+        type: 'top_attack',
+        title: '💣 CỖ MÁY DẬP BÓNG',
+        group: 'score',
+        rarity: 'uncommon',
+        weight: 6,
+        priority: 76,
+        metricScore: metric.attackScore,
+        participantIds: [metric.id],
+        context: { name: metric.name, score: rounded(metric.attackScore), avg: metric.avgPointsFor.toFixed(1) },
+        templates: [
+          '{name} đang là máy bào điểm của sân: trung bình {avg} điểm/trận, chỉ số công {score}.',
+          'Điểm số của {name} lên đều thật sự, trung bình {avg} điểm mỗi trận. Đánh kiểu này rất khó bị bỏ xa.',
+          '{name} đang dẫn nhóm tấn công với chỉ số {score}, trung bình kéo được {avg} điểm/trận.',
+          'Cứ nhìn điểm ghi là thấy {name} đang vào tay: {avg} điểm/trận, chỉ số công {score}.',
+        ],
+      });
+    }
+
+    if (isEnough(metric, 8) && metric.avgConceded <= 5) {
+      addCandidate(candidates, snapshot, {
+        type: 'defense_wall',
+        title: '🛡️ BỨC TƯỜNG BÊ TÔNG',
+        group: 'score',
+        rarity: metric.avgConceded <= 4 ? 'rare' : 'uncommon',
+        weight: 8,
+        priority: 82,
+        metricScore: 10 - metric.avgConceded,
+        participantIds: [metric.id],
+        context: { name: metric.name, avg: metric.avgConceded.toFixed(1) },
+        templates: [
+          '{name} phòng thủ rất gắt, trung bình chỉ để mất {avg} điểm/trận. Muốn xuyên tường này không dễ.',
+          'Đối thủ gặp {name} thường bị bóp điểm khá nặng: chỉ {avg} điểm/trận lọt qua.',
+          '{name} đang giữ sân cực kín, điểm mất trung bình chỉ {avg}. Đây mới là thủ đúng nghĩa.',
+          'Bảng điểm nói hộ {name}: trung bình mất {avg} điểm/trận, hàng thủ không hề mềm.',
+        ],
+      });
+    }
+
+    if (metric.dominantWins >= 4) {
+      addCandidate(candidates, snapshot, {
+        type: 'dominant_closer',
+        title: '⚰️ ĐÓNG HÒM CHÓNG VÁNH',
+        group: 'score',
+        rarity: metric.dominantWins >= 6 ? 'rare' : 'uncommon',
+        weight: 7,
+        priority: 78 + metric.dominantWins,
+        metricScore: metric.dominantWins,
+        participantIds: [metric.id],
+        context: { name: metric.name, count: metric.dominantWins },
+        templates: [
+          '{name} có {count} trận thắng cách biệt từ 7 điểm. Đã thắng là thường thắng rất sâu.',
+          '{count} lần đóng hòm đối thủ cho thấy {name} không thích dây dưa khi đã vào tay.',
+          '{name} đã {count} lần thắng áp đảo, kiểu thắng khiến bên kia chỉ biết nhìn bảng điểm.',
+          'Khi {name} bắt được nhịp, trận đấu kết thúc rất nhanh: {count} trận thắng cách biệt sâu.',
+        ],
+      });
+    }
+
+    if (metric.closeLosses >= 3) {
+      addCandidate(candidates, snapshot, {
+        type: 'close_loss',
+        title: '🥲 THÁNH NHỌ SÂN BÃI',
+        group: 'score',
+        rarity: metric.closeLosses >= 5 ? 'rare' : 'uncommon',
+        weight: 7,
+        priority: 76 + metric.closeLosses,
+        metricScore: metric.closeLosses,
+        participantIds: [metric.id],
+        context: { name: metric.name, count: metric.closeLosses },
+        templates: [
+          '{name} thua sát nút {count} trận. Thiếu đúng một nhịp là từ đỏ chuyển xanh.',
+          '{count} trận thua sát cho thấy {name} không dễ vỡ, nhưng đoạn chốt hạ đang hơi thiếu duyên.',
+          'Vận may cuối game chưa đứng về phía {name}: {count} lần thua sát nút rồi.',
+          '{name} có {count} trận chỉ thua 1-2 điểm. Đen nhẹ thôi, không phải sập trình.',
+        ],
+      });
+    }
+
+    if (metric.deuceMatches >= 3) {
+      addCandidate(candidates, snapshot, {
+        type: 'deuce_addict',
+        title: '🥵 ĐAM MÊ CÒ CƯA',
+        group: 'score',
+        rarity: metric.deuceMatches >= 5 ? 'rare' : 'uncommon',
+        weight: 7,
+        priority: 76 + metric.deuceMatches,
+        metricScore: metric.deuceMatches,
+        participantIds: [metric.id],
+        context: { name: metric.name, count: metric.deuceMatches },
+        templates: [
+          'Đánh với {name} dễ kéo qua 11 điểm: {count} trận deuce, đúng kiểu cò cưa tới mệt.',
+          '{name} góp mặt trong {count} trận dây dưa qua 11 điểm. Vào kèo này nhớ giữ pin.',
+          '{count} trận deuce có mặt {name}, đủ hiểu người này rất biết kéo drama điểm số.',
+          '{name} không thích thắng thua nhanh: {count} trận phải kéo quá 11 điểm mới chịu xong.',
+        ],
+      });
+    }
+
+    if (metric.bagelLosses > 0) {
+      addCandidate(candidates, snapshot, {
+        type: 'bagel_loss',
+        title: '🔌 SẬP NGUỒN',
+        group: 'score',
+        rarity: metric.bagelLosses >= 2 ? 'rare' : 'uncommon',
+        weight: 6,
+        priority: 72 + metric.bagelLosses,
+        metricScore: metric.bagelLosses,
+        participantIds: [metric.id],
+        context: { name: metric.name, count: metric.bagelLosses },
+        templates: [
+          '{name} có {count} trận thua mà team chỉ lên tối đa 2 điểm. Đây là dạng sập nguồn cần quên nhanh.',
+          '{count} lần điểm số tụt xuống mức báo động, {name} chắc không muốn xem lại highlight này.',
+          '{name} đã {count} lần dính trận quá sâu, kiểu điểm số nhìn vào là muốn tắt app.',
+          'Có {count} trận team của {name} chỉ ghi được 0-2 điểm. Kèo đó đúng nghĩa mất điện.',
+        ],
+      });
+    }
+
+    if (topActivity?.id === metric.id && metric.total >= 20) {
+      addCandidate(candidates, snapshot, {
+        type: 'iron_lung',
+        title: '🚜 LÁ PHỔI BÒ',
+        group: 'activity',
+        rarity: metric.dailyMaxMatches >= 6 ? 'rare' : 'common',
+        weight: 5,
+        priority: 66 + Math.min(10, metric.dailyMaxMatches),
+        metricScore: metric.total,
+        participantIds: [metric.id],
+        context: { name: metric.name, total: metric.total, daily: metric.dailyMaxMatches },
+        templates: [
+          '{name} đang là máy cày của sân với {total} trận, có ngày quất tới {daily} trận.',
+          'Độ chăm của {name} khỏi bàn: {total} trận tổng, đỉnh điểm {daily} trận trong một ngày.',
+          '{name} ra sân như chấm công, tích lũy {total} trận và từng đánh {daily} trận/ngày.',
+          'Nếu tính độ bền, {name} đang dẫn sóng: {total} trận, ngày cao nhất {daily} trận.',
+        ],
+      });
+    }
+
+    if (metric.daysAbsent !== null && metric.daysAbsent >= 7) {
+      addCandidate(candidates, snapshot, {
+        type: 'missing_player',
+        title: '🕶️ QUY ẨN GIANG HỒ',
+        group: 'activity',
+        rarity: metric.daysAbsent >= 21 ? 'rare' : 'uncommon',
+        weight: 5,
+        priority: 64 + Math.min(20, metric.daysAbsent),
+        metricScore: metric.daysAbsent,
+        participantIds: [metric.id],
+        context: { name: metric.name, days: metric.daysAbsent },
+        templates: [
+          '{name} đã vắng mặt {days} ngày. Anh em bắt đầu quên cảm giác bị người này báo điểm rồi.',
+          '{days} ngày chưa thấy {name} ra sân, có vẻ đang tu luyện hoặc né quỹ phạt.',
+          '{name} quy ẩn {days} ngày rồi. Sân vẫn chạy, nhưng thiếu một gương mặt quen.',
+          'Đã {days} ngày {name} chưa xuất hiện. Nếu đây là chiến thuật giấu bài thì hơi lâu.',
+        ],
+      });
+    }
+
+    if (metric.total > 0 && metric.total <= 5 && metric.winRate >= 80) {
+      addCandidate(candidates, snapshot, {
+        type: 'mercenary',
+        title: '🏕️ LÍNH ĐÁNH THUÊ',
+        group: 'activity',
+        rarity: 'rare',
+        weight: 7,
+        priority: 74,
+        metricScore: metric.winRate,
+        participantIds: [metric.id],
+        context: { name: metric.name, total: metric.total, rate: rounded(metric.winRate) },
+        templates: [
+          '{name} mới đánh {total} trận nhưng winrate {rate}%. Ra sân ít mà chất lượng hơi cao.',
+          '{total} trận là mẫu còn mỏng, nhưng {name} đang cầm {rate}% thắng. Lính đánh thuê đúng nghĩa.',
+          '{name} xuất hiện ít, đánh {total} trận, nhưng tỉ lệ thắng {rate}% khiến anh em phải để ý.',
+          'Không ra sân nhiều, nhưng {name} có {rate}% thắng sau {total} trận. Ít mà đau.',
+        ],
+      });
+    }
+
+    if (metric.alternations >= 5) {
+      addCandidate(candidates, snapshot, {
+        type: 'alternating_form',
+        title: '🎛️ MÁY TEST VỢT',
+        group: 'fun',
+        rarity: 'uncommon',
+        weight: 5,
+        priority: 66 + metric.alternations,
+        metricScore: metric.alternations,
+        participantIds: [metric.id],
+        context: { name: metric.name },
+        templates: [
+          'Form của {name} bật tắt liên tục, thắng thua xen kẽ như đang test vợt mới.',
+          '{name} đang khó đoán thật sự: vừa xanh đã đỏ, vừa đỏ lại xanh.',
+          'Chuỗi gần đây của {name} không chịu đi theo đường thẳng. Bảng form nhìn như sóng điện.',
+          'Muốn dự đoán {name} trận tới hơi khó, vì form đang đổi màu liên tục.',
+        ],
+      });
+    }
+  });
+}
+
+function addPartnerCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnapshot) {
+  snapshot.partnerEdges.filter(edge => edge.total >= 4).forEach(edge => {
+    if (edge.rate >= 75) {
+      addCandidate(candidates, snapshot, {
+        type: 'perfect_duo',
+        title: '🤝 CẶP BÀI TRÙNG',
+        group: 'partner',
+        rarity: edge.total >= 8 || edge.impact >= 15 ? 'rare' : 'uncommon',
+        weight: 8,
+        priority: 82 + Math.min(10, edge.total),
+        metricScore: edge.confidence,
+        participantIds: [edge.playerId, edge.otherId],
+        context: { a: edge.playerName, b: edge.otherName, record: edgeRecord(edge), impact: edge.impact },
+        templates: [
+          '{a} đánh chung với {b} đang rất bén: {record}, hiệu suất lệch {impact} điểm so với baseline.',
+          'Cặp {a} - {b} có số đẹp thật sự: {record}. Impact {impact} cho thấy không chỉ là winrate ảo.',
+          'Ráp {a} với {b} đang ra bài rất ổn: {record}, chênh hiệu suất {impact} điểm.',
+          '{a} và {b} là cặp đáng để ý: {record}, dữ liệu đang nghiêng mạnh về hướng hợp cạ.',
+        ],
+      });
+    }
+
+    if (edge.rate <= 25) {
+      addCandidate(candidates, snapshot, {
+        type: 'bad_duo',
+        title: '⚓ DẪM CHÂN NHAU',
+        group: 'partner',
+        rarity: edge.total >= 8 || edge.impact <= -15 ? 'rare' : 'uncommon',
+        weight: 8,
+        priority: 82 + Math.min(10, edge.total),
+        metricScore: edge.confidence,
+        participantIds: [edge.playerId, edge.otherId],
+        context: { a: edge.playerName, b: edge.otherName, record: edgeRecord(edge), impact: edge.impact },
+        templates: [
+          '{a} ghép với {b} đang hơi khắc hệ: {record}, hiệu suất lệch {impact} điểm.',
+          'Cặp {a} - {b} nhìn dữ liệu khá đau: {record}. Impact {impact} cho thấy cần đổi bài.',
+          'Mỗi lần {a} đứng cùng {b} là kèo hơi nặng: {record}, chênh hiệu suất {impact} điểm.',
+          '{a} và {b} cần xem lại cách ráp đội: {record}, số liệu đang báo dẫm chân nhau.',
+        ],
+      });
+    }
+
+    if (edge.impact >= 15) {
+      addCandidate(candidates, snapshot, {
+        type: 'partner_boost',
+        title: '🧿 BÙA HỘ MỆNH',
+        group: 'partner',
+        rarity: edge.impact >= 25 ? 'epic' : 'rare',
+        weight: 9,
+        priority: 88 + Math.min(12, edge.impact),
+        metricScore: edge.impact + edge.total,
+        participantIds: [edge.playerId, edge.otherId],
+        context: { a: edge.playerName, b: edge.otherName, impact: edge.impact, record: edgeRecord(edge) },
+        templates: [
+          'Cứ có {b} bên cạnh là {a} đánh sáng hơn hẳn: +{impact} điểm hiệu suất, record {record}.',
+          '{b} đang là bùa hộ mệnh của {a}: hiệu suất tăng +{impact}, thành tích {record}.',
+          'Dữ liệu nói khá rõ: {a} gặp {b} là lên tay, +{impact} điểm hiệu suất qua {record}.',
+          '{a} đánh cùng {b} không chỉ thắng nhiều mà còn vượt baseline +{impact} điểm.',
+        ],
+      });
+    }
+
+    if (edge.impact <= -15) {
+      addCandidate(candidates, snapshot, {
+        type: 'partner_drag',
+        title: '🪨 QUẢ TẠ VÀNG',
+        group: 'partner',
+        rarity: edge.impact <= -25 ? 'epic' : 'rare',
+        weight: 9,
+        priority: 88 + Math.min(12, abs(edge.impact)),
+        metricScore: abs(edge.impact) + edge.total,
+        participantIds: [edge.playerId, edge.otherId],
+        context: { a: edge.playerName, b: edge.otherName, impact: abs(edge.impact), record: edgeRecord(edge) },
+        templates: [
+          '{a} đánh cùng {b} đang tụt {impact} điểm hiệu suất. Record {record} nhìn là thấy hơi nặng vai.',
+          'Cặp {a} - {b} cần đi giải hạn: hiệu suất giảm {impact} điểm, thành tích {record}.',
+          '{b} đứng cạnh {a} đang kéo chỉ số xuống {impact} điểm. Đây là dấu hiệu khắc lối chơi.',
+          'Dữ liệu đang không bênh cặp {a} - {b}: {record}, hiệu suất tụt {impact} điểm.',
+        ],
+      });
+    }
+  });
+}
+
+function addOpponentCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnapshot) {
+  const repeatedEdges = snapshot.opponentEdges.filter(edge => edge.total >= 4);
+  const mostRepeated = [...repeatedEdges].sort((a, b) => b.total - a.total)[0];
+
+  repeatedEdges.forEach(edge => {
+    if (edge.rate === 100) {
+      addCandidate(candidates, snapshot, {
+        type: 'hard_counter',
+        title: '🦅 KHẮC TINH',
+        group: 'opponent',
+        rarity: edge.total >= 6 ? 'epic' : 'rare',
+        weight: 9,
+        priority: 90 + edge.total,
+        metricScore: edge.total,
+        participantIds: [edge.playerId, edge.otherId],
+        context: { a: edge.playerName, b: edge.otherName, total: edge.total },
+        templates: [
+          '{a} gặp {b} đang toàn thắng {total}/{total}. Đây không còn là hên, đây là bắt bài.',
+          'Cứ bên kia lưới có {b}, {a} lại sáng cửa: {total} trận đối đầu toàn xanh.',
+          '{a} đang là khắc tinh của {b}: gặp {total} lần thắng cả {total}.',
+          'Kèo {a} gặp {b} hiện nghiêng hẳn một chiều: {total}/{total} trận xanh cho {a}.',
+        ],
+      });
+    }
+
+    if (edge.rate === 0) {
+      addCandidate(candidates, snapshot, {
+        type: 'target_dummy',
+        title: '🧸 BỊCH BÔNG GIẢI TRÍ',
+        group: 'opponent',
+        rarity: edge.total >= 6 ? 'epic' : 'rare',
+        weight: 9,
+        priority: 90 + edge.total,
+        metricScore: edge.total,
+        participantIds: [edge.playerId, edge.otherId],
+        context: { a: edge.playerName, b: edge.otherName, total: edge.total },
+        templates: [
+          '{a} gặp {b} đang thua cả {total}/{total}. Kèo này nhìn vào là thấy hơi át vía.',
+          'Mỗi lần đối đầu {b}, {a} chưa tìm được cửa xanh: {total} trận toàn đỏ.',
+          '{b} đang là bài toán khó chịu với {a}: gặp {total} lần, {a} chưa thắng lần nào.',
+          'Kèo {a} gặp {b} hiện khá đau: {total}/{total} trận đỏ, cần đổi chiến thuật thật.',
+        ],
+      });
+    }
+
+    if (edge.impact >= 15) {
+      addCandidate(candidates, snapshot, {
+        type: 'sweet_matchup',
+        title: '🍯 KÈO THƠM',
+        group: 'opponent',
+        rarity: edge.impact >= 25 ? 'epic' : 'rare',
+        weight: 8,
+        priority: 86 + Math.min(12, edge.impact),
+        metricScore: edge.impact + edge.total,
+        participantIds: [edge.playerId, edge.otherId],
+        context: { a: edge.playerName, b: edge.otherName, impact: edge.impact, record: edgeRecord(edge) },
+        templates: [
+          '{a} gặp {b} là hiệu suất tăng +{impact} điểm. Record {record} cho thấy kèo này khá thơm.',
+          'Đối đầu {b}, {a} đánh vượt baseline +{impact} điểm. Thành tích {record} không phải ngẫu nhiên.',
+          '{b} đang là matchup dễ chịu với {a}: +{impact} điểm hiệu suất, {record}.',
+          'Số liệu nghiêng về {a} khi gặp {b}: {record}, hiệu suất cao hơn bình thường {impact} điểm.',
+        ],
+      });
+    }
+
+    if (edge.impact <= -15) {
+      addCandidate(candidates, snapshot, {
+        type: 'nightmare_matchup',
+        title: '😵 KÈO KHÓ',
+        group: 'opponent',
+        rarity: edge.impact <= -25 ? 'epic' : 'rare',
+        weight: 8,
+        priority: 86 + Math.min(12, abs(edge.impact)),
+        metricScore: abs(edge.impact) + edge.total,
+        participantIds: [edge.playerId, edge.otherId],
+        context: { a: edge.playerName, b: edge.otherName, impact: abs(edge.impact), record: edgeRecord(edge) },
+        templates: [
+          '{a} gặp {b} là hiệu suất tụt {impact} điểm. Record {record} cho thấy kèo này không dễ thở.',
+          '{b} đang làm {a} đánh dưới baseline {impact} điểm. Thành tích {record} khá biết nói.',
+          'Kèo {a} gặp {b} hơi sập hầm: {record}, hiệu suất thấp hơn bình thường {impact} điểm.',
+          '{a} cần tìm lời giải khi gặp {b}: hiệu suất giảm {impact} điểm qua {record}.',
+        ],
+      });
+    }
+
+    if (edge.deuceGames >= 3) {
+      addCandidate(candidates, snapshot, {
+        type: 'deuce_rivalry',
+        title: '🪢 CỨ GẶP LÀ DÂY DƯA',
+        group: 'opponent',
+        rarity: 'uncommon',
+        weight: 6,
+        priority: 76 + edge.deuceGames,
+        metricScore: edge.deuceGames,
+        participantIds: [edge.playerId, edge.otherId],
+        context: { a: edge.playerName, b: edge.otherName, count: edge.deuceGames },
+        templates: [
+          '{a} gặp {b} đã có {count} trận kéo deuce. Kèo này không cho ai thắng nhanh.',
+          'Cứ {a} đối đầu {b} là dễ dây dưa: {count} trận phải kéo qua 11 điểm.',
+          '{count} trận deuce giữa {a} và {b} cho thấy cặp đối đầu này rất biết bào thể lực.',
+          'Kèo {a} - {b} thường không gọn: {count} lần kéo deuce rồi.',
+        ],
+      });
+    }
+  });
+
+  if (mostRepeated && mostRepeated.total >= 6 && mostRepeated.rate >= 40 && mostRepeated.rate <= 60) {
+    addCandidate(candidates, snapshot, {
+      type: 'balanced_rivalry',
+      title: '⚔️ KỲ PHÙNG ĐỊCH THỦ',
+      group: 'opponent',
+      rarity: 'uncommon',
+      weight: 7,
+      priority: 78 + mostRepeated.total,
+      metricScore: mostRepeated.total,
+      participantIds: [mostRepeated.playerId, mostRepeated.otherId],
+      context: { a: mostRepeated.playerName, b: mostRepeated.otherName, record: edgeRecord(mostRepeated) },
+      templates: [
+        '{a} và {b} gặp nhau nhiều mà vẫn cân: {record}. Đây là kèo đúng nghĩa phải đánh mới biết.',
+        'Kèo {a} - {b} đang rất ngang: {record}, không ai thật sự bắt nạt được ai.',
+        '{a} đối đầu {b} đủ nhiều để thấy độ cân: {record}. Kèo này đáng xem.',
+        '{record} giữa {a} và {b} cho thấy hai bên đang kỳ phùng địch thủ thật sự.',
+      ],
+    });
+  }
+}
+
+function selectInsights(candidates: InsightCandidate[], limit = 8) {
+  const finalInsights: InsightCandidate[] = [];
+  const playerMentions = new Map<string, number>();
+  const playerGroups = new Map<string, Set<InsightGroup>>();
+  const usedTypes = new Set<string>();
+
+  const scored = [...candidates].sort((a, b) => {
+    const aScore = a.priority + RARITY_SCORE[a.rarity || 'common'] + (a.weight || 0) * 1.8 + a.metricScore * 0.2;
+    const bScore = b.priority + RARITY_SCORE[b.rarity || 'common'] + (b.weight || 0) * 1.8 + b.metricScore * 0.2;
+    return bScore - aScore || b.priority - a.priority || b.metricScore - a.metricScore;
+  });
+
+  for (const candidate of scored) {
+    if (finalInsights.length >= limit) break;
+    if (usedTypes.has(candidate.type)) continue;
+
+    let canUse = true;
+    for (const participantId of candidate.participantIds) {
+      if ((playerMentions.get(participantId) || 0) >= 2) {
+        canUse = false;
+        break;
+      }
+      const groups = playerGroups.get(participantId);
+      if (groups?.has(candidate.group)) {
+        canUse = false;
+        break;
+      }
+    }
+
+    if (!canUse) continue;
+    finalInsights.push(candidate);
+    usedTypes.add(candidate.type);
+    candidate.participantIds.forEach(participantId => {
+      playerMentions.set(participantId, (playerMentions.get(participantId) || 0) + 1);
+      if (!playerGroups.has(participantId)) playerGroups.set(participantId, new Set());
+      playerGroups.get(participantId)!.add(candidate.group);
+    });
+  }
+
+  return finalInsights.map(candidate => ({
+    type: candidate.type,
+    title: candidate.title,
+    text: candidate.text,
+    playersInvolved: candidate.playersInvolved,
+    rarity: candidate.rarity,
+    weight: candidate.weight,
+  }));
+}
+
+export function generateInsightsFromSnapshot(snapshot: AnalysisSnapshot): Insight[] {
+  const candidates: InsightCandidate[] = [];
+  addPlayerCandidates(candidates, snapshot);
+  addPartnerCandidates(candidates, snapshot);
+  addOpponentCandidates(candidates, snapshot);
+  return selectInsights(candidates, 8);
+}
 
 export function generateAdvancedInsights(
-  board: any[],
-  elo: any,
-  matches: Match[],
-  players: Player[],
-  matchExpected: Map<string, { winProb: number; loseProb: number }>
+  _board: unknown[],
+  _elo: unknown,
+  matches: AnalysisMatch[],
+  players: AnalysisPlayer[],
+  _matchExpected: unknown
 ): Insight[] {
-  const insights: LocalInsight[] = [];
-  if (!board || board.length === 0) return [];
-
-  const addInsight = (type: string, title: string, texts: string[], involved: (string | undefined)[], category: InsightCategory) => {
-    const randomText = texts[Math.floor(Math.random() * texts.length)];
-    insights.push({ type, title, text: randomText, playersInvolved: involved, category });
-  };
-
-  const getDay = (date: any) => {
-    if (!date) return '';
-    if (typeof date === 'string') return date.split('T')[0];
-    if (date instanceof Date) return date.toISOString().split('T')[0];
-    return String(date).split('T')[0];
-  };
-
-  // 1. PRE-CALCULATE GLOBAL STATS
-  const allDays = new Set(matches.map(m => getDay(m.date)));
-  const totalDays = allDays.size;
-
-  const playerStats = new Map<string, {
-    totalMatches: number;
-    closeWins: number;
-    closeLosses: number;
-    dominantWins: number;
-    dominantLosses: number;
-    totalPoints: number;
-    deuceMatches: number;
-    daysPlayed: Set<string>;
-    upsets: number;
-    lastMatchDate: string;
-  }>();
-
-  const pairStats = new Map<string, { wins: number; total: number; impact: number }>();
-  const rivalStats = new Map<string, { wins: number; total: number; impact: number }>();
-
-  // Initialize
-  board.forEach(p => {
-    playerStats.set(p.id, {
-      totalMatches: 0, closeWins: 0, closeLosses: 0, dominantWins: 0, dominantLosses: 0,
-      totalPoints: 0, deuceMatches: 0, daysPlayed: new Set(), upsets: 0, lastMatchDate: ''
-    });
-  });
-
-  matches.forEach(m => {
-    const winners = [m.win_1, m.win_2].filter(Boolean) as string[];
-    const losers = [m.lose_1, m.lose_2].filter(Boolean) as string[];
-    const ws = m.win_score || 0;
-    const ls = m.lose_score || 0;
-    const scoreDiff = ws - ls;
-    const isDeuce = ws > 11;
-    const day = getDay(m.date);
-    
-    // Upsets check (WinProb < 35%)
-    const exp = m.id ? matchExpected.get(m.id) : undefined;
-    const isUpset = exp && exp.winProb < 0.35;
-
-    winners.forEach(w => {
-      const s = playerStats.get(w);
-      if (s) {
-        s.totalMatches++;
-        s.totalPoints += ws;
-        s.daysPlayed.add(day);
-        if (!s.lastMatchDate || day > s.lastMatchDate) s.lastMatchDate = day;
-        if (scoreDiff <= 2) s.closeWins++;
-        if (scoreDiff >= 7) s.dominantWins++;
-        if (isDeuce) s.deuceMatches++;
-        if (isUpset) s.upsets++;
-      }
-    });
-
-    losers.forEach(l => {
-      const s = playerStats.get(l);
-      if (s) {
-        s.totalMatches++;
-        s.totalPoints += ls;
-        s.daysPlayed.add(day);
-        if (!s.lastMatchDate || day > s.lastMatchDate) s.lastMatchDate = day;
-        if (scoreDiff <= 2) s.closeLosses++;
-        if (scoreDiff >= 7) s.dominantLosses++;
-        if (isDeuce) s.deuceMatches++;
-      }
-    });
-  });
-
-  // 2. GENERATE INDIVIDUAL INSIGHTS
-  const today = new Date();
-  
-  board.forEach(p => {
-    const stats = playerStats.get(p.id);
-    if (!stats) return;
-
-    const playerWinRate = p.total > 0 ? (p.wins / p.total) * 100 : 0;
-    const streakMatch = p.streak?.match(/^(\d+)(W|L)$/);
-    const streakVal = streakMatch ? parseInt(streakMatch[1]) : 0;
-    const streakType = streakMatch ? streakMatch[2] : '';
-
-    // 🔥 Đang Vào Form
-    if (streakType === 'W' && streakVal >= 3) {
-      addInsight('hot_streak', '🔥 ĐANG VÀO FORM', [
-        `Không thể cản bước! ${p.name} đang cực cháy với chuỗi ${streakVal} trận bất bại liên tiếp. Chạm vào là bỏng tay!`,
-        `Thắng liền ${streakVal} trận, ${p.name} dường như đã tìm ra công thức chiến thắng tối thượng.`,
-        `Phong độ của ${p.name} đang ở đỉnh cao, ${streakVal} đối thủ gần nhất đều đã phải ôm hận rời sân.`,
-        `${p.name} đang thăng hoa với chuỗi thắng ${streakVal} trận. Hãy xem ai có thể cản bước!`,
-        `Máy ghi điểm mang tên ${p.name} đã thông nòng, càn quét giải đấu với ${streakVal} chiến thắng liên tiếp.`
-      ], [p.name], 'individual');
-    }
-
-    // 😔 Chuỗi Đen
-    if (streakType === 'L' && streakVal >= 3) {
-      addInsight('cold_streak', '😔 CHUỖI ĐEN', [
-        `${p.name} đang gặp khủng hoảng nhẹ khi để thua tới ${streakVal} trận liên tiếp.`,
-        `Cần một liệu pháp tâm lý khẩn cấp cho ${p.name} sau chuỗi ${streakVal} trận toàn thua cay đắng.`,
-        `${p.name} đang lạc lối với ${streakVal} thất bại liên tiếp. Đã đến lúc đi giải hạn đổi phong thủy?`,
-        `Có vẻ ${p.name} đang bị vận đen đeo bám suốt ${streakVal} trận qua chưa biết mùi chiến thắng.`,
-        `Kéo dài chuỗi thua lên con số ${streakVal}, ${p.name} đang rất khát khao một trận đấu gỡ gạc danh dự!`
-      ], [p.name], 'individual');
-    }
-
-    // ⭐ Kẻ Hủy Diệt
-    const playerWins = stats.dominantWins + stats.closeWins;
-    if (p.total >= 8 && playerWinRate >= 70) {
-      addInsight('dominator', '⭐ KẺ HỦY DIỆT', [
-        `Với tỉ lệ thắng ${Math.round(playerWinRate)}% (thắng ${playerWins}/${p.total} trận), ${p.name} đang là nỗi khiếp sợ của giải đấu.`,
-        `Ra sân là nắm chắc phần thắng! Tỉ lệ thắng ${Math.round(playerWinRate)}% (${playerWins}/${p.total} trận) chứng minh ${p.name} đang out trình.`,
-        `Duy trì tỉ lệ thắng ${Math.round(playerWinRate)}% (${playerWins}/${p.total} trận), ${p.name} đang sở hữu phong độ mà ai cũng khao khát.`,
-        `${p.name} đang thống trị sân bóng với tỉ lệ thắng ${Math.round(playerWinRate)}% (${playerWins} thắng/${p.total} trận). Đẳng cấp quá khác biệt.`,
-        `Không thể cản phá! ${p.name} càn quét mọi đối thủ với tỉ lệ thắng lên tới ${Math.round(playerWinRate)}% (${playerWins}/${p.total} trận).`
-      ], [p.name], 'individual');
-    }
-
-    // 📉 Đang Chật Vật
-    if (p.total >= 8 && playerWinRate <= 30) {
-      addInsight('struggling', '📉 ĐANG CHẬT VẬT', [
-        `Chỉ thắng vỏn vẹn ${Math.round(playerWinRate)}% (${playerWins}/${p.total} trận), ${p.name} cần nghiêm túc xem lại chiến thuật.`,
-        `Có vẻ ${p.name} vẫn đang trong giai đoạn làm quen sân bãi với tỉ lệ thắng khiêm tốn ${Math.round(playerWinRate)}% (${playerWins}/${p.total} trận).`,
-        `Chỉ đạt ${Math.round(playerWinRate)}% tỉ lệ thắng từ đầu giải (${playerWins}/${p.total} trận), ${p.name} cần tập trung hơn.`,
-        `${p.name} đang gặp khó khăn với tỉ lệ thắng hiện tại chỉ ${Math.round(playerWinRate)}% (${playerWins}/${p.total} trận).`,
-        `Cần luyện tập thêm cho ${p.name} khi hiệu suất chiến thắng chỉ ${Math.round(playerWinRate)}% (${playerWins}/${p.total} trận).`
-      ], [p.name], 'individual');
-    }
-
-    // 💪 Vua Chốt Hạ
-    if (stats.closeWins >= 3) {
-      addInsight('clutch', '💪 VUA CHỐT HẠ', [
-        `Chuyên gia thử thách nhịp tim! ${p.name} có tới ${stats.closeWins} lần chốt hạ đối thủ ở những điểm số nghẹt thở.`,
-        `Bản lĩnh thép! ${p.name} luôn lạnh lùng dứt điểm đối phương mang về ${stats.closeWins} chiến thắng sát nút.`,
-        `Chỉ cần điểm rơi vào điểm quyết định, ${p.name} chưa bao giờ làm anh em thất vọng với ${stats.closeWins} lần lật kèo phút chót.`,
-        `Cứ đánh giằng co là tự động bật chế độ quái vật. ${p.name} đã vượt ải thành công ${stats.closeWins} trận sát nút.`,
-        `Những trận đấu của ${p.name} luôn cần thuốc trợ tim cho khán giả, minh chứng là ${stats.closeWins} lần thắng nghẹt thở.`
-      ], [p.name], 'individual');
-    }
-
-    // 💔 Thánh Nhọ
-    if (stats.closeLosses >= 3) {
-      addInsight('heartbreaker', '💔 THÁNH NHỌ', [
-        `${p.name} quả thực là Thánh Nhọ của giải với ${stats.closeLosses} lần gục ngã đáng tiếc ở những điểm số quyết định.`,
-        `Yếu bóng vía hay do tâm linh? ${p.name} đã đánh rơi chiến thắng sát nút tới ${stats.closeLosses} lần.`,
-        `Chỉ thiếu đúng một chút may mắn nữa thôi, ${p.name} đã để vuột mất ${stats.closeLosses} trận cầu căng thẳng.`,
-        `Vua về nhì trong các kèo đấu sòng phẳng. ${p.name} đã ngậm ngùi thua ${stats.closeLosses} trận với tỉ số sát nút.`,
-        `Khán giả luôn phải ôm đầu tiếc nuối cho ${p.name} sau ${stats.closeLosses} lần gục ngã ngay trước vạch đích.`
-      ], [p.name], 'individual');
-    }
-
-    // 🪓 Bàn Tay Sắt
-    if (stats.dominantWins >= 5) {
-      addInsight('merciless', '🪓 BÀN TAY SẮT', [
-        `${p.name} ra tay quá tàn nhẫn! Có tới ${stats.dominantWins} nạn nhân đã bị anh hủy diệt với tỉ số cách biệt sâu.`,
-        `Đánh không cho đối phương gỡ danh dự! ${p.name} đã "đóng hòm" ${stats.dominantWins} trận với thế trận áp đảo hoàn toàn.`,
-        `Đứng trước ${p.name} là xác định mất điện. Đã có ${stats.dominantWins} đối thủ bị dội gáo nước lạnh không kịp ngáp.`,
-        `Sức mạnh hủy diệt tuyệt đối. ${p.name} có thói quen kết liễu trận đấu chóng vánh, ghi nhận ${stats.dominantWins} trận thắng áp đảo.`,
-        `Một khi ${p.name} đã nghiêm túc, đối thủ chỉ biết cất vợt xin hàng sau ${stats.dominantWins} chiến thắng quá chênh lệch.`
-      ], [p.name], 'individual');
-    }
-
-    // ⚽ Vua Phá Lưới
-    if (stats.totalPoints >= 150) {
-      addInsight('top_scorer', '⚽ VUA PHÁ LƯỚI', [
-        `Cỗ máy bào điểm chăm chỉ nhất giải! ${p.name} đã tự tay ghi tổng cộng ${stats.totalPoints} điểm kể từ đầu mùa.`,
-        `Vua phá lưới gọi tên ${p.name} với thành tích tích lũy được ${stats.totalPoints} điểm qua các trận đấu.`,
-        `Kẻ ghi điểm nhiều nhất! ${p.name} đã bỏ túi ${stats.totalPoints} điểm, thể hiện sự cống hiến tuyệt đối.`,
-        `Thành tích ${stats.totalPoints} điểm của ${p.name} là minh chứng cho việc chăm chỉ trên sân Pickleball.`,
-        `Dù thắng hay thua, ${p.name} vẫn luôn là người ghi điểm nhiều nhất, mang về ${stats.totalPoints} điểm tổng.`
-      ], [p.name], 'individual');
-    }
-
-    // 👻 Chuyên Gia Bùng Kèo
-    const absentDays = totalDays - stats.daysPlayed.size;
-    if (totalDays > 5 && absentDays >= (totalDays * 0.5)) {
-      addInsight('ghost', '👻 CHUYÊN GIA BÙNG KÈO', [
-        `Cảnh sát điểm danh! Ban tổ chức đánh rất đều nhưng ${p.name} thì đã vắng mặt tới ${absentDays} buổi.`,
-        `Giữ chỗ mà không ra sân! ${p.name} đang quán quân trong danh sách nghỉ chơi với ${absentDays} ngày vắng mặt.`
-      ], [p.name], 'individual');
-    }
-
-    // 🏕️ Lính Đánh Thuê
-    if (p.total > 0 && p.total <= 5 && totalDays >= 10) {
-      addInsight('mercenary', '🏕️ LÍNH ĐÁNH THUÊ', [
-        `Hoạt động cầm chừng! ${p.name} dường như chỉ đăng ký để ngồi xem khi mới ra sân vỏn vẹn ${p.total} trận.`,
-        `Khách mời danh dự của giải đấu. Số trận thực chiến của ${p.name} đang ở mức báo động đỏ: chỉ ${p.total} trận.`
-      ], [p.name], 'individual');
-    }
-
-    // ⏳ Mai Danh Ẩn Tích
-    if (stats.lastMatchDate) {
-      const lastMatch = new Date(stats.lastMatchDate);
-      const diffTime = Math.abs(today.getTime() - lastMatch.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      if (diffDays >= 7) {
-        addInsight('mia', '⏳ MAI DANH ẨN TÍCH', [
-        `${p.name} đã quy ẩn giang hồ được ${diffDays} ngày. Anh em đang ráo riết dán lệnh truy nã!`,
-        `Mọi người đang rất nhớ những cú đánh lỗi của ${p.name}. Đã qua ${diffDays} ngày, hãy mau chóng xỏ giày ra sân!`
-      ], [p.name], 'individual');
-      }
-    }
-
-    // 🎢 Chuyên Gia Lật Kèo
-    if (stats.upsets >= 2) {
-      addInsight('underdog', '🎢 CHUYÊN GIA LẬT KÈO', [
-        `Chấp luôn cả chỉ số máy tính! ${p.name} vừa tạo ra cơn địa chấn khi đánh bại đối thủ cửa trên tới ${stats.upsets} lần.`,
-        `Đừng bao giờ khinh thường cửa dưới. ${p.name} đã ${stats.upsets} lần chứng minh rằng ELO không phải là tất cả.`
-      ], [p.name], 'individual');
-    }
-
-    // 🥵 Kẻ Đam Mê Deuce
-    if (stats.deuceMatches >= 3) {
-      addInsight('deuce', '🥵 KẺ ĐAM MÊ DEUCE', [
-        `Vua kịch tính! Đánh với ${p.name} thì xác định phải bào thể lực với ${stats.deuceMatches} trận đấu nghẹt thở kéo dài.`,
-        `Chỉ thích thắng ở điểm số kịch tính. ${p.name} đã ${stats.deuceMatches} lần khiến khán giả đau tim vì thói quen giằng co.`,
-        `Đam mê kịch tính! ${p.name} là nguyên nhân chính khiến sân bị lố giờ nghỉ với ${stats.deuceMatches} trận cầu dai dẳng.`,
-        `Thắng nhanh thì chê, phải kéo đến điểm kịch tính mới chịu. ${p.name} đã nướng bóng và thời gian trong ${stats.deuceMatches} trận giằng co.`
-      ], [p.name], 'individual');
-    }
-
-    // 🩹 Tai Nạn Giao Thông
-    const lastMatch = stats.lastMatchDate ? matches.find(m => getDay(m.date) === stats.lastMatchDate && [m.lose_1, m.lose_2].includes(p.id)) : null;
-    if (lastMatch && (lastMatch.lose_score || 0) <= 2) {
-      addInsight('bagel', '🩹 TAI NẠN GIAO THÔNG', [
-        `Trận thua thảm họa chỉ ghi được ${lastMatch.lose_score} điểm vừa qua quả thực là một tai nạn giao thông của ${p.name}.`,
-        `Sập nguồn đột ngột! ${p.name} vừa trải qua một trận đấu quên mang theo nhịp điệu khi chỉ lên được ${lastMatch.lose_score} điểm.`,
-        `Chỉ vớt vát được ${lastMatch.lose_score} điểm danh dự, trận thua thảm họa vừa rồi chắc chắn sẽ khiến ${p.name} mất ngủ đêm nay.`,
-        `Cần một chầu bia để giải đen gấp cho ${p.name} sau trận đấu "cất vợt" kết thúc với ${lastMatch.lose_score} điểm ít ỏi.`,
-        `Không thể nhận ra ${p.name} trong trận đấu bị dội gáo nước lạnh vừa rồi, chỉ kịp ghi ${lastMatch.lose_score} điểm trước khi rời sân.`
-      ], [p.name], 'individual');
-    }
-
-    // 🚜 Trâu Cày / Vua Thể Lực (Kịch bản #19)
-    const matchesByDay = new Map<string, number>();
-    stats.daysPlayed.forEach(day => {
-      const dayMatches = matches.filter(m => getDay(m.date) === day && [m.win_1, m.win_2, m.lose_1, m.lose_2].includes(p.id));
-      matchesByDay.set(day, dayMatches.length);
-    });
-    const maxMatchesInDay = Math.max(...Array.from(matchesByDay.values()), 0);
-    if (maxMatchesInDay >= 5) {
-      addInsight('ironman', '🚜 TRÂU CÀY', [
-        `Thể lực bền bỉ đáng nể! ${p.name} giữ kỷ lục ra sân tới ${maxMatchesInDay} trận chỉ trong một buổi.`,
-        `Đánh không biết mệt! ${p.name} đã thi đấu ${maxMatchesInDay} trận liên tiếp trong ngày hôm đó.`,
-        `Cỗ máy chạy bằng cơm mang tên ${p.name} vừa hoàn tất ${maxMatchesInDay} trận đấu cực căng trong một buổi.`,
-        `Ban tổ chức xin trao giải "Người có sức bền" cho ${p.name} vì đánh được ${maxMatchesInDay} trận/ngày.`,
-        `Ai hụt hơi thì hụt chứ ${p.name} vẫn dư sức thi đấu ${maxMatchesInDay} trận một buổi dễ như ăn kẹo.`
-      ], [p.name], 'individual');
-    }
-
-    // 🦋 Lột Xác Ngoạn Mục (Kịch bản #20)
-    const playerMatches = matches
-      .filter(m => [m.win_1, m.win_2, m.lose_1, m.lose_2].includes(p.id))
-      .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-    const last5 = playerMatches.slice(0, 5);
-    const last5Wins = last5.filter(m => [m.win_1, m.win_2].includes(p.id)).length;
-    const last5WR = last5.length > 0 ? (last5Wins / last5.length) * 100 : 0;
-    // Calculate overall win rate from actual wins/total (dominantWins + closeWins = total wins)
-    const totalWins = stats.dominantWins + stats.closeWins;
-    const overallWR = stats.totalMatches > 0 ? (totalWins / stats.totalMatches) * 100 : 0;
-    const improvement = last5WR - overallWR;
-    if (improvement >= 20 && last5.length >= 5) {
-      addInsight('improved', '🦋 LỘT XÁC NGOẠN MỤC', [
-        `Sự lột xác đáng kinh ngạc! Hiệu suất gần đây của ${p.name} đang tăng vọt thêm ${Math.round(improvement)}% so với hồi đầu mùa.`,
-        `Càng đánh càng hay! ${p.name} đập tan mọi nghi ngờ với tỉ lệ thắng thăng tiến vượt bậc ${Math.round(improvement)}%.`,
-        `Dường như ${p.name} vừa được đả thông kinh mạch. Chuỗi phong độ cực kỳ khởi sắc, tăng mạnh ${Math.round(improvement)}% tỉ lệ thắng!`,
-        `Ai chê ${p.name} dở thì ra đây mà xem! Sự tiến bộ tăng ${Math.round(improvement)}% hiệu suất trong các trận gần đây là không thể bàn cãi.`,
-        `Khởi đầu chậm nhưng bứt tốc cực gắt. ${p.name} đang cho thấy một bộ mặt khác hẳn với mức tăng ${Math.round(improvement)}% tỉ lệ thắng.`
-      ], [p.name], 'individual');
-    }
-
-    // 🥶 Rớt Phong Độ (Kịch bản #21)
-    const decline = overallWR - last5WR;
-    if (decline >= 20 && last5.length >= 5) {
-      addInsight('slump', '🥶 RỚT PHONG ĐỘ', [
-        `Có vẻ ${p.name} đang mất cảm giác bóng khi thành tích gần đây tụt dốc không phanh, giảm tới ${Math.round(decline)}% hiệu suất.`,
-        `Cỗ máy đang có dấu hiệu quá tải! ${p.name} sụt giảm ${Math.round(decline)}% tỉ lệ thắng so với dạo trước.`,
-        `Đang bay cao bỗng nhiên đứt cáp. Phong độ của ${p.name} đang lao dốc ${Math.round(decline)}%, tạo ra một dấu hỏi lớn.`,
-        `${p.name} cần sớm tìm lại chính mình trước khi mọi thứ trôi đi quá xa, bù đắp lại ${Math.round(decline)}% hiệu suất vừa đánh mất.`,
-        `Màn trình diễn của ${p.name} dạo này khá nhạt nhòa, tỉ lệ thắng bốc hơi ${Math.round(decline)}%, không còn sự sắc bén như trước.`
-      ], [p.name], 'individual');
-    }
-
-    // 👑 Thống Trị ELO (Kịch bản #22)
-    const currentElo = elo.rating.get(p.id) || 1000;
-    const topPlayer = board[0];
-    if (topPlayer && p.id === topPlayer.id && currentElo > 1050) {
-      addInsight('king', '👑 THỐNG TRỊ ELO', [
-        `${p.name} đang chễm chệ trên ngai vàng vương quyền. Liệu ai có đủ sức lật đổ mức điểm ${Math.round(currentElo)} ELO?`,
-        `Mức ELO hiện tại ${Math.round(currentElo)} của ${p.name} là minh chứng cho một đẳng cấp out trình hoàn toàn.`,
-        `${p.name} đang quá cô đơn trên đỉnh cao danh vọng với ${Math.round(currentElo)} điểm. Cần lắm một thế lực mới trỗi dậy!`,
-        `Sở hữu ${Math.round(currentElo)} ELO áp đảo, ${p.name} chính là "Trùm cuối" mà anh em nào cũng muốn săn lùng.`,
-        `BXH đang bị thống trị bởi bàn tay sắt của ${p.name}. Ngai vàng ${Math.round(currentElo)} điểm vẫn chưa có dấu hiệu đổi chủ.`
-      ], [p.name], 'individual');
-    }
-
-    // 📈 Ngôi Sao Đang Lên (Kịch bản #25)
-    if (stats.totalMatches >= 3 && stats.totalMatches <= 15 && currentElo > 1050) {
-      const eloGain = currentElo - 1000;
-      addInsight('rising_star', '📈 NGÔI SAO ĐANG LÊN', [
-        `Làn gió mới mang tính hủy diệt! ${p.name} đang chứng tỏ tài năng thiên bẩm khi hốt gọn ${Math.round(eloGain)} ELO dù mới ra mắt.`,
-        `Sự trỗi dậy của một thế lực mới. ${p.name} thăng tiến ${Math.round(eloGain)} ELO thần tốc khiến các đàn anh phải e dè.`,
-        `${p.name} chính là phát hiện thú vị nhất mùa giải với những màn kiếm được ${Math.round(eloGain)} điểm cực kỳ ấn tượng.`,
-        `Chưa có nhiều kinh nghiệm nhưng độ mượt thì khỏi bàn. ${p.name} đang leo tháp với ${Math.round(eloGain)} điểm dắt túi.`,
-        `Chú ngựa ô của giải đấu. ${p.name} đang làm náo loạn trật tự BXH bằng sức trẻ bùng nổ, ẵm trọn ${Math.round(eloGain)} ELO.`
-      ], [p.name], 'individual');
-    }
-
-    // 👴 Gừng Càng Già Càng Cay (Kịch bản #26)
-    if (stats.totalMatches >= 20 && currentElo > 1050) {
-      addInsight('veteran', '👴 GỪNG CÀNG GIÀ CÀNG CAY', [
-        `Với ${stats.totalMatches} trận đấu, ${p.name} là minh chứng sống cho câu nói gừng càng già càng cay. Đẳng cấp là mãi mãi!`,
-        `Sự điềm tĩnh từ kinh nghiệm ${stats.totalMatches} trận đấu của ${p.name} là vũ khí sắc bén đè bẹp sự xốc nổi.`,
-        `Cáo già trên sân bóng! Lối chơi mềm mại đúc kết qua ${stats.totalMatches} trận của ${p.name} khiến bao tay đấu trẻ phải e ngại.`,
-        `Đứng vững qua ${stats.totalMatches} thăng trầm, ${p.name} vẫn là hòn đá tảng khó nhằn ở đỉnh BXH.`,
-        `Trải qua ${stats.totalMatches} trận rèn giũa, ${p.name} dùng cái đầu để giải quyết những đôi chân mệt mỏi đầy hiệu quả.`
-      ], [p.name], 'individual');
-    }
-
-    // 🛡️ Bức Tường Thép (Kịch bản #27) - Defense stat - opponent avg score when losing
-    const opponentAvgScore = stats.totalMatches > 0 ? (stats.totalPoints / stats.totalMatches) : 0; // stats.totalPoints here = loser's avg (opponent's score when p loses)
-    if (stats.totalMatches >= 5 && opponentAvgScore <= 6) {
-      addInsight('wall', '🛡️ BỨC TƯỜNG THÉP', [
-        `Hàng thủ không thể xuyên thủng! Đối phương trung bình chỉ ghi được ${Math.round(opponentAvgScore)} điểm khi đấu với ${p.name}.`,
-        `${p.name} phòng ngự kiên cố như xe tăng, đối thủ khó lòng vượt qua ${Math.round(opponentAvgScore)} điểm.`,
-        `Lối chơi kín kẽ của ${p.name} khiến đối thủ chỉ ghi trung bình ${Math.round(opponentAvgScore)} điểm mỗi trận.`,
-        `${p.name} thi đấu cực kỳ chắc chắn, để đối phương chỉ ghi được ${Math.round(opponentAvgScore)} điểm/trận khi đối đầu.`,
-        `Chỉ cho phép đối thủ ghi ${Math.round(opponentAvgScore)} điểm trung bình – thành tích phòng thủ đáng nể của ${p.name}.`
-      ], [p.name], 'individual');
-    }
-
-    // 🃏 Vua Đen Đủi (Kịch bản #28) - High ELO but low Win Rate
-    const unluckyWR = stats.totalMatches > 0 ? (((stats.closeWins + stats.dominantWins) / stats.totalMatches) * 100) : 0;
-    if (currentElo > 1050 && unluckyWR < 45) {
-      addInsight('unlucky_king', '🃏 VUA ĐEN ĐỦI', [
-        `Tài năng đi liền tai ương. ELO chạm mốc ${Math.round(currentElo)} nhưng ${p.name} toàn phải gánh đồng đội yếu hơn, khiến tỉ lệ thắng chỉ còn ${Math.round(unluckyWR)}%.`,
-        `Đẳng cấp có thừa nhưng vận may từ chối. ${p.name} là định nghĩa của việc giỏi không bằng hên (ELO: ${Math.round(currentElo)}, tỉ lệ thắng: ${Math.round(unluckyWR)}%).`,
-        `Ông hoàng gánh team bất đắc dĩ. ${p.name} dùng mức ELO ${Math.round(currentElo)} của mình kéo đồng đội lên đến mức tỉ lệ thắng chỉ ${Math.round(unluckyWR)}%.`,
-        `Trình độ thượng thừa nhưng chiến thắng thưa thớt (${Math.round(unluckyWR)}%). ${p.name} đang gặp toàn đồng đội không ngang tài.`,
-        `${p.name} đánh bóng bằng kỹ năng nhưng kết quả lại do đồng đội quyết định. Đen thôi, đỏ quên đi!`
-      ], [p.name], 'individual');
-    }
-
-    // 🏋️‍♂️ Thần Gánh Tạ (Kịch bản #29) - Carry impact
-    const carryImpact = stats.totalMatches > 0 ? ((stats.dominantWins - stats.closeLosses) / stats.totalMatches) * 100 : 0;
-    if (carryImpact >= 20 && stats.totalMatches >= 5) {
-      addInsight('carry', '🏋️‍♂️ THẦN GÁNH TẠ', [
-        `${p.name} đích thực là Bùa Hộ Mệnh, giúp tỉ lệ thắng của đồng đội tăng vọt thêm ${Math.round(carryImpact)}% so với bình quân.`,
-        `${p.name} bao sân cực tốt để kéo phong độ của đồng đội lên một tầm cao mới, buff mạnh ${Math.round(carryImpact)}% hiệu suất.`,
-        `Sự xuất hiện của ${p.name} giúp đồng đội đánh như lên đồng, thành tích thi đấu được kéo lên tới ${Math.round(carryImpact)}%.`,
-        `Đứng cạnh ${p.name}, đồng đội dường như cởi bỏ được mọi áp lực, hiệu quả thi đấu được cải thiện thêm ${Math.round(carryImpact)}%.`,
-        `${p.name} đã gánh vác quá hay, tạo tiền đề cho đồng đội tỏa sáng với mức tăng trưởng ${Math.round(carryImpact)}% tỉ lệ thắng.`
-      ], [p.name], 'individual');
-    }
-
-    // 🎯 Sai Lầm (Kịch bản #34)
-    if (stats.closeLosses >= 5) {
-      addInsight('mistake', '🎯 SAI LẦM', [
-        `${p.name} đã có ${stats.closeLosses} trận thua sát nút – cần cải thiện khả năng chốt hạ.`,
-        `${p.name} cần tránh sai lầm khi đã để thua sát sao ${stats.closeLosses} lần.`,
-        `${p.name} đang có xu hướng đánh rơi chiến thắng với ${stats.closeLosses} trận thua cận kề.`,
-        `Các trận thua sát nút của ${p.name} (${stats.closeLosses} lần) cho thấy cần rèn luyện thêm về tinh thần.`,
-        `${p.name} nên tập trung cải thiện khả năng giữ thắng lợi sau ${stats.closeLosses} lần vuột mất chiến thắng.`
-      ], [p.name], 'individual');
-    }
-
-    // 📈 Động Lực Cao (Kịch bản #35)
-    if (stats.dominantWins >= 4) {
-      addInsight('momentum', '📈 ĐỘNG LỰC CAO', [
-        `${p.name} đang lên cao với ${stats.dominantWins} trận thắng áp đảo.`,
-        `${p.name} có động lực tăng tốc sau ${stats.dominantWins} lần thắng cách biệt lớn.`,
-        `Dòng chảy của ${p.name} đang mạnh mẽ với ${stats.dominantWins} chiến thắng thuyết phục.`,
-        `${p.name} ghi dấu ấn bằng ${stats.dominantWins} lần thắng đậm.`,
-        `Động lực của ${p.name} bùng nổ khi thắng áp đảo ${stats.dominantWins} trận.`
-      ], [p.name], 'individual');
-    }
-
-    // 🔥 PHÁ ĐẬP (Kịch bản #40) - Sử dụng dominantWins >= 6 để tránh trùng với momentum
-    if (stats.dominantWins >= 6) {
-      addInsight('smash', '🔥 PHÁ ĐẬP', [
-        `${p.name} tạo sức ép ấn tượng với ${stats.dominantWins} trận thắng cách biệt từ 7 điểm trở lên.`,
-        `Sức mạnh của ${p.name} được thể hiện qua ${stats.dominantWins} chiến thắng áp đảo.`,
-        `${p.name} vượt trội hơn đối thủ với ${stats.dominantWins} trận thắng đậm cách biệt.`,
-        `Phong độ ấn tượng của ${p.name} thể hiện qua ${stats.dominantWins} lần thắng cách biệt từ 7 điểm.`,
-        `${p.name} để lại dấu ấn mạnh với ${stats.dominantWins} trận thắng thuyết phục.`
-      ], [p.name], 'individual');
-    }
-
-    // 🏅 HUY CHƯƠNG (Kịch bản #48)
-    if (stats.totalMatches >= 20 && playerWinRate >= 75) {
-      addInsight('medal', '🏅 HUY CHƯƠNG', [
-        `${p.name} xứng đáng nhận huy chương với tỉ lệ thắng ${Math.round(playerWinRate)}% qua ${stats.totalMatches} trận (thắng ${playerWins} trận).`,
-        `${p.name} có đủ tiêu chuẩn cho huy chương – tỉ lệ thắng ${Math.round(playerWinRate)}% và ${stats.totalMatches} trận kinh nghiệm.`,
-        `Thành tích ${Math.round(playerWinRate)}% qua ${stats.totalMatches} trận của ${p.name} (thắng ${playerWins}/${stats.totalMatches}) xứng đáng được trao huy chương.`,
-        `${p.name} đạt "huy chương" với tỉ lệ thắng ${Math.round(playerWinRate)}% trong ${stats.totalMatches} trận (thắng ${playerWins} trận).`,
-        `${p.name} sẽ mang về viên huy chương vì thành tích ${Math.round(playerWinRate)}% qua ${stats.totalMatches} trận đấu.`
-      ], [p.name], 'individual');
-    }
-
-    // 🌟 NGÔI SAO MỚI (Kịch bản #49)
-    if (stats.totalMatches <= 5 && currentElo >= 1100) {
-      addInsight('new_star', '🌟 NGÔI SAO MỚI', [
-        `${p.name} đang lên ngôi sao với ELO ${Math.round(currentElo)} trong chỉ ${stats.totalMatches} trận.`,
-        `Ngôi sao mới ${p.name} – ELO ${Math.round(currentElo)} và ${stats.totalMatches} trận đã chơi.`,
-        `${p.name} tỏa sáng với ELO ${Math.round(currentElo)} dù chỉ ${stats.totalMatches} trận.`,
-        `Tân binh triển vọng ${p.name} với ELO ${Math.round(currentElo)} qua ${stats.totalMatches} trận.`,
-        `${p.name} đang thu hút ánh nhìn với ELO ${Math.round(currentElo)} trong ${stats.totalMatches} trận đầu tiên.`
-      ], [p.name], 'individual');
-    }
-
-    // 🧭 ĐỊNH HƯỚNG (Kịch bản #41)
-    if (stats.totalMatches >= 10 && playerWinRate >= 60) {
-      addInsight('direction', '🧭 ĐỊNH HƯỚNG', [
-        `${p.name} đã tìm ra hướng đi đúng đắn với tỉ lệ thắng ${Math.round(playerWinRate)}%.`,
-        `${p.name} đang trên con đường thành công nhờ tỉ lệ thắng ${Math.round(playerWinRate)}%.`,
-        `Chiến lược của ${p.name} dẫn tới tỉ lệ thắng ${Math.round(playerWinRate)}% – một định hướng rõ ràng.`,
-        `${p.name} có chỉ số thắng ổn định ${Math.round(playerWinRate)}% – minh chứng cho lối chơi đúng đắn.`,
-        `${p.name} đang đi đúng hướng với tỉ lệ thắng ${Math.round(playerWinRate)}% qua ${stats.totalMatches} trận.`
-      ], [p.name], 'individual');
-    }
-
-    // 🏓 NHỊP ĐIỆU (Kịch bản #42)
-    if (stats.closeWins >= 4) {
-      addInsight('rhythm', '🏓 NHỊP ĐIỆU', [
-        `${p.name} đang duy trì nhịp độ ổn định với ${stats.closeWins} trận thắng sát nút qua ${stats.totalMatches} trận.`,
-        `${p.name} chơi đều tay với ${stats.closeWins} chiến thắng cân não, minh chứng cho sự tập trung cao độ.`,
-        `Nhịp độ thi đấu của ${p.name} rất tốt qua ${stats.closeWins} trận thắng sát sao trên tổng số ${stats.totalMatches} trận.`,
-        `${p.name} duy trì phong độ ổn định với ${stats.closeWins} trận thắng cận kề, tạo nền tảng vững chắc cho sự thăng tiến.`,
-        `Sự đều đặn của ${p.name} được thể hiện qua ${stats.closeWins} chiến thắng sát nút, khẳng định bản lĩnh trong các cuộc đối đầu.`
-      ], [p.name], 'individual');
-    }
-
-    // 🐉 SỨC MẠNH (Kịch bản #44)
-    if (currentElo >= 1200 && playerWinRate >= 70) {
-      addInsight('power', '🐉 SỨC MẠNH', [
-        `${p.name} sở hữu sức mạnh áp đảo với ELO ${Math.round(currentElo)} và tỉ lệ thắng ${Math.round(playerWinRate)}% qua ${stats.totalMatches} trận.`,
-        `${p.name} là một thế lực đáng gờm với ELO ${Math.round(currentElo)} và tỉ lệ thắng ${Math.round(playerWinRate)}% sau nhiều lần thử thách.`,
-        `Sức mạnh của ${p.name} đạt đỉnh cao với ELO ${Math.round(currentElo)} và tỉ lệ thắng ${Math.round(playerWinRate)}% trong ${stats.totalMatches} trận đã đấu.`,
-        `${p.name} đang "bùng nổ" với ELO ${Math.round(currentElo)} và tỉ lệ thắng ${Math.round(playerWinRate)}%, là đối thủ khó chịu nhất hiện tại.`,
-        `Độ mạnh của ${p.name} lên tới ELO ${Math.round(currentElo)} và tỉ lệ thắng ${Math.round(playerWinRate)}%, khẳng định vị thế dẫn đầu.`
-      ], [p.name], 'individual');
-    }
-
-    // 🏆 VỊ THẾ (Kịch bản #45)
-    if (stats.totalMatches >= 10 && playerWinRate >= 65) {
-      addInsight('rank', '🏆 VỊ THẾ', [
-        `${p.name} đang nhanh chóng leo lên vị trí cao với tỉ lệ thắng ${Math.round(playerWinRate)}% qua ${stats.totalMatches} trận đấu.`,
-        `${p.name} đạt vị trí cao nhờ tỉ lệ thắng ${Math.round(playerWinRate)}%, một thành tích ấn tượng so với tổng số trận chơi.`,
-        `Vị trí của ${p.name} trên bảng xếp hạng đang tăng mạnh với tỉ lệ thắng ${Math.round(playerWinRate)}% sau ${stats.totalMatches} trận.`,
-        `${p.name} đang "chinh phục" các đối thủ để leo hạng với tỉ lệ thắng ${Math.round(playerWinRate)}% qua ${stats.totalMatches} trận đã qua.`,
-        `Chỉ số tỉ lệ thắng ${Math.round(playerWinRate)}% đưa ${p.name} lên vị trí dẫn đầu sau chặng đường ${stats.totalMatches} trận.`
-      ], [p.name], 'individual');
-    }
-
-    // 🎖️ THÀNH TỰU (Kịch bản #46)
-    if (stats.totalMatches >= 15 && playerWinRate >= 80) {
-      addInsight('achievement', '🎖️ THÀNH TỰU', [
-        `${p.name} đạt thành tựu xuất sắc với tỉ lệ thắng ${Math.round(playerWinRate)}% qua ${stats.totalMatches} trận đấu.`,
-        `${p.name} đã ghi dấu ấn bằng tỉ lệ thắng ${Math.round(playerWinRate)}% sau ${stats.totalMatches} trận – một thành tựu đáng tự hào.`,
-        `Thành tựu của ${p.name}: tỉ lệ thắng ${Math.round(playerWinRate)}% và ${stats.totalMatches} trận đã chơi thật đáng nể.`,
-        `${p.name} được công nhận vì tỉ lệ thắng ${Math.round(playerWinRate)}% qua ${stats.totalMatches} trận đấu – một thành tựu lớn.`,
-        `Đạt thành tựu hàng đầu với tỉ lệ thắng ${Math.round(playerWinRate)}% sau ${stats.totalMatches} trận của ${p.name}.`
-      ], [p.name], 'individual');
-    }
-
-    // 🧹 DỌN DẸP (Kịch bản #36)
-    if (stats.closeLosses > 0 && stats.dominantWins > 0) {
-      addInsight('balance', '🧹 DỌN DẸP', [
-        `${p.name} đang cân bằng giữa thắng và thua – ${stats.dominantWins} thắng áp đảo vs ${stats.closeLosses} thua sát nút sau ${stats.totalMatches} trận.`,
-        `${p.name} cần duy trì sự cân đối giữa các trận thắng áp đảo và thua sát nút để cải thiện tỉ lệ ${Math.round(playerWinRate)}%.`,
-        `Hiệu suất của ${p.name} phản ánh sự cân đối: ${stats.dominantWins} thắng đậm / ${stats.closeLosses} thua gần qua ${stats.totalMatches} trận.`,
-        `${p.name} đang có lịch trình đồng đều giữa thắng đậm và thua gần trong suốt ${stats.totalMatches} trận đấu đã tham gia.`,
-        `Cân bằng giữa chiến thắng và thất bại của ${p.name} hiển thị qua ${stats.dominantWins} và ${stats.closeLosses} trong ${stats.totalMatches} trận.`
-      ], [p.name], 'individual');
-    }
-
-    // 🌪️ XÁO TRỘN (Kịch bản #37)
-    if (stats.dominantLosses >= 3) {
-      addInsight('chaos', '🌪️ XÁO TRỘN', [
-        `${p.name} để lại dấu ấn với ${stats.dominantLosses} trận thua áp đảo trong tổng số ${stats.totalMatches} trận.`,
-        `${p.name} đã tạo ra sự hỗn loạn qua ${stats.dominantLosses} lần thua đậm, cần xem lại chiến thuật sau ${stats.totalMatches} trận.`,
-        `Mỗi khi ${p.name} thua áp đảo ${stats.dominantLosses} lần, bảng xếp hạng rung chuyển, dù đã chơi tới ${stats.totalMatches} trận.`,
-        `Đối thủ cảm nhận sự xáo trộn khi ${p.name} có ${stats.dominantLosses} thua đậm trong chặng đường ${stats.totalMatches} trận.`,
-        `${p.name} để lại dấu ấn "xáo trộn" trong vòng đấu với ${stats.dominantLosses} trận thua áp đảo sau ${stats.totalMatches} lần ra sân.`
-      ], [p.name], 'individual');
-    }
-
-    // 💡 TRÍ TUỆ (Kịch bản #38)
-    if (stats.deuceMatches >= 2) {
-      addInsight('smart', '💡 TRÍ TUỆ', [
-        `${p.name} thể hiện trí tuệ khi vượt qua các trận đấu kéo dài (tỉ số vượt quá 11 điểm) ${stats.deuceMatches} lần trong ${stats.totalMatches} trận.`,
-        `Chiến thuật thông minh của ${p.name} giúp thắng ${stats.deuceMatches} trận kéo dài hơn bình thường sau ${stats.totalMatches} lần ra sân.`,
-        `${p.name} dựa vào trí tuệ để thắng các trận đấu kéo dài ${stats.deuceMatches} lần (tỉ số vượt quá 11) trong ${stats.totalMatches} trận.`,
-        `${stats.deuceMatches} trận thắng kéo dài (12-12 trở lên) cho thấy ${p.name} biết cách giữ bình tĩnh qua ${stats.totalMatches} trận đã chơi.`,
-        `${p.name} thể hiện trí tuệ qua ${stats.deuceMatches} lần thắng các trận đấu kéo dài bất thường trong tổng số ${stats.totalMatches} trận.`
-      ], [p.name], 'individual');
-    }
-
-    // 🎲 RỦI RO THẤP removed - logic was confusing and didn't make sense
-
-    // 🤝 HỢP TÁC (Kịch bản #43)
-    if (stats.totalMatches >= 8 && stats.closeWins >= 3 && stats.dominantWins >= 3) {
-      addInsight('cooperate', '🤝 HỢP TÁC', [
-        `${p.name} và đồng đội cùng thắng ${stats.closeWins + stats.dominantWins} lần trong tổng số ${stats.totalMatches} trận đã phối hợp.`,
-        `${p.name} thể hiện tinh thần đồng đội qua ${stats.closeWins + stats.dominantWins} chiến thắng sau ${stats.totalMatches} lần sát cánh.`,
-        `Đội ngũ của ${p.name} cùng nhau giành ${stats.closeWins + stats.dominantWins} chiến thắng qua ${stats.totalMatches} trận đấu.`,
-        `Số thắng cộng đồng của ${p.name} là ${stats.closeWins + stats.dominantWins} – minh chứng hợp tác sau ${stats.totalMatches} trận.`,
-        `${p.name} và đồng đội ghi được ${stats.closeWins + stats.dominantWins} chiến thắng chung trong ${stats.totalMatches} trận.`
-      ], [p.name], 'partnership');
-    }
-
-    // 📊 THỐNG KÊ (Kịch bản #47)
-    if (stats.totalMatches >= 5) {
-      const avgPoints = Math.round(stats.totalPoints / stats.totalMatches);
-      addInsight('stats_overview', '📊 THỐNG KÊ', [
-        `${p.name} đã chơi ${stats.totalMatches} trận, ghi trung bình ${avgPoints} điểm mỗi trận.`,
-        `Thống kê ${p.name}: ${stats.totalMatches} trận, trung bình ${avgPoints} điểm/trận.`,
-        `${p.name} có trung bình ${avgPoints} điểm mỗi trận qua ${stats.totalMatches} trận đã đấu.`,
-        `Tổng cộng ${p.name} ghi được ${stats.totalPoints} điểm trong ${stats.totalMatches} trận (trung bình ${avgPoints} điểm/trận).`,
-        `Dữ liệu ${p.name}: tham gia ${stats.totalMatches} trận, trung bình ${avgPoints} điểm/trận.`
-      ], [p.name], 'individual');
-    }
-
-    // 🧱 Bị Khớp Tâm Lý (Kịch bản #30)
-    const mentalBlockPerc = stats.totalMatches > 0 ? ((stats.closeLosses + stats.dominantLosses) / stats.totalMatches) * 100 : 0;
-    if (stats.totalMatches >= 5 && mentalBlockPerc >= 50) {
-      addInsight('mental_block', '🧱 BỊ KHỚP TÂM LÝ', [
-        `${p.name} có vẻ đang gặp khó khăn tâm lý khi đối mặt với một số đối thủ nhất định – tỉ lệ khớp tâm lý ${Math.round(mentalBlockPerc)}%.`,
-        `Có thể thấy ${p.name} tỏ ra e ngại khi gặp một số tay đấm cụ thể với tỉ lệ ${Math.round(mentalBlockPerc)}% bất lợi.`,
-        `Phong độ của ${p.name} bị ảnh hưởng bởi yếu tố tâm lý với tỉ lệ ${Math.round(mentalBlockPerc)}%.`,
-        `${p.name} cần vượt qua rào cản tâm lý khi đối đầu với một số đối thủ nhất định (${Math.round(mentalBlockPerc)}% bất lợi).`,
-        `Một số đối thủ dường như "khớp" với lối chơi của ${p.name} với tỉ lệ ${Math.round(mentalBlockPerc)}%.`
-      ], [p.name], 'individual');
-    }
-
-    // ⚔️ Cân Kèo (Kịch bản #31)
-    if (matchExpected.has(p.id)) {
-      const { winProb, loseProb } = matchExpected.get(p.id)!;
-      const oddsDiff = winProb - loseProb;
-      if (Math.abs(oddsDiff) >= 0.2) {
-        const sentiment = oddsDiff > 0 ? 'khả quan' : 'thận trọng';
-        addInsight('odds', '⚔️ CÂN KÈO', [
-          `Dựa trên ELO, ${p.name} được đánh giá có cơ hội thắng khoảng ${Math.round(winProb * 100)}%.`,
-          `Theo tính toán máy, ${p.name} có ${Math.round(winProb * 100)}% cơ hội thắng và ${Math.round(loseProb * 100)}% có thể thua.`,
-          `Đối với ${p.name}, tỉ lệ kỳ vọng là ${Math.round(winProb * 100)}% thắng – triển vọng khá ${sentiment}.`,
-          `Máy tính dự đoán ${p.name} có khoảng ${Math.round(winProb * 100)}% khả năng giành chiến thắng.`,
-          `Căn cứ vào ELO, ${p.name} nằm ở thế ${sentiment} với tỉ lệ kỳ vọng ${Math.round(winProb * 100)}%.`
-        ], [p.name], 'fun');
-      }
-    }
-
-    // 🏃‍♂️ Đối Thủ Đánh Lớn (Kịch bản #32)
-    if (stats.totalMatches >= 5) {
-      const opponents = board.filter(q => q.id !== p.id);
-      opponents.forEach(op => {
-        const oppStats = playerStats.get(op.id);
-        if (!oppStats) return;
-        const oppWR = oppStats.totalMatches > 0 ? ((oppStats.closeWins + oppStats.dominantWins) / oppStats.totalMatches) * 100 : 0;
-        if (oppWR >= 70 && oppStats.totalMatches >= 3) {
-          const oppWins = oppStats.closeWins + oppStats.dominantWins;
-          addInsight('rival_powerhouse', '🏃‍♂️ ĐỐI THỦ MẠNH', [
-            `${op.name} là một đối thủ đáng gờm với tỉ lệ thắng ${Math.round(oppWR)}% (thắng ${oppWins}/${oppStats.totalMatches} trận) – cần chú ý khi đấu.`,
-            `${op.name} đang có phong độ cực cao với tỉ lệ thắng ${Math.round(oppWR)}% (thắng ${oppWins}/${oppStats.totalMatches} trận) – đối thủ không hề dễ chơi.`,
-            `Với tỉ lệ thắng ${Math.round(oppWR)}%, ${op.name} cho thấy đẳng cấp vượt trội trong ${oppStats.totalMatches} trận đã đấu.`,
-            `${op.name} đang là \"quái vật\" trên sân với tỉ lệ thắng ${Math.round(oppWR)}% (thắng ${oppWins}/${oppStats.totalMatches} trận).`,
-            `Cẩn thận với ${op.name} – đối thủ này đang sở hữu ${Math.round(oppWR)}% thắng trong ${oppStats.totalMatches} trận.`
-          ], [p.name, op.name], 'rivalry');
-        }
-      });
-    }
-
-    // 🪂 Đối Thủ Yếu Hơn (Kịch bản #33)
-    if (stats.totalMatches >= 5) {
-      const opponents = board.filter(q => q.id !== p.id);
-      opponents.forEach(op => {
-        const oppStats = playerStats.get(op.id);
-        if (!oppStats) return;
-        const oppWR = oppStats.totalMatches > 0 ? ((oppStats.closeWins + oppStats.dominantWins) / oppStats.totalMatches) * 100 : 0;
-        if (oppWR <= 30 && oppStats.totalMatches >= 3) {
-          const oppWins = oppStats.closeWins + oppStats.dominantWins;
-          addInsight('underdog_rival', '🪂 ĐỐI THỦ YẾU', [
-            `${op.name} đang gặp khó khăn khi chỉ thắng ${oppWins} trận trong tổng số ${oppStats.totalMatches} trận (${Math.round(oppWR)}%).`,
-            `${p.name} có thể tự tin đấu với ${op.name} vì đối thủ này chỉ thắng ${oppWins}/${oppStats.totalMatches} trận (${Math.round(oppWR)}%).`,
-            `${op.name} dường như đang trong giai đoạn khó khăn khi chỉ thắng ${oppWins} trận trong ${oppStats.totalMatches} trận.`,
-            `${op.name} cần cải thiện nhiều khi chỉ thắng ${oppWins} trận trong ${oppStats.totalMatches} trận.`,
-            `${p.name} có thể tận dụng phong độ yếu của ${op.name} (thắng ${oppWins}/${oppStats.totalMatches} trận) để gia tăng chiến thắng.`
-          ], [p.name, op.name], 'rivalry');
-        }
-      });
-    }
-
-    // 🏁 KẾT THÚC (Kịch bản #50)
-    if (stats.totalMatches >= 30) {
-      addInsight('finish', '🏁 KẾT THÚC HÀNH TRÌNH', [
-        `${p.name} đã có một hành trình dài với ${stats.totalMatches} trận đấu – kinh nghiệm dồi dào!`,
-        `Sau ${stats.totalMatches} trận, ${p.name} đã tích lũy được rất nhiều bài học quý giá.`,
-        `${p.name} hoàn thành giai đoạn kinh nghiệm với ${stats.totalMatches} trận trên sân Pickleball.`,
-        `Hành trình Pickleball của ${p.name} đã ghi dấu ấn qua ${stats.totalMatches} trận đấu.`,
-        `${p.name} đã chứng tỏ sự bền bỉ với ${stats.totalMatches} trận tham gia – một người chơi thực thụ.`
-      ], [p.name], 'individual');
-    }
-  });
-
-  // 3. GENERATE PARTNER & RIVAL INSIGHTS
-  const pairMap = new Map<string, {w: number, t: number, players: string[]}>();
-  matches.forEach(m => {
-    if (m.win_1 && m.win_2) {
-      const p = [m.win_1, m.win_2].sort();
-      const k = p.join('|');
-      if (!pairMap.has(k)) pairMap.set(k, {w:0, t:0, players: p});
-      pairMap.get(k)!.w++;
-      pairMap.get(k)!.t++;
-    }
-    if (m.lose_1 && m.lose_2) {
-      const p = [m.lose_1, m.lose_2].sort();
-      const k = p.join('|');
-      if (!pairMap.has(k)) pairMap.set(k, {w:0, t:0, players: p});
-      pairMap.get(k)!.t++;
-    }
-  });
-
-  const getName = (id: string) => players.find(p => p.id === id)?.name || id;
-
-  pairMap.forEach((v, k) => {
-    if (v.t >= 4) {
-      const wr = (v.w / v.t) * 100;
-      const n1 = getName(v.players[0]);
-      const n2 = getName(v.players[1]);
-
-      if (wr >= 75) {
-        addInsight('perfect_duo', '🤝 CẶP BÀI TRÙNG', [
-          `Cứ ráp ${n1} & ${n2} vào nhau là nắm chắc phần thắng. Tỉ lệ thắng chung đạt tới ${Math.round(wr)}% – quá ăn ý!`,
-          `Sự bọc lót giữa ${n1} và ${n2} đạt độ hoàn hảo, dường như họ đọc được suy nghĩ của nhau, tỉ lệ thắng chung lên tới ${Math.round(wr)}%.`
-        ], [n1, n2], 'partnership');
-      } else if (wr <= 25) {
-        addInsight('bad_synergy', '⚓ DẪM CHÂN NHAU', [
-          `${n1} và ${n2} dường như chưa tìm được tiếng nói chung, thường xuyên giẫm chân nhau khiến tỉ lệ thắng chỉ đạt ${Math.round(wr)}%.`,
-          `Khắc rơi lối chơi! Việc ${n1} ghép cặp với ${n2} đang tự làm khó cả hai với tỉ lệ thắng vỏn vẹn ${Math.round(wr)}%.`
-        ], [n1, n2], 'partnership');
-      } else if (wr >= 45 && wr <= 55) {
-        addInsight('neutral_duo', '⚖️ TRÒN VAI', [
-          `Sau ${v.t} trận sát cánh, ${n1} và ${n2} chứng tỏ họ là một cặp đôi ổn định. Cả hai đều chơi đúng phong độ, không ai gánh ai quá nhiều.`,
-          `Ra sân tìm nhau ${v.t} lần, ${n1} và ${n2} thi đấu vừa vặn, đúng với khả năng của mỗi người.`
-        ], [n1, n2], 'partnership');
-      }
-    }
-  });
-
-  // 🦅 Thiên Địch (Kịch bản #24) - Head-to-Head Analysis
-  const h2h = new Map<string, number>(); // format: "winnerId|loserId" -> count
-  matches.forEach(m => {
-    const winners = [m.win_1, m.win_2].filter(Boolean) as string[];
-    const losers = [m.lose_1, m.lose_2].filter(Boolean) as string[];
-    winners.forEach(w => {
-      losers.forEach(l => {
-        const k = `${w}|${l}`;
-        h2h.set(k, (h2h.get(k) || 0) + 1);
-      });
-    });
-  });
-
-  h2h.forEach((wins, key) => {
-    if (wins >= 3) {
-      const [wId, lId] = key.split('|');
-      const wName = getName(wId);
-      const lName = getName(lId);
-      
-      addInsight('nemesis', '🦅 THIÊN ĐỊCH', [
-        `Cứ gặp ${wName} là ${lName} lại tắt điện! Lịch sử ghi nhận ${wName} đã ${wins} lần gieo sầu cho đối thủ này.`,
-        `${wName} chính là khắc tinh lớn nhất của ${lName} với ${wins} lần tiễn đối phương về chầu trời.`,
-        `Đứng trước ${wName}, dường như ${lName} bị khớp tâm lý hoàn toàn (thua ${wins} trận).`,
-        `${wName} đã bỏ túi hoàn toàn lối chơi của ${lName}. Cửa phản kháng là quá hẹp với ${wins} lần bại trận.`,
-        `Một sự áp đảo tàn nhẫn! ${wName} dường như biết trước mọi đường bóng của ${lName}, thắng ${wins} lần.`
-      ], [wName, lName], 'rivalry');
-    }
-  });
-
-  // 4. QUOTA DIVERSITY FILTER
-  const finalInsights: Insight[] = [];
-  const playerMentions = new Map<string, number>();
-  const usedCategories = new Map<string, Set<string>>(); // player -> Set of categories
-  const usedTypes = new Set<string>(); // Global Set of insight types (e.g., 'clutch', 'deuce')
-
-  // Shuffle insights for randomness
-  const shuffled = insights.sort(() => 0.5 - Math.random());
-
-  for (const ins of shuffled) {
-    if (finalInsights.length >= 6) break;
-
-    const involved = ins.playersInvolved.filter(Boolean) as string[];
-    let canAdd = true;
-
-    // Prevent same type of insight from appearing twice (e.g., two "Vua chốt hạ")
-    if (usedTypes.has(ins.type)) {
-      canAdd = false;
-    }
-
-    if (canAdd) {
-      for (const p of involved) {
-        const mentions = playerMentions.get(p) || 0;
-        if (mentions >= 2) { canAdd = false; break; }
-        
-        const cats = usedCategories.get(p) || new Set();
-        if (cats.has(ins.category)) { canAdd = false; break; }
-      }
-    }
-
-    if (canAdd) {
-      finalInsights.push({ type: ins.type, title: ins.title, text: ins.text, playersInvolved: ins.playersInvolved });
-      usedTypes.add(ins.type);
-      for (const p of involved) {
-        playerMentions.set(p, (playerMentions.get(p) || 0) + 1);
-        if (!usedCategories.has(p)) usedCategories.set(p, new Set());
-        usedCategories.get(p)!.add(ins.category);
-      }
-    }
-  }
-
-  // Fallback if not enough insights
-  while (finalInsights.length < 6 && insights.length > 0) {
-    const extra = insights.pop();
-    if (extra && !finalInsights.some(f => f.text === extra.text)) {
-      finalInsights.push({ type: extra.type, title: extra.title, text: extra.text, playersInvolved: extra.playersInvolved });
-    }
-  }
-
-  return finalInsights.slice(0, 6);
+  void _board;
+  void _elo;
+  void _matchExpected;
+  return generateInsightsFromSnapshot(buildAnalysisSnapshot(players, matches));
 }

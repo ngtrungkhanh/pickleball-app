@@ -157,6 +157,8 @@ The analysis center uses IndexedDB:
 Implementation files:
 
 - `src/components/analysis/AnalysisCenter.tsx`
+- `src/lib/analysis-core.ts`
+- `src/lib/insights.ts`
 - `src/lib/db.ts`
 - `src/app/actions.ts` via `getMatchesAfterAction`
 - `src/app/analysis/page.tsx`
@@ -194,15 +196,22 @@ Important caveat:
 Client analysis derivation:
 
 - `selectedSeason` filters cached/preloaded matches client-side.
-- `isRankingMatch` removes guest matches from ranking analytics.
-- `calculateLeaderboard` derives rank, wins, losses, win rate, and fines for
-  the selected match set.
-- `buildElo` derives client-side ELO from ranking matches using chronological
-  replay.
-- `buildPartnerRows` and `buildOpponentRows` derive matrix rows from ranking
-  matches.
-- `getPlayerAnalysis` combines leaderboard rank, player stats,
-  `getPlayerAdvancedStats`, recent matches, current streak, and last match.
+- `buildAnalysisSnapshot` in `src/lib/analysis-core.ts` normalizes the selected
+  data once for the entire analysis UI.
+- Ranking analytics exclude guest/deleted records and require full 2v2 doubles
+  rows before ELO, player metrics, partner edges, opponent edges, and insights
+  are derived.
+- ELO replay uses chronological order and stores per-match expected
+  probabilities for Performance Score calculations.
+- Player metrics derive wins, losses, win rate, current streak, recent form,
+  points scored, points conceded, average conceded, attack, defense, brave,
+  synergy, activity, fines, and recent matches directly from match rows.
+- Partner and opponent rows are directed edges keyed by player id. They include
+  record, rate, average score diff, baseline Performance Score, matchup
+  Performance Score, impact, confidence, and label.
+- Hub insight candidates are generated from the same snapshot in
+  `src/lib/insights.ts`; rules carry `rarity` and `weight` metadata for future
+  feed tuning.
 
 Cache and revalidation:
 

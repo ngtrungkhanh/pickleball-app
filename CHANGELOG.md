@@ -202,3 +202,18 @@ repo.
 ### Admin Tools
 
 - Added full database JSON Restore (`POST /api/restore`) to complement existing JSON Backup functionality, preventing data loss.
+
+### Analysis Core and Insight Rewrite
+
+- Added `src/lib/analysis-core.ts` as the shared calculation core for
+  `/analysis`, covering ELO, player metrics, radar inputs, partner impact
+  edges, opponent impact edges, and profile-ready data.
+- Rewrote `src/lib/insights.ts` as a typed rule registry using shared analysis
+  metrics instead of recalculating wins/losses and score stats ad hoc.
+- Added `rarity` and `weight` metadata to insight candidates so future tuning
+  can control how often common vs rare events appear in the Hub feed.
+- Updated Network cards to use player ids instead of display names, sort by
+  confidence/impact, and explain impact as a performance-score delta such as
+  `+18 điểm hiệu suất`.
+- Synced Hub, Profile, Network, and Insights to read from the same analysis
+  snapshot so partner/opponent labels and comments do not disagree.

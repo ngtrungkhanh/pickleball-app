@@ -45,16 +45,19 @@ Read only when relevant:
   four-line expanded leaderboard detail with compact fun remarks.
 - Expanded leaderboard form remarks now read 5-match form newest-first and use
   seeded data-driven notes so similar players do not always get identical text.
-- `/analysis` is a read-only analytics center rebuilt with a 3-zone Bottom Navigation (Hub, Profile, Matrix). It features automated data-driven insights (15 triggers with randomized variations), ELO-based Performance Scores (Delta Hiệu Suất for Matrix Impact), and a 6-axis Radar Chart.
+- `/analysis` is a read-only analytics center with a 3-zone Bottom Navigation
+  (Hub, Profile, Matrix). It now uses `src/lib/analysis-core.ts` as the shared
+  source for ELO, player metrics, partner/opponent impact edges, profile cards,
+  Network cards, and Hub insight comments.
 - Admin dashboard supports both `.xlsx` bulk migration and `.json` full database backup/restore mechanisms.
 - Local demo routes such as `/ui-demo` and `/picker-demo` may exist on one
   machine for review, but should not be pushed unless explicitly requested.
 
 ## Current Pending Tasks (Next Session)
 
-## Current Pending Tasks (Next Session)
-
 - **UI/UX Refinement**: Implement "Sports Ticker" style (marquee) or dynamic Flash Cards for displaying the generated Insights on the Home screen.
+- **Analysis Copy Review**: Review Hub insight comment tone on Vercel Preview
+  after the shared analysis core has real dev data.
 - **Merge & Deploy**: Validate `dev` on Vercel preview, then merge to `main`.
 
 ## Architecture Snapshot
