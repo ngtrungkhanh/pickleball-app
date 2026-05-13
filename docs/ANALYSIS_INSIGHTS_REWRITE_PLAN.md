@@ -162,3 +162,9 @@ Before finishing:
   - `npm run build` compiled and completed TypeScript, then failed while
     prerendering `/analysis` because local `.env.local` uses a direct Vercel
     Postgres connection string instead of a pooled connection string.
+- Follow-up copy hardening applied:
+  - Win-rate comments must include record context such as `wins/total`.
+  - Dominant-win comments must check overall record/ELO before using strong
+    "đóng hòm/hủy diệt" framing.
+  - Vague standalone percent deltas should be avoided unless the label states
+    exactly what the number measures.

@@ -267,6 +267,10 @@ Current analysis rules:
   such as `+18 điểm hiệu suất`, not as a raw percentage.
 - Hub insights are generated from the same snapshot with `rarity` and `weight`
   metadata so rare events can be prioritized over always-available facts.
+- Hub insight copy that mentions win rate should include record context such as
+  `wins/total` or `wins-total record`. Strong dominance wording should be
+  reserved for players whose overall record/ELO supports that framing; otherwise
+  describe dominant wins as isolated score highlights.
 
 Known gaps / good next work:
 

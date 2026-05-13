@@ -217,3 +217,6 @@ repo.
   `+18 điểm hiệu suất`.
 - Synced Hub, Profile, Network, and Insights to read from the same analysis
   snapshot so partner/opponent labels and comments do not disagree.
+- Hardened Hub insight copy rules so win-rate comments include record context
+  and dominant-win comments are toned down when the player's overall record/ELO
+  does not support a strong "hủy diệt" framing.

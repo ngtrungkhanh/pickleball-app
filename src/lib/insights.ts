@@ -146,7 +146,7 @@ function addPlayerCandidates(candidates: InsightCandidate[], snapshot: AnalysisS
         templates: [
           '{name} đang thắng liền {count} trận, bóng sang bên kia là có mùi sập hầm.',
           'Chuỗi {count} trận xanh của {name} đang nóng thật sự. Ai bắt cặp đối đầu nhớ chuẩn bị thở oxy.',
-          '{name} vào form hơi gắt: {count} trận thắng liên tiếp, đánh đâu cũng thấy có cửa đóng hòm.',
+          '{name} vào form hơi gắt: {count} trận thắng liên tiếp, kèo gần đây đang rất có lực.',
           'Mạch thắng {count} trận đưa {name} lên chế độ cháy máy, nhìn là biết đang rất khó cản.',
         ],
       });
@@ -313,21 +313,33 @@ function addPlayerCandidates(candidates: InsightCandidate[], snapshot: AnalysisS
     }
 
     if (metric.dominantWins >= 4) {
+      const strongDominantContext = metric.winRate >= 52 && metric.rating >= 1000;
       addCandidate(candidates, snapshot, {
         type: 'dominant_closer',
-        title: '⚰️ ĐÓNG HÒM CHÓNG VÁNH',
+        title: strongDominantContext ? '⚰️ ĐÓNG HÒM CHÓNG VÁNH' : '⚡ CÚ THẮNG SÂU',
         group: 'score',
-        rarity: metric.dominantWins >= 6 ? 'rare' : 'uncommon',
-        weight: 7,
-        priority: 78 + metric.dominantWins,
+        rarity: strongDominantContext && metric.dominantWins >= 6 ? 'rare' : 'uncommon',
+        weight: strongDominantContext ? 7 : 4,
+        priority: (strongDominantContext ? 78 : 64) + metric.dominantWins,
         metricScore: metric.dominantWins,
         participantIds: [metric.id],
-        context: { name: metric.name, count: metric.dominantWins },
-        templates: [
-          '{name} có {count} trận thắng cách biệt từ 7 điểm. Đã thắng là thường thắng rất sâu.',
-          '{count} lần đóng hòm đối thủ cho thấy {name} không thích dây dưa khi đã vào tay.',
-          '{name} đã {count} lần thắng áp đảo, kiểu thắng khiến bên kia chỉ biết nhìn bảng điểm.',
-          'Khi {name} bắt được nhịp, trận đấu kết thúc rất nhanh: {count} trận thắng cách biệt sâu.',
+        context: {
+          name: metric.name,
+          count: metric.dominantWins,
+          record: `${metric.wins}/${metric.total}`,
+          rate: rounded(metric.winRate),
+          elo: metric.rating,
+        },
+        templates: strongDominantContext ? [
+          '{name} có {count} trận thắng cách biệt từ 7 điểm, tổng record {record} ({rate}%). Khi vào tay là thắng khá sâu.',
+          '{count} trận thắng sâu của {name} đi cùng record {record} ({rate}%), đủ để xem đây là một mảng mạnh thật.',
+          '{name} đã {count} lần thắng cách biệt lớn, trong bối cảnh tổng thể {record} ({rate}%) và ELO {elo}.',
+          'Khi {name} bắt được nhịp, trận đấu có thể trôi rất nhanh: {count} trận thắng sâu, record tổng {record}.',
+        ] : [
+          '{name} có {count} trận thắng cách biệt từ 7 điểm, nhưng tổng record chỉ {record} ({rate}%). Đây là vài cú thắng sâu, chưa phải thống trị.',
+          '{count} trận thắng sâu cho thấy {name} có lúc vào tay rất bén, nhưng record tổng {record} ({rate}%) vẫn cần đọc kèm bối cảnh.',
+          '{name} từng thắng đậm {count} trận, dù tổng thể đang ở mức {record} ({rate}%) và ELO {elo}. Số này nên xem là điểm sáng cục bộ.',
+          'Có {count} trận thắng cách biệt lớn, nhưng với record {record} ({rate}%), {name} chỉ nên được xem là có vài điểm sáng thắng sâu.',
         ],
       });
     }
@@ -442,12 +454,12 @@ function addPlayerCandidates(candidates: InsightCandidate[], snapshot: AnalysisS
         priority: 74,
         metricScore: metric.winRate,
         participantIds: [metric.id],
-        context: { name: metric.name, total: metric.total, rate: rounded(metric.winRate) },
+        context: { name: metric.name, wins: metric.wins, total: metric.total, rate: rounded(metric.winRate) },
         templates: [
-          '{name} mới đánh {total} trận nhưng winrate {rate}%. Ra sân ít mà chất lượng hơi cao.',
-          '{total} trận là mẫu còn mỏng, nhưng {name} đang cầm {rate}% thắng. Lính đánh thuê đúng nghĩa.',
-          '{name} xuất hiện ít, đánh {total} trận, nhưng tỉ lệ thắng {rate}% khiến anh em phải để ý.',
-          'Không ra sân nhiều, nhưng {name} có {rate}% thắng sau {total} trận. Ít mà đau.',
+          '{name} mới đánh {total} trận nhưng thắng {wins}/{total} ({rate}%). Ra sân ít mà chất lượng hơi cao.',
+          'Mẫu còn mỏng, nhưng {name} đang cầm {wins}/{total} trận thắng ({rate}%). Lính đánh thuê đúng nghĩa.',
+          '{name} xuất hiện ít, đánh {total} trận, thắng {wins}/{total} ({rate}%) nên vẫn đáng để ý.',
+          'Không ra sân nhiều, nhưng {name} có record {wins}/{total} ({rate}%). Ít mà đau.',
         ],
       });
     }
@@ -489,7 +501,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
         context: { a: edge.playerName, b: edge.otherName, record: edgeRecord(edge), impact: edge.impact },
         templates: [
           '{a} đánh chung với {b} đang rất bén: {record}, hiệu suất lệch {impact} điểm so với baseline.',
-          'Cặp {a} - {b} có số đẹp thật sự: {record}. Impact {impact} cho thấy không chỉ là winrate ảo.',
+          'Cặp {a} - {b} có số đẹp thật sự: {record}. Chênh hiệu suất {impact} điểm cho thấy không chỉ là winrate ảo.',
           'Ráp {a} với {b} đang ra bài rất ổn: {record}, chênh hiệu suất {impact} điểm.',
           '{a} và {b} là cặp đáng để ý: {record}, dữ liệu đang nghiêng mạnh về hướng hợp cạ.',
         ],
@@ -509,7 +521,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
         context: { a: edge.playerName, b: edge.otherName, record: edgeRecord(edge), impact: edge.impact },
         templates: [
           '{a} ghép với {b} đang hơi khắc hệ: {record}, hiệu suất lệch {impact} điểm.',
-          'Cặp {a} - {b} nhìn dữ liệu khá đau: {record}. Impact {impact} cho thấy cần đổi bài.',
+          'Cặp {a} - {b} nhìn dữ liệu khá đau: {record}. Chênh hiệu suất {impact} điểm cho thấy cần đổi bài.',
           'Mỗi lần {a} đứng cùng {b} là kèo hơi nặng: {record}, chênh hiệu suất {impact} điểm.',
           '{a} và {b} cần xem lại cách ráp đội: {record}, số liệu đang báo dẫm chân nhau.',
         ],
