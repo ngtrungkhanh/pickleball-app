@@ -444,6 +444,61 @@ export function generateAdvancedInsights(
         `${p.name} đang thu hút ánh nhìn với ELO ${Math.round(currentElo)} trong ${stats.totalMatches} trận đầu tiên.`
       ], [p.name], 'individual');
     }
+
+    // 🧭 ĐỊNH HƯỚNG (Kịch bản #41)
+    if (stats.totalMatches >= 10 && playerWinRate >= 60) {
+      addInsight('direction', '🧭 ĐỊNH HƯỚNG', [
+        `${p.name} đã tìm ra hướng đi đúng đắn với tỉ lệ thắng ${Math.round(playerWinRate)}%.`,
+        `${p.name} đang trên con đường thành công nhờ tỉ lệ thắng ${Math.round(playerWinRate)}%.`,
+        `Chiến lược của ${p.name} dẫn tới tỉ lệ thắng ${Math.round(playerWinRate)}% – một định hướng rõ ràng.`,
+        `${p.name} có chỉ số thắng ổn định ${Math.round(playerWinRate)}% – minh chứng cho lối chơi đúng đắn.`,
+        `${p.name} đang đi đúng hướng với tỉ lệ thắng ${Math.round(playerWinRate)}% qua ${stats.totalMatches} trận.`
+      ], [p.name], 'individual');
+    }
+
+    // 🏓 NHỊP ĐIỆU (Kịch bản #42)
+    if (stats.closeWins >= 4) {
+      addInsight('rhythm', '🏓 NHỊP ĐIỆU', [
+        `${p.name} đang duy trì nhịp độ ổn định với ${stats.closeWins} trận thắng sát nút.`,
+        `${p.name} chơi đều tay với ${stats.closeWins} chiến thắng cân não.`,
+        `Nhịp độ thi đấu của ${p.name} rất tốt qua ${stats.closeWins} trận thắng sát sao.`,
+        `${p.name} duy trì phong độ ổn định với ${stats.closeWins} trận thắng cận kề.`,
+        `Sự đều đặn của ${p.name} được thể hiện qua ${stats.closeWins} chiến thắng sát nút.`
+      ], [p.name], 'individual');
+    }
+
+    // 🐉 SỨC MẠNH (Kịch bản #44)
+    if (currentElo >= 1200 && playerWinRate >= 70) {
+      addInsight('power', '🐉 SỨC MẠNH', [
+        `${p.name} sở hữu sức mạnh áp đảo với ELO ${Math.round(currentElo)} và tỉ lệ thắng ${Math.round(playerWinRate)}%.`,
+        `${p.name} là một thế lực đáng gờm với ELO ${Math.round(currentElo)} và tỉ lệ thắng ${Math.round(playerWinRate)}%.`,
+        `Sức mạnh của ${p.name} đạt đỉnh cao với ELO ${Math.round(currentElo)} và tỉ lệ thắng ${Math.round(playerWinRate)}%.`,
+        `${p.name} đang "bùng nổ" với ELO ${Math.round(currentElo)} và tỉ lệ thắng ${Math.round(playerWinRate)}%.`,
+        `Độ mạnh của ${p.name} lên tới ELO ${Math.round(currentElo)} và tỉ lệ thắng ${Math.round(playerWinRate)}%.`
+      ], [p.name], 'individual');
+    }
+
+    // 🏆 VỊ THẾ (Kịch bản #45)
+    if (stats.totalMatches >= 10 && playerWinRate >= 65) {
+      addInsight('rank', '🏆 VỊ THẾ', [
+        `${p.name} đang nhanh chóng leo lên vị trí cao với tỉ lệ thắng ${Math.round(playerWinRate)}%.`,
+        `${p.name} đạt vị trí cao nhờ tỉ lệ thắng ${Math.round(playerWinRate)}%.`,
+        `Vị trí của ${p.name} trên bảng xếp hạng đang tăng mạnh với tỉ lệ thắng ${Math.round(playerWinRate)}%.`,
+        `${p.name} đang "chinh phục" các đối thủ để leo hạng với tỉ lệ thắng ${Math.round(playerWinRate)}%.`,
+        `Chỉ số tỉ lệ thắng ${Math.round(playerWinRate)}% đưa ${p.name} lên vị trí dẫn đầu.`
+      ], [p.name], 'individual');
+    }
+
+    // 🎖️ THÀNH TỰU (Kịch bản #46)
+    if (stats.totalMatches >= 15 && playerWinRate >= 80) {
+      addInsight('achievement', '🎖️ THÀNH TỰU', [
+        `${p.name} đạt thành tựu xuất sắc với tỉ lệ thắng ${Math.round(playerWinRate)}% qua ${stats.totalMatches} trận.`,
+        `${p.name} đã ghi dấu ấn bằng tỉ lệ thắng ${Math.round(playerWinRate)}% – một thành tựu đáng tự hào.`,
+        `Thành tựu của ${p.name}: tỉ lệ thắng ${Math.round(playerWinRate)}% và ${stats.totalMatches} trận đã chơi.`,
+        `${p.name} được công nhận vì tỉ lệ thắng ${Math.round(playerWinRate)}% – một thành tựu lớn.`,
+        `Đạt thành tựu hàng đầu với tỉ lệ thắng ${Math.round(playerWinRate)}% của ${p.name}.`
+      ], [p.name], 'individual');
+    }
   });
 
   // 3. GENERATE PARTNER & RIVAL INSIGHTS
