@@ -632,7 +632,7 @@ export function generateAdvancedInsights(
           const oppWins = oppStats.closeWins + oppStats.dominantWins;
           addInsight('underdog_rival', '🪂 ĐỐI THỦ YẾU', [
             `${op.name} đang gặp khó khăn khi chỉ thắng ${oppWins} trận trong tổng số ${oppStats.totalMatches} trận (${Math.round(oppWR)}%).`,
-            `${op.name} là đối thủ ${p.name} có thể tự tin đấu với tỉ lệ thắng chỉ ${Math.round(oppWR)}% (thắng ${oppWins}/${oppStats.totalMatches} trận).`,
+            `${p.name} có thể tự tin đấu với ${op.name} vì đối thủ này chỉ thắng ${oppWins}/${oppStats.totalMatches} trận (${Math.round(oppWR)}%).`,
             `${op.name} dường như đang trong giai đoạn khó khăn khi chỉ thắng ${oppWins} trận trong ${oppStats.totalMatches} trận.`,
             `${op.name} cần cải thiện nhiều khi chỉ thắng ${oppWins} trận trong ${oppStats.totalMatches} trận.`,
             `${p.name} có thể tận dụng phong độ yếu của ${op.name} (thắng ${oppWins}/${oppStats.totalMatches} trận) để gia tăng chiến thắng.`
