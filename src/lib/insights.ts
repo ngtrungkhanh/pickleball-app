@@ -174,8 +174,8 @@ export function generateAdvancedInsights(
       addInsight('clutch', '💪 VUA CHỐT HẠ', [
         `Chuyên gia thử thách nhịp tim! ${p.name} có tới ${stats.closeWins} lần chốt hạ đối thủ ở những điểm số nghẹt thở.`,
         `Bản lĩnh thép! ${p.name} luôn lạnh lùng dứt điểm đối phương mang về ${stats.closeWins} chiến thắng sát nút.`,
-        `Chỉ cần điểm rơi vào Match-point, ${p.name} chưa bao giờ làm anh em thất vọng với ${stats.closeWins} lần lật kèo phút chót.`,
-        `Cứ đánh giằng co là tự động bật Mode Quái vật. ${p.name} đã vượt ải thành công ${stats.closeWins} trận sát nút.`,
+        `Chỉ cần điểm rơi vào điểm quyết định, ${p.name} chưa bao giờ làm anh em thất vọng với ${stats.closeWins} lần lật kèo phút chót.`,
+        `Cứ đánh giằng co là tự động bật chế độ quái vật. ${p.name} đã vượt ải thành công ${stats.closeWins} trận sát nút.`,
         `Những trận đấu của ${p.name} luôn cần thuốc trợ tim cho khán giả, minh chứng là ${stats.closeWins} lần thắng nghẹt thở.`
       ], [p.name], 'individual');
     }
@@ -254,11 +254,10 @@ export function generateAdvancedInsights(
     // 🥵 Kẻ Đam Mê Deuce
     if (stats.deuceMatches >= 3) {
       addInsight('deuce', '🥵 KẺ ĐAM MÊ DEUCE', [
-        `Không Deuce không về! ${p.name} có tới ${stats.deuceMatches} trận mắc hội chứng kéo dài tỉ số vượt mốc 11.`,
-        `Vua dây dưa! Đánh với ${p.name} thì xác định phải bào thể lực với ${stats.deuceMatches} trận đấu nghẹt thở extra point.`,
-        `Chỉ thích thắng ở điểm số 12 trở lên. ${p.name} đã ${stats.deuceMatches} lần khiến khán giả đau tim vì thói quen giằng co.`,
-        `Đam mê Extra Point! ${p.name} là nguyên nhân chính khiến sân bị lố giờ nghỉ với ${stats.deuceMatches} trận cầu dai dẳng.`,
-        `Thắng nhanh thì chê, phải kéo đến Deuce mới chịu. ${p.name} đã nướng bóng và thời gian trong ${stats.deuceMatches} trận giằng co.`
+        `Vua kịch tính! Đánh với ${p.name} thì xác định phải bào thể lực với ${stats.deuceMatches} trận đấu nghẹt thở kéo dài.`,
+        `Chỉ thích thắng ở điểm số kịch tính. ${p.name} đã ${stats.deuceMatches} lần khiến khán giả đau tim vì thói quen giằng co.`,
+        `Đam mê kịch tính! ${p.name} là nguyên nhân chính khiến sân bị lố giờ nghỉ với ${stats.deuceMatches} trận cầu dai dẳng.`,
+        `Thắng nhanh thì chê, phải kéo đến điểm kịch tính mới chịu. ${p.name} đã nướng bóng và thời gian trong ${stats.deuceMatches} trận giằng co.`
       ], [p.name], 'individual');
     }
 
@@ -360,15 +359,15 @@ export function generateAdvancedInsights(
       ], [p.name], 'individual');
     }
 
-    // 🛡️ Bức Tường Thép (Kịch bản #27) - Defense stat
-    const defenseAvg = stats.totalMatches > 0 ? (stats.totalPoints / stats.totalMatches) : 0;
-    if (stats.totalMatches >= 5 && defenseAvg <= 6) {
+    // 🛡️ Bức Tường Thép (Kịch bản #27) - Defense stat - opponent avg score when losing
+    const opponentAvgScore = stats.totalMatches > 0 ? (stats.totalPoints / stats.totalMatches) : 0; // stats.totalPoints here = loser's avg (opponent's score when p loses)
+    if (stats.totalMatches >= 5 && opponentAvgScore <= 6) {
       addInsight('wall', '🛡️ BỨC TƯỜNG THÉP', [
-        `Hàng thủ không thể xuyên thủng! Đối phương trung bình chỉ kiếm được ${Math.round(defenseAvg)} điểm khi đối mặt với ${p.name}.`,
-        `${p.name} phòng ngự như xe tăng, đối phương ghi trên ${Math.round(defenseAvg)} điểm cứ như đi bắt chim trời.`,
-        `Kẻ cắp không gian thực sự. Đánh với ${p.name}, rổ đựng bóng của bạn thường rất trống rỗng (Mất ${Math.round(defenseAvg)} điểm/trận).`,
-        `Lối chơi kín kẽ và lỳ lợm của ${p.name} đã làm nản lòng mọi tay đập trên sân (Chỉ mất ${Math.round(defenseAvg)} điểm mỗi trận).`,
-        `Ghi nhiều hơn ${Math.round(defenseAvg)} điểm vào lưới của ${p.name} được xem là một thành tựu đáng tự hào trong giải đấu.`
+        `Hàng thủ không thể xuyên thủng! Đối phương trung bình chỉ ghi được ${Math.round(opponentAvgScore)} điểm khi đấu với ${p.name}.`,
+        `${p.name} phòng ngự kiên cố như xe tăng, đối thủ khó lòng vượt qua ${Math.round(opponentAvgScore)} điểm.`,
+        `Lối chơi kín kẽ của ${p.name} khiến đối thủ chỉ ghi trung bình ${Math.round(opponentAvgScore)} điểm mỗi trận.`,
+        `${p.name} thi đấu cực kỳ chắc chắn, để đối phương chỉ ghi được ${Math.round(opponentAvgScore)} điểm/trận khi đối đầu.`,
+        `Chỉ cho phép đối thủ ghi ${Math.round(opponentAvgScore)} điểm trung bình – thành tích phòng thủ đáng nể của ${p.name}.`
       ], [p.name], 'individual');
     }
 
@@ -376,9 +375,9 @@ export function generateAdvancedInsights(
     const unluckyWR = stats.totalMatches > 0 ? (((stats.closeWins + stats.dominantWins) / stats.totalMatches) * 100) : 0;
     if (currentElo > 1050 && unluckyWR < 45) {
       addInsight('unlucky_king', '🃏 VUA ĐEN ĐỦI', [
-        `Tài năng đi liền tai ương. ELO chạm mốc ${Math.round(currentElo)} nhưng ${p.name} toàn phải gánh đồng đội, khiến tỉ lệ thắng lẹt đẹt ở mức ${Math.round(unluckyWR)}%.`,
-        `Đẳng cấp có thừa nhưng vận may từ chối. ${p.name} là định nghĩa của việc giỏi không bằng may (ELO: ${Math.round(currentElo)}, tỉ lệ thắng: ${Math.round(unluckyWR)}%).`,
-        `Ông hoàng gánh team bất đắc dĩ. ${p.name} dùng mức ELO ${Math.round(currentElo)} của mình cõng đồng đội đến mức tỉ lệ thắng chỉ còn ${Math.round(unluckyWR)}%.`,
+        `Tài năng đi liền tai ương. ELO chạm mốc ${Math.round(currentElo)} nhưng ${p.name} toàn phải gánh đồng đội yếu hơn, khiến tỉ lệ thắng chỉ còn ${Math.round(unluckyWR)}%.`,
+        `Đẳng cấp có thừa nhưng vận may từ chối. ${p.name} là định nghĩa của việc giỏi không bằng hên (ELO: ${Math.round(currentElo)}, tỉ lệ thắng: ${Math.round(unluckyWR)}%).`,
+        `Ông hoàng gánh team bất đắc dĩ. ${p.name} dùng mức ELO ${Math.round(currentElo)} của mình kéo đồng đội lên đến mức tỉ lệ thắng chỉ ${Math.round(unluckyWR)}%.`,
         `Trình độ thượng thừa nhưng chiến thắng thưa thớt (${Math.round(unluckyWR)}%). ${p.name} đang gặp toàn đồng đội không ngang tài.`,
         `${p.name} đánh bóng bằng kỹ năng nhưng kết quả lại do đồng đội quyết định. Đen thôi, đỏ quên đi!`
       ], [p.name], 'individual');
@@ -539,16 +538,7 @@ export function generateAdvancedInsights(
       ], [p.name], 'individual');
     }
 
-    // 🎲 RỦI RO THẤP (Kịch bản #39)
-    if (stats.totalPoints < 30) {
-      addInsight('risk_low', '🎲 RỦI RO THẤP', [
-        `${p.name} có mức rủi ro thấp với chỉ ${stats.totalPoints} điểm tổng cộng sau ${stats.totalMatches} trận.`,
-        `Những trận đấu của ${p.name} ít biến động điểm số qua ${stats.totalMatches} trận → rủi ro giảm thiểu tối đa.`,
-        `${p.name} đang chơi "an toàn" với tổng điểm chỉ ${stats.totalPoints} sau ${stats.totalMatches} lần ra sân.`,
-        `Tổng điểm ${stats.totalPoints} cho thấy ${p.name} không mạo hiểm qua ${stats.totalMatches} trận đã chơi.`,
-        `${p.name} có chiến thuật "không rủi ro" với chỉ ${stats.totalPoints} điểm tích lũy sau ${stats.totalMatches} trận.`
-      ], [p.name], 'individual');
-    }
+    // 🎲 RỦI RO THẤP removed - logic was confusing and didn't make sense
 
     // 🤝 HỢP TÁC (Kịch bản #43)
     if (stats.totalMatches >= 8 && stats.closeWins >= 3 && stats.dominantWins >= 3) {
@@ -681,8 +671,8 @@ export function generateAdvancedInsights(
 
       if (wr >= 75) {
         addInsight('perfect_duo', '🤝 CẶP BÀI TRÙNG', [
-          `Cứ ráp ${n1} & ${n2} vào nhau là nắm chắc phần thắng. Phép thuật tạo ra tỉ lệ thắng chung ${Math.round(wr)}% là đây!`,
-          `Sự bọc lót giữa ${n1} và ${n2} đạt độ hoàn hảo, dường như họ đọc được suy nghĩ của nhau, mang về tỉ lệ thắng chung lên tới ${Math.round(wr)}%.`
+          `Cứ ráp ${n1} & ${n2} vào nhau là nắm chắc phần thắng. Tỉ lệ thắng chung đạt tới ${Math.round(wr)}% – quá ăn ý!`,
+          `Sự bọc lót giữa ${n1} và ${n2} đạt độ hoàn hảo, dường như họ đọc được suy nghĩ của nhau, tỉ lệ thắng chung lên tới ${Math.round(wr)}%.`
         ], [n1, n2], 'partnership');
       } else if (wr <= 25) {
         addInsight('bad_synergy', '⚓ DẪM CHÂN NHAU', [
