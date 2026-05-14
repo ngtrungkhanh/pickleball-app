@@ -38,7 +38,7 @@ export default async function HomePage() {
   } catch {}
 
   const { rows: players } = await sql`SELECT * FROM players WHERE deleted_at IS NULL ORDER BY active DESC, name ASC`;
-  const { rows: matches } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL ORDER BY date DESC LIMIT 500`;
+  const { rows: matches } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL ORDER BY date DESC`;
   const config: Record<string, string> = {};
   try {
     const { rows } = await sql`SELECT key, value FROM config`;

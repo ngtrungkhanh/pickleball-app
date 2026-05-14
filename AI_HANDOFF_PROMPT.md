@@ -44,7 +44,10 @@ Recent behavior updates to remember:
 - Admin has an `Import XLSX` button that uploads a local `.xlsx` file and replaces match history from sheet `MATCHES`.
 - XLSX import now auto-creates missing player IDs before inserting matches to avoid FK errors.
 - Dashboard expanded form/partner/rival/easy insights use seeded data-driven logic in `src/lib/stats.ts`; labels must stay short and directly understandable.
-- `/analysis` is read-only, preloads up to 500 matches, uses IndexedDB cache/sync, and still has a Trend placeholder. Read the Analysis Center sections in `docs/FEATURE_SPEC.md`, `docs/DATA_FLOW.md`, and `docs/UI_RULES.md` before extending it.
+- `/analysis` is read-only, preloads non-deleted matches, uses the shared IndexedDB route cache/sync, and still has a Trend placeholder. Read the Analysis Center sections in `docs/FEATURE_SPEC.md`, `docs/DATA_FLOW.md`, and `docs/UI_RULES.md` before extending it.
+- Shared route cache work is now higher priority than expanding 50 insight copy:
+  Dashboard and Analysis seed/read a common IndexedDB cache, route entry checks a
+  throttled manifest/version, and stale cache is replaced from Postgres.
 
 Working rules:
 - Do not touch main unless the user explicitly asks for a release.
@@ -62,6 +65,7 @@ When starting:
 3. State what you will check or implement first.
 6. When done, report changed files, verification run, and any remaining risk.
 7. CURRENT PENDING TASKS TO IMPLEMENT:
+   - **Shared Data Cache Validation**: Test route-entry manifest checks and IndexedDB cache replacement on Vercel Preview before resuming insight-copy expansion.
    - **UI/UX Polishing**: Implement "Sports Ticker" or "Flash News Card" style for the Analytics Center Insights as requested by user.
    - **Data Validation**: Ensure the newly implemented 50 Insights engine handles Edge Cases without crashing when data is sparse.
    - **Merge & Deploy**: Merge `dev` to `main` when features are validated.

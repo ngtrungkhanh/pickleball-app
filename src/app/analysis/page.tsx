@@ -46,7 +46,7 @@ export default async function AnalysisPage() {
   } catch {}
 
   const { rows: players } = await sql`SELECT * FROM players WHERE deleted_at IS NULL ORDER BY active DESC, name ASC`;
-  const { rows: matches } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL ORDER BY date DESC LIMIT 500`;
+  const { rows: matches } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL ORDER BY date DESC`;
   const { rows: configRows } = await sql`SELECT * FROM config`;
   let seasons: Array<{ id: string; name: string; active?: boolean; start_date?: string }> = [];
   try {
@@ -63,5 +63,5 @@ export default async function AnalysisPage() {
   configRows.forEach(row => { config[row.key] = row.value; });
   const loseMoney = Number(config.lose_money || 5000);
 
-  return <AnalysisCenter players={players as Player[]} matches={matches as Match[]} seasons={seasons} loseMoney={loseMoney} activeSeason={config.active_season || 'Season 1'} />;
+  return <AnalysisCenter players={players as Player[]} matches={matches as Match[]} seasons={seasons} config={config} loseMoney={loseMoney} activeSeason={config.active_season || 'Season 1'} />;
 }

@@ -50,7 +50,7 @@ Normal viewing should be cheap:
 1. `/` uses `revalidate = false` and is intended to be static/ISR-style.
 2. Server-side data fetches preload enough bounded data for smooth client-side
    interaction.
-3. Dashboard fetches players, up to 500 non-deleted matches, config, and
+3. Dashboard fetches players, non-deleted matches, config, and
    non-archived seasons.
 4. Client-side filtering/sorting handles common UI changes without extra DB
    calls where practical.
@@ -149,25 +149,45 @@ Current localStorage keys:
 
 ## IndexedDB Usage
 
-The analysis center uses IndexedDB:
+The app uses IndexedDB as a shared client-side cache for data that is expensive
+to repeatedly send between routes:
 
 - database: `PickleballDB`
-- object store: `matches`
+- object stores:
+  - `matches`
+  - `players`
+  - `seasons`
+  - `config`
+  - `sync_meta`
 
 Implementation files:
 
 - `src/components/analysis/AnalysisCenter.tsx`
+- `src/components/Dashboard.tsx`
 - `src/lib/analysis-core.ts`
 - `src/lib/insights.ts`
 - `src/lib/db.ts`
 - `src/app/actions.ts` via `getMatchesAfterAction`
 - `src/app/analysis/page.tsx`
 
-Server preload:
+Shared cache policy:
+
+- Postgres remains the source of truth.
+- IndexedDB is only a replaceable local copy used to avoid refetching full match
+  history when moving between dashboard, analysis, and history-oriented views.
+- Route entry may call a lightweight manifest check, throttled on the client, to
+  compare local cache state with server state.
+- Do not poll in the background. Manual refresh, route entry, or explicit data
+  writes are the normal sync triggers.
+- If the current view needs data that is missing or stale, sync that data before
+  rendering analysis-derived facts. Background sync can continue for other
+  seasons after the current view is usable.
+
+Server preload remains the first-render fallback:
 
 1. `/analysis` uses `revalidate = false`.
-2. The server route loads non-deleted players, up to 500 non-deleted matches,
-   config, and non-archived seasons.
+2. The server route loads non-deleted players, non-deleted matches, config, and
+   non-archived seasons.
 3. The route passes `players`, `matches`, `seasons`, `loseMoney`, and
    `activeSeason` into `AnalysisCenter`.
 4. The route currently attempts lightweight schema/guest normalization, but
@@ -175,21 +195,32 @@ Server preload:
 
 Client sync flow:
 
-1. Render immediately from server-provided `initialMatches`.
-2. Ask server for the current full non-deleted match set via
-   `getMatchesAfterAction('')`.
-3. Replace the IndexedDB `matches` store with that server result.
-4. Continue analysis from the refreshed cache.
-5. If the full sync fails, use whichever is larger between the current server
-   preload and local IndexedDB cache.
+1. Seed/update IndexedDB from the server-provided route preload.
+2. Read local `sync_meta.lastManifestCheck`; if it is recent, avoid another
+   manifest request during quick route switches.
+3. When a manifest check is due, ask the server for:
+   - global `dataVersion`
+   - match `count`
+   - latest/oldest match dates
+   - per-season count/latest/oldest dates
+   - config and seasons
+4. If local `dataVersion` and count match the manifest, keep using local cache.
+5. If local data is missing or stale, fetch the full current match set once,
+   replace the local `matches` store, and update sync metadata.
+6. Future phase: split full fetch into season-priority batches. The current
+   implementation keeps the same correctness model while the dataset is still
+   small.
 
 Important caveat:
 
 - `getMatchesAfterAction(lastId)` still supports incremental reads for other
-  screens, but `/analysis` intentionally uses the empty-id full read on page
-  entry so stale IndexedDB rows cannot override newer Postgres data.
+  screens. Shared route sync can use the empty-id full read when manifest data
+  shows the local cache is stale.
 - The analysis cache is a replaceable local copy. Full imports, deletes, edits,
   and new match batches should converge on the next analysis page sync.
+- All writes that change user-visible data should bump `config.data_version`.
+  This catches edits, deletes, imports, restores, season changes, player changes,
+  and fine/config changes even when match count does not change.
 
 Client analysis derivation:
 
@@ -215,8 +246,8 @@ Client analysis derivation:
 Cache and revalidation:
 
 - Match writes revalidate `/analysis` together with `/` and `/history`.
-- Analysis uses IndexedDB for a fast local copy, but page-entry sync treats
-  Postgres as authoritative and replaces stale local match history.
+- Shared route sync uses IndexedDB for a fast local copy, but manifest/version
+  checks treat Postgres as authoritative and replace stale local match history.
 - Do not use IndexedDB as source of truth. Postgres remains authoritative.
 
 ## Vercel and Cache

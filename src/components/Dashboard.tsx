@@ -1,12 +1,13 @@
 'use client';
 import { useState, useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import { BarChart3, Settings } from 'lucide-react';
+import { BarChart3, RefreshCw, Settings } from 'lucide-react';
 import { SummaryGrid } from './dashboard/SummaryGrid';
 import { Leaderboard } from './dashboard/Leaderboard';
 import { RecentHistory } from './dashboard/RecentHistory';
 import { ScoreForm } from './ScoreForm';
 import { SettingsModal } from './SettingsModal';
+import { useSharedAppData } from '@/lib/use-shared-app-data';
 
 type Player = { id: string; name: string; active?: boolean; [key: string]: unknown };
 type Match = { id?: string; date?: string; season?: string; [key: string]: unknown };
@@ -40,14 +41,25 @@ export default function Dashboard({
   initialSeasons?: Season[],
   previewWritesBlocked?: boolean,
 }) {
+  const sharedData = useSharedAppData({
+    initialPlayers,
+    initialMatches,
+    initialConfig,
+    initialSeasons,
+    routeKey: 'dashboard',
+  });
+  const players = (sharedData.players.length > 0 ? sharedData.players : initialPlayers) as Player[];
+  const config = Object.keys(sharedData.config).length > 0 ? sharedData.config : initialConfig;
+  const seasons = (sharedData.seasons.length > 0 ? sharedData.seasons : initialSeasons) as Season[];
+
   // Use local state for matches to ensure instant updates that persist 
   // until the server-side ISR revalidation completes in the background.
   const [matches, setMatches] = useState(initialMatches);
   
-  // Sync state if initialMatches changes (e.g. after a background revalidation)
+  // Sync state if shared route cache changes (e.g. after manifest detects fresh data)
   useEffect(() => {
-    queueMicrotask(() => setMatches(initialMatches));
-  }, [initialMatches]);
+    queueMicrotask(() => setMatches(sharedData.matches as Match[]));
+  }, [sharedData.matches]);
 
   const addLocalMatch = (newMatch: Match) => {
     setMatches(prev => [newMatch, ...prev]);
@@ -56,9 +68,9 @@ export default function Dashboard({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const canEdit = useSyncExternalStore(subscribeEditMode, getEditModeSnapshot, () => false);
   const canWrite = canEdit && !previewWritesBlocked;
-  const activeSeason = initialConfig.active_season || 'Season 1';
+  const activeSeason = config.active_season || 'Season 1';
   const [selectedSeason, setSelectedSeason] = useState<string | null>(activeSeason);
-  const loseMoney = Number(initialConfig.lose_money || 5000);
+  const loseMoney = Number(config.lose_money || 5000);
   const viewedMatches = selectedSeason === null ? matches : matches.filter(m => (m.season || 'Season 1') === selectedSeason);
 
   const unlock = (password: string) => {
@@ -79,6 +91,16 @@ export default function Dashboard({
   return (
     <div className="space-y-5 transition-all duration-500 w-full">
       <div className={`${DESKTOP_PANEL_WIDTH} flex items-center justify-end gap-2`}>
+        {sharedData.syncMessage && (
+          <div className="mr-auto hidden sm:flex items-center gap-2 rounded-xl border border-slate-500/20 bg-[#142034]/80 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300/60">
+            <RefreshCw className={`w-3.5 h-3.5 ${sharedData.syncState === 'checking' || sharedData.syncState === 'syncing' ? 'animate-spin' : ''}`} />
+            {sharedData.syncMessage}
+          </div>
+        )}
+        <button onClick={sharedData.refresh} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
+          <RefreshCw className="w-4 h-4" />
+          Làm mới
+        </button>
         <Link href="/analysis" className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
           <BarChart3 className="w-4 h-4" />
           Trung tâm phân tích
@@ -97,15 +119,15 @@ export default function Dashboard({
 
       {/* 1. Summary */}
       <div className={DESKTOP_PANEL_WIDTH}>
-        <SummaryGrid players={initialPlayers} matches={viewedMatches} loseMoney={loseMoney} />
+        <SummaryGrid players={players} matches={viewedMatches} loseMoney={loseMoney} />
       </div>
 
       {/* 2. Leaderboard */}
       <div className={DESKTOP_PANEL_WIDTH}>
         <Leaderboard
-          players={initialPlayers}
+          players={players}
           matches={matches}
-          seasons={initialSeasons}
+          seasons={seasons}
           activeSeason={activeSeason}
           selectedSeason={selectedSeason}
           onSeasonChange={setSelectedSeason}
@@ -124,14 +146,14 @@ export default function Dashboard({
             <h3 className="font-black text-[10px] sm:text-xs uppercase tracking-[0.4em] text-slate-300/70">Ghi kết quả</h3>
           </div>
           <div className="relative z-30 rounded-2xl border border-slate-500/25 bg-[#142034]/95 overflow-visible">
-            <ScoreForm players={initialPlayers} onAddMatch={addLocalMatch} activeSeason={activeSeason} />
+            <ScoreForm players={players} onAddMatch={addLocalMatch} activeSeason={activeSeason} />
           </div>
         </div>
       )}
 
       {/* 4. Recent History */}
       <div className={DESKTOP_PANEL_WIDTH}>
-        <RecentHistory matches={viewedMatches} players={initialPlayers} canEdit={canWrite} />
+        <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} />
       </div>
 
       <SettingsModal
@@ -140,9 +162,9 @@ export default function Dashboard({
         canEdit={canWrite}
         onUnlock={unlock}
         onLock={lock}
-        players={initialPlayers}
-        seasons={initialSeasons}
-        config={initialConfig}
+        players={players}
+        seasons={seasons}
+        config={config}
       />
 
     </div>

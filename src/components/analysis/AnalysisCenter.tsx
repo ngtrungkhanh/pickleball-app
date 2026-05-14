@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, RefreshCw, Database,
@@ -12,8 +12,7 @@ import {
 import { buildAnalysisSnapshot, edgeRecord, getAnalysisName, type AnalysisEdge, type EloResult, type PlayerMetrics, type PlayerProfile } from '@/lib/analysis-core';
 import { generateInsightsFromSnapshot } from '@/lib/insights';
 import { cn, getAvatarLetter } from '@/lib/utils';
-import { getLocalMatches, replaceMatchesLocal } from '@/lib/db';
-import { getMatchesAfterAction } from '@/app/actions';
+import { useSharedAppData } from '@/lib/use-shared-app-data';
 import { isGuestId, loserFineCount } from '@/lib/guest';
 
 // Navigation tabs - 4 zones instead of 6
@@ -46,19 +45,6 @@ type Insight = { type: string; title?: string; text: string; icon?: string };
 type RadarData = { attack: number; defense: number; brave: number; synergy: number; form: number; experience: number };
 type EloHistory = Array<{ date: string; ratings: Record<string, number> }>;
 
-function sortMatchesNewestFirst(matches: Match[]) {
-  return [...matches].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-}
-
-function uniqueMatches(matches: Match[]) {
-  const byId = new Map<string, Match>();
-  matches.forEach((match, index) => {
-    const key = match.id || `missing-id-${index}`;
-    byId.set(key, match);
-  });
-  return sortMatchesNewestFirst(Array.from(byId.values()));
-}
-
 function expectationDeltaText(value?: number | null) {
   const delta = Math.round(value || 0);
   const absDelta = Math.abs(delta);
@@ -69,70 +55,49 @@ function expectationDeltaText(value?: number | null) {
 }
 
 export function AnalysisCenter({
-  players,
+  players: initialPlayers,
   matches: initialMatches,
   seasons = [],
   activeSeason = 'Season 1',
   loseMoney = 5000,
+  config: initialConfig = {},
 }: {
   players: Player[];
   matches: Match[];
   seasons?: Season[];
   activeSeason?: string;
   loseMoney?: number;
+  config?: Record<string, string>;
 }) {
+  const sharedData = useSharedAppData({
+    initialPlayers,
+    initialMatches,
+    initialConfig: { ...initialConfig, active_season: initialConfig.active_season || activeSeason, lose_money: String(initialConfig.lose_money || loseMoney) },
+    initialSeasons: seasons,
+    routeKey: 'analysis',
+  });
+  const players = sharedData.players.length > 0 ? sharedData.players as Player[] : initialPlayers;
+  const allMatches = (sharedData.matches.length > 0 ? sharedData.matches : initialMatches) as Match[];
+  const currentSeasons = sharedData.seasons.length > 0 ? sharedData.seasons as Season[] : seasons;
+  const config = Object.keys(sharedData.config).length > 0 ? sharedData.config : initialConfig;
+  const currentLoseMoney = Number(config.lose_money || loseMoney);
+  const currentActiveSeason = config.active_season || activeSeason;
   const [activeNav, setActiveNav] = useState(navItems[0].id);
   const [matrixTab, setMatrixTab] = useState('partner');
   const visiblePlayers = players.filter(p => p.active !== false && !isGuestId(p.id));
   const [playerId, setPlayerId] = useState(visiblePlayers[0]?.id || '');
-  const [selectedSeason, setSelectedSeason] = useState<string | null>(activeSeason);
-  
-  const [localMatches, setLocalMatches] = useState<Match[]>([]);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [hasCompletedInitialSync, setHasCompletedInitialSync] = useState(false);
-
-  // Refresh the analysis cache from Postgres on entry. The browser cache is only
-  // a local copy and must not override a newer server snapshot.
-  useEffect(() => {
-    const sync = async () => {
-      setIsSyncing(true);
-      setHasCompletedInitialSync(false);
-      try {
-        const serverMatches = await getMatchesAfterAction('');
-        const freshMatches = uniqueMatches((serverMatches && serverMatches.length > 0 ? serverMatches : initialMatches) as Match[]);
-        await replaceMatchesLocal(freshMatches);
-        setLocalMatches(freshMatches);
-      } catch (err) {
-        console.error('Sync failed:', err);
-        try {
-          const cachedMatches = await getLocalMatches();
-          setLocalMatches(
-            cachedMatches.length > initialMatches.length
-              ? uniqueMatches(cachedMatches as Match[])
-              : uniqueMatches(initialMatches)
-          );
-        } catch {
-          setLocalMatches(uniqueMatches(initialMatches));
-        }
-      }
-      setHasCompletedInitialSync(true);
-      setIsSyncing(false);
-    };
-    sync();
-  }, [initialMatches]);
-
-  const allMatches = localMatches.length > 0 ? localMatches : initialMatches;
+  const [selectedSeason, setSelectedSeason] = useState<string | null>(currentActiveSeason);
   const activeMatches = selectedSeason === null ? allMatches : allMatches.filter(m => (m.season || 'Season 1') === selectedSeason);
-  const seasonOptions = Array.from(new Set([activeSeason, ...seasons.map(s => s.name), ...allMatches.map(m => m.season || 'Season 1')].filter(Boolean)));
+  const seasonOptions = Array.from(new Set([currentActiveSeason, ...currentSeasons.map(s => s.name), ...allMatches.map(m => m.season || 'Season 1')].filter(Boolean)));
 
-  const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(visiblePlayers, activeMatches, loseMoney), [visiblePlayers, activeMatches, loseMoney]);
+  const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(visiblePlayers, activeMatches, currentLoseMoney), [visiblePlayers, activeMatches, currentLoseMoney]);
   const rankingMatches = analysisSnapshot.rankingMatches;
   const elo = analysisSnapshot.elo;
   const board = analysisSnapshot.board;
   const partnerRows = analysisSnapshot.partnerEdges;
   const opponentRows = analysisSnapshot.opponentEdges;
   const analysis = analysisSnapshot.profiles.get(playerId) || analysisSnapshot.profiles.get(visiblePlayers[0]?.id || '');
-  const insightsReady = hasCompletedInitialSync && !isSyncing;
+  const insightsReady = sharedData.syncState !== 'checking' && sharedData.syncState !== 'syncing';
   const insights = useMemo(() => (
     insightsReady ? generateInsightsFromSnapshot(analysisSnapshot) : []
   ), [analysisSnapshot, insightsReady]);
@@ -152,14 +117,21 @@ export function AnalysisCenter({
               <div className="flex items-center gap-2 mt-0.5">
                 <div className={cn(
                   "flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all",
-                  isSyncing ? "bg-primary/10 text-primary animate-pulse" : "bg-white/5 text-white/30"
+                  sharedData.syncState === 'checking' || sharedData.syncState === 'syncing' ? "bg-primary/10 text-primary animate-pulse" : "bg-white/5 text-white/30"
                 )}>
-                  {isSyncing ? (
-                    <><RefreshCw className="w-3 h-3 animate-spin" /> Syncing...</>
+                  {sharedData.syncState === 'checking' || sharedData.syncState === 'syncing' ? (
+                    <><RefreshCw className="w-3 h-3 animate-spin" /> {sharedData.syncState === 'checking' ? 'Checking...' : 'Syncing...'}</>
                   ) : (
                     <><Database className="w-3 h-3" /> {activeMatches.length} cached</>
                   )}
                 </div>
+                <button
+                  type="button"
+                  onClick={sharedData.refresh}
+                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/5 text-[10px] font-black uppercase tracking-widest text-white/30 hover:text-primary transition-colors"
+                >
+                  <RefreshCw className="w-3 h-3" /> Làm mới
+                </button>
               </div>
             </div>
           </div>
@@ -189,7 +161,7 @@ export function AnalysisCenter({
             elo={elo}
             insights={insights}
             insightsReady={insightsReady}
-            loseMoney={loseMoney}
+            loseMoney={currentLoseMoney}
           />
         )}
 

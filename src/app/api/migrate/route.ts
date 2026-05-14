@@ -6,8 +6,10 @@ import path from 'path';
 import fs from 'fs';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
 import { isGuestId, matchHasGuest } from '@/lib/guest';
+import { bumpDataVersion } from '@/lib/data-version';
 
 const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
+type SheetRow = Record<string, unknown>;
 
 // Excel serial is treated as Bangkok local time; convert once to UTC for DB storage.
 function excelDateToUTCDate(excelDate: number) {
@@ -96,12 +98,15 @@ export async function GET(request: Request) {
     // 1. Migrate PLAYERS
     const playersSheet = workbook.Sheets['PLAYERS'];
     if (playersSheet) {
-      const players = xlsx.utils.sheet_to_json<any>(playersSheet);
+      const players = xlsx.utils.sheet_to_json<SheetRow>(playersSheet);
       for (const p of players) {
-        if (!p.player_id) continue;
+        const id = String(p.player_id || '').trim();
+        if (!id) continue;
+        const name = String(p.name || id).trim() || id;
+        const active = parseSheetBoolean(p.active, true);
         await sql`
           INSERT INTO players (id, name, active)
-          VALUES (${p.player_id}, ${p.name}, ${p.active === undefined ? true : p.active})
+          VALUES (${id}, ${name}, ${active})
           ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, active = EXCLUDED.active;
         `;
       }
@@ -110,23 +115,31 @@ export async function GET(request: Request) {
     // 2. Migrate MATCHES
     const matchesSheet = workbook.Sheets['MATCHES'];
     if (matchesSheet) {
-      const matches = xlsx.utils.sheet_to_json<any>(matchesSheet);
+      const matches = xlsx.utils.sheet_to_json<SheetRow>(matchesSheet);
       for (const m of matches) {
-        if (!m.match_id) continue;
+        const id = String(m.match_id || '').trim();
+        if (!id) continue;
         const date = typeof m.date === 'number' ? excelDateToUTCDate(m.date) : parseMatchDate(m.date);
+        const win1 = String(m.win_1 || '').trim();
+        const win2 = String(m.win_2 || '').trim() || null;
+        const lose1 = String(m.lose_1 || '').trim();
+        const lose2 = String(m.lose_2 || '').trim() || null;
+        const winScore = Number(m.win_score || 0);
+        const loseScore = Number(m.lose_score || 0);
+        const season = String(m.season || 'Season 1');
         
         await sql`
           INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season)
           VALUES (
-            ${m.match_id}, 
+            ${id}, 
             ${date.toISOString()}, 
-            ${m.win_1}, 
-            ${m.win_2 || null}, 
-            ${m.lose_1}, 
-            ${m.lose_2 || null}, 
-            ${m.win_score}, 
-            ${m.lose_score}, 
-            ${m.season}
+            ${win1}, 
+            ${win2}, 
+            ${lose1}, 
+            ${lose2}, 
+            ${winScore}, 
+            ${loseScore}, 
+            ${season}
           )
           ON CONFLICT (id) DO NOTHING;
         `;
@@ -138,10 +151,10 @@ export async function GET(request: Request) {
     for (const sheetName of ['CONFIG', 'SETTINGS', 'LOG']) {
       const sheet = workbook.Sheets[sheetName];
       if (sheet) {
-        const rows = xlsx.utils.sheet_to_json<any[]>(sheet, { header: 1 });
+        const rows = xlsx.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
         for (const row of rows) {
           if (row.length >= 2 && row[0] && row[0] !== 'key') {
-            configData[row[0].toString()] = row[1] !== undefined ? row[1].toString() : '';
+            configData[String(row[0])] = row[1] !== undefined && row[1] !== null ? String(row[1]) : '';
           }
         }
       }
@@ -155,11 +168,14 @@ export async function GET(request: Request) {
       `;
     }
 
+    await bumpDataVersion();
+
     return NextResponse.json({ message: 'Migration completed successfully!' }, { status: 200 });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Migration error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -270,7 +286,7 @@ export async function POST(request: Request) {
       const season = String(m.season || 'Season 1');
       const winners = [m.win_1, m.win_2].filter((pid) => pid && validPlayerIds.has(String(pid))).map(String);
       const losers = [m.lose_1, m.lose_2].filter((pid) => pid && validPlayerIds.has(String(pid))).map(String);
-      const hasGuest = matchHasGuest(m as any);
+      const hasGuest = matchHasGuest(m);
 
       if (!hasGuest) {
         winners.forEach((pid) => {
@@ -304,12 +320,15 @@ export async function POST(request: Request) {
       `;
     }
 
+    await bumpDataVersion();
+
     revalidatePath('/');
     revalidatePath('/analysis');
     revalidatePath('/history');
     revalidatePath('/add-match');
 
     return NextResponse.json({ success: true, inserted, playersUpserted }, { status: 200 });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     console.error('XLSX import error:', error);
     return NextResponse.json({ error: error.message || 'Import thất bại.' }, { status: 500 });

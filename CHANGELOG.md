@@ -244,3 +244,7 @@ repo.
 - Changed `/analysis` IndexedDB sync to fetch the full server match set on page
   entry and replace the local match cache, preventing stale browser cache counts
   from overriding fresh Postgres data after reload.
+- Added shared route data cache groundwork: Dashboard and Analysis now seed/read
+  a common IndexedDB cache, route entry performs a throttled manifest/version
+  check, stale cache triggers a full server refresh, and the old 500-match
+  preload limit was removed for full-history correctness.

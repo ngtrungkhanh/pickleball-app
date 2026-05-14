@@ -12,9 +12,10 @@ pickleball group.
 This spec reflects the current Next.js production app, not the old `legacy/`
 Apps Script app.
 
-Expected data size is modest: a few hundred matches, not millions. The app
-preloads up to 500 visible matches for dashboard and analysis so history and
-filters feel instant while Vercel/Postgres usage stays low.
+Expected data size is modest: a few hundred to a few thousand matches, not
+millions. The app can preload full non-deleted match history and stores a shared
+IndexedDB route cache so dashboard, history, and analysis do not repeatedly
+download the same raw data during normal route changes.
 
 ## User Modes
 

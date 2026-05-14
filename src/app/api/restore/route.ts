@@ -2,6 +2,7 @@ import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
+import { bumpDataVersion } from '@/lib/data-version';
 
 export async function POST(request: Request) {
   try {
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
     let data;
     try {
       data = JSON.parse(text);
-    } catch (e) {
+    } catch {
       return NextResponse.json({ error: 'File không đúng định dạng JSON.' }, { status: 400 });
     }
 
@@ -81,6 +82,7 @@ export async function POST(request: Request) {
     // Given the risk of desync, it's safer to just tell the frontend to call rebuild after success, 
     // or import rebuilding logic if possible.
     // Let's just return success, and the frontend will call rebuildStatsAction.
+    await bumpDataVersion();
 
     revalidatePath('/');
     revalidatePath('/admin');
@@ -88,6 +90,7 @@ export async function POST(request: Request) {
     revalidatePath('/analysis');
 
     return NextResponse.json({ success: true }, { status: 200 });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     console.error('JSON Restore error:', error);
     return NextResponse.json({ error: error.message || 'Khôi phục thất bại.' }, { status: 500 });
