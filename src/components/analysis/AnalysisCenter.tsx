@@ -76,11 +76,13 @@ export function AnalysisCenter({
   
   const [localMatches, setLocalMatches] = useState<Match[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [hasCompletedInitialSync, setHasCompletedInitialSync] = useState(false);
 
   // Smart Sync Logic
   useEffect(() => {
     const sync = async () => {
       setIsSyncing(true);
+      setHasCompletedInitialSync(false);
       try {
         let existing = await getLocalMatches();
         if (existing.length === 0 && initialMatches.length > 0) {
@@ -98,6 +100,7 @@ export function AnalysisCenter({
         console.error('Sync failed:', err);
         setLocalMatches(initialMatches);
       }
+      setHasCompletedInitialSync(true);
       setIsSyncing(false);
     };
     sync();
@@ -114,7 +117,10 @@ export function AnalysisCenter({
   const partnerRows = analysisSnapshot.partnerEdges;
   const opponentRows = analysisSnapshot.opponentEdges;
   const analysis = analysisSnapshot.profiles.get(playerId) || analysisSnapshot.profiles.get(visiblePlayers[0]?.id || '');
-  const insights = useMemo(() => generateInsightsFromSnapshot(analysisSnapshot), [analysisSnapshot]);
+  const insightsReady = hasCompletedInitialSync && !isSyncing;
+  const insights = useMemo(() => (
+    insightsReady ? generateInsightsFromSnapshot(analysisSnapshot) : []
+  ), [analysisSnapshot, insightsReady]);
 
   return (
     <div className="min-h-screen bg-slate-900">
@@ -167,6 +173,7 @@ export function AnalysisCenter({
             visiblePlayers={visiblePlayers}
             elo={elo}
             insights={insights}
+            insightsReady={insightsReady}
             loseMoney={loseMoney}
           />
         )}
@@ -237,6 +244,7 @@ function HubZone({
   visiblePlayers,
   elo,
   insights,
+  insightsReady,
   loseMoney,
 }: {
   board: PlayerMetrics[];
@@ -244,6 +252,7 @@ function HubZone({
   visiblePlayers: Player[];
   elo: EloResult;
   insights: Insight[];
+  insightsReady: boolean;
   loseMoney: number;
 }) {
   const totalFines = rankingMatches.reduce((sum, match) => sum + loserFineCount(match), 0) * loseMoney;
@@ -288,7 +297,11 @@ function HubZone({
         {/* News Feed Insights (50%) */}
         <BentoCard title="Nhận xét chuyên gia" icon={Zap} className="border-primary/30 bg-primary/5 flex flex-col h-full">
           <div className="space-y-3 flex-1 overflow-y-auto pr-1 custom-scrollbar">
-            {insights.length === 0 ? (
+            {!insightsReady ? (
+              <div className="flex items-center justify-center h-full text-white/30 text-sm italic font-bold">
+                Đang chốt nhận xét...
+              </div>
+            ) : insights.length === 0 ? (
               <div className="flex items-center justify-center h-full text-white/30 text-sm italic font-bold">
                 Chưa đủ dữ liệu nổi bật
               </div>

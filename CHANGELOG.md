@@ -238,3 +238,6 @@ repo.
   frequency, and copy can be reviewed together from the plan.
 - Archived `docs/ANALYSIS_INSIGHTS_REWRITE_PLAN.md` so future work follows the
   52-rule plan instead of the older architecture rewrite plan.
+- Delayed Hub insight rendering until the initial match cache/server sync
+  finishes, preventing comments from appearing after refresh and then changing
+  again a second later.

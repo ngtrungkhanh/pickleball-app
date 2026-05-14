@@ -157,6 +157,30 @@ function mostFrequentDirectional(edges: AnalysisEdge[]) {
   return [...edges].sort((a, b) => b.total - a.total || b.confidence - a.confidence)[0] || null;
 }
 
+function pairKey(edge: AnalysisEdge) {
+  return [edge.playerId, edge.otherId].sort().join('|');
+}
+
+function displayPairEdge(edges: AnalysisEdge[]) {
+  return [...edges].sort((a, b) => a.playerName.localeCompare(b.playerName, 'vi') || a.otherName.localeCompare(b.otherName, 'vi'))[0];
+}
+
+function uniquePartnerPairs(edges: AnalysisEdge[]) {
+  const byPair = new Map<string, AnalysisEdge[]>();
+  edges.forEach(edge => {
+    const key = pairKey(edge);
+    byPair.set(key, [...(byPair.get(key) || []), edge]);
+  });
+
+  return Array.from(byPair.values()).map(pairEdges => {
+    const edge = displayPairEdge(pairEdges);
+    return {
+      edge,
+      maxAbsImpact: Math.max(...pairEdges.map(row => Math.abs(row.impact))),
+    };
+  });
+}
+
 function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnapshot) {
   const active = snapshot.playerMetrics.filter(metric => metric.total > 0);
   const eloBoard = snapshot.board.filter(metric => metric.total > 0);
@@ -210,7 +234,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
         baseWeight: 72,
         evidenceStrength: evidence(metric.streakCount),
         surpriseScore: metric.streakCount * 3,
-        text: `${metric.name} đang thắng liền ${metric.streakCount} trận, form này lên sân là đối thủ phải chuẩn bị thở oxy.`,
+        text: `${metric.name} đang thắng liền ${metric.streakCount} trận, phong độ này lên sân là đối thủ phải chuẩn bị thở oxy.`,
       });
     }
 
@@ -240,7 +264,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
         baseWeight: 76,
         evidenceStrength: 9,
         surpriseScore: 14,
-        text: `${metric.name} đang thắng 5/5 trận gần nhất, bảng form xanh kín nhìn khá cháy.`,
+        text: `${metric.name} đang thắng 5/5 trận gần nhất, bảng phong độ xanh kín nhìn khá cháy.`,
       });
     }
 
@@ -270,7 +294,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
         baseWeight: 68,
         evidenceStrength: evidence(metric.upsetWins),
         surpriseScore: metric.upsetWins * 6,
-        text: `${metric.name} có ${metric.upsetWins} lần thắng cửa dưới khi tỷ lệ thắng dự tính chỉ dưới 30%, đúng kiểu chuyên gạt giò.`,
+        text: `${metric.name} có ${metric.upsetWins} lần thắng cửa dưới khi tỷ lệ thắng dự tính trước trận chỉ dưới 30%, đúng kiểu kèo khó vẫn lật được.`,
       });
     }
 
@@ -285,7 +309,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
         baseWeight: 56,
         evidenceStrength: evidence(metric.upsetLosses),
         surpriseScore: metric.upsetLosses * 5,
-        text: `${metric.name} có ${metric.upsetLosses} lần cửa trên trên 70% mà vẫn rơi kèo, sân phủi đúng là khó đoán.`,
+        text: `${metric.name} có ${metric.upsetLosses} lần tỷ lệ thắng dự tính trước trận lên tới trên 70% mà vẫn rơi kèo, kèo trên cũng có ngày sập hầm.`,
       });
     }
 
@@ -300,7 +324,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
         appearanceRate: 0.55,
         baseWeight: 42,
         evidenceStrength: evidence(metric.total),
-        text: `${metric.name} đã đánh ${metric.total} trận mà ELO vẫn quanh ${metric.rating}, đúng kiểu người giữ cổng 1000.`,
+        text: `${metric.name} đã đánh ${metric.total} trận mà ELO vẫn quanh ${metric.rating}, lên xuống mãi vẫn giữ đúng một vùng quen thuộc.`,
       });
     }
 
@@ -465,12 +489,10 @@ function addStoryCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
 
 function addPartnerCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnapshot) {
   const repeated = snapshot.partnerEdges.filter(edge => edge.total >= 4);
-  const glued = mostFrequentDirectional(snapshot.partnerEdges);
+  const pairEdges = uniquePartnerPairs(repeated);
+  const glued = uniquePartnerPairs(snapshot.partnerEdges).sort((a, b) => b.edge.total - a.edge.total || b.edge.confidence - a.edge.confidence)[0]?.edge || null;
 
-  repeated.forEach(edge => {
-    const playerMetric = snapshot.metrics.get(edge.playerId);
-    if (!playerMetric) return;
-
+  pairEdges.forEach(({ edge, maxAbsImpact }) => {
     if (edge.rate >= 75) {
       addCandidate(candidates, snapshot, {
         type: 'perfect_duo',
@@ -501,37 +523,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
       });
     }
 
-    if (edge.impact >= 15 && edge.rate >= 50) {
-      addCandidate(candidates, snapshot, {
-        type: 'partner_boost',
-        title: '🧿 BÙA HỘ MỆNH',
-        group: 'partner',
-        participantIds: [edge.playerId, edge.otherId],
-        rarity: edge.impact >= 25 ? 'epic' : 'rare',
-        frequency: 'rare',
-        baseWeight: 68,
-        evidenceStrength: evidence(edge.total),
-        surpriseScore: edge.impact,
-        text: `${edge.playerName} cặp với ${edge.otherName} thắng ${edge.wins}/${edge.total} trận và đánh cao hơn kỳ vọng từ ELO ${edge.impact} điểm.`,
-      });
-    }
-
-    if (edge.impact <= -15 && edge.rate <= 40) {
-      addCandidate(candidates, snapshot, {
-        type: 'partner_drag',
-        title: '🪨 QUẢ TẠ VÀNG',
-        group: 'partner',
-        participantIds: [edge.playerId, edge.otherId],
-        rarity: edge.impact <= -25 ? 'epic' : 'rare',
-        frequency: 'rare',
-        baseWeight: 68,
-        evidenceStrength: evidence(edge.total),
-        surpriseScore: absRound(edge.impact),
-        text: `${edge.playerName} đứng cùng ${edge.otherName} chỉ thắng ${edge.wins}/${edge.total} trận, lại thấp hơn kỳ vọng từ ELO ${absRound(edge.impact)} điểm.`,
-      });
-    }
-
-    if (edge.rate >= 50 && edge.rate <= 65 && Math.abs(edge.impact) <= 5 && edge.total >= 6) {
+    if (edge.rate >= 50 && edge.rate <= 65 && maxAbsImpact <= 5 && edge.total >= 6) {
       addCandidate(candidates, snapshot, {
         type: 'stable_partner',
         title: '⚖️ TRÒN VAI',
@@ -590,6 +582,41 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
         text: `${edge.playerName} và ${edge.otherName} đánh chung mà đã có ${edge.deuceGames} trận kéo qua 11 điểm, cặp này thích cò cưa thật.`,
       });
     }
+  });
+
+  repeated.forEach(edge => {
+    const playerMetric = snapshot.metrics.get(edge.playerId);
+    if (!playerMetric) return;
+
+    if (edge.impact >= 15 && edge.rate >= 50) {
+      addCandidate(candidates, snapshot, {
+        type: 'partner_boost',
+        title: '🧿 BÙA HỘ MỆNH',
+        group: 'partner',
+        participantIds: [edge.playerId, edge.otherId],
+        rarity: edge.impact >= 25 ? 'epic' : 'rare',
+        frequency: 'rare',
+        baseWeight: 68,
+        evidenceStrength: evidence(edge.total),
+        surpriseScore: edge.impact,
+        text: `${edge.playerName} cặp với ${edge.otherName} thắng ${edge.wins}/${edge.total} trận và cao hơn mức dự tính từ ELO trước trận ${edge.impact} điểm.`,
+      });
+    }
+
+    if (edge.impact <= -15 && edge.rate <= 40) {
+      addCandidate(candidates, snapshot, {
+        type: 'partner_drag',
+        title: '🪨 QUẢ TẠ VÀNG',
+        group: 'partner',
+        participantIds: [edge.playerId, edge.otherId],
+        rarity: edge.impact <= -25 ? 'epic' : 'rare',
+        frequency: 'rare',
+        baseWeight: 68,
+        evidenceStrength: evidence(edge.total),
+        surpriseScore: absRound(edge.impact),
+        text: `${edge.playerName} đứng cùng ${edge.otherName} chỉ thắng ${edge.wins}/${edge.total} trận, lại thấp hơn mức dự tính từ ELO trước trận ${absRound(edge.impact)} điểm.`,
+      });
+    }
 
     const playerLift = edge.rate - playerMetric.winRate;
     if (edge.total >= 4 && playerLift >= 18 && edge.rate >= 55) {
@@ -603,7 +630,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
         baseWeight: 57,
         evidenceStrength: evidence(edge.total),
         surpriseScore: playerLift,
-        text: `${edge.playerName} đi với ${edge.otherName} thắng ${edge.wins}/${edge.total} trận, cao hơn hẳn mức thường thấy của ${edge.playerName}.`,
+        text: `${edge.playerName} đi với ${edge.otherName} thắng ${edge.wins}/${edge.total} trận, kéo tỷ lệ từ mức thường thấy ${round(playerMetric.winRate)}% lên ${edgeRate(edge)}%.`,
       });
     }
 
@@ -651,7 +678,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
         baseWeight: 50,
         evidenceStrength: evidence(metric.total),
         surpriseScore: metric.synergyScore - metric.attackScore,
-        text: `${metric.name} ghi điểm không quá ồn ào nhưng đi với nhiều đồng đội vẫn giúp cặp thắng ${round(metric.synergyScore)}% số trận.`,
+        text: `${metric.name} ghi điểm không quá ồn ào nhưng các kèo đánh chung vẫn thắng trung bình ${round(metric.synergyScore)}% số trận.`,
       });
     }
   });
@@ -809,7 +836,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
         baseWeight: 45,
         evidenceStrength: evidence(metric.lowScoreLosses),
         surpriseScore: metric.lowScoreLosses * 2,
-        text: `${metric.name} góp mặt trong ${metric.lowScoreLosses} trận team thua điểm rất thấp, đúng kiểu cột thu lôi hôm xấu trời.`,
+        text: `${metric.name} góp mặt trong ${metric.lowScoreLosses} trận team thua mà chỉ ghi tối đa 4 điểm, đúng kiểu cột thu lôi hôm xấu trời.`,
       });
     }
   });
@@ -879,7 +906,7 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
         baseWeight: 62,
         evidenceStrength: evidence(edge.total),
         surpriseScore: absRound(edge.impact),
-        text: `${edge.playerName} gặp ${edge.otherName} thì đánh thấp hơn kỳ vọng từ ELO ${absRound(edge.impact)} điểm, dấu hiệu khớp kèo khá rõ.`,
+        text: `${edge.playerName} gặp ${edge.otherName} thì thấp hơn mức dự tính từ ELO trước trận ${absRound(edge.impact)} điểm, dấu hiệu khớp kèo khá rõ.`,
       });
     }
 
@@ -894,7 +921,7 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
         baseWeight: 62,
         evidenceStrength: evidence(edge.total),
         surpriseScore: edge.impact,
-        text: `${edge.playerName} gặp ${edge.otherName} đang thắng ${edge.wins}/${edge.total} trận và cao hơn kỳ vọng từ ELO ${edge.impact} điểm, kèo này khá thơm.`,
+        text: `${edge.playerName} gặp ${edge.otherName} đang thắng ${edge.wins}/${edge.total} trận và cao hơn mức dự tính từ ELO trước trận ${edge.impact} điểm, kèo này khá thơm.`,
       });
     }
   });
@@ -927,7 +954,7 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
         baseWeight: 58,
         evidenceStrength: evidence(metric.totalVsHigherElo),
         surpriseScore: metric.winsVsHigherElo * 4,
-        text: `${metric.name} có ${metric.winsVsHigherElo} lần thắng đối thủ ELO cao hơn, thợ săn trùm hơi uy tín.`,
+        text: `${metric.name} có ${metric.winsVsHigherElo} lần thắng team có ELO trung bình cao hơn, thợ săn trùm hơi uy tín.`,
       });
     }
 
@@ -943,7 +970,7 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
         baseWeight: 42,
         evidenceStrength: evidence(metric.totalVsLowerElo),
         surpriseScore: lowerRate - 60,
-        text: `${metric.name} thắng ${metric.winsVsLowerElo} trận trước nhóm ELO thấp hơn, farm kèo mềm khá đều tay.`,
+        text: `${metric.name} thắng ${metric.winsVsLowerElo}/${metric.totalVsLowerElo} trận trước nhóm ELO thấp hơn, farm kèo mềm khá đều tay.`,
       });
     }
 
@@ -1029,7 +1056,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
         baseWeight: 42,
         evidenceStrength: evidence(metric.alternations),
         surpriseScore: metric.alternations * 2,
-        text: `Form gần đây của ${metric.name} nhảy ${pattern(metric.recentResults)} liên tục, đúng kiểu máy test vợt.`,
+        text: `Phong độ gần đây của ${metric.name} nhảy ${pattern(metric.recentResults)} liên tục, đúng kiểu máy test vợt.`,
       });
     }
 

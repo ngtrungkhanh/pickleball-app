@@ -161,6 +161,11 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
 - The analysis page is denser than the dashboard and should feel like an
   internal analytics tool, not a landing page.
 - Keep filters visible and compact: season selector first, then zone controls.
+- Hub insight comments should not auto-rotate on a timer. On page refresh, wait
+  for the initial cache/server match sync to finish before showing the insight
+  feed so comments do not appear once and then immediately change a second
+  later. It is acceptable for the feed to refresh when the user leaves
+  `Tổng quan` and later returns.
 - Network (`Mạng lưới`) cards should explain expected-result deltas directly:
   - Use labels such as `Hợp cạ`, `Kỵ cạ`, `Kèo thơm`, `Kèo khó`, `Tròn vai`,
     and `Cân kèo`.

@@ -269,6 +269,9 @@ Current analysis rules:
 - Hub insights are generated from the same snapshot with
   rarity/frequency/appearance metadata so rare events can be prioritized over
   always-available facts.
+- Hub insight comments wait for the initial IndexedDB/server match sync before
+  first render. The feed should not auto-rotate on a timer or change one second
+  after refresh just because the initial sync replaced preloaded data.
 - Hub insight copy that mentions win rate should include record context such as
   `wins/total` or `wins-total record`. Strong dominance wording should be
   reserved for players whose overall record/ELO supports that framing; otherwise
