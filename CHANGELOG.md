@@ -228,3 +228,6 @@ repo.
   per scenario and rarity/frequency/appearance metadata for feed selection.
 - Rephrased user-facing ELO expectation deltas as `cao hơn/thấp hơn kỳ vọng từ
   ELO X điểm` instead of raw `baseline`, `impact`, or machine-prediction wording.
+- Updated Profile and Network analysis cards to use the same ELO-expectation
+  wording, replacing user-facing `Baseline` / `điểm hiệu suất` labels with
+  plain-language expectation deltas and sample size.

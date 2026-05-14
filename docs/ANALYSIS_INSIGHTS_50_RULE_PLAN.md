@@ -231,3 +231,16 @@ Status:
 
 After logic is trusted, expand each scenario from 1 sentence to 4-5 deterministic
 variants. Do not expand copy before the data layer is verified.
+
+Status:
+
+- Not started. Keep this for the next copy pass after reviewing the one-sentence
+  feed on Vercel Preview.
+- Follow-up UI wording pass completed before this expansion:
+  - Profile and Network UI no longer show user-facing `Baseline` or
+    `điểm hiệu suất`.
+  - Network cards now show `cao/thấp hơn kỳ vọng từ ELO X điểm` and sample size
+    instead of raw internal baseline/actual values.
+  - Targeted checks passed:
+    - `npx tsc --noEmit --pretty false`
+    - `npx eslint src/components/analysis/AnalysisCenter.tsx src/lib/analysis-core.ts src/lib/insights.ts`

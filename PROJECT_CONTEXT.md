@@ -60,9 +60,9 @@ Read only when relevant:
 - **UI/UX Refinement**: Implement "Sports Ticker" style (marquee) or dynamic Flash Cards for displaying the generated Insights on the Home screen.
 - **Analysis Copy Review**: Review Hub insight comment tone on Vercel Preview
   after the shared analysis core has real dev data.
-- **Analysis Insights Rewrite**: Before further implementation, follow
-  `docs/ANALYSIS_INSIGHTS_50_RULE_PLAN.md`; the next pass must fix
-  partner/opponent edge counting and implement the 50+ planned scenarios.
+- **Analysis Insights Review**: The first-pass 52-scenario insight registry is
+  implemented. Next review Vercel Preview with real dev data, tune wording/rule
+  weights, then expand each scenario from 1 sentence to 4-5 variants.
 - **Merge & Deploy**: Validate `dev` on Vercel preview, then merge to `main`.
 
 ## Architecture Snapshot

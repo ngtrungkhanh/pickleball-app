@@ -46,6 +46,15 @@ type Insight = { type: string; title?: string; text: string; icon?: string };
 type RadarData = { attack: number; defense: number; brave: number; synergy: number; form: number; experience: number };
 type EloHistory = Array<{ date: string; ratings: Record<string, number> }>;
 
+function expectationDeltaText(value?: number | null) {
+  const delta = Math.round(value || 0);
+  const absDelta = Math.abs(delta);
+  if (absDelta <= 5) return 'Gần đúng kỳ vọng từ ELO';
+  return delta > 0
+    ? `Cao hơn kỳ vọng từ ELO ${absDelta} điểm`
+    : `Thấp hơn kỳ vọng từ ELO ${absDelta} điểm`;
+}
+
 export function AnalysisCenter({
   players,
   matches: initialMatches,
@@ -523,7 +532,7 @@ function ProfileZone({
                   <div>
                     <div className="text-lg font-black text-white">{bestPartner.otherName}</div>
                     <div className="text-xs text-green-400 font-bold uppercase tracking-wider">{edgeRecord(bestPartner)}</div>
-                    <div className="text-[11px] text-white/40 font-bold mt-1">{bestPartner.impact >= 0 ? '+' : ''}{bestPartner.impact} điểm hiệu suất</div>
+                    <div className="text-[11px] text-white/40 font-bold mt-1">{expectationDeltaText(bestPartner.impact)}</div>
                   </div>
                 </div>
               ) : <p className="text-white/40 text-xs italic">Chưa đủ dữ liệu</p>}
@@ -538,7 +547,7 @@ function ProfileZone({
                   <div>
                     <div className="text-lg font-black text-white">{toughestOpponent.otherName}</div>
                     <div className="text-xs text-red-400 font-bold uppercase tracking-wider">{edgeRecord(toughestOpponent)}</div>
-                    <div className="text-[11px] text-white/40 font-bold mt-1">{toughestOpponent.impact} điểm hiệu suất</div>
+                    <div className="text-[11px] text-white/40 font-bold mt-1">{expectationDeltaText(toughestOpponent.impact)}</div>
                   </div>
                 </div>
               ) : <p className="text-white/40 text-xs italic">Chưa có kỵ rơ</p>}
@@ -620,7 +629,7 @@ function MatrixZone({
   // Filter rows for selected player
   const playerRows = rows.filter(r => r.playerId === playerId);
 
-  // Sort by confidence/impact so small perfect samples do not dominate.
+  // Sort by confidence and ELO-expectation gap so small perfect samples do not dominate.
   const sortedRows = [...playerRows].sort((a, b) => {
     if (matrixTab === 'partner') {
       return b.confidence - a.confidence || b.total - a.total;
@@ -669,6 +678,7 @@ function MatrixZone({
             const badgeText = row.total < 4
               ? 'Ít dữ liệu'
               : `${row.label} ${impact > 0 ? '+' : ''}${impact}`;
+            const deltaText = expectationDeltaText(impact);
             
             return (
               <div 
@@ -717,9 +727,9 @@ function MatrixZone({
                 <div className="relative z-10 text-xs font-semibold text-white/55 leading-relaxed mb-3 min-h-[34px]">
                   {row.explanation}
                 </div>
-                <div className="relative z-10 text-[10px] text-white/35 font-mono tracking-tight bg-black/20 p-2 rounded-lg flex justify-between mb-3">
-                  <span>Baseline {row.baselinePs}</span>
-                  <span>Thực tế {row.actualPs}</span>
+                <div className="relative z-10 text-[10px] text-white/35 font-bold tracking-tight bg-black/20 p-2 rounded-lg flex flex-wrap gap-2 justify-between mb-3">
+                  <span>{deltaText}</span>
+                  <span>{row.total} trận mẫu</span>
                 </div>
                 
                 <div className="h-2.5 bg-slate-900 rounded-full overflow-hidden mb-3 border border-white/5">
