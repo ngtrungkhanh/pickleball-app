@@ -71,7 +71,8 @@ export function useSharedAppData({
   const [data, setData] = useState<SharedData>(initialData);
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [syncMessage, setSyncMessage] = useState('');
-  const runIdRef = useRef(0);
+  const preloadRunIdRef = useRef(0);
+  const refreshRunIdRef = useRef(0);
 
   const loadLocalSnapshot = useCallback(async () => {
     const snapshot = await getAppCacheSnapshot();
@@ -79,9 +80,9 @@ export function useSharedAppData({
   }, [initialData]);
 
   const seedFromRoutePreload = useCallback(async () => {
-    const runId = runIdRef.current + 1;
-    runIdRef.current = runId;
-    const isCurrentRun = () => runIdRef.current === runId;
+    const runId = preloadRunIdRef.current + 1;
+    preloadRunIdRef.current = runId;
+    const isCurrentRun = () => preloadRunIdRef.current === runId;
     const initialVersion = dataVersionFromConfig(initialConfig);
 
     const snapshot = await getAppCacheSnapshot();
@@ -105,9 +106,9 @@ export function useSharedAppData({
   }, [initialConfig, initialData, initialMatches, initialPlayers, initialSeasons]);
 
   const refresh = useCallback(async () => {
-    const runId = runIdRef.current + 1;
-    runIdRef.current = runId;
-    const isCurrentRun = () => runIdRef.current === runId;
+    const runId = refreshRunIdRef.current + 1;
+    refreshRunIdRef.current = runId;
+    const isCurrentRun = () => refreshRunIdRef.current === runId;
 
     try {
       setSyncState('syncing');

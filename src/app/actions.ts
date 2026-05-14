@@ -754,9 +754,32 @@ export async function getAppDataAction() {
 
     const configVersion = Number(config.data_version || 0) || 0;
 
+    const players = playersResult.rows.map((row) => ({
+      id: String(row.id || ''),
+      name: String(row.name || ''),
+      active: row.active === null ? undefined : Boolean(row.active),
+      deleted_at: row.deleted_at ? String(row.deleted_at) : null,
+      delete_group_id: row.delete_group_id ? String(row.delete_group_id) : null,
+    }));
+
+    const matches = matchesResult.rows.map((row) => ({
+      id: String(row.id || ''),
+      date: row.date ? String(row.date) : new Date().toISOString(),
+      win_1: String(row.win_1 || ''),
+      win_2: row.win_2 ? String(row.win_2) : null,
+      lose_1: String(row.lose_1 || ''),
+      lose_2: row.lose_2 ? String(row.lose_2) : null,
+      win_score: Number(row.win_score || 0),
+      lose_score: Number(row.lose_score || 0),
+      season: String(row.season || 'Season 1'),
+      created_by: String(row.created_by || 'SYSTEM'),
+      deleted_at: row.deleted_at ? String(row.deleted_at) : null,
+      delete_group_id: row.delete_group_id ? String(row.delete_group_id) : null,
+    }));
+
     return {
-      players: playersResult.rows,
-      matches: matchesResult.rows,
+      players,
+      matches,
       config,
       seasons: seasonsResult.rows.map((row) => ({
         id: String(row.id),

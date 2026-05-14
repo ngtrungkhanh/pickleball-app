@@ -69,10 +69,16 @@ export function AnalysisCenter({
   loseMoney?: number;
   config?: Record<string, string>;
 }) {
+  const resolvedConfig = useMemo(() => ({
+    ...initialConfig,
+    active_season: initialConfig.active_season || activeSeason,
+    lose_money: String(initialConfig.lose_money || loseMoney),
+  }), [initialConfig, activeSeason, loseMoney]);
+
   const sharedData = useSharedAppData({
     initialPlayers,
     initialMatches,
-    initialConfig: { ...initialConfig, active_season: initialConfig.active_season || activeSeason, lose_money: String(initialConfig.lose_money || loseMoney) },
+    initialConfig: resolvedConfig,
     initialSeasons: seasons,
     routeKey: 'analysis',
   });
