@@ -56,13 +56,27 @@ export default function Dashboard({
   // until the server-side ISR revalidation completes in the background.
   const [matches, setMatches] = useState(initialMatches);
   
-  // Sync state if shared route cache changes (e.g. after manifest detects fresh data)
+  // Sync state if shared route cache changes (e.g. after manifest detects fresh data).
+  // Do not let an older shared cache wipe the optimistic TMP row after a local save.
   useEffect(() => {
-    queueMicrotask(() => setMatches(sharedData.matches as Match[]));
+    const nextMatches = sharedData.matches as Match[];
+    queueMicrotask(() => {
+      setMatches(prev => {
+        const hasOptimistic = prev.some(m => String(m.id || '').startsWith('TMP-'));
+        if (hasOptimistic && nextMatches.length < prev.length) return prev;
+        return nextMatches;
+      });
+    });
   }, [sharedData.matches]);
 
   const addLocalMatch = (newMatch: Match) => {
     setMatches(prev => [newMatch, ...prev]);
+  };
+  const confirmLocalMatch = (tempId: string, match: Match) => {
+    setMatches(prev => [match, ...prev.filter(m => m.id !== tempId && m.id !== match.id)]);
+  };
+  const rejectLocalMatch = (tempId: string) => {
+    setMatches(prev => prev.filter(m => m.id !== tempId));
   };
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -93,7 +107,7 @@ export default function Dashboard({
       <div className={`${DESKTOP_PANEL_WIDTH} flex items-center justify-end gap-2`}>
         {sharedData.syncMessage && (
           <div className="mr-auto hidden sm:flex items-center gap-2 rounded-xl border border-slate-500/20 bg-[#142034]/80 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300/60">
-            <RefreshCw className={`w-3.5 h-3.5 ${sharedData.syncState === 'checking' || sharedData.syncState === 'syncing' ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${sharedData.syncState === 'syncing' ? 'animate-spin' : ''}`} />
             {sharedData.syncMessage}
           </div>
         )}
@@ -146,7 +160,13 @@ export default function Dashboard({
             <h3 className="font-black text-[10px] sm:text-xs uppercase tracking-[0.4em] text-slate-300/70">Ghi kết quả</h3>
           </div>
           <div className="relative z-30 rounded-2xl border border-slate-500/25 bg-[#142034]/95 overflow-visible">
-            <ScoreForm players={players} onAddMatch={addLocalMatch} activeSeason={activeSeason} />
+            <ScoreForm
+              players={players}
+              onAddMatch={addLocalMatch}
+              onConfirmMatch={confirmLocalMatch}
+              onRejectMatch={rejectLocalMatch}
+              activeSeason={activeSeason}
+            />
           </div>
         </div>
       )}

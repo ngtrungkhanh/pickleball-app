@@ -97,7 +97,7 @@ export function AnalysisCenter({
   const partnerRows = analysisSnapshot.partnerEdges;
   const opponentRows = analysisSnapshot.opponentEdges;
   const analysis = analysisSnapshot.profiles.get(playerId) || analysisSnapshot.profiles.get(visiblePlayers[0]?.id || '');
-  const insightsReady = sharedData.syncState !== 'checking' && sharedData.syncState !== 'syncing';
+  const insightsReady = sharedData.syncState !== 'syncing';
   const insights = useMemo(() => (
     insightsReady ? generateInsightsFromSnapshot(analysisSnapshot) : []
   ), [analysisSnapshot, insightsReady]);
@@ -117,10 +117,10 @@ export function AnalysisCenter({
               <div className="flex items-center gap-2 mt-0.5">
                 <div className={cn(
                   "flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all",
-                  sharedData.syncState === 'checking' || sharedData.syncState === 'syncing' ? "bg-primary/10 text-primary animate-pulse" : "bg-white/5 text-white/30"
+                  sharedData.syncState === 'syncing' ? "bg-primary/10 text-primary animate-pulse" : "bg-white/5 text-white/30"
                 )}>
-                  {sharedData.syncState === 'checking' || sharedData.syncState === 'syncing' ? (
-                    <><RefreshCw className="w-3 h-3 animate-spin" /> {sharedData.syncState === 'checking' ? 'Checking...' : 'Syncing...'}</>
+                  {sharedData.syncState === 'syncing' ? (
+                    <><RefreshCw className="w-3 h-3 animate-spin" /> Syncing...</>
                   ) : (
                     <><Database className="w-3 h-3" /> {activeMatches.length} cached</>
                   )}

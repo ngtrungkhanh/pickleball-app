@@ -5,6 +5,7 @@ import { addMatchAction } from '@/app/actions';
 import { Minus, Plus, Trophy, Ghost, Send, RefreshCw, AlertCircle, CheckCircle2, Check, ChevronDown, UserRound, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isGuestId } from '@/lib/guest';
+import { removeMatchesLocal, replaceOptimisticMatchLocal, saveMatchesLocal } from '@/lib/db';
 
 const PENDING_KEY = 'pickleball_pending_match';
 const RECENT_KEY = 'pickleball_recent_matches';
@@ -33,6 +34,8 @@ type ServerResult = {
   success?: boolean;
   skippedDuplicate?: boolean;
   error?: string;
+  dataVersion?: number;
+  match?: Record<string, unknown>;
 };
 
 function teamKey(a: string, b: string): string {
@@ -257,7 +260,19 @@ function PlayerPicker({
   );
 }
 
-export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { players: Array<Record<string, unknown>>; onAddMatch?: (m: Record<string, unknown>) => void; activeSeason?: string }) {
+export function ScoreForm({
+  players,
+  onAddMatch,
+  onConfirmMatch,
+  onRejectMatch,
+  activeSeason = 'Season 1',
+}: {
+  players: Array<Record<string, unknown>>;
+  onAddMatch?: (m: Record<string, unknown>) => void;
+  onConfirmMatch?: (tempId: string, match: Record<string, unknown>) => void;
+  onRejectMatch?: (tempId: string) => void;
+  activeSeason?: string;
+}) {
   const [, start] = useTransition();
   const router = useRouter();
   const [ui, setUi] = useState<'idle' | 'saved'>('idle');
@@ -340,9 +355,24 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
 
   const fullIdentity = `${clientId}${nickname ? ` (${nickname})` : ''} [${deviceInfo || 'Unknown'}]`;
 
-  const handleServerResult = useCallback((r: ServerResult | undefined, fd: FormData) => {
+  const removeOptimisticMatch = useCallback((fd: FormData) => {
+    const tempId = String(fd.get('temp_id') || '');
+    if (!tempId) return;
+    onRejectMatch?.(tempId);
+    void removeMatchesLocal([tempId]);
+  }, [onRejectMatch]);
+
+  const handleServerResult = useCallback(async (r: ServerResult | undefined, fd: FormData) => {
+    const tempId = String(fd.get('temp_id') || '');
     if (r?.success) {
       clearPending();
+      if (r.match) {
+        onConfirmMatch?.(tempId, r.match);
+        await replaceOptimisticMatchLocal(tempId, r.match, r.dataVersion);
+      } else if (tempId) {
+        onRejectMatch?.(tempId);
+        await removeMatchesLocal([tempId]);
+      }
       saveRecentLocal({
         win1: String(fd.get('win_1') || ''),
         win2: String(fd.get('win_2') || ''),
@@ -356,19 +386,22 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
     }
     if (r?.skippedDuplicate) {
       clearPending();
+      removeOptimisticMatch(fd);
       setSync('idle');
       router.refresh();
       return;
     }
     if (!r?.error) {
       clearPending();
+      removeOptimisticMatch(fd);
       setSync('ok');
       setTimeout(() => setSync('idle'), 2500);
       return;
     }
+    removeOptimisticMatch(fd);
     setSync('error');
     setPendingFd(fd);
-  }, [activeSeason, router]);
+  }, [activeSeason, onConfirmMatch, onRejectMatch, removeOptimisticMatch, router]);
 
   useEffect(() => {
     try {
@@ -384,7 +417,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
         queueMicrotask(() => setSync('syncing'));
         start(async () => {
           const r = await addMatchAction(fd);
-          handleServerResult(r, fd);
+          await handleServerResult(r, fd);
         });
       } else clearPending();
     } catch {}
@@ -395,7 +428,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
     savePending(Object.fromEntries(fd.entries()));
     start(async () => {
       const r = await addMatchAction(fd);
-      handleServerResult(r, fd);
+      await handleServerResult(r, fd);
     });
   };
 
@@ -410,7 +443,10 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
       if (!duplicateConfirmed) return;
     }
 
-    onAddMatch?.({ id: 'TMP-' + Date.now(), date: new Date().toISOString(), win_1: win1, win_2: win2 || null, lose_1: lose1, lose_2: lose2 || null, win_score: ws, lose_score: ls, season: activeSeason, created_by: fullIdentity });
+    const tempId = 'TMP-' + Date.now();
+    const optimisticMatch = { id: tempId, date: new Date().toISOString(), win_1: win1, win_2: win2 || null, lose_1: lose1, lose_2: lose2 || null, win_score: ws, lose_score: ls, season: activeSeason, created_by: fullIdentity, pending: true };
+    onAddMatch?.(optimisticMatch);
+    void saveMatchesLocal([optimisticMatch]);
     setUi('saved');
     setTimeout(() => { reset(); setUi('idle'); }, 1000);
 
@@ -423,6 +459,7 @@ export function ScoreForm({ players, onAddMatch, activeSeason = 'Season 1' }: { 
     fd.append('lose_score', String(ls));
     fd.append('season', activeSeason);
     fd.append('created_by', fullIdentity);
+    fd.append('temp_id', tempId);
     if (duplicateConfirmed) fd.append('duplicate_confirmed', 'true');
     doSync(fd);
   };

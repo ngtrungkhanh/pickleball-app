@@ -175,9 +175,10 @@ Shared cache policy:
 - Postgres remains the source of truth.
 - IndexedDB is only a replaceable local copy used to avoid refetching full match
   history when moving between dashboard, analysis, and history-oriented views.
-- Route entry may call a lightweight manifest check, throttled on the client, to
-  compare local cache state with server state.
-- Do not poll in the background. Manual refresh, route entry, or explicit data
+- Dashboard/F5/direct route preload is the normal online sync point. Analysis
+  reads local cache first and does not auto-fetch online after the route has
+  mounted.
+- Do not poll in the background. Manual refresh, route preload, or explicit data
   writes are the normal sync triggers.
 - If the current view needs data that is missing or stale, sync that data before
   rendering analysis-derived facts. Background sync can continue for other
@@ -195,27 +196,28 @@ Server preload remains the first-render fallback:
 
 Client sync flow:
 
-1. Seed/update IndexedDB from the server-provided route preload.
-2. Read local `sync_meta.lastManifestCheck`; if it is recent, avoid another
-   manifest request during quick route switches.
-3. When a manifest check is due, ask the server for:
-   - global `dataVersion`
-   - match `count`
-   - latest/oldest match dates
-   - per-season count/latest/oldest dates
-   - config and seasons
-4. If local `dataVersion` and count match the manifest, keep using local cache.
-5. If local data is missing or stale, fetch the full current match set once,
-   replace the local `matches` store, and update sync metadata.
-6. Future phase: split full fetch into season-priority batches. The current
-   implementation keeps the same correctness model while the dataset is still
-   small.
+1. Seed/update IndexedDB from the server-provided route preload, unless the
+   existing local cache has a newer `dataVersion`.
+2. Dashboard, Analysis, and other client views read from the shared cache state
+   exposed by `useSharedAppData`.
+3. When a score is submitted, the client writes an optimistic `TMP-*` match to
+   IndexedDB and the Dashboard state.
+4. `addMatchAction` inserts the canonical match in Postgres and returns the
+   inserted match row plus `dataVersion`.
+5. The client replaces the optimistic `TMP-*` row in IndexedDB with the
+   canonical server match. If the server rejects or errors, the optimistic row
+   is removed.
+6. The Analysis page reads local cache by default. It only fetches online when
+   the route is loaded/reloaded by the browser or the user presses `Làm mới`.
+7. Future phase: split full refresh into season-priority batches. The current
+   implementation keeps full refresh as the explicit/manual path while the
+   dataset is still small.
 
 Important caveat:
 
-- `getMatchesAfterAction(lastId)` still supports incremental reads for other
-  screens. Shared route sync can use the empty-id full read when manifest data
-  shows the local cache is stale.
+- `getMatchesAfterAction(lastId)` still supports incremental reads for older
+  admin/helper screens, but shared client routes should prefer the shared cache
+  and explicit full refresh path.
 - The analysis cache is a replaceable local copy. Full imports, deletes, edits,
   and new match batches should converge on the next analysis page sync.
 - All writes that change user-visible data should bump `config.data_version`.
@@ -246,8 +248,9 @@ Client analysis derivation:
 Cache and revalidation:
 
 - Match writes revalidate `/analysis` together with `/` and `/history`.
-- Shared route sync uses IndexedDB for a fast local copy, but manifest/version
-  checks treat Postgres as authoritative and replace stale local match history.
+- Shared route sync uses IndexedDB for a fast local copy. Route preload, manual
+  refresh, and canonical write responses are the points that reconcile it with
+  Postgres.
 - Do not use IndexedDB as source of truth. Postgres remains authoritative.
 
 ## Vercel and Cache

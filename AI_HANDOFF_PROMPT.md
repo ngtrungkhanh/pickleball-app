@@ -46,8 +46,9 @@ Recent behavior updates to remember:
 - Dashboard expanded form/partner/rival/easy insights use seeded data-driven logic in `src/lib/stats.ts`; labels must stay short and directly understandable.
 - `/analysis` is read-only, preloads non-deleted matches, uses the shared IndexedDB route cache/sync, and still has a Trend placeholder. Read the Analysis Center sections in `docs/FEATURE_SPEC.md`, `docs/DATA_FLOW.md`, and `docs/UI_RULES.md` before extending it.
 - Shared route cache work is now higher priority than expanding 50 insight copy:
-  Dashboard and Analysis seed/read a common IndexedDB cache, route entry checks a
-  throttled manifest/version, and stale cache is replaced from Postgres.
+  Dashboard and Analysis seed/read a common IndexedDB cache, score-save responses
+  replace optimistic local rows with canonical server matches, and Analysis only
+  goes online through route preload/reload or manual refresh.
 
 Working rules:
 - Do not touch main unless the user explicitly asks for a release.
@@ -65,7 +66,7 @@ When starting:
 3. State what you will check or implement first.
 6. When done, report changed files, verification run, and any remaining risk.
 7. CURRENT PENDING TASKS TO IMPLEMENT:
-   - **Shared Data Cache Validation**: Test route-entry manifest checks and IndexedDB cache replacement on Vercel Preview before resuming insight-copy expansion.
+   - **Shared Data Cache Validation**: Test local-first Dashboard/Analysis cache, canonical score-save replacement, and manual refresh on Vercel Preview before resuming insight-copy expansion.
    - **UI/UX Polishing**: Implement "Sports Ticker" or "Flash News Card" style for the Analytics Center Insights as requested by user.
    - **Data Validation**: Ensure the newly implemented 50 Insights engine handles Edge Cases without crashing when data is sparse.
    - **Merge & Deploy**: Merge `dev` to `main` when features are validated.

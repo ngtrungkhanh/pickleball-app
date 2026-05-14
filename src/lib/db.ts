@@ -88,6 +88,12 @@ function entriesToConfig(entries: ConfigEntry[]) {
   return config;
 }
 
+function emitCacheChange() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('pickleball-cache-change'));
+  }
+}
+
 export async function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -168,10 +174,41 @@ async function getMetaValue<T>(key: string, fallback: T): Promise<T> {
 
 export async function saveMatchesLocal(matches: StoredMatch[]) {
   await putStore(STORES.matches, matches);
+  emitCacheChange();
 }
 
 export async function replaceMatchesLocal(matches: StoredMatch[]) {
   await replaceStore(STORES.matches, uniqueMatches(matches));
+  emitCacheChange();
+}
+
+export async function removeMatchesLocal(matchIds: string[]) {
+  if (matchIds.length === 0) return;
+  const db = await openDB();
+  const tx = db.transaction(STORES.matches, 'readwrite');
+  const store = tx.objectStore(STORES.matches);
+  matchIds.forEach((id) => store.delete(id));
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+  emitCacheChange();
+}
+
+export async function replaceOptimisticMatchLocal(tempId: string, match: StoredMatch, dataVersion?: number) {
+  const db = await openDB();
+  const tx = db.transaction([STORES.matches, STORES.syncMeta], 'readwrite');
+  const matchStore = tx.objectStore(STORES.matches);
+  if (tempId) matchStore.delete(tempId);
+  matchStore.put(match);
+  if (typeof dataVersion === 'number') {
+    tx.objectStore(STORES.syncMeta).put({ key: 'dataVersion', value: dataVersion });
+  }
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+  emitCacheChange();
 }
 
 export async function getLocalMatches(): Promise<StoredMatch[]> {
@@ -197,6 +234,7 @@ export async function seedAppCache(input: AppCacheInput) {
     writes.push(setMetaValue('lastManifestCheck', input.manifestCheckedAt));
   }
   await Promise.all(writes);
+  emitCacheChange();
 }
 
 export async function getAppCacheSnapshot(): Promise<AppCacheSnapshot> {

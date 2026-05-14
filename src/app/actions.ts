@@ -135,10 +135,12 @@ export async function addMatchAction(formData: FormData) {
   }
 
   try {
-    await sql`
+    const { rows: insertedRows } = await sql`
       INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by)
       VALUES (${id}, NOW(), ${win_1}, ${win_2}, ${lose_1}, ${lose_2}, ${win_score}, ${lose_score}, ${season}, ${created_by})
+      RETURNING id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by
     `;
+    const inserted = insertedRows[0];
 
     const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
     const hasGuest = matchHasGuest({ win_1, win_2, lose_1, lose_2 });
@@ -154,12 +156,27 @@ export async function addMatchAction(formData: FormData) {
     if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 0, lose_money);
 
     await logAudit('ADD_MATCH', `Match ${id} by ${created_by}: ${win_1}${win_2 ? '/' + win_2 : ''} beat ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
-    await bumpDataVersion();
+    const dataVersion = await bumpDataVersion();
 
     revalidatePath('/');
     revalidatePath('/history');
     revalidatePath('/analysis');
-    return { success: true };
+    return {
+      success: true,
+      dataVersion,
+      match: {
+        id: String(inserted.id),
+        date: inserted.date ? String(inserted.date) : new Date().toISOString(),
+        win_1: String(inserted.win_1 || ''),
+        win_2: inserted.win_2 ? String(inserted.win_2) : null,
+        lose_1: String(inserted.lose_1 || ''),
+        lose_2: inserted.lose_2 ? String(inserted.lose_2) : null,
+        win_score: Number(inserted.win_score || 0),
+        lose_score: Number(inserted.lose_score || 0),
+        season: String(inserted.season || season),
+        created_by: String(inserted.created_by || created_by),
+      },
+    };
   } catch (error) {
     console.error('Failed to add match:', error);
     return { error: 'Lỗi khi lưu trận đấu. Vui lòng thử lại.' };

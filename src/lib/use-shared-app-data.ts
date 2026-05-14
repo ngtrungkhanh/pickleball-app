@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getAppDataAction, getAppDataManifestAction } from '@/app/actions';
+import { getAppDataAction } from '@/app/actions';
 import {
   getAppCacheSnapshot,
   seedAppCache,
@@ -9,8 +9,6 @@ import {
   type StoredPlayer,
   type StoredSeason,
 } from '@/lib/db';
-
-const MANIFEST_THROTTLE_MS = 60_000;
 
 type SharedConfig = Record<string, string>;
 
@@ -21,20 +19,33 @@ type SharedData = {
   config: SharedConfig;
 };
 
-type SyncState = 'idle' | 'checking' | 'syncing' | 'error';
+type SyncState = 'idle' | 'syncing' | 'error';
 
 function dataVersionFromConfig(config: SharedConfig) {
   return Number(config.data_version || 0) || 0;
 }
 
-function snapshotIsBetterThanInitial(
+function snapshotWins(
   snapshot: Awaited<ReturnType<typeof getAppCacheSnapshot>>,
   initialMatches: StoredMatch[],
   initialVersion: number,
 ) {
   if (snapshot.matches.length === 0) return false;
   if (snapshot.dataVersion > initialVersion) return true;
-  return snapshot.dataVersion === initialVersion && snapshot.matches.length >= initialMatches.length;
+  if (snapshot.dataVersion < initialVersion) return false;
+  return snapshot.matches.length > initialMatches.length;
+}
+
+function snapshotToData(
+  snapshot: Awaited<ReturnType<typeof getAppCacheSnapshot>>,
+  fallback: SharedData,
+): SharedData {
+  return {
+    players: snapshot.players.length > 0 ? snapshot.players : fallback.players,
+    matches: snapshot.matches.length > 0 ? snapshot.matches : fallback.matches,
+    seasons: snapshot.seasons.length > 0 ? snapshot.seasons : fallback.seasons,
+    config: Object.keys(snapshot.config).length > 0 ? snapshot.config : fallback.config,
+  };
 }
 
 export function useSharedAppData({
@@ -62,125 +73,97 @@ export function useSharedAppData({
   const [syncMessage, setSyncMessage] = useState('');
   const runIdRef = useRef(0);
 
-  const sync = useCallback(async (force = false) => {
+  const loadLocalSnapshot = useCallback(async () => {
+    const snapshot = await getAppCacheSnapshot();
+    setData(snapshotToData(snapshot, initialData));
+  }, [initialData]);
+
+  const seedFromRoutePreload = useCallback(async () => {
     const runId = runIdRef.current + 1;
     runIdRef.current = runId;
     const isCurrentRun = () => runIdRef.current === runId;
     const initialVersion = dataVersionFromConfig(initialConfig);
 
+    const snapshot = await getAppCacheSnapshot();
+    if (!isCurrentRun()) return;
+
+    if (snapshotWins(snapshot, initialMatches, initialVersion)) {
+      setData(snapshotToData(snapshot, initialData));
+      return;
+    }
+
+    await seedAppCache({
+      players: initialPlayers,
+      matches: initialMatches,
+      seasons: initialSeasons,
+      config: initialConfig,
+      dataVersion: initialVersion,
+      manifestCheckedAt: Date.now(),
+    });
+    if (!isCurrentRun()) return;
+    setData(initialData);
+  }, [initialConfig, initialData, initialMatches, initialPlayers, initialSeasons]);
+
+  const refresh = useCallback(async () => {
+    const runId = runIdRef.current + 1;
+    runIdRef.current = runId;
+    const isCurrentRun = () => runIdRef.current === runId;
+
     try {
-      const snapshot = await getAppCacheSnapshot();
-      if (!isCurrentRun()) return;
-
-      if (snapshotIsBetterThanInitial(snapshot, initialMatches, initialVersion)) {
-        setData({
-          players: snapshot.players.length > 0 ? snapshot.players : initialPlayers,
-          matches: snapshot.matches,
-          seasons: snapshot.seasons.length > 0 ? snapshot.seasons : initialSeasons,
-          config: Object.keys(snapshot.config).length > 0 ? snapshot.config : initialConfig,
-        });
-      }
-
-      const shouldSeedInitial = snapshot.matches.length === 0 || initialVersion >= snapshot.dataVersion;
-      if (shouldSeedInitial) {
-        await seedAppCache({
-          players: initialPlayers,
-          matches: initialMatches,
-          seasons: initialSeasons,
-          config: initialConfig,
-          dataVersion: initialVersion,
-        });
-      }
-
-      const seededSnapshot = await getAppCacheSnapshot();
-      if (!isCurrentRun()) return;
-      const recentlyChecked = Date.now() - seededSnapshot.lastManifestCheck < MANIFEST_THROTTLE_MS;
-      if (!force && recentlyChecked) {
-        setSyncState('idle');
-        setSyncMessage('');
-        return;
-      }
-
-      setSyncState('checking');
-      setSyncMessage('Đang kiểm tra dữ liệu mới...');
-      const manifest = await getAppDataManifestAction();
-      if (!isCurrentRun()) return;
-      if (!manifest) throw new Error('manifest unavailable');
-
-      const currentSnapshot = await getAppCacheSnapshot();
-      if (!isCurrentRun()) return;
-      const localCount = currentSnapshot.matches.length;
-      const serverCount = manifest.matchSummary.count;
-      const stale = currentSnapshot.dataVersion !== manifest.dataVersion || localCount !== serverCount;
-
-      if (!stale) {
-        await seedAppCache({
-          config: manifest.config,
-          seasons: manifest.seasons,
-          dataVersion: manifest.dataVersion,
-          manifestCheckedAt: Date.now(),
-        });
-        if (!isCurrentRun()) return;
-        setData((prev) => ({
-          ...prev,
-          config: manifest.config,
-          seasons: manifest.seasons.length > 0 ? manifest.seasons : prev.seasons,
-        }));
-        setSyncState('idle');
-        setSyncMessage('');
-        return;
-      }
-
       setSyncState('syncing');
       setSyncMessage('Đang tải dữ liệu mới nhất...');
       const appData = await getAppDataAction();
       if (!isCurrentRun()) return;
       if (!appData) throw new Error('app data unavailable');
 
-      await seedAppCache({
+      const nextData = {
         players: appData.players as StoredPlayer[],
         matches: appData.matches as StoredMatch[],
         seasons: appData.seasons,
         config: appData.config,
+      };
+
+      await seedAppCache({
+        ...nextData,
         dataVersion: appData.dataVersion,
         manifestCheckedAt: Date.now(),
       });
       if (!isCurrentRun()) return;
 
-      setData({
-        players: appData.players as StoredPlayer[],
-        matches: appData.matches as StoredMatch[],
-        seasons: appData.seasons,
-        config: appData.config,
-      });
+      setData(nextData);
       setSyncState('idle');
       setSyncMessage('');
     } catch (error) {
-      console.error('Shared app data sync failed:', error);
+      console.error('Shared app data refresh failed:', error);
       if (!isCurrentRun()) return;
       setSyncState('error');
       setSyncMessage('Không đồng bộ được dữ liệu mới');
     }
-  }, [initialConfig, initialMatches, initialPlayers, initialSeasons]);
+  }, []);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      setData(initialData);
-      void sync(false);
+      void seedFromRoutePreload();
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [initialData, routeKey, sync]);
+  }, [routeKey, seedFromRoutePreload]);
 
-  const refresh = useCallback(() => {
-    void sync(true);
-  }, [sync]);
+  useEffect(() => {
+    const onCacheChange = () => {
+      void loadLocalSnapshot();
+    };
+    window.addEventListener('pickleball-cache-change', onCacheChange);
+    return () => window.removeEventListener('pickleball-cache-change', onCacheChange);
+  }, [loadLocalSnapshot]);
 
   return {
     ...data,
     syncState,
     syncMessage,
-    isCheckingManifest: syncState === 'checking',
+    isCheckingManifest: false,
     isSyncingData: syncState === 'syncing',
-    refresh,
+    refresh: () => {
+      void refresh();
+    },
   };
 }

@@ -245,6 +245,9 @@ repo.
   entry and replace the local match cache, preventing stale browser cache counts
   from overriding fresh Postgres data after reload.
 - Added shared route data cache groundwork: Dashboard and Analysis now seed/read
-  a common IndexedDB cache, route entry performs a throttled manifest/version
-  check, stale cache triggers a full server refresh, and the old 500-match
-  preload limit was removed for full-history correctness.
+  a common IndexedDB cache, explicit refresh can replace it from Postgres, and
+  the old 500-match preload limit was removed for full-history correctness.
+- Changed score-save flow so the server returns the canonical inserted match and
+  data version; the client replaces the optimistic `TMP-*` local row with that
+  match so Analysis can read the latest result from local cache without an
+  extra online sync.

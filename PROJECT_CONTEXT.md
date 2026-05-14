@@ -53,9 +53,10 @@ Read only when relevant:
   source for ELO, player metrics, partner/opponent impact edges, profile cards,
   Network cards, and Hub insight comments.
 - Dashboard and Analysis are moving toward a shared IndexedDB route cache:
-  Postgres remains authoritative, route entry performs a throttled lightweight
-  manifest/version check, and stale local match history is replaced from server
-  data instead of being trusted blindly.
+  Postgres remains authoritative, Dashboard/F5/direct route preload seeds local
+  cache, score-save responses replace optimistic local rows with canonical
+  server matches, and Analysis reads local cache unless the user reloads or
+  presses refresh.
 - Admin dashboard supports both `.xlsx` bulk migration and `.json` full database backup/restore mechanisms.
 - Local demo routes such as `/ui-demo` and `/picker-demo` may exist on one
   machine for review, but should not be pushed unless explicitly requested.
@@ -63,8 +64,8 @@ Read only when relevant:
 ## Current Pending Tasks (Next Session)
 
 - **UI/UX Refinement**: Implement "Sports Ticker" style (marquee) or dynamic Flash Cards for displaying the generated Insights on the Home screen.
-- **Shared Data Cache Review**: Validate route-entry manifest checks and
-  IndexedDB cache replacement across Dashboard and Analysis before resuming
+- **Shared Data Cache Review**: Validate local-first Dashboard/Analysis cache,
+  canonical score-save replacement, and manual refresh before resuming
   insight-copy expansion work.
 - **Analysis Copy Review**: Review Hub insight comment tone on Vercel Preview
   after the shared analysis core has real dev data.
