@@ -47,6 +47,28 @@ Selection rules:
 - A player can appear at most once in the same semantic group.
 - A global scenario type appears at most once.
 
+## Future Phase: Expected Probability V2
+
+Do not change expected probability while reviewing the current 52 insight
+scenarios. The current expected value is intentionally ELO-only: average ELO of
+the two-player team versus average ELO of the opposing two-player team.
+
+After all 52 scenarios are reviewed and expanded to 4-5 sentence variants, add a
+separate design/implementation phase for expected probability v2:
+
+- Keep true win rate as `wins / total`; do not call expected probability
+  "win rate" in user-facing text.
+- Keep the ELO-only probability as the stable baseline.
+- Add small, clamped adjustments for pair chemistry, opponent matchup history,
+  and recent form.
+- Require sample-size thresholds before pair or opponent adjustments can affect
+  the probability, so a 1-2 match sample cannot swing the result.
+- Because matches have no draw, if one team has an expected probability of 30%,
+  the other team is 70%.
+- Re-check every insight that uses expectation gaps after this phase, especially
+  upset wins/losses, partner impact, opponent impact, and "above/below ELO
+  expectation" wording.
+
 ## Trigger Table: Current Code Truth
 
 This table reflects the current implementation in `src/lib/insights.ts`.
