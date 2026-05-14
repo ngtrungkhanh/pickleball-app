@@ -30,7 +30,8 @@ Read only when relevant:
   match save flow.
 - `docs/UI_RULES.md` for layout, wording, responsive behavior, and visual rules.
 - `docs/ANALYSIS_INSIGHTS_50_RULE_PLAN.md` before changing `/analysis`
-  insight logic or copy.
+  insight logic, trigger thresholds, feed frequency, or copy. This is the
+  active source of truth for Hub insight rules.
 
 ## Product Priorities
 

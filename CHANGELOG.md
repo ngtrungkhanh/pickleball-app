@@ -231,3 +231,8 @@ repo.
 - Updated Profile and Network analysis cards to use the same ELO-expectation
   wording, replacing user-facing `Baseline` / `điểm hiệu suất` labels with
   plain-language expectation deltas and sample size.
+- Aligned `docs/ANALYSIS_INSIGHTS_50_RULE_PLAN.md` with the actual 52 rule
+  triggers and feed frequency metadata in `src/lib/insights.ts`, including
+  notes for approximation or global-only rules.
+- Archived `docs/ANALYSIS_INSIGHTS_REWRITE_PLAN.md` so future work follows the
+  52-rule plan instead of the older architecture rewrite plan.
