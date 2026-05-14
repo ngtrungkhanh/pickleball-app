@@ -234,5 +234,7 @@ repo.
 - Aligned `docs/ANALYSIS_INSIGHTS_50_RULE_PLAN.md` with the actual 52 rule
   triggers and feed frequency metadata in `src/lib/insights.ts`, including
   notes for approximation or global-only rules.
+- Added the current code sentence for every 52-rule insight row so trigger,
+  frequency, and copy can be reviewed together from the plan.
 - Archived `docs/ANALYSIS_INSIGHTS_REWRITE_PLAN.md` so future work follows the
   52-rule plan instead of the older architecture rewrite plan.
