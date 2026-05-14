@@ -241,3 +241,6 @@ repo.
 - Delayed Hub insight rendering until the initial match cache/server sync
   finishes, preventing comments from appearing after refresh and then changing
   again a second later.
+- Changed `/analysis` IndexedDB sync to fetch the full server match set on page
+  entry and replace the local match cache, preventing stale browser cache counts
+  from overriding fresh Postgres data after reload.

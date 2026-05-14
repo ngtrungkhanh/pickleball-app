@@ -175,23 +175,21 @@ Server preload:
 
 Client sync flow:
 
-1. Load local matches from IndexedDB.
-2. If empty, seed from server-provided `initialMatches`.
-3. Ask server for matches after the latest local match id via
-   `getMatchesAfterAction(lastId)`.
-4. Save new matches locally.
-5. Fall back to server-provided matches if sync fails.
+1. Render immediately from server-provided `initialMatches`.
+2. Ask server for the current full non-deleted match set via
+   `getMatchesAfterAction('')`.
+3. Replace the IndexedDB `matches` store with that server result.
+4. Continue analysis from the refreshed cache.
+5. If the full sync fails, use whichever is larger between the current server
+   preload and local IndexedDB cache.
 
 Important caveat:
 
-- `getMatchesAfterAction` looks up the date for `lastId` and returns matches
-  with `date > lastMatch.date`. This assumes local IndexedDB data is ordered
-  newest-first and that match ids can identify the newest cached row. If future
-  sync bugs appear, first verify IndexedDB sort order and whether edits/imports
-  can leave stale local rows.
-- The current sync appends/saves new matches, but it is not a full conflict
-  resolver. Full imports, deletes, or match edits can require cache refresh or
-  cache invalidation logic if stale analysis data is observed.
+- `getMatchesAfterAction(lastId)` still supports incremental reads for other
+  screens, but `/analysis` intentionally uses the empty-id full read on page
+  entry so stale IndexedDB rows cannot override newer Postgres data.
+- The analysis cache is a replaceable local copy. Full imports, deletes, edits,
+  and new match batches should converge on the next analysis page sync.
 
 Client analysis derivation:
 
@@ -217,9 +215,8 @@ Client analysis derivation:
 Cache and revalidation:
 
 - Match writes revalidate `/analysis` together with `/` and `/history`.
-- Analysis still prefers IndexedDB when local cached data exists, so future
-  agents should consider cache invalidation when adding destructive imports,
-  hard deletes, or bulk history edits.
+- Analysis uses IndexedDB for a fast local copy, but page-entry sync treats
+  Postgres as authoritative and replaces stale local match history.
 - Do not use IndexedDB as source of truth. Postgres remains authoritative.
 
 ## Vercel and Cache

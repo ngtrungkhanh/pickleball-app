@@ -12,7 +12,7 @@ import {
 import { buildAnalysisSnapshot, edgeRecord, getAnalysisName, type AnalysisEdge, type EloResult, type PlayerMetrics, type PlayerProfile } from '@/lib/analysis-core';
 import { generateInsightsFromSnapshot } from '@/lib/insights';
 import { cn, getAvatarLetter } from '@/lib/utils';
-import { getLocalMatches, saveMatchesLocal } from '@/lib/db';
+import { getLocalMatches, replaceMatchesLocal } from '@/lib/db';
 import { getMatchesAfterAction } from '@/app/actions';
 import { isGuestId, loserFineCount } from '@/lib/guest';
 
@@ -46,6 +46,19 @@ type Insight = { type: string; title?: string; text: string; icon?: string };
 type RadarData = { attack: number; defense: number; brave: number; synergy: number; form: number; experience: number };
 type EloHistory = Array<{ date: string; ratings: Record<string, number> }>;
 
+function sortMatchesNewestFirst(matches: Match[]) {
+  return [...matches].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+}
+
+function uniqueMatches(matches: Match[]) {
+  const byId = new Map<string, Match>();
+  matches.forEach((match, index) => {
+    const key = match.id || `missing-id-${index}`;
+    byId.set(key, match);
+  });
+  return sortMatchesNewestFirst(Array.from(byId.values()));
+}
+
 function expectationDeltaText(value?: number | null) {
   const delta = Math.round(value || 0);
   const absDelta = Math.abs(delta);
@@ -78,27 +91,29 @@ export function AnalysisCenter({
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasCompletedInitialSync, setHasCompletedInitialSync] = useState(false);
 
-  // Smart Sync Logic
+  // Refresh the analysis cache from Postgres on entry. The browser cache is only
+  // a local copy and must not override a newer server snapshot.
   useEffect(() => {
     const sync = async () => {
       setIsSyncing(true);
       setHasCompletedInitialSync(false);
       try {
-        let existing = await getLocalMatches();
-        if (existing.length === 0 && initialMatches.length > 0) {
-          await saveMatchesLocal(initialMatches);
-          existing = initialMatches;
-        }
-        const lastId = existing.length > 0 ? existing[0].id : null;
-        const newMatches = await getMatchesAfterAction(lastId as string);
-        if (newMatches && newMatches.length > 0) {
-          await saveMatchesLocal(newMatches);
-          existing = await getLocalMatches();
-        }
-        setLocalMatches(existing);
+        const serverMatches = await getMatchesAfterAction('');
+        const freshMatches = uniqueMatches((serverMatches && serverMatches.length > 0 ? serverMatches : initialMatches) as Match[]);
+        await replaceMatchesLocal(freshMatches);
+        setLocalMatches(freshMatches);
       } catch (err) {
         console.error('Sync failed:', err);
-        setLocalMatches(initialMatches);
+        try {
+          const cachedMatches = await getLocalMatches();
+          setLocalMatches(
+            cachedMatches.length > initialMatches.length
+              ? uniqueMatches(cachedMatches as Match[])
+              : uniqueMatches(initialMatches)
+          );
+        } catch {
+          setLocalMatches(uniqueMatches(initialMatches));
+        }
       }
       setHasCompletedInitialSync(true);
       setIsSyncing(false);

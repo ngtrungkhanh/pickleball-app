@@ -7,6 +7,12 @@ const DB_NAME = 'PickleballDB';
 const STORE_NAME = 'matches';
 const DB_VERSION = 1;
 
+type StoredMatch = {
+  id?: string;
+  date?: string | Date | null;
+  [key: string]: unknown;
+};
+
 export async function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -21,7 +27,7 @@ export async function openDB(): Promise<IDBDatabase> {
   });
 }
 
-export async function saveMatchesLocal(matches: any[]) {
+export async function saveMatchesLocal(matches: StoredMatch[]) {
   const db = await openDB();
   const tx = db.transaction(STORE_NAME, 'readwrite');
   const store = tx.objectStore(STORE_NAME);
@@ -31,7 +37,18 @@ export async function saveMatchesLocal(matches: any[]) {
   });
 }
 
-export async function getLocalMatches(): Promise<any[]> {
+export async function replaceMatchesLocal(matches: StoredMatch[]) {
+  const db = await openDB();
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  const store = tx.objectStore(STORE_NAME);
+  store.clear();
+  matches.forEach(m => store.put(m));
+  return new Promise((resolve) => {
+    tx.oncomplete = () => resolve(true);
+  });
+}
+
+export async function getLocalMatches(): Promise<StoredMatch[]> {
   const db = await openDB();
   const tx = db.transaction(STORE_NAME, 'readonly');
   const store = tx.objectStore(STORE_NAME);
@@ -49,5 +66,5 @@ export async function getLocalMatches(): Promise<any[]> {
 
 export async function getLastMatchId(): Promise<string | null> {
   const matches = await getLocalMatches();
-  return matches.length > 0 ? matches[0].id : null;
+  return matches.length > 0 ? matches[0].id || null : null;
 }
