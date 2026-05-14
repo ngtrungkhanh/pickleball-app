@@ -264,7 +264,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
         baseWeight: 76,
         evidenceStrength: 9,
         surpriseScore: 14,
-        text: `${metric.name} đang thắng 5/5 trận gần nhất, bảng phong độ xanh kín nhìn khá cháy.`,
+        text: `${metric.name} đang thắng 5 trận liên tiếp, bảng phong độ xanh kín nhìn khá cháy.`,
       });
     }
 
@@ -279,7 +279,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
         baseWeight: 75,
         evidenceStrength: 9,
         surpriseScore: 14,
-        text: `${metric.name} đang thua 0/5 trận gần nhất, đoạn này đúng là hơi sập hầm.`,
+        text: `${metric.name} đang thua 5 trận liên tiếp, bảng phong độ đỏ kín nhìn hơi chán.`,
       });
     }
 
@@ -309,7 +309,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
         baseWeight: 56,
         evidenceStrength: evidence(metric.upsetLosses),
         surpriseScore: metric.upsetLosses * 5,
-        text: `${metric.name} có ${metric.upsetLosses} lần tỷ lệ thắng dự tính trước trận lên tới trên 70% mà vẫn rơi kèo, kèo trên cũng có ngày sập hầm.`,
+        text: `${metric.name} có ${metric.upsetLosses} lần tỷ lệ thắng dự tính trước trận lên tới trên 70% mà vẫn rơi kèo.`,
       });
     }
 
@@ -373,7 +373,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
         baseWeight: 60,
         evidenceStrength: evidence(metric.total),
         surpriseScore: places * 5,
-        text: `${metric.name} đang leo ${places} bậc trên bảng ELO gần đây, 5 trận mới nhất thắng ${recentWins}/5 nên nhìn khá có lực.`,
+        text: `${metric.name} đang leo ${places} bậc trên bảng ELO gần đây, với ${recentWins} chiến thắng trong 5 trận mới nhất, đà thăng tiến đang cực kỳ ấn tượng.`,
       });
     }
   });
@@ -678,7 +678,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
         baseWeight: 50,
         evidenceStrength: evidence(metric.total),
         surpriseScore: metric.synergyScore - metric.attackScore,
-        text: `${metric.name} ghi điểm không quá ồn ào nhưng các kèo đánh chung vẫn thắng trung bình ${round(metric.synergyScore)}% số trận.`,
+        text: `${metric.name} ghi điểm không quá ồn ào nhưng sở hữu chỉ số phối hợp đồng đội cực tốt, đạt tới ${round(metric.synergyScore)} điểm.`,
       });
     }
   });
@@ -701,7 +701,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
         baseWeight: 43,
         evidenceStrength: evidence(metric.total),
         surpriseScore: metric.avgPointsFor,
-        text: `${metric.name} đang ghi trung bình ${oneDecimal(metric.avgPointsFor)} điểm/trận, cao nhất sân ở khoản dập bóng.`,
+        text: `${metric.name} đang ghi trung bình ${oneDecimal(metric.avgPointsFor)} điểm/trận, xứng danh tay săn điểm uy tín nhất trên sân.`,
       });
     }
 
@@ -716,7 +716,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
         baseWeight: 58,
         evidenceStrength: evidence(metric.total),
         surpriseScore: (5 - metric.avgConceded) * 6,
-        text: `${metric.name} chỉ mất trung bình ${oneDecimal(metric.avgConceded)} điểm/trận, phòng thủ kiểu này đối thủ rất khó đóng điểm.`,
+        text: `${metric.name} chỉ mất trung bình ${oneDecimal(metric.avgConceded)} điểm/trận, đúng chất bức tường phòng ngự cực kỳ khó để xuyên phá.`,
       });
     }
 
@@ -746,7 +746,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
         baseWeight: 52,
         evidenceStrength: evidence(metric.closeLosses),
         surpriseScore: metric.closeLosses * 2,
-        text: `${metric.name} đã thua sát nút ${metric.closeLosses} trận chỉ 1-2 điểm, đúng kiểu thánh nhọ sân bãi.`,
+        text: `${metric.name} đã thua sát nút ${metric.closeLosses} trận với cách biệt vỏn vẹn 2 điểm, đúng kiểu thánh nhọ sân bãi.`,
       });
     }
 
@@ -776,7 +776,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
         baseWeight: 48,
         evidenceStrength: evidence(metric.bagelLosses),
         surpriseScore: metric.bagelLosses * 5,
-        text: `${metric.name} có ${metric.bagelLosses} trận thua mà team chỉ ghi tối đa 2 điểm, đoạn này hơi sập nguồn.`,
+        text: `${metric.name} có ${metric.bagelLosses} trận thua mà team chỉ ghi tối đa 2 điểm.`,
       });
     }
 
@@ -850,7 +850,7 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
     const metric = snapshot.metrics.get(edge.playerId);
     if (!metric) return;
 
-    if (edge.rate === 100) {
+    if (edge.rate >= 80) {
       addCandidate(candidates, snapshot, {
         type: 'hard_counter',
         title: '🦅 KHẮC TINH',
@@ -861,11 +861,11 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
         baseWeight: 72,
         evidenceStrength: evidence(edge.total),
         surpriseScore: edge.total * 4,
-        text: `${edge.playerName} gặp ${edge.otherName} đang thắng ${edge.wins}/${edge.total} trận, tỷ lệ ${edgeRate(edge)}%, kèo này nhìn khá khắc tinh.`,
+        text: `${edge.playerName} đang tỏ ra cực kỳ "kỵ rơ" với ${edge.otherName} khi giành chiến thắng tới ${edge.wins}/${edge.total} trận đối đầu.`,
       });
     }
 
-    if (edge.rate === 0) {
+    if (edge.rate <= 20) {
       addCandidate(candidates, snapshot, {
         type: 'target_dummy',
         title: '🧸 BỊCH BÔNG GIẢI TRÍ',
@@ -876,7 +876,7 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
         baseWeight: 72,
         evidenceStrength: evidence(edge.total),
         surpriseScore: edge.total * 4,
-        text: `${edge.playerName} gặp ${edge.otherName} đang thua ${edge.losses}/${edge.total} trận, cứ đối đầu là hơi bị át vía.`,
+        text: `Cứ hễ đụng độ ${edge.otherName} là ${edge.playerName} lại gặp dớp, để thua tới ${edge.losses}/${edge.total} trận.`,
       });
     }
 
@@ -906,7 +906,7 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
         baseWeight: 62,
         evidenceStrength: evidence(edge.total),
         surpriseScore: absRound(edge.impact),
-        text: `${edge.playerName} gặp ${edge.otherName} thì thấp hơn mức dự tính từ ELO trước trận ${absRound(edge.impact)} điểm, dấu hiệu khớp kèo khá rõ.`,
+        text: `${edge.playerName} mỗi khi đối đầu ${edge.otherName} thường có dấu hiệu bị "cóng" tâm lý, khiến kết quả thi đấu thực tế thấp hơn kỳ vọng từ ELO tới ${absRound(edge.impact)} điểm.`,
       });
     }
 
@@ -921,7 +921,7 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
         baseWeight: 62,
         evidenceStrength: evidence(edge.total),
         surpriseScore: edge.impact,
-        text: `${edge.playerName} gặp ${edge.otherName} đang thắng ${edge.wins}/${edge.total} trận và cao hơn mức dự tính từ ELO trước trận ${edge.impact} điểm, kèo này khá thơm.`,
+        text: `${edge.playerName} mỗi khi chạm trán ${edge.otherName} thường thi đấu cực kỳ thăng hoa, giúp hiệu suất thực tế vượt xa kỳ vọng từ ELO tới ${edge.impact} điểm.`,
       });
     }
   });
@@ -986,7 +986,7 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
         baseWeight: 42,
         evidenceStrength: evidence(metric.totalVsHigherElo),
         surpriseScore: higherLossRate - 55,
-        text: `${metric.name} gặp nhóm ELO cao hơn đang thua ${metric.lossesVsHigherElo}/${metric.totalVsHigherElo} trận, lịch đấu này không dễ thở.`,
+        text: `${metric.name} gặp nhóm ELO cao hơn đang thua ${metric.lossesVsHigherElo}/${metric.totalVsHigherElo} trận, đụng độ "chiếu trên" quả thực không hề dễ nuốt.`,
       });
     }
   });
@@ -1010,7 +1010,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
         baseWeight: 40,
         evidenceStrength: evidence(metric.total),
         surpriseScore: metric.dailyMaxMatches,
-        text: `${metric.name} đã đánh ${metric.total} trận, nhiều nhất sân, đúng chất máy cày không biết mệt.`,
+        text: `${metric.name} đang tạm dẫn đầu toàn sân về số lượng cày ải với ${metric.total} trận, phong độ cực kỳ bền bỉ.`,
       });
     }
 
