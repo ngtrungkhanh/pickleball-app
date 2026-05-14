@@ -142,6 +142,26 @@ update this table in the same unit of work.
 - `top_attack` uses average points scored per match, not `attackScore`.
 - Several rules use internal `impact` fields in code, but all user-facing copy
   must phrase them as ELO expectation gaps.
+- Decision: update `perfect_form5` and `zero_form5` copy to say
+  "thắng/thua 5 trận gần nhất" instead of "thắng/thua 5/5" or "thua 0/5".
+
+## Pending Copy Changes (not yet in code)
+
+| Rule | Type | Current copy | New copy | Notes |
+|---:|---|---|---|---|
+| 5 | `earthquake_victim` | `...sập hầm.` | Remove "sập hầm", keep sentence neutral | |
+| 6 | `perfect_form5` | `thắng 5/5 trận gần nhất` | `thắng 5 trận liên tiếp` | |
+| 7 | `zero_form5` | `thua 0/5 trận gần nhất, đoạn này đúng là hơi sập hầm.` | `thua 5 trận liên tiếp.` | Remove fraction notation + "sập hầm" |
+| 32 | `bagel_loss` | `...hơi sập nguồn.` | Remove "sập nguồn", keep factual | |
+
+## Pending Copy Changes (not yet in code)
+
+| Rule | Type | Current copy | New copy | Notes |
+|---:|---|---|---|---|
+| 5 | `earthquake_victim` | `...sập hầm.` | Remove "sập hầm", keep sentence neutral | |
+| 6 | `perfect_form5` | `thắng 5/5 trận gần nhất` | `thắng 5 trận liên tiếp` | |
+| 7 | `zero_form5` | `thua 0/5 trận gần nhất, đoạn này đúng là hơi sập hầm.` | `thua 5 trận liên tiếp.` | Remove fraction notation + "sập hầm" |
+| 32 | `bagel_loss` | `...hơi sập nguồn.` | Remove "sập nguồn", keep factual | |
 
 ## Completed Verification
 
