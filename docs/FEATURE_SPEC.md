@@ -271,8 +271,8 @@ Current analysis rules:
   rarity/frequency/appearance metadata so rare events can be prioritized over
   always-available facts.
 - Hub insight comments read from the shared local cache. Analysis should not
-  auto-fetch online after mount; reload/direct route preload and the manual
-  refresh button are the online reconciliation paths.
+  auto-fetch online after mount; reload/direct route preload is the normal
+  online reconciliation path when the user needs fresh data.
 - Hub insight copy that mentions win rate should include record context such as
   `wins/total` or `wins-total record`. Strong dominance wording should be
   reserved for players whose overall record/ELO supports that framing; otherwise

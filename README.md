@@ -23,6 +23,10 @@ Read only when relevant:
 - `docs/FEATURE_SPEC.md` for product behavior and screen overview
 - `docs/DATA_FLOW.md` for database, server actions, cache, and localStorage
 - `docs/UI_RULES.md` for layout, wording, and responsive UI rules
+- `docs/ANALYSIS_INSIGHTS_RULES.md` for `/analysis` insight rules, triggers,
+  copy, and expansion roadmap
+- `docs/ANALYSIS_INSIGHTS_SELECTION.md` for `/analysis` insight audit,
+  weighting, cooldown/pity, and implementation plan
 
 Avoid reading large legacy files unless the task requires them. Use `rg` first.
 

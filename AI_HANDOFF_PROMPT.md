@@ -36,6 +36,8 @@ Read deeper docs only when relevant:
 - docs/FEATURE_SPEC.md for product behavior, screens, and business rules.
 - docs/DATA_FLOW.md for database, server actions, cache, localStorage, and match save flow.
 - docs/UI_RULES.md for layout, wording, responsive behavior, and visual rules.
+- docs/ANALYSIS_INSIGHTS_RULES.md before changing `/analysis` insight rules, thresholds, frequency, copy, or future scenario expansion.
+- docs/ANALYSIS_INSIGHTS_SELECTION.md before tuning Hub insight weights, semantic groups, cooldown/pity behavior, audit simulation, or the agreed next selection implementation.
 
 Recent behavior updates to remember:
 - Match save now requires 4 selected players (no empty slot).
@@ -48,7 +50,9 @@ Recent behavior updates to remember:
 - Shared route cache work is now higher priority than expanding 50 insight copy:
   Dashboard and Analysis seed/read a common IndexedDB cache, score-save responses
   replace optimistic local rows with canonical server matches, and Analysis only
-  goes online through route preload/reload or manual refresh.
+  goes online through route preload/reload.
+- Dashboard and Analysis should not show manual `Làm mới` buttons; use browser
+  reload/F5 when fresh server data is needed.
 
 Working rules:
 - Do not touch main unless the user explicitly asks for a release.
@@ -66,8 +70,9 @@ When starting:
 3. State what you will check or implement first.
 6. When done, report changed files, verification run, and any remaining risk.
 7. CURRENT PENDING TASKS TO IMPLEMENT:
-   - **Shared Data Cache Validation**: Test local-first Dashboard/Analysis cache, canonical score-save replacement, and manual refresh on Vercel Preview before resuming insight-copy expansion.
+   - **Shared Data Cache Validation**: Test local-first Dashboard/Analysis cache, canonical score-save replacement, and reload/F5 reconciliation on Vercel Preview before resuming insight-copy expansion.
    - **UI/UX Polishing**: Implement "Sports Ticker" or "Flash News Card" style for the Analytics Center Insights as requested by user.
-   - **Data Validation**: Ensure the newly implemented 50 Insights engine handles Edge Cases without crashing when data is sparse.
+   - **Data Validation**: Ensure the 52 Insights engine handles edge cases without crashing when data is sparse.
+   - **Insight Selection Review**: The `balanced-v1.1` selection model is ported; use `docs/ANALYSIS_INSIGHTS_SELECTION.md` and audit script results when tuning wording/rule weights after Vercel Preview review.
    - **Merge & Deploy**: Merge `dev` to `main` when features are validated.
 ```

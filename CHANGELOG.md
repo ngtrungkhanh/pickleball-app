@@ -68,6 +68,9 @@ repo.
   - `docs/FEATURE_SPEC.md`
   - `docs/DATA_FLOW.md`
   - `docs/UI_RULES.md`
+- Consolidated insight docs into `docs/ANALYSIS_INSIGHTS_RULES.md` and
+  `docs/ANALYSIS_INSIGHTS_SELECTION.md` so future agents have one rule source
+  and one selection/audit source.
 - Updated `AI_HANDOFF_PROMPT.md` so future AI sessions read only the required
   docs first and then open deeper docs by task type.
 
@@ -224,20 +227,20 @@ repo.
   where they actually appear, preventing impossible matchup records that exceed
   the player's real match total.
 - Rebuilt the Hub insight registry to the 52-scenario first pass from
-  `docs/ANALYSIS_INSIGHTS_50_RULE_PLAN.md`, with one evidence-backed sentence
+  `docs/ANALYSIS_INSIGHTS_RULES.md`, with one evidence-backed sentence
   per scenario and rarity/frequency/appearance metadata for feed selection.
 - Rephrased user-facing ELO expectation deltas as `cao hơn/thấp hơn kỳ vọng từ
   ELO X điểm` instead of raw `baseline`, `impact`, or machine-prediction wording.
 - Updated Profile and Network analysis cards to use the same ELO-expectation
   wording, replacing user-facing `Baseline` / `điểm hiệu suất` labels with
   plain-language expectation deltas and sample size.
-- Aligned `docs/ANALYSIS_INSIGHTS_50_RULE_PLAN.md` with the actual 52 rule
+- Aligned `docs/ANALYSIS_INSIGHTS_RULES.md` with the actual 52 rule
   triggers and feed frequency metadata in `src/lib/insights.ts`, including
   notes for approximation or global-only rules.
 - Added the current code sentence for every 52-rule insight row so trigger,
   frequency, and copy can be reviewed together from the plan.
-- Archived `docs/ANALYSIS_INSIGHTS_REWRITE_PLAN.md` so future work follows the
-  52-rule plan instead of the older architecture rewrite plan.
+- Removed the older architecture rewrite plan so future work follows
+  `docs/ANALYSIS_INSIGHTS_RULES.md` and `docs/ANALYSIS_INSIGHTS_SELECTION.md`.
 - Delayed Hub insight rendering until the initial match cache/server sync
   finishes, preventing comments from appearing after refresh and then changing
   again a second later.
@@ -251,3 +254,20 @@ repo.
   data version; the client replaces the optimistic `TMP-*` local row with that
   match so Analysis can read the latest result from local cache without an
   extra online sync.
+- Removed manual `Làm mới` buttons from Dashboard and Analysis; reload/F5 is
+  now the explicit fresh-data path.
+- Tuned Hub insight selection so `KHẮC TINH` / `BỊCH BÔNG` opponent scenarios
+  no longer dominate the first feed slot every time, and added page-load seeded
+  ordering so similarly strong comments can reshuffle after F5 without using an
+  auto-rotate timer.
+- Added reusable Hub insight selection audit tooling and documented the agreed
+  next selection redesign: rule-type weighted selection, weighted candidate
+  choice, semantic groups for V4, cooldown/soft pity, and trigger updates for
+  `cover_master`, `rare_pair_hot`, and `defense_wall`.
+- Extended the insight audit script with a lab-only `--strategy balanced-v1`
+  simulator so selection/cooldown/pity and proposed trigger changes can be
+  tested against backup data before being ported to production insight code.
+- Ported the approved `balanced-v1.1` Hub insight selection model into
+  production: rule-type weighted selection, weighted candidate choice,
+  semantic-group diversity, localStorage cooldown/soft pity, and relative
+  `defense_wall` triggering.

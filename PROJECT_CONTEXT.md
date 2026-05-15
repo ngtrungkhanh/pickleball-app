@@ -29,9 +29,11 @@ Read only when relevant:
 - `docs/DATA_FLOW.md` for database, server actions, cache, localStorage, and
   match save flow.
 - `docs/UI_RULES.md` for layout, wording, responsive behavior, and visual rules.
-- `docs/ANALYSIS_INSIGHTS_50_RULE_PLAN.md` before changing `/analysis`
-  insight logic, trigger thresholds, feed frequency, or copy. This is the
-  active source of truth for Hub insight rules.
+- `docs/ANALYSIS_INSIGHTS_RULES.md` before changing `/analysis` insight logic,
+  trigger thresholds, feed frequency, scenario copy, or future scenario
+  expansion. This is the active source of truth for Hub insight rules.
+- `docs/ANALYSIS_INSIGHTS_SELECTION.md` before tuning Hub insight selection,
+  weights, semantic groups, cooldown/pity behavior, or audit simulation.
 
 ## Product Priorities
 
@@ -55,8 +57,9 @@ Read only when relevant:
 - Dashboard and Analysis are moving toward a shared IndexedDB route cache:
   Postgres remains authoritative, Dashboard/F5/direct route preload seeds local
   cache, score-save responses replace optimistic local rows with canonical
-  server matches, and Analysis reads local cache unless the user reloads or
-  presses refresh.
+  server matches, and Analysis reads local cache unless the user reloads.
+- Dashboard and Analysis no longer show manual `Làm mới` buttons; browser
+  reload/F5 is the intended fresh-data action.
 - Admin dashboard supports both `.xlsx` bulk migration and `.json` full database backup/restore mechanisms.
 - Local demo routes such as `/ui-demo` and `/picker-demo` may exist on one
   machine for review, but should not be pushed unless explicitly requested.
@@ -65,13 +68,15 @@ Read only when relevant:
 
 - **UI/UX Refinement**: Implement "Sports Ticker" style (marquee) or dynamic Flash Cards for displaying the generated Insights on the Home screen.
 - **Shared Data Cache Review**: Validate local-first Dashboard/Analysis cache,
-  canonical score-save replacement, and manual refresh before resuming
-  insight-copy expansion work.
+  canonical score-save replacement, and reload/F5 reconciliation before
+  resuming insight-copy expansion work.
 - **Analysis Copy Review**: Review Hub insight comment tone on Vercel Preview
   after the shared analysis core has real dev data.
 - **Analysis Insights Review**: The first-pass 52-scenario insight registry is
-  implemented. Next review Vercel Preview with real dev data, tune wording/rule
-  weights, then expand each scenario from 1 sentence to 4-5 variants.
+  implemented, with type-first weighted selection, semantic-group diversity,
+  cooldown/soft pity, and the relative `defense_wall` trigger. Next review
+  Vercel Preview with real dev data, tune wording/rule weights if needed, then
+  expand each scenario from 1 sentence to 4-5 variants.
 - **Merge & Deploy**: Validate `dev` on Vercel preview, then merge to `main`.
 
 ## Architecture Snapshot

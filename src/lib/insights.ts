@@ -32,6 +32,11 @@ type InsightCandidate = Insight & {
   surpriseScore: number;
 };
 
+type InsightSelectionOptions = {
+  seed?: number;
+  selectionState?: InsightSelectionState;
+};
+
 type CandidateConfig = {
   type: string;
   title: string;
@@ -46,6 +51,20 @@ type CandidateConfig = {
   text: string;
 };
 
+export type InsightSelectionRuleState = {
+  eligibleMisses: number;
+  cooldownLoads: number;
+  recentSeenCount?: number;
+  lastSeenAt?: number;
+};
+
+export type InsightSelectionState = Record<string, InsightSelectionRuleState>;
+
+export type InsightSelectionResult = {
+  insights: Insight[];
+  nextSelectionState: InsightSelectionState;
+};
+
 const RARITY_SCORE: Record<InsightRarity, number> = {
   common: 0,
   uncommon: 8,
@@ -58,6 +77,76 @@ const FREQUENCY_PENALTY: Record<InsightFrequency, number> = {
   frequent: 13,
   occasional: 5,
   rare: 0,
+};
+
+const SEMANTIC_GROUP_BY_TYPE: Record<string, string> = {
+  elo_king: 'elo_power',
+  giant_killer: 'elo_power',
+  earthquake_victim: 'elo_power',
+  gatekeeper: 'elo_power',
+  most_improved: 'elo_power',
+  free_fall: 'elo_power',
+  bully_lower_elo: 'elo_matchup',
+  victim_strong_elo: 'elo_matchup',
+  boss_hunter: 'elo_matchup',
+  rank_leader: 'rank_race',
+  rank_climber: 'rank_race',
+  hot_streak: 'form_streak',
+  cold_streak: 'form_streak',
+  perfect_form5: 'form_streak',
+  zero_form5: 'form_streak',
+  streak_breaker: 'form_streak',
+  alternating_form: 'form_streak',
+  perfect_duo: 'partner_pair',
+  bad_duo: 'partner_pair',
+  stable_partner: 'partner_pair',
+  rare_pair_hot: 'partner_pair',
+  glued_pair: 'partner_pair',
+  disaster_duo: 'partner_impact',
+  partner_boost: 'partner_impact',
+  partner_drag: 'partner_impact',
+  carry_partner: 'partner_impact',
+  heavy_backpack: 'partner_impact',
+  cover_master: 'partner_impact',
+  partner_long_games: 'clutch_drama',
+  dominant_closer: 'score_style',
+  top_attack: 'score_style',
+  defense_wall: 'score_style',
+  bagel_loss: 'score_style',
+  score_bully: 'score_style',
+  low_score_magnet: 'score_style',
+  close_loss: 'clutch_drama',
+  long_game_addict: 'clutch_drama',
+  clutch_master: 'clutch_drama',
+  late_collapse: 'clutch_drama',
+  hard_counter: 'head_to_head',
+  target_dummy: 'head_to_head',
+  long_game_rivalry: 'head_to_head',
+  mental_block: 'head_to_head',
+  sweet_matchup: 'head_to_head',
+  balanced_rivalry: 'head_to_head',
+  revenge_win: 'head_to_head',
+  revenge_target: 'head_to_head',
+  iron_lung: 'activity_attendance',
+  missing_player: 'activity_attendance',
+  mercenary: 'activity_attendance',
+  fine_sponsor: 'money_fun',
+  experience_seeker: 'meta_weird',
+};
+
+const SEMANTIC_GROUP_PRIORITY: Record<string, number> = {
+  head_to_head: 1.15,
+  partner_impact: 1.12,
+  form_streak: 1.08,
+  elo_matchup: 1.08,
+  clutch_drama: 1.04,
+  score_style: 0.98,
+  partner_pair: 0.96,
+  elo_power: 0.95,
+  rank_race: 0.86,
+  activity_attendance: 0.82,
+  money_fun: 0.84,
+  meta_weird: 0.8,
 };
 
 function namesFor(snapshot: AnalysisSnapshot, ids: string[]) {
@@ -131,6 +220,74 @@ function evidence(total: number) {
   if (total >= 6) return 9;
   if (total >= 4) return 6;
   return 2;
+}
+
+function semanticGroupFor(candidate: InsightCandidate) {
+  return SEMANTIC_GROUP_BY_TYPE[candidate.type] || candidate.group;
+}
+
+function seededRandom(seed: number | undefined) {
+  let state = (seed || Date.now()) >>> 0;
+  return () => {
+    state += 0x6D2B79F5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function weightedPick<T>(items: T[], weightFor: (item: T) => number, random: () => number) {
+  const weighted = items
+    .map(item => ({ item, weight: Math.max(0, weightFor(item)) }))
+    .filter(entry => entry.weight > 0);
+  const total = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+  if (total <= 0) return null;
+
+  let cursor = random() * total;
+  for (const entry of weighted) {
+    cursor -= entry.weight;
+    if (cursor <= 0) return entry.item;
+  }
+
+  return weighted[weighted.length - 1]?.item || null;
+}
+
+function cooldownForPosition(index: number) {
+  if (index <= 1) return 5;
+  if (index <= 4) return 3;
+  return 2;
+}
+
+function normalizeSelectionState(state: InsightSelectionState | undefined) {
+  const next = new Map<string, InsightSelectionRuleState>();
+  Object.entries(state || {}).forEach(([type, value]) => {
+    next.set(type, {
+      eligibleMisses: Math.max(0, Number(value.eligibleMisses) || 0),
+      cooldownLoads: Math.max(0, Number(value.cooldownLoads) || 0),
+      recentSeenCount: Math.max(0, Number(value.recentSeenCount) || 0),
+      lastSeenAt: Math.max(0, Number(value.lastSeenAt) || 0),
+    });
+  });
+  return next;
+}
+
+function serializeSelectionState(state: Map<string, InsightSelectionRuleState>) {
+  const serialized: InsightSelectionState = {};
+  state.forEach((value, type) => {
+    const eligibleMisses = Math.min(20, Math.max(0, Math.round(value.eligibleMisses || 0)));
+    const cooldownLoads = Math.min(8, Math.max(0, Math.round(value.cooldownLoads || 0)));
+    const recentSeenCount = Math.min(20, Math.max(0, Math.round(value.recentSeenCount || 0)));
+    const lastSeenAt = Math.max(0, Math.round(value.lastSeenAt || 0));
+    if (eligibleMisses > 0 || cooldownLoads > 0 || recentSeenCount > 0 || lastSeenAt > 0) {
+      serialized[type] = { eligibleMisses, cooldownLoads, recentSeenCount, lastSeenAt };
+    }
+  });
+  return serialized;
+}
+
+function candidateSelectionWeight(candidate: InsightCandidate, minScore: number) {
+  return Math.max(1, selectionScore(candidate) - minScore + 8);
 }
 
 function pattern(results: Result[]) {
@@ -687,6 +844,12 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
 function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnapshot) {
   const active = snapshot.playerMetrics.filter(metric => metric.total > 0);
   const topAttack = [...active].filter(metric => metric.total >= 8).sort((a, b) => b.avgPointsFor - a.avgPointsFor)[0];
+  const avgConceded = active.reduce((sum, metric) => sum + metric.avgConceded, 0) / Math.max(1, active.length);
+  const defenseLeaders = new Set([...active]
+    .filter(metric => metric.total >= 8)
+    .sort((a, b) => a.avgConceded - b.avgConceded)
+    .slice(0, 2)
+    .map(metric => metric.id));
 
   active.forEach(metric => {
     if (topAttack?.id === metric.id && metric.avgPointsFor >= 9) {
@@ -705,17 +868,18 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
       });
     }
 
-    if (metric.total >= 8 && metric.avgConceded <= 5) {
+    const defenseLift = avgConceded - metric.avgConceded;
+    if (metric.total >= 8 && defenseLeaders.has(metric.id) && defenseLift >= 0.8 && metric.avgConceded <= 7.5) {
       addCandidate(candidates, snapshot, {
         type: 'defense_wall',
         title: '🛡️ BỨC TƯỜNG BÊ TÔNG',
         group: 'score',
         participantIds: [metric.id],
-        rarity: metric.avgConceded <= 4 ? 'rare' : 'uncommon',
+        rarity: defenseLift >= 1.5 ? 'rare' : 'uncommon',
         frequency: 'occasional',
-        baseWeight: 58,
+        baseWeight: 50,
         evidenceStrength: evidence(metric.total),
-        surpriseScore: (5 - metric.avgConceded) * 6,
+        surpriseScore: Math.min(18, defenseLift * 8),
         text: `${metric.name} chỉ mất trung bình ${oneDecimal(metric.avgConceded)} điểm/trận, đúng chất bức tường phòng ngự cực kỳ khó để xuyên phá.`,
       });
     }
@@ -858,9 +1022,10 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
         participantIds: [edge.playerId, edge.otherId],
         rarity: edge.total >= 6 ? 'epic' : 'rare',
         frequency: 'rare',
-        baseWeight: 72,
+        appearanceRate: 0.85,
+        baseWeight: 50,
         evidenceStrength: evidence(edge.total),
-        surpriseScore: edge.total * 4,
+        surpriseScore: Math.min(18, edge.total * 2),
         text: `${edge.playerName} đang tỏ ra cực kỳ "kỵ rơ" với ${edge.otherName} khi giành chiến thắng tới ${edge.wins}/${edge.total} trận đối đầu.`,
       });
     }
@@ -873,9 +1038,10 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
         participantIds: [edge.playerId, edge.otherId],
         rarity: edge.total >= 6 ? 'epic' : 'rare',
         frequency: 'rare',
-        baseWeight: 72,
+        appearanceRate: 0.85,
+        baseWeight: 50,
         evidenceStrength: evidence(edge.total),
-        surpriseScore: edge.total * 4,
+        surpriseScore: Math.min(18, edge.total * 2),
         text: `Cứ hễ đụng độ ${edge.otherName} là ${edge.playerName} lại gặp dớp, để thua tới ${edge.losses}/${edge.total} trận.`,
       });
     }
@@ -1103,51 +1269,98 @@ function selectionScore(candidate: InsightCandidate) {
   return raw * candidate.appearanceRate;
 }
 
-function selectInsights(candidates: InsightCandidate[], limit = 8) {
-  const finalInsights: InsightCandidate[] = [];
-  const playerMentions = new Map<string, number>();
-  const playerGroups = new Map<string, Set<InsightGroup>>();
-  const usedTypes = new Set<string>();
+function selectInsights(candidates: InsightCandidate[], limit = 8, options: InsightSelectionOptions = {}): InsightSelectionResult {
+  const random = seededRandom(options.seed);
+  const byType = new Map<string, InsightCandidate[]>();
+  const state = normalizeSelectionState(options.selectionState);
 
-  const scored = [...candidates].sort((a, b) => {
-    return selectionScore(b) - selectionScore(a) || b.evidenceStrength - a.evidenceStrength || b.surpriseScore - a.surpriseScore;
+  candidates.forEach(candidate => {
+    byType.set(candidate.type, [...(byType.get(candidate.type) || []), candidate]);
   });
 
-  for (const candidate of scored) {
-    if (finalInsights.length >= limit) break;
-    if (usedTypes.has(candidate.type)) continue;
-
-    let canUse = true;
-    for (const participantId of candidate.participantIds) {
-      if ((playerMentions.get(participantId) || 0) >= 2) {
-        canUse = false;
-        break;
-      }
-      if (playerGroups.get(participantId)?.has(candidate.group)) {
-        canUse = false;
-        break;
-      }
-    }
-
-    if (!canUse) continue;
-
-    finalInsights.push(candidate);
-    usedTypes.add(candidate.type);
-    candidate.participantIds.forEach(participantId => {
-      playerMentions.set(participantId, (playerMentions.get(participantId) || 0) + 1);
-      if (!playerGroups.has(participantId)) playerGroups.set(participantId, new Set());
-      playerGroups.get(participantId)!.add(candidate.group);
+  byType.forEach((_candidatesForType, type) => {
+    const typeState = state.get(type) || { eligibleMisses: 0, cooldownLoads: 0 };
+    state.set(type, {
+      ...typeState,
+      cooldownLoads: Math.max(0, typeState.cooldownLoads - 1),
     });
+  });
+
+  const selected: InsightCandidate[] = [];
+  const selectedTypes = new Set<string>();
+  const groupCounts = new Map<string, number>();
+  const presentTypes = [...byType.keys()].sort();
+
+  while (selected.length < limit) {
+    const remainingTypes = presentTypes.filter(type => !selectedTypes.has(type));
+    if (remainingTypes.length === 0) break;
+
+    const pickedType = weightedPick(remainingTypes, type => {
+      const typeState = state.get(type) || { eligibleMisses: 0, cooldownLoads: 0 };
+      if (typeState.cooldownLoads > 0) return 0;
+
+      const typeCandidates = byType.get(type) || [];
+      const scores = typeCandidates.map(candidate => selectionScore(candidate));
+      const bestScore = Math.max(...scores);
+      const avgScore = scores.reduce((sum, score) => sum + score, 0) / Math.max(1, scores.length);
+      const group = semanticGroupFor(typeCandidates[0]);
+      const groupCount = groupCounts.get(group) || 0;
+      if (groupCount >= 2) return 0;
+
+      const groupPenalty = groupCount === 1 ? 0.38 : 1;
+      const priority = SEMANTIC_GROUP_PRIORITY[group] || 1;
+      const pityBonus = Math.min(26, typeState.eligibleMisses * 3);
+      const countBonus = Math.min(8, Math.log2(typeCandidates.length + 1) * 2);
+      const scoreMix = (bestScore * 0.85) + (avgScore * 0.15);
+      return Math.max(18, scoreMix + countBonus + pityBonus) * groupPenalty * priority;
+    }, random);
+
+    if (!pickedType) break;
+
+    const typeCandidates = byType.get(pickedType) || [];
+    const minScore = Math.min(...typeCandidates.map(candidate => selectionScore(candidate)));
+    const pickedCandidate = weightedPick(typeCandidates, candidate => candidateSelectionWeight(candidate, minScore), random);
+    if (!pickedCandidate) break;
+
+    selected.push(pickedCandidate);
+    selectedTypes.add(pickedType);
+    const group = semanticGroupFor(pickedCandidate);
+    groupCounts.set(group, (groupCounts.get(group) || 0) + 1);
   }
 
-  return finalInsights.map(candidate => ({
-    type: candidate.type,
-    title: candidate.title,
-    text: candidate.text,
-    playersInvolved: candidate.playersInvolved,
-    rarity: candidate.rarity,
-    weight: candidate.weight,
-  }));
+  const now = Date.now();
+  presentTypes.forEach(type => {
+    const typeState = state.get(type) || { eligibleMisses: 0, cooldownLoads: 0 };
+    if (selectedTypes.has(type)) {
+      const index = selected.findIndex(candidate => candidate.type === type);
+      state.set(type, {
+        eligibleMisses: 0,
+        cooldownLoads: Math.max(typeState.cooldownLoads, cooldownForPosition(index)),
+        recentSeenCount: Math.min(20, (typeState.recentSeenCount || 0) + 1),
+        lastSeenAt: now,
+      });
+      return;
+    }
+
+    if (typeState.cooldownLoads === 0) {
+      state.set(type, {
+        ...typeState,
+        eligibleMisses: Math.min(20, typeState.eligibleMisses + 1),
+      });
+    }
+  });
+
+  return {
+    insights: selected.map(candidate => ({
+      type: candidate.type,
+      title: candidate.title,
+      text: candidate.text,
+      playersInvolved: candidate.playersInvolved,
+      rarity: candidate.rarity,
+      weight: candidate.weight,
+    })),
+    nextSelectionState: serializeSelectionState(state),
+  };
 }
 
 export function generateInsightCandidatesForDebug(snapshot: AnalysisSnapshot) {
@@ -1165,12 +1378,13 @@ export function generateInsightCandidatesForDebug(snapshot: AnalysisSnapshot) {
     participants: candidate.playersInvolved,
     rarity: candidate.rarity,
     frequency: candidate.frequency,
+    semanticGroup: semanticGroupFor(candidate),
     selectionScore: Math.round(selectionScore(candidate)),
     text: candidate.text,
   }));
 }
 
-export function generateInsightsFromSnapshot(snapshot: AnalysisSnapshot): Insight[] {
+export function generateInsightSelectionResultFromSnapshot(snapshot: AnalysisSnapshot, options: InsightSelectionOptions = {}): InsightSelectionResult {
   const candidates: InsightCandidate[] = [];
   addFormAndEloCandidates(candidates, snapshot);
   addStoryCandidates(candidates, snapshot);
@@ -1178,7 +1392,11 @@ export function generateInsightsFromSnapshot(snapshot: AnalysisSnapshot): Insigh
   addScoreCandidates(candidates, snapshot);
   addOpponentCandidates(candidates, snapshot);
   addFunCandidates(candidates, snapshot);
-  return selectInsights(candidates, 8);
+  return selectInsights(candidates, 8, options);
+}
+
+export function generateInsightsFromSnapshot(snapshot: AnalysisSnapshot, options: InsightSelectionOptions = {}): Insight[] {
+  return generateInsightSelectionResultFromSnapshot(snapshot, options).insights;
 }
 
 export function generateAdvancedInsights(

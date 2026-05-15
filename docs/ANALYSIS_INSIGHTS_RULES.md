@@ -1,16 +1,18 @@
-# Analysis Insights 52 Rule Plan
+# Analysis Insights Rules
 
-This is the active source of truth for `/analysis` Hub insights. Keep this file
-aligned with `src/lib/insights.ts` before changing trigger logic, frequency, or
-copy.
+This is the active source of truth for `/analysis` Hub insight rules, including
+the current 52 implemented scenarios and the V4 expansion roadmap. Keep this
+file aligned with `src/lib/insights.ts` before changing trigger logic,
+frequency, or copy.
 
 ## Current Scope
 
 - Implemented rule types: 52/52.
 - Current copy scope: 1 sentence per rule.
-- Next planned work: review all 52 triggers, frequency weights, and wording on
-  Vercel Preview before expanding each rule to 4-5 deterministic text variants.
-- Archived architecture plan: `docs/ANALYSIS_INSIGHTS_REWRITE_PLAN.md`.
+- Next planned work: implement the selection model in
+  `docs/ANALYSIS_INSIGHTS_SELECTION.md`, then review triggers, frequency
+  weights, and wording on Vercel Preview before expanding each rule to 4-5
+  deterministic text variants.
 
 ## User-Facing Wording Rules
 
@@ -39,6 +41,10 @@ copy.
   stories.
 - Final score shape in code:
   `selectionScore = (baseWeight + rarityBonus + evidenceStrength + surpriseScore - frequencyPenalty) * appearanceRate`.
+- The Analysis UI can pass a page-load seed into insight selection. The seed
+  adds bounded deterministic jitter to candidate picking/display order so
+  similarly strong stories can reshuffle after F5 without using an auto-rotate
+  timer.
 
 Selection rules:
 
@@ -186,16 +192,16 @@ update this table in the same unit of work.
 | 16 | `bad_duo` | Canonical partner pair edge `total >= 4` and `rate <= 25` | occasional / 1 | `${edge.playerName} đi với ${edge.otherName} mới thắng ${edge.wins}/${edge.total} trận, tỷ lệ ${edgeRate(edge)}%, dữ liệu đang báo hơi dẫm chân nhau.` | | Pair-level rule: A-B and B-A are deduped before candidates are created. |
 | 17 | `partner_boost` | Partner edge `total >= 4`, `impact >= 15`, and `rate >= 50` | rare / 1 | `${edge.playerName} cặp với ${edge.otherName} thắng ${edge.wins}/${edge.total} trận và cao hơn mức dự tính từ ELO trước trận ${edge.impact} điểm.` | | User text phrases impact as ELO expectation gap. |
 | 18 | `partner_drag` | Partner edge `total >= 4`, `impact <= -15`, and `rate <= 40` | rare / 1 | `${edge.playerName} đứng cùng ${edge.otherName} chỉ thắng ${edge.wins}/${edge.total} trận, lại thấp hơn mức dự tính từ ELO trước trận ${absRound(edge.impact)} điểm.` | | User text phrases impact as ELO expectation gap. |
-| 19 | `cover_master` | Player `total >= 8`, `attackScore <= 85`, `synergyScore >= 60`, and at least 2 partner edges with `total >= 4` | rare / 1 | `${metric.name} ghi điểm không quá ồn ào nhưng sở hữu chỉ số phối hợp đồng đội cực tốt, đạt tới ${round(metric.synergyScore)} điểm.` | | Review thresholds; attack cutoff may be too loose. |
+| 19 | `cover_master` | Player `total >= 8`, `attackScore <= 85`, `synergyScore >= 60`, and at least 2 partner edges with `total >= 4` | rare / 1 | `${metric.name} ghi điểm không quá ồn ào nhưng sở hữu chỉ số phối hợp đồng đội cực tốt, đạt tới ${round(metric.synergyScore)} điểm.` | **Trigger**: keep the original idea/copy, but change hard absolute conditions to relative conditions. Proposed: `total >= 12`, `partnerEdges >= 2`, `synergyScore >= groupAvgSynergy + 8`, and `attackScore <= groupAvgAttack + 3` or not top-2 by average points. | Current trigger is too narrow: current backup has high-synergy player with high attack, while lower-attack players have low synergy. |
 | 20 | `carry_partner` | Partner edge `total >= 4`, edge win rate is at least 18 points above that player's overall win rate, and edge `rate >= 55` | rare / 1 | `${edge.playerName} đi với ${edge.otherName} thắng ${edge.wins}/${edge.total} trận, kéo tỷ lệ từ mức thường thấy ${round(playerMetric.winRate)}% lên ${edgeRate(edge)}%.` | | Measures named player's lift, not reverse partner lift. |
 | 21 | `heavy_backpack` | Partner edge `total >= 4`, edge win rate is at least 18 points below that player's overall win rate, and edge `rate <= 45` | rare / 1 | `${edge.playerName} đi với ${edge.otherName} tụt từ mức thắng thường thấy ${round(playerMetric.winRate)}% xuống còn ${edgeRate(edge)}%, kèo này hơi nặng vai.` | | Measures named player's drop, not reverse partner drop. |
 | 22 | `stable_partner` | Canonical partner pair edge `total >= 6`, `50 <= rate <= 65`, and both directed impacts have `abs(impact) <= 5` | frequent / 0.55 | `${edge.playerName} và ${edge.otherName} đánh chung ${edge.total} trận, thắng ${edge.wins} trận, không bùng nổ nhưng khá tròn vai.` | | Pair-level rule; requires both sides to be near ELO expectation. |
 | 23 | `glued_pair` | Most frequent canonical partner pair with `total >= 8` | frequent / 0.45 | `${glued.playerName} và ${glued.otherName} đã đánh chung ${glued.total} trận, tần suất dính nhau nhiều nhất sân.` | | Pair-level rule: A-B and B-A are deduped before picking the most frequent pair. |
-| 24 | `rare_pair_hot` | Canonical partner pair edge `total` between 4 and 5, and `rate >= 80` | rare / 1 | `${edge.playerName} và ${edge.otherName} mới đánh ${edge.total} trận nhưng thắng ${edge.wins}/${edge.total}, mẫu còn mỏng mà nhìn khá thơm.` | | Because partner candidates are prefiltered at `total >= 4`. |
+| 24 | `rare_pair_hot` | Canonical partner pair edge `total` between 4 and 5, and `rate >= 80` | rare / 1 | `${edge.playerName} và ${edge.otherName} mới đánh ${edge.total} trận nhưng thắng ${edge.wins}/${edge.total}, mẫu còn mỏng mà nhìn khá thơm.` | **Trigger**: redefine around relative pair scarcity, not fixed 4-5 matches. Proposed: among qualifying pairs, choose the least-played pair only when it is genuinely below the pair-volume average, e.g. `pair.total === minPairTotal`, `pair.total >= 3`, `rate >= 80`, and `avgPairTotal - pair.total >= scarcityGap` (or `pair.total <= avgPairTotal * 0.65`). Example: totals `3,4,6,8` => `3` is valid; totals `6,7,8,8` => `6` is not rare enough. | Fixed 4-5 dies as the database grows. Relative scarcity keeps the story meaningful later. |
 | 25 | `disaster_duo` | Canonical partner pair edge `total >= 4`, `rate <= 35`, and `avgDiff <= -3` | rare / 1 | `${edge.playerName} và ${edge.otherName} thua ${edge.losses}/${edge.total} trận chung, trung bình mỗi trận âm ${oneDecimal(Math.abs(edge.avgDiff))} điểm, cần đổi bài gấp.` | | Pair-level rule: A-B and B-A are deduped before candidates are created. |
 | 26 | `partner_long_games` | Canonical partner pair edge `total >= 4` and `deuceGames >= 3` | occasional / 1 | `${edge.playerName} và ${edge.otherName} đánh chung mà đã có ${edge.deuceGames} trận kéo qua 11 điểm, cặp này thích cò cưa thật.` | | Pair-level rule; user-facing text says `kéo qua 11 điểm`. |
 | 27 | `top_attack` | Highest `avgPointsFor` among players with `total >= 8`, and `avgPointsFor >= 9` | frequent / 0.55 | `${metric.name} đang ghi trung bình ${oneDecimal(metric.avgPointsFor)} điểm/trận, xứng danh tay săn điểm uy tín nhất trên sân.` | | Plan wording should say avg points, not attackScore. |
-| 28 | `defense_wall` | `total >= 8` and `avgConceded <= 5` | occasional / 1 | `${metric.name} chỉ mất trung bình ${oneDecimal(metric.avgConceded)} điểm/trận, đúng chất bức tường phòng ngự cực kỳ khó để xuyên phá.` | | Good. |
+| 28 | `defense_wall` | `total >= 8` and `avgConceded <= 5` | occasional / 1 | `${metric.name} chỉ mất trung bình ${oneDecimal(metric.avgConceded)} điểm/trận, đúng chất bức tường phòng ngự cực kỳ khó để xuyên phá.` | **Trigger**: replace hard `avgConceded <= 5` with relative + soft absolute threshold. Proposed: `total >= 8`, player is lowest or top-2 lowest `avgConceded`, `avgConceded <= groupAvgConceded - 0.8`, and `avgConceded <= 7.5`. | Current backup best is 6.76, clearly best in group but blocked by the old <=5 threshold. |
 | 29 | `dominant_closer` | `dominantWins >= 4` and `winRate >= 45` | occasional / 1 | `${metric.name} có ${metric.dominantWins} trận thắng cách biệt từ 7 điểm trở lên, vào tay là đóng hòm khá nhanh.` | | Extra win-rate guard prevents weak records from sounding dominant. |
 | 30 | `close_loss` | `closeLosses >= 3` | occasional / 1 | `${metric.name} đã thua sát nút ${metric.closeLosses} trận với cách biệt vỏn vẹn 2 điểm, đúng kiểu thánh nhọ sân bãi.` | | Close loss means losing by 2 points (smallest Pickleball margin). |
 | 31 | `long_game_addict` | `deuceMatches >= 3` | occasional / 1 | `${metric.name} đã góp mặt trong ${metric.deuceMatches} trận kéo qua 11 điểm, đam mê cò cưa hơi rõ.` | | User-facing text says `kéo qua 11 điểm`. |
@@ -204,8 +210,8 @@ update this table in the same unit of work.
 | 34 | `late_collapse` | `closeLosses >= 4` and `closeLosses >= closeWins + 2` | occasional / 1 | `${metric.name} thua sát nút ${metric.closeLosses} trận, nhiều kèo chỉ thiếu một nhịp là lật được.` | | Good. |
 | 35 | `score_bully` | `wins >= 5` and `avgWinDiff >= 5` | occasional / 1 | `Mỗi khi thắng, ${metric.name} thường thắng trung bình ${oneDecimal(metric.avgWinDiff)} điểm, không thích dây dưa.` | | Good. |
 | 36 | `low_score_magnet` | `lowScoreLosses >= 3`; low-score loss means losing team scored `<= 4` | occasional / 1 | `${metric.name} góp mặt trong ${metric.lowScoreLosses} trận team thua mà chỉ ghi tối đa 4 điểm, đúng kiểu cột thu lôi hôm xấu trời.` | | Good. |
-| 37 | `hard_counter` | Opponent edge `total >= 4` and `rate >= 80` | rare / 1 | `${edge.playerName} đang tỏ ra cực kỳ "kỵ rơ" với ${edge.otherName} khi giành chiến thắng tới ${edge.wins}/${edge.total} trận đối đầu.` | | Directed edge from player perspective. |
-| 38 | `target_dummy` | Opponent edge `total >= 4` and `rate <= 20` | rare / 1 | `Cứ hễ đụng độ ${edge.otherName} là ${edge.playerName} lại gặp dớp, để thua tới ${edge.losses}/${edge.total} trận.` | | Directed edge from player perspective. |
+| 37 | `hard_counter` | Opponent edge `total >= 4` and `rate >= 80` | rare / 0.85 | `${edge.playerName} đang tỏ ra cực kỳ "kỵ rơ" với ${edge.otherName} khi giành chiến thắng tới ${edge.wins}/${edge.total} trận đối đầu.` | **Freq**: dampened to `appearanceRate: 0.85`; surprise score is capped so this rule can surface without always owning the first feed slot. | Directed edge from player perspective. |
+| 38 | `target_dummy` | Opponent edge `total >= 4` and `rate <= 20` | rare / 0.85 | `Cứ hễ đụng độ ${edge.otherName} là ${edge.playerName} lại gặp dớp, để thua tới ${edge.losses}/${edge.total} trận.` | **Freq**: dampened to `appearanceRate: 0.85`; surprise score is capped symmetrically with `hard_counter`. | Directed edge from player perspective. |
 | 39 | `balanced_rivalry` | Most frequent repeated opponent edge with `total >= 6` and `40 <= rate <= 60` | frequent / 0.55 | `${mostRepeated.playerName} và ${mostRepeated.otherName} đã gặp ${mostRepeated.total} trận với tỷ số ${mostRepeated.wins}-${mostRepeated.losses}, đúng kèo kỳ phùng địch thủ.` | | Only strongest current candidate is emitted. |
 | 40 | `long_game_rivalry` | Opponent edge `total >= 4` and `deuceGames >= 3` | occasional / 1 | `${edge.playerName} gặp ${edge.otherName} có ${edge.deuceGames}/${edge.total} trận kéo qua 11 điểm, cứ chạm nhau là dây dưa.` | | User-facing text says `kéo qua 11 điểm`. |
 | 41 | `boss_hunter` | `winsVsHigherElo >= 3` | rare / 1 | `${metric.name} có ${metric.winsVsHigherElo} lần thắng team có ELO trung bình cao hơn, thợ săn trùm hơi uy tín.` | | Uses wins against higher-ELO teams, not expected probability. |
@@ -261,5 +267,72 @@ to 4-5 deterministic variants.
 
 ---
 
-## 🚀 Future Expansion Roadmap
-For advanced, highly-engaging stories focused directly on Bảng Xếp Hạng (Leaderboard Rank) movements, predictive upcoming threats, and peer-to-peer stepping stones, please refer to the expansion plan: [ANALYSIS_INSIGHTS_V4_EXPANSION.md](file:///D:/Pickleball%20App/docs/ANALYSIS_INSIGHTS_V4_EXPANSION.md).
+## Future Expansion Roadmap
+
+Advanced, highly-engaging stories focused directly on Bảng Xếp Hạng
+(Leaderboard Rank) movements, predictive upcoming threats, and peer-to-peer
+stepping stones are included below.
+
+---
+
+## V4 Narrative Expansion Roadmap: High-Engagement Stories
+
+This document outlines highly dynamic, story-driven insights for future implementation in V4. These rules extend the core 52-insight system with gamification elements focused directly on Leaderboard (Rank) movements, peer-to-peer stepping stones, and upcoming threats.
+
+## Design Principles for V4
+1. **Rank Over ELO**: User-facing stories must emphasize Bảng Xếp Hạng (Leaderboard Rank) and Win Rate, treating ELO as secondary.
+2. **Banter & Hype**: Leverage competitive rivalries, predictive "threats" for upcoming play days, and explicit "stepping stone" credits.
+3. **Consistent Schema**: Follow the same data structures used in `ANALYSIS_INSIGHTS_RULES.md`.
+4. **Standard Output Formatting**: All finalized or approved expansion rules must be documented as a single Markdown Table Row matching the **7-column structure** below. This ensures 100% symmetry with the master 50 Rules plan, allowing subsequent development agents to parse them automatically to write production code.
+
+---
+
+## Expansion Rules Table (Standardized 7-Column Schema)
+
+| # | Type | Proposed Trigger Logic | Freq / rate | Proposed Initial Sentence | Điều chỉnh | Notes / Technical Feasibility |
+|---:|---|---|---|---|---|---|
+| X1 | `casual_visitor` | `0 < total < 0.4 * avgMatchesOfActiveGroup` | occasional / 1 | `${metric.name} dạo này mới ra sân ${metric.total} trận, thấp hơn hẳn trung bình nhóm, đúng phong cách "khách mời danh dự".` | | **Tone**: Gentle tease / Playful.<br>Easy. Compares player's total against average. |
+| X2 | `rank_launchpad` | `B.Rank <= 3` and `winsVsA >= 4` and `winsVsA === maxWinsVsAnyOpponentOfB` | occasional / 1 | `Chễm chệ top đầu BXH, ${player.name} chắc phải tri ân ${opponent.name} lắm vì đã cống hiến tới ${winsVsA} trận thắng làm bàn đạp thăng hoa.` | | **Tone**: Grateful / Banter.<br>Nằm Top 3 BXH. Thay tỷ lệ bằng số đếm tuyệt đối. |
+| X3 | `rank_takeover` | In the most recent match, Player B's rank moved above Player A's rank (Rank Overtake Event) | rare / 1 | `Cú bứt tốc ngoạn mục! Trận thắng vừa qua giúp ${playerB.name} chính thức qua mặt ${playerA.name} để giành lấy vị trí số ${newRank}!` | | **Tone**: Hype / Dramatic.<br>High Value. Compares leaderboard ranks before/after latest match. |
+| X4 | `hot_seat_threat` | Player B is Rank N, Player A is Rank N-1, and `A.winRate - B.winRate < 1.5%` | frequent / 0.45 | `Ghế nóng báo động! Khoảng cách Winrate giữa ${playerB.name} và ${playerA.name} chỉ còn ${round(diff)}%. Sơ sẩy ngày mai là đảo ngôi liền!` | | **Tone**: Excitement / Tension.<br>Predictive logic. High-stakes upcoming threat. |
+| X5 | `buffet_eater` | `uniqueDays < avgDays` and `matchesPerSession >= avgMatchesPerSession + 1` | occasional / 1 | `${metric.name} lặn khá kỹ nhưng hễ vác vợt ra sân là bào tới bến bù lỗ. Cày trung bình ${round(metric.matchesPerSession)} trận mỗi buổi, đúng kiểu đi ăn buffet!` | | **Tone**: Playful / Teasing.<br>Đã điều chỉnh trigger dễ hơn cho sân 7 người. |
+| X6 | `rank_camper` | `total < 0.7 * avgMatchesOfActiveGroup` and `Rank <= 3` | occasional / 1 | `Mới đánh ${metric.total} trận, ít hơn hẳn mặt bằng chung nhưng ${metric.name} vẫn đang ung dung Top ${Rank} BXH. Đánh ít mà chất lượng hay là đang nấp lùm giữ rank đây?` | | **Tone**: Teasing / Competitive.<br>Bắt bài anh em đánh ít để bảo toàn Win Rate giữ Top 3. |
+| X7 | `moody_player` | `uniqueDays >= 3` and `attendanceConsistencyScore < lowThreshold` | occasional / 1 | `Lịch ra sân của ${metric.name} dạo này giống hệt thời tiết, thích thì đánh buồn thì nghỉ, hoàn toàn không theo một hệ tâm linh nào cả.` | | **Tone**: Playful / Light.<br>Sử dụng điểm phân tán ngày chơi (Standard Deviation). |
+| 14 | `elo_climber` | ELO rank improved by >= 2 places, and latest 5 has at least 3 wins | rare / 1 | `${metric.name} đang leo ${places} bậc trên bảng ELO, 5 trận mới nhất ẵm trọn ${recentWins} chiến thắng, đà thăng tiến khá khét.` | | **Tone**: Hype / Encouraging.<br>Đổi tên từ rank_climber để tránh trùng lặp khái niệm BXH. |
+| 20 | `carry_partner` | Partner edge total >= 4, win rate lift >= 18, and edge.rate >= 55 | occasional / 1 | `Mỗi khi đánh cặp cùng ${edge.playerName}, tỷ lệ thắng của ${edge.otherName} tăng vọt từ mức ${round(otherMetric.winRate)}% lên tới ${edgeRate(edge)}%. Đúng nghĩa một bờ vai vững chắc!` | | **Tone**: Praising / Banter.<br>Đo lường hiệu quả của B khi được A gánh. |
+| 21 | `heavy_backpack` | Partner edge total >= 4, win rate drop >= 18, and edge.rate <= 45 | occasional / 1 | `Bình thường ${edge.otherName} thắng tới ${round(otherMetric.winRate)}%, nhưng cứ ghép với ${edge.playerName} là tụt xuống còn ${edgeRate(edge)}%. Kèo này ${edge.playerName} hơi nặng tạ rồi!` | | **Tone**: Playful / Teasing.<br>Đo lường sự sụt giảm phong độ của B do ghép với A. |
+| 44 | `bully_lower_elo` | totalVsLowerElo >= 8 and win rate vs lower-ELO teams >= 70 | occasional / 1 | `${metric.name} thắng ${metric.winsVsLowerElo}/${metric.totalVsLowerElo} trận trước nhóm ELO thấp hơn. Rất chắt chiu điểm số và không có khái niệm nhả kèo.` | | **Tone**: Objective / Solid.<br>Bỏ cụm từ "farm kèo mềm" để tránh tiêu cực. |
+| X8 | `king_rescue` | `result === W` and prior `streakType === L` and `streakCount >= 4` and `partner.EloRank <= 2` | rare / 1 | `Chuỗi đỏ ${priorStreakCount} trận liên tiếp của ${player.name} cuối cùng đã được dập tắt, nhưng là nhờ được "kẹp" cùng Phao cứu sinh ${partner.name} gánh còng lưng. Ca này đúng kiểu hồi sinh từ cõi chết!` | | **Tone**: Sarcastic / Hilarious.<br>Mở rộng ra Top 2 ELO gánh tạ cắt chuỗi đen để tăng tỷ lệ trigger. |
+| X9 | `anchor_drag` | `result === L` and prior `streakType === W` and `streakCount >= 4` and `partner.winRate <= 38` | rare / 1 | `Mạch thắng ${priorStreakCount} trận cực cháy của ${player.name} vừa chính thức tan thành mây khói, sau một pha bắt cặp "đi vào lòng đất" cùng ${partner.name}. Kéo xích kiểu này thì chịu chết!` | | **Tone**: Comical / Tragedy.<br>Kịch bản "Báo thủ chặt xích": Chuỗi thắng khủng bị đứt gánh khi ghép cặp với người có tỷ lệ thắng cực thấp. |
+| 53a | `elo_inflated` | `eloRank <= 2` and `Rank >= 4` | occasional / 1 | `ELO thì cao ngất ngưởng chễm chệ Top đầu, nhưng BXH Win Rate thực tế thì ${metric.name} lại đang lẹt đẹt ở vị trí số ${Rank}. Có sự lạm phát ELO nhẹ ở đây hay do thuật toán tính nhầm thế nhỉ?` | | **Tone**: Trêu chọc, nghi ngờ thuật toán.<br>Bắt bài những tay to đánh thiếu ổn định, "lạm phát thông số". |
+| 53b | `elo_defied` | `eloRank >= 5` and `Rank <= 2` | occasional / 1 | `Dù thông số ELO lẹt đẹt nhưng ${metric.name} lại đang chễm chệ Top ${Rank} BXH. Đúng chất vua lì đòn hệ thực chiến!` | | **Tone**: Khâm phục, hype.<br>Tôn vinh người có ELO thấp nhưng Win Rate cực cao. |
+| 54 | `parasite_win` | `edge.wins / player.wins >= 0.6` and `edge.otherRank <= 2` and `winRateWithoutPartner < 30` | rare / 1 | `Có tới ${percent}% số trận thắng của ${edge.playerName} là nhờ bám càng ${edge.otherName}. Tách đôi bạn cùng tiến này ra cái là sóng gió ập tới ngay!` | | **Tone**: Khịa cực mạnh, bóc phốt.<br>Chỉ ra sự phụ thuộc của 1 người vào tay to Top đầu (Cần tính tỷ lệ tách lẻ). |
+| 55 | `gatekeeper_boss` | `(Rank === 3 or Rank === 4)` and Opponent Edge vs Top 2 has `rate >= 60` and `total >= 3` | rare / 1 | `Dù đang tạm trú ở giữa BXH, nhưng ${metric.name} lại là hung thần thực sự của Top đầu. Ai muốn leo Rank thì xác định phải bước qua được ải này đã!` | | **Tone**: Ngưỡng mộ, khiêu khích.<br>Vinh danh người chuyên đi ngáng bạc Top 1 hoặc Top 2. |
+| 56 | `unlucky_draw` | Partner edge total matches with Bottom 2 players `>= 0.5 * player.totalPartnerMatches` | occasional / 1 | `Không phải do trình độ mà do nhân phẩm bốc thăm, ${metric.name} đang có tần suất ghép cặp với anh em bét bảng nhiều nhất sân. Gánh còng cả lưng mà Rank vẫn chưa bay nổi!` | | **Tone**: Đồng cảm, đổ lỗi tâm linh.<br>Phản ánh người gặp xui xẻo khi random team ghép tạ. |
+| 57a | `top1_gap` | `Rank === 1` and `(winRate - Rank2.winRate >= 15)` or `(wins - Rank2.wins >= 5)` | occasional / 1 | `Bỏ xa người bám đuổi tới ${gap} trận thắng, ${metric.name} đang trải qua cảm giác lạnh lẽo trên đỉnh vinh quang. Sân bãi đang rất cần một anh hùng đứng lên gạt giò!` | | **Tone**: Tôn vinh, kêu gọi hợp lực.<br>Kích thích tinh thần anh em lật đổ thế độc tôn. |
+| 57b | `top1_time` | `Rank === 1` and `daysAtTop1 >= 14` | occasional / 1 | `Đã ${daysAtTop1} ngày trôi qua mà ${metric.name} vẫn ngồi lỳ trên đỉnh. Anh em sân bãi dạo này hiền quá chăng?` | | **Tone**: Khiêu khích, hối thúc.<br>Đo thời gian chiếm đóng ngôi vương. |
+| 58 | `stuck_in_mud` | `recentMatches >= 5` and `Rank === previousRank` | frequent / 0.45 | `Cày bừa miệt mài ${recentMatches} trận gần nhất nhưng vị trí thứ ${Rank} của ${metric.name} vẫn đóng đinh y nguyên. Cảm giác trầy trật giống hệt như đang chạy bộ trên máy!` | | **Tone**: Châm biếm nhẹ nhàng.<br>Dành cho những tay vợt cày mãi nhưng bị kẹt ở giữa bảng. |
+| 59 | `friendly_fire` | Partner `rate >= 60` and Opponent `rate >= 80` against same player (both `total >= 4`) | rare / 1 | `Đứng chung thì gánh nhau nhiệt tình nhưng cứ chia đội là ${edge.playerName} lại quay ra nã pháo vào ${edge.otherName} không thương tiếc. Đúng là tình anh em chắc có bền lâu!` | | **Tone**: Hài hước, khịa.<br>Khai thác khía cạnh "cắn trộm" giữa 2 tay vợt thân thiết. |
+| 60a | `late_bloomer` | `winRate < 45` and `formScore >= 80` | occasional / 1 | `Nửa đầu mùa ngụp lặn nhưng dạo này ${metric.name} đang chạy nước rút cực khét. Với ${recentWins}/5 trận thắng gần nhất, có vẻ ngọn cờ khởi nghĩa đã chính thức được phất lên!` | | **Tone**: Khích lệ, cảnh báo.<br>Khen ngợi chuỗi phong độ của người đang lấy lại cảm giác. |
+| 60b | `late_choker` | `Rank <= 3` and `formScore <= 20` | occasional / 1 | `Đang bay cao trên Top đầu thì tự nhiên ${metric.name} lại gãy cánh, để thua tới ${recentLosses}/5 trận gần nhất. Dấu hiệu hết xăng chăng?` | | **Tone**: Cà khịa, tiếc nuối.<br>Cảnh báo sự tuột dốc không phanh của nhóm dẫn đầu bảng. |
+| X10 | `drama_magnet` | `tightMatches / total >= 0.35` and `total >= 8` | occasional / 1 | `Cứ hễ ${metric.name} lên sân là nhịp tim khán giả lại nhảy loạn nhịp. Tới ${round(percent)}% số trận kết thúc với tỷ số sát nút 2-3 điểm hoặc kéo nhau vào Deuce căng não. Coi ông này đánh thì nên chuẩn bị sẵn thuốc trợ tim!` | | **Tone**: Hồi hộp, hài hước.<br>"Nhà máy Drama": Sử dụng biến tightMatches (cách biệt <= 3 điểm). |
+| 61 | `quantity_over_quality` | `wins === Rank_above.wins` and `total > Rank_above.total` and `total >= 10` and `Rank > Rank_above.Rank` | occasional / 1 | `Có cùng ${wins} trận thắng như ${Rank_above.name}, nhưng ${metric.name} đành ngậm ngùi xếp dưới một bậc do trót... ra sân nhiều hơn và ôm thêm vài trận thua tạ. Cần chắt chiu điểm số hơn thay vì lấy số lượng bù chất lượng nhé!` | | **Tone: Trêu chọc sự nhiệt tình** Hệ thống so sánh chéo người đứng trên. Gắn chốt an toàn total >= 10. |
+| 62a | `glass_cannon` | `Rank <= 3` and `avgLossDiff >= 4` | occasional / 1 | `Chễm chệ Top đầu nhưng cứ hễ gãy kèo là ${metric.name} lại sập nguồn, trung bình toàn thua cách biệt tới ${oneDecimal(avgLossDiff)} điểm. Đúng chuẩn "hổ giấy", công to nhưng giáp thủ hơi mỏng!` | | **Tone: Châm biếm, khịa** Sử dụng biến `avgLossDiff` đo mong manh của tay to. |
+| 62b | `stubborn_loser` | `Rank >= 5` and `avgLossDiff <= 3.5` | occasional / 1 | `Tuy ngụp lặn ở nhóm cuối bảng, nhưng ${metric.name} cực kỳ khó nhằn. Trung bình mỗi lần gãy kèo chỉ thua cách biệt vỏn vẹn ${oneDecimal(avgLossDiff)} điểm. Không bị "out trình", chỉ là chưa đủ duyên đóng hòm thôi!` | | **Tone: An ủi, nể phục** Cổ vũ những người nhóm dưới nhưng lỳ lợm. |
+| 63 | `vulture_win` | `Rank <= 3` and `(winsVsBottom2 / wins) >= 0.6` and `wins >= 5` | occasional / 1 | `Đang bay cao trên Top đầu, nhưng mổ xẻ ra thì có tới ${percent}% số trận thắng của ${metric.name} là "bắt nạt" anh em Bottom 2. Cần tìm thêm thuốc thử liều cao ở các trận đối đầu trực tiếp để chứng minh thực lực!` | | **Tone: Bóc phốt, khiêu khích** Bóc mẽ farm rank bét bảng. Gắn chốt an toàn wins >= 5. |
+| 64 | `money_blackhole` | `Rank >= 6` and `money === topFine.money` and `money > 0` | frequent / 0.35 | `Đứng chót Bảng xếp hạng đã đành, ${metric.name} lại còn ẵm luôn cúp "Nhà tài trợ vàng" với ${topFine.money.toLocaleString('vi-VN')}đ tiền quỹ. Vừa mất Rank lại vừa hao tài tốn lộc, anh em xin dành một phút mặc niệm!` | | **Tone: Xót xa, mặc niệm (khịa)** Đã hạ appearanceRate để giảm spam. |
+| 65 | `spring_jump` | `previousRank >= 6` and `Rank <= 3` | occasional / 1 | `Buổi trước còn đang ngụp lặn dưới đáy xã hội, hôm nay ${metric.name} đã phóng một mạch lên Top ${Rank} BXH. Cú nảy lò xo này khét lẹt thực sự, anh em cẩn thận bị gạt giò!` | | **Tone: Ngỡ ngàng, cảnh báo** Đo biến thiên Rank sau 1 buổi chơi. |
+| X11 | `last_laugh` | In latest completed session (cooldown >= 2h from last match):<br>`totalInSession >= 3` and `lastResult === W` and `priorResults === all L` | rare / 1 | `Trong buổi ra sân ngày ${sessionDate}, cả buổi đánh ${sessionTotal} trận thì gãy tới ${sessionTotal - 1} trận đầu, nhưng được cái ${metric.name} lại cực mát tay ở game chốt hạ. Đúng là thua đâu không biết, cứ thắng trận cuối ra về là tươi cười mãn nguyện!` | | **Tone**: Hài hước, trêu chọc.<br>Tự động cool-down 2h để tránh kích hoạt nhầm khi buổi chơi chưa xong. |
+| X12 | `triangle_paradox` | Directed 3-player cycle (A > B > C > A) with `winRate >= 60` and `total >= 4` for each relationship | rare / 1 | `Thế giới quan của các nhà toán học vừa sụp đổ trước tam giác khắc chế: ${A.name} át vía ${B.name}, ${B.name} bắt bài ${C.name}, nhưng ${C.name} lại đè bẹp ${A.name}. Kèo oẳn tù tì vòng lặp này đúng là oan oan tương báo!` | | **Tone**: Kinh ngạc, kịch tính.<br>Thuật toán đồ thị phát hiện vòng lặp đối đầu khắc chế. |
+| 66 | `chameleon_partner` | Partner with >= 3 different players in last 7 days, and win rate with each is >= 55% during that week | rare / 1 | `Ghép cặp với ai cũng đánh cháy! Tuần qua ${metric.name} đứng chung với ${count} anh em khác nhau và duy trì win rate >= 55% với tất cả. "Trạm sạc đa năng" thực thụ!` | | **Tone: Tôn vinh**. Đo lường khả năng thích nghi cực cao theo tuần. |
+| 67 | `quick_finisher` | Total matches in last 7 days >= 10, and deuceMatches in last 7 days === 0 | occasional / 1 | `Tuần này ra sân tận ${count} trận mà hoàn toàn sạch bóng Deuce! Với ${metric.name}, phong cách thi đấu tuần qua cực kỳ chớp nhoáng: một là đóng hòm nhanh, hai là ngửa bụng hàng, tuyệt đối không cò cưa tốn sức!` | | **Tone: Hài hước**. Ràng buộc tối thiểu 10 trận trong 7 ngày để tăng độ uy tín. |
+| 68 | `attendance_king` | `clubTotalDays >= 10` and `(uniqueDays / clubTotalDays) >= 0.9` and is absolute Rank 1 attendee | frequent / 0.45 | `Sân bãi có thể đổi, nhưng nhân sự thì không! Góp mặt ${round(percent)}% số buổi và vững ngôi đầu chuyên cần, bằng khen "Thanh niên rảnh rỗi" à nhầm "chuyên cần" trao cho ${metric.name} chứ ai!` | | **Tone: Tôn vinh**. Yêu cầu đạt >= 90% VÀ là Top 1 chuyên cần. |
+| 69 | `charity_top_rank` | `Rank <= 3` and `recentLossesVsBottom2 >= 2` | occasional / 1 | `Chễm chệ Top đầu nhưng dạo này ${metric.name} lại rất chăm "phát chẩn" cho anh em bét bảng. Mới đây thôi đã nhả tới ${recentLossesVsBottom2} trận trước nhóm Bottom 2, nhà tài trợ điểm thân thiện chăng?` | | **Tone: Bóc phốt, trêu chọc**. Đối trọng của kền kền: Top đầu ban phát điểm cho người nghèo. |
+| 70 | `golden_victim` | `goldenPickled >= 1` | rare / 1 | `Dữ liệu không biết nói dối, lịch sử ghi nhận ${metric.name} đã từng bị cạo trọc đầu (thua trắng 11-0 - Golden Pickle). Một vết xước nhẹ trong lòng, anh em ra sân đừng nhắc lại kẻo chạm nọc nhé!` | | **Tone: Xát muối vui vẻ**. Tế sống ca cạo trọc đầu tiên lịch sử CLB. |
+
+---
+
+## Cross-Reference with Core Plan
+- Core baseline rules (1-52) are defined above in this file.
+- Always ensure that V4 scenarios are registered under a low `baseWeight` or `appearanceRate` unless a highly dramatic crossover triggers (e.g. overtaking Rank #1).
+

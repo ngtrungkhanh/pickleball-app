@@ -178,8 +178,8 @@ Shared cache policy:
 - Dashboard/F5/direct route preload is the normal online sync point. Analysis
   reads local cache first and does not auto-fetch online after the route has
   mounted.
-- Do not poll in the background. Manual refresh, route preload, or explicit data
-  writes are the normal sync triggers.
+- Do not poll in the background. Route preload/reload or explicit data writes
+  are the normal sync triggers.
 - If the current view needs data that is missing or stale, sync that data before
   rendering analysis-derived facts. Background sync can continue for other
   seasons after the current view is usable.
@@ -208,9 +208,9 @@ Client sync flow:
    canonical server match. If the server rejects or errors, the optimistic row
    is removed.
 6. The Analysis page reads local cache by default. It only fetches online when
-   the route is loaded/reloaded by the browser or the user presses `Làm mới`.
+   the route is loaded/reloaded by the browser.
 7. Future phase: split full refresh into season-priority batches. The current
-   implementation keeps full refresh as the explicit/manual path while the
+   implementation keeps full refresh tied to route preload/reload while the
    dataset is still small.
 
 Important caveat:
@@ -248,9 +248,8 @@ Client analysis derivation:
 Cache and revalidation:
 
 - Match writes revalidate `/analysis` together with `/` and `/history`.
-- Shared route sync uses IndexedDB for a fast local copy. Route preload, manual
-  refresh, and canonical write responses are the points that reconcile it with
-  Postgres.
+- Shared route sync uses IndexedDB for a fast local copy. Route preload/reload
+  and canonical write responses are the points that reconcile it with Postgres.
 - Do not use IndexedDB as source of truth. Postgres remains authoritative.
 
 ## Vercel and Cache

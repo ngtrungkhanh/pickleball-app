@@ -111,10 +111,6 @@ export default function Dashboard({
             {sharedData.syncMessage}
           </div>
         )}
-        <button onClick={sharedData.refresh} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
-          <RefreshCw className="w-4 h-4" />
-          Làm mới
-        </button>
         <Link href="/analysis" className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
           <BarChart3 className="w-4 h-4" />
           Trung tâm phân tích

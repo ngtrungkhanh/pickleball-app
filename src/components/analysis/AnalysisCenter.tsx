@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, RefreshCw, Database,
@@ -10,7 +10,7 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import { buildAnalysisSnapshot, edgeRecord, getAnalysisName, type AnalysisEdge, type EloResult, type PlayerMetrics, type PlayerProfile } from '@/lib/analysis-core';
-import { generateInsightsFromSnapshot } from '@/lib/insights';
+import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
 import { cn, getAvatarLetter } from '@/lib/utils';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
 import { isGuestId, loserFineCount } from '@/lib/guest';
@@ -41,9 +41,31 @@ type Match = {
   season?: string;
 };
 type Season = { id?: string; name: string; active?: boolean; start_date?: string };
-type Insight = { type: string; title?: string; text: string; icon?: string };
+type Insight = { type: string; title?: string; text: string; icon?: string; playersInvolved?: string[] };
 type RadarData = { attack: number; defense: number; brave: number; synergy: number; form: number; experience: number };
 type EloHistory = Array<{ date: string; ratings: Record<string, number> }>;
+
+const INSIGHT_SELECTION_STATE_KEY = 'pickleball.analysis.insightSelection.v1';
+
+function readInsightSelectionState(): InsightSelectionState {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(INSIGHT_SELECTION_STATE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as InsightSelectionState;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeInsightSelectionState(state: InsightSelectionState) {
+  try {
+    window.localStorage.setItem(INSIGHT_SELECTION_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignore storage failures; the feed can still render without persistence.
+  }
+}
 
 function expectationDeltaText(value?: number | null) {
   const delta = Math.round(value || 0);
@@ -90,6 +112,9 @@ export function AnalysisCenter({
   const currentActiveSeason = config.active_season || activeSeason;
   const [activeNav, setActiveNav] = useState(navItems[0].id);
   const [matrixTab, setMatrixTab] = useState('partner');
+  const [insightSeed, setInsightSeed] = useState<number | null>(null);
+  const [insightSelectionState, setInsightSelectionState] = useState<InsightSelectionState | null>(null);
+  const committedInsightSeedRef = useRef<number | null>(null);
   const visiblePlayers = players.filter(p => p.active !== false && !isGuestId(p.id));
   const [playerId, setPlayerId] = useState(visiblePlayers[0]?.id || '');
   const [selectedSeason, setSelectedSeason] = useState<string | null>(currentActiveSeason);
@@ -103,10 +128,31 @@ export function AnalysisCenter({
   const partnerRows = analysisSnapshot.partnerEdges;
   const opponentRows = analysisSnapshot.opponentEdges;
   const analysis = analysisSnapshot.profiles.get(playerId) || analysisSnapshot.profiles.get(visiblePlayers[0]?.id || '');
-  const insightsReady = sharedData.syncState !== 'syncing';
-  const insights = useMemo(() => (
-    insightsReady ? generateInsightsFromSnapshot(analysisSnapshot) : []
-  ), [analysisSnapshot, insightsReady]);
+  useEffect(() => {
+    const seedId = window.setTimeout(() => {
+      setInsightSelectionState(readInsightSelectionState());
+      setInsightSeed(Date.now() + Math.floor(Math.random() * 100000));
+    }, 0);
+
+    return () => window.clearTimeout(seedId);
+  }, []);
+
+  const insightsReady = sharedData.syncState !== 'syncing' && insightSeed !== null && insightSelectionState !== null;
+  const insightSelectionResult = useMemo(() => (
+    insightsReady
+      ? generateInsightSelectionResultFromSnapshot(analysisSnapshot, {
+        seed: insightSeed ?? 0,
+        selectionState: insightSelectionState || {},
+      })
+      : { insights: [], nextSelectionState: insightSelectionState || {} }
+  ), [analysisSnapshot, insightSeed, insightSelectionState, insightsReady]);
+  const insights = insightSelectionResult.insights;
+
+  useEffect(() => {
+    if (!insightsReady || insightSeed === null || committedInsightSeedRef.current === insightSeed) return;
+    writeInsightSelectionState(insightSelectionResult.nextSelectionState);
+    committedInsightSeedRef.current = insightSeed;
+  }, [insightSeed, insightSelectionResult.nextSelectionState, insightsReady]);
 
   return (
     <div className="min-h-screen bg-slate-900">
@@ -131,13 +177,6 @@ export function AnalysisCenter({
                     <><Database className="w-3 h-3" /> {activeMatches.length} cached</>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={sharedData.refresh}
-                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/5 text-[10px] font-black uppercase tracking-widest text-white/30 hover:text-primary transition-colors"
-                >
-                  <RefreshCw className="w-3 h-3" /> Làm mới
-                </button>
               </div>
             </div>
           </div>
@@ -305,7 +344,7 @@ function HubZone({
               const textTitle = (firstSpaceIdx > 0 && firstSpaceIdx <= 3) ? rawTitle.substring(firstSpaceIdx + 1) : rawTitle;
 
               return (
-                <div key={index} className="flex gap-3 p-3 rounded-xl bg-slate-900/50 border border-white/5 hover:border-primary/20 transition-all group">
+                <div key={`${insight.type}-${insight.playersInvolved?.join('|') || index}`} className="flex gap-3 p-3 rounded-xl bg-slate-900/50 border border-white/5 hover:border-primary/20 transition-all group">
                   <div className="mt-0.5 w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center shrink-0 text-xl shadow-inner border border-white/5 group-hover:scale-110 transition-transform">
                     {icon}
                   </div>
