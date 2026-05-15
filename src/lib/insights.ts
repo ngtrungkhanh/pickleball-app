@@ -86,15 +86,21 @@ const SEMANTIC_GROUP_BY_TYPE: Record<string, string> = {
   gatekeeper: 'elo_power',
   most_improved: 'elo_power',
   free_fall: 'elo_power',
+  elo_inflated: 'elo_power',
+  elo_defied: 'elo_power',
   bully_lower_elo: 'elo_matchup',
   victim_strong_elo: 'elo_matchup',
   boss_hunter: 'elo_matchup',
   rank_leader: 'rank_race',
   rank_climber: 'rank_race',
+  rank_camper: 'rank_race',
+  top1_gap: 'rank_race',
   hot_streak: 'form_streak',
   cold_streak: 'form_streak',
   perfect_form5: 'form_streak',
   zero_form5: 'form_streak',
+  late_bloomer: 'form_streak',
+  late_choker: 'form_streak',
   streak_breaker: 'form_streak',
   alternating_form: 'form_streak',
   perfect_duo: 'partner_pair',
@@ -115,10 +121,13 @@ const SEMANTIC_GROUP_BY_TYPE: Record<string, string> = {
   bagel_loss: 'score_style',
   score_bully: 'score_style',
   low_score_magnet: 'score_style',
+  glass_cannon: 'score_style',
+  stubborn_loser: 'score_style',
   close_loss: 'clutch_drama',
   long_game_addict: 'clutch_drama',
   clutch_master: 'clutch_drama',
   late_collapse: 'clutch_drama',
+  drama_magnet: 'clutch_drama',
   hard_counter: 'head_to_head',
   target_dummy: 'head_to_head',
   long_game_rivalry: 'head_to_head',
@@ -129,6 +138,7 @@ const SEMANTIC_GROUP_BY_TYPE: Record<string, string> = {
   revenge_target: 'head_to_head',
   iron_lung: 'activity_attendance',
   missing_player: 'activity_attendance',
+  casual_visitor: 'activity_attendance',
   mercenary: 'activity_attendance',
   fine_sponsor: 'money_fun',
   experience_seeker: 'meta_weird',
@@ -193,6 +203,14 @@ function resultForPlayer(match: AnalysisMatch, playerId: string): Result {
 
 function playerInMatch(match: AnalysisMatch, playerId: string) {
   return match.win_1 === playerId || match.win_2 === playerId || match.lose_1 === playerId || match.lose_2 === playerId;
+}
+
+function scoreGap(match: AnalysisMatch) {
+  return Math.abs(Number(match.win_score || 0) - Number(match.lose_score || 0));
+}
+
+function isTightOrLongGame(match: AnalysisMatch) {
+  return scoreGap(match) <= 3 || Number(match.win_score || 0) > 11;
 }
 
 function opponentIdsForPlayer(match: AnalysisMatch, playerId: string) {
@@ -345,7 +363,11 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
   const secondElo = eloBoard[1];
   const ranks = rankBoard(snapshot);
   const topRank = ranks[0];
+  const secondRank = ranks[1];
   const oldRanks = oldEloRanks(active);
+  const avgMatches = active.reduce((sum, metric) => sum + metric.total, 0) / Math.max(1, active.length);
+  const rankById = new Map(ranks.map((metric, index) => [metric.id, index + 1]));
+  const eloRankById = new Map(eloBoard.map((metric, index) => [metric.id, index + 1]));
 
   if (topElo && topElo.total >= 8) {
     const gap = topElo.rating - (secondElo?.rating ?? 1000);
@@ -377,6 +399,26 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
       evidenceStrength: evidence(topRank.total),
       text: `${topRank.name} đang đứng đầu bảng xếp hạng với ${topRank.wins}/${topRank.total} trận thắng, tỷ lệ ${round(topRank.winRate)}%.`,
     });
+  }
+
+  if (topRank && secondRank && topRank.total >= 8) {
+    const winRateGap = topRank.winRate - secondRank.winRate;
+    const winsGap = topRank.wins - secondRank.wins;
+    if (winRateGap >= 15 || winsGap >= 5) {
+      const gapText = winsGap >= 5 ? `${winsGap} trận thắng` : `${round(winRateGap)} điểm win rate`;
+      addCandidate(candidates, snapshot, {
+        type: 'top1_gap',
+        title: '🏔️ ĐỈNH CAO CÔ ĐƠN',
+        group: 'rank',
+        participantIds: [topRank.id],
+        rarity: winsGap >= 8 || winRateGap >= 25 ? 'rare' : 'uncommon',
+        frequency: 'occasional',
+        baseWeight: 48,
+        evidenceStrength: evidence(topRank.total),
+        surpriseScore: Math.max(winsGap * 2, winRateGap / 2),
+        text: `Bỏ xa người bám đuổi ${gapText}, ${topRank.name} đang ngồi khá lạnh trên đỉnh bảng xếp hạng.`,
+      });
+    }
   }
 
   active.forEach(metric => {
@@ -515,10 +557,90 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
       });
     }
 
-    const currentRank = eloBoard.findIndex(row => row.id === metric.id) + 1;
+    const leaderboardRank = rankById.get(metric.id) || 0;
+    const eloRank = eloRankById.get(metric.id) || 0;
+    const recentWins = metric.recentResults.slice(0, 5).filter(result => result === 'W').length;
+    const recentTotal = metric.recentResults.slice(0, 5).length;
+    const recentLosses = recentTotal - recentWins;
+
+    if (leaderboardRank > 0 && leaderboardRank <= 3 && metric.total >= 5 && metric.total < avgMatches * 0.7) {
+      addCandidate(candidates, snapshot, {
+        type: 'rank_camper',
+        title: '⛺ GIỮ RANK KIỂU NẤP LÙM',
+        group: 'rank',
+        participantIds: [metric.id],
+        rarity: 'uncommon',
+        frequency: 'occasional',
+        baseWeight: 46,
+        evidenceStrength: evidence(metric.total),
+        surpriseScore: Math.max(0, avgMatches - metric.total),
+        text: `Mới đánh ${metric.total} trận, ít hơn mặt bằng chung ${round(avgMatches)} trận nhưng ${metric.name} vẫn ung dung Top ${leaderboardRank} BXH. Đánh ít mà chất lượng hay đang giữ rank đây?`,
+      });
+    }
+
+    if (eloRank > 0 && eloRank <= 2 && leaderboardRank >= 4 && metric.total >= 8) {
+      addCandidate(candidates, snapshot, {
+        type: 'elo_inflated',
+        title: '🎈 ELO HƠI CĂNG',
+        group: 'elo',
+        participantIds: [metric.id],
+        rarity: 'uncommon',
+        frequency: 'occasional',
+        baseWeight: 42,
+        evidenceStrength: evidence(metric.total),
+        surpriseScore: (leaderboardRank - eloRank) * 4,
+        text: `ELO đang Top ${eloRank}, nhưng BXH win rate của ${metric.name} lại ở vị trí ${leaderboardRank}. Có vẻ thông số hơi lạm phát nhẹ.`,
+      });
+    }
+
+    if (eloRank >= 5 && leaderboardRank > 0 && leaderboardRank <= 2 && metric.total >= 8) {
+      addCandidate(candidates, snapshot, {
+        type: 'elo_defied',
+        title: '🧱 THỰC CHIẾN VƯỢT ELO',
+        group: 'elo',
+        participantIds: [metric.id],
+        rarity: 'uncommon',
+        frequency: 'occasional',
+        baseWeight: 44,
+        evidenceStrength: evidence(metric.total),
+        surpriseScore: (eloRank - leaderboardRank) * 4,
+        text: `ELO chỉ đang hạng ${eloRank}, nhưng ${metric.name} lại chễm chệ Top ${leaderboardRank} BXH. Đúng chất thực chiến vượt thông số.`,
+      });
+    }
+
+    if (metric.total >= 8 && metric.winRate < 45 && metric.formScore >= 80 && recentTotal >= 5) {
+      addCandidate(candidates, snapshot, {
+        type: 'late_bloomer',
+        title: '🌱 NƯỚC RÚT KHÉT',
+        group: 'form',
+        participantIds: [metric.id],
+        rarity: 'uncommon',
+        frequency: 'occasional',
+        baseWeight: 50,
+        evidenceStrength: evidence(metric.total),
+        surpriseScore: recentWins * 4,
+        text: `Nửa mùa còn ngụp lặn, nhưng 5 trận gần đây ${metric.name} thắng ${recentWins}/5. Có vẻ đang chạy nước rút khá khét.`,
+      });
+    }
+
+    if (leaderboardRank > 0 && leaderboardRank <= 3 && metric.total >= 8 && metric.formScore <= 20 && recentTotal >= 5) {
+      addCandidate(candidates, snapshot, {
+        type: 'late_choker',
+        title: '🪫 TOP ĐẦU HẾT XĂNG',
+        group: 'form',
+        participantIds: [metric.id],
+        rarity: 'uncommon',
+        frequency: 'occasional',
+        baseWeight: 50,
+        evidenceStrength: evidence(metric.total),
+        surpriseScore: recentLosses * 4,
+        text: `Đang Top ${leaderboardRank} BXH nhưng 5 trận gần đây ${metric.name} thua ${recentLosses}/5. Dấu hiệu hết xăng hơi rõ.`,
+      });
+    }
+
+    const currentRank = eloRank;
     const oldRank = oldRanks.findIndex(row => row.id === metric.id) + 1;
     const places = oldRank > 0 && currentRank > 0 ? oldRank - currentRank : 0;
-    const recentWins = metric.recentResults.slice(0, 5).filter(result => result === 'W').length;
     if (places >= 2 && recentWins >= 3) {
       addCandidate(candidates, snapshot, {
         type: 'rank_climber',
@@ -843,6 +965,8 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
 
 function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnapshot) {
   const active = snapshot.playerMetrics.filter(metric => metric.total > 0);
+  const ranks = rankBoard(snapshot);
+  const rankById = new Map(ranks.map((metric, index) => [metric.id, index + 1]));
   const topAttack = [...active].filter(metric => metric.total >= 8).sort((a, b) => b.avgPointsFor - a.avgPointsFor)[0];
   const avgConceded = active.reduce((sum, metric) => sum + metric.avgConceded, 0) / Math.max(1, active.length);
   const defenseLeaders = new Set([...active]
@@ -852,6 +976,10 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
     .map(metric => metric.id));
 
   active.forEach(metric => {
+    const leaderboardRank = rankById.get(metric.id) || 0;
+    const tightMatches = snapshot.rankingMatches.filter(match => playerInMatch(match, metric.id) && isTightOrLongGame(match)).length;
+    const tightRate = metric.total > 0 ? tightMatches / metric.total : 0;
+
     if (topAttack?.id === metric.id && metric.avgPointsFor >= 9) {
       addCandidate(candidates, snapshot, {
         type: 'top_attack',
@@ -881,6 +1009,51 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
         evidenceStrength: evidence(metric.total),
         surpriseScore: Math.min(18, defenseLift * 8),
         text: `${metric.name} chỉ mất trung bình ${oneDecimal(metric.avgConceded)} điểm/trận, đúng chất bức tường phòng ngự cực kỳ khó để xuyên phá.`,
+      });
+    }
+
+    if (metric.total >= 8 && tightMatches >= 4 && tightRate >= 0.35) {
+      addCandidate(candidates, snapshot, {
+        type: 'drama_magnet',
+        title: '🎭 NAM CHÂM DRAMA',
+        group: 'score',
+        participantIds: [metric.id],
+        rarity: tightRate >= 0.5 ? 'rare' : 'uncommon',
+        frequency: 'occasional',
+        baseWeight: 48,
+        evidenceStrength: evidence(tightMatches),
+        surpriseScore: tightRate * 18,
+        text: `Cứ hễ ${metric.name} lên sân là dễ có drama: ${tightMatches}/${metric.total} trận kết thúc sát nút hoặc kéo qua 11 điểm.`,
+      });
+    }
+
+    if (leaderboardRank > 0 && leaderboardRank <= 3 && metric.losses >= 3 && metric.avgLossDiff >= 4) {
+      addCandidate(candidates, snapshot, {
+        type: 'glass_cannon',
+        title: '💥 CÔNG TO GIÁP MỎNG',
+        group: 'score',
+        participantIds: [metric.id],
+        rarity: metric.avgLossDiff >= 5.5 ? 'rare' : 'uncommon',
+        frequency: 'occasional',
+        baseWeight: 46,
+        evidenceStrength: evidence(metric.losses),
+        surpriseScore: metric.avgLossDiff * 3,
+        text: `Chễm chệ Top ${leaderboardRank} nhưng cứ hễ gãy kèo là ${metric.name} thua trung bình ${oneDecimal(metric.avgLossDiff)} điểm, đúng kiểu công to mà giáp hơi mỏng.`,
+      });
+    }
+
+    if (leaderboardRank >= 5 && metric.losses >= 3 && metric.avgLossDiff <= 3.5) {
+      addCandidate(candidates, snapshot, {
+        type: 'stubborn_loser',
+        title: '🪨 THUA NHƯNG KHÓ NUỐT',
+        group: 'score',
+        participantIds: [metric.id],
+        rarity: metric.avgLossDiff <= 2.5 ? 'rare' : 'uncommon',
+        frequency: 'occasional',
+        baseWeight: 44,
+        evidenceStrength: evidence(metric.losses),
+        surpriseScore: Math.max(0, 4 - metric.avgLossDiff) * 5,
+        text: `Dù đang ở nhóm cuối bảng, ${metric.name} mỗi lần thua chỉ cách biệt trung bình ${oneDecimal(metric.avgLossDiff)} điểm. Không dễ bị out trình, chỉ thiếu duyên đóng kèo.`,
       });
     }
 
@@ -1162,6 +1335,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
   const active = snapshot.playerMetrics.filter(metric => metric.total > 0);
   const topActivity = [...active].sort((a, b) => b.total - a.total || b.dailyMaxMatches - a.dailyMaxMatches)[0];
   const topFine = [...active].sort((a, b) => b.money - a.money || b.losses - a.losses)[0];
+  const avgMatches = active.reduce((sum, metric) => sum + metric.total, 0) / Math.max(1, active.length);
 
   active.forEach(metric => {
     if (topActivity?.id === metric.id && metric.total >= 20) {
@@ -1208,6 +1382,21 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
         evidenceStrength: evidence(metric.total),
         surpriseScore: metric.winRate - 70,
         text: `${metric.name} mới đánh ${metric.total} trận nhưng thắng ${metric.wins} trận, đạt ${round(metric.winRate)}%, lính đánh thuê mẫu mỏng mà bén.`,
+      });
+    }
+
+    if (metric.total > 0 && metric.total < avgMatches * 0.4) {
+      addCandidate(candidates, snapshot, {
+        type: 'casual_visitor',
+        title: '🎟️ KHÁCH MỜI DANH DỰ',
+        group: 'fun',
+        participantIds: [metric.id],
+        rarity: 'common',
+        frequency: 'occasional',
+        baseWeight: 34,
+        evidenceStrength: evidence(metric.total),
+        surpriseScore: Math.max(0, avgMatches - metric.total) / 2,
+        text: `${metric.name} dạo này mới ra sân ${metric.total} trận, thấp hơn hẳn trung bình nhóm ${round(avgMatches)} trận, đúng phong cách khách mời danh dự.`,
       });
     }
 

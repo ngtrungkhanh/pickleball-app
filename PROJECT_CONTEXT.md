@@ -72,11 +72,11 @@ Read only when relevant:
   resuming insight-copy expansion work.
 - **Analysis Copy Review**: Review Hub insight comment tone on Vercel Preview
   after the shared analysis core has real dev data.
-- **Analysis Insights Review**: The first-pass 52-scenario insight registry is
-  implemented, with type-first weighted selection, semantic-group diversity,
-  cooldown/soft pity, and the relative `defense_wall` trigger. Next review
-  Vercel Preview with real dev data, tune wording/rule weights if needed, then
-  expand each scenario from 1 sentence to 4-5 variants.
+- **Analysis Insights Review**: The first-pass 52-scenario insight registry plus
+  Batch 1 expansion is implemented as 62 rule types, with type-first weighted
+  selection, semantic-group diversity, cooldown/soft pity, and the relative
+  `defense_wall` trigger. Next review Vercel Preview with real dev data, then
+  continue Batch 2 expansion or tune wording/rule weights if needed.
 - **Merge & Deploy**: Validate `dev` on Vercel preview, then merge to `main`.
 
 ## Architecture Snapshot

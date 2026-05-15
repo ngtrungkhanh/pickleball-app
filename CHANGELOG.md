@@ -271,3 +271,7 @@ repo.
   production: rule-type weighted selection, weighted candidate choice,
   semantic-group diversity, localStorage cooldown/soft pity, and relative
   `defense_wall` triggering.
+- Implemented Batch 1 of the analysis insight expansion, bringing the current
+  registry to 62 rule types with activity, rank-vs-ELO, top-gap, late-form,
+  drama, and score-style scenarios, and updated the audit/docs to count the
+  expanded current rule set.

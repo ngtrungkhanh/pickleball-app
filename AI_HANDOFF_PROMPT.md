@@ -53,6 +53,9 @@ Recent behavior updates to remember:
   goes online through route preload/reload.
 - Dashboard and Analysis should not show manual `Làm mới` buttons; use browser
   reload/F5 when fresh server data is needed.
+- `/analysis` Hub insight rules are now 62 current rule types: 52 core rules
+  plus Batch 1 expansion. Read `docs/ANALYSIS_INSIGHTS_RULES.md` and
+  `docs/ANALYSIS_INSIGHTS_SELECTION.md` before adding Batch 2 or tuning weights.
 
 Working rules:
 - Do not touch main unless the user explicitly asks for a release.
@@ -72,7 +75,7 @@ When starting:
 7. CURRENT PENDING TASKS TO IMPLEMENT:
    - **Shared Data Cache Validation**: Test local-first Dashboard/Analysis cache, canonical score-save replacement, and reload/F5 reconciliation on Vercel Preview before resuming insight-copy expansion.
    - **UI/UX Polishing**: Implement "Sports Ticker" or "Flash News Card" style for the Analytics Center Insights as requested by user.
-   - **Data Validation**: Ensure the 52 Insights engine handles edge cases without crashing when data is sparse.
-   - **Insight Selection Review**: The `balanced-v1.1` selection model is ported; use `docs/ANALYSIS_INSIGHTS_SELECTION.md` and audit script results when tuning wording/rule weights after Vercel Preview review.
+   - **Data Validation**: Ensure the 62-rule Insights engine handles edge cases without crashing when data is sparse.
+   - **Insight Selection Review**: Batch 1 expansion is implemented; use `docs/ANALYSIS_INSIGHTS_SELECTION.md` and audit script results when tuning wording/rule weights after Vercel Preview review or adding Batch 2.
    - **Merge & Deploy**: Merge `dev` to `main` when features are validated.
 ```

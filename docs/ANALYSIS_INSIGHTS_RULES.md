@@ -1,18 +1,16 @@
 # Analysis Insights Rules
 
 This is the active source of truth for `/analysis` Hub insight rules, including
-the current 52 implemented scenarios and the V4 expansion roadmap. Keep this
+the currently implemented scenarios and the V4 expansion roadmap. Keep this
 file aligned with `src/lib/insights.ts` before changing trigger logic,
 frequency, or copy.
 
 ## Current Scope
 
-- Implemented rule types: 52/52.
+- Implemented rule types: 62 total (52 core rules + 10 Batch 1 expansion rules).
 - Current copy scope: 1 sentence per rule.
-- Next planned work: implement the selection model in
-  `docs/ANALYSIS_INSIGHTS_SELECTION.md`, then review triggers, frequency
-  weights, and wording on Vercel Preview before expanding each rule to 4-5
-  deterministic text variants.
+- Current expansion progress: Batch 1 implemented in `src/lib/insights.ts`;
+  continue with Batch 2 only after reviewing audit output for the 62-rule feed.
 
 ## User-Facing Wording Rules
 
@@ -55,12 +53,13 @@ Selection rules:
 
 ## Future Phase: Expected Probability V2
 
-Do not change expected probability while reviewing the current 52 insight
+Do not change expected probability while reviewing the current implemented insight
 scenarios. The current expected value is intentionally ELO-only: average ELO of
 the two-player team versus average ELO of the opposing two-player team.
 
-After all 52 scenarios are reviewed and expanded to 4-5 sentence variants, add a
-separate design/implementation phase for expected probability v2:
+After the current implemented scenarios are reviewed and expanded to 4-5
+sentence variants, add a separate design/implementation phase for expected
+probability v2:
 
 - Keep true win rate as `wins / total`; do not call expected probability
   "win rate" in user-facing text.
@@ -226,6 +225,16 @@ update this table in the same unit of work.
 | 50 | `alternating_form` | `alternations >= 5` in latest result pattern | occasional / 1 | `Phong độ gần đây của ${metric.name} nhảy ${pattern(metric.recentResults)} liên tục, đúng kiểu máy test vợt.` | **Chính**: `Phong độ gần đây của ${metric.name} nhảy ${pattern(metric.recentResults)} liên tục, đúng kiểu máy test vợt.` | Good. |
 | 51 | `fine_sponsor` | Top money/fine player, with `money > 0` | frequent / 0.45 | `${topFine.name} đang gánh ${topFine.losses} trận thua và đóng ${topFine.money.toLocaleString('vi-VN')}đ tiền quỹ, nhà tài trợ vàng gọi tên.` | | Always picks only the top fine payer. |
 | 52 | `experience_seeker` | `total >= 20` and `winRate <= 40` | frequent / 0.45 | `${metric.name} đánh ${metric.total} trận nhưng mới thắng ${metric.wins} trận, tinh thần cọ xát thì khỏi bàn.` | | Good. |
+| 53 | `casual_visitor` | `0 < total < 0.4 * avgMatchesOfActiveGroup` | occasional / 1 | `${metric.name} dạo này mới ra sân ${metric.total} trận, thấp hơn hẳn trung bình nhóm ${round(avgMatches)} trận, đúng phong cách khách mời danh dự.` | **Batch 1**: Implemented. | Activity-attendance rule; deliberately low weight so it supports variety without crowding stronger stories. |
+| 54 | `rank_camper` | `Rank <= 3`, `total >= 5`, and `total < 0.7 * avgMatchesOfActiveGroup` | occasional / 1 | `Mới đánh ${metric.total} trận, ít hơn mặt bằng chung ${round(avgMatches)} trận nhưng ${metric.name} vẫn ung dung Top ${leaderboardRank} BXH. Đánh ít mà chất lượng hay đang giữ rank đây?` | **Batch 1**: Implemented. | Uses leaderboard rank, not ELO rank. |
+| 55 | `elo_inflated` | `eloRank <= 2`, `Rank >= 4`, and `total >= 8` | occasional / 1 | `ELO đang Top ${eloRank}, nhưng BXH win rate của ${metric.name} lại ở vị trí ${leaderboardRank}. Có vẻ thông số hơi lạm phát nhẹ.` | **Batch 1**: Implemented. | Compares ELO rank against real leaderboard rank. |
+| 56 | `elo_defied` | `eloRank >= 5`, `Rank <= 2`, and `total >= 8` | occasional / 1 | `ELO chỉ đang hạng ${eloRank}, nhưng ${metric.name} lại chễm chệ Top ${leaderboardRank} BXH. Đúng chất thực chiến vượt thông số.` | **Batch 1**: Implemented. | Positive counterpart to `elo_inflated`. |
+| 57 | `top1_gap` | Top leaderboard player with `total >= 8`, and either `winRate - Rank2.winRate >= 15` or `wins - Rank2.wins >= 5` | occasional / 1 | `Bỏ xa người bám đuổi ${gapText}, ${topRank.name} đang ngồi khá lạnh trên đỉnh bảng xếp hạng.` | **Batch 1**: Implemented. | Gap text prefers wins gap when the wins gap is at least 5. |
+| 58 | `late_bloomer` | `total >= 8`, `winRate < 45`, `formScore >= 80`, and at least 5 recent results | occasional / 1 | `Nửa mùa còn ngụp lặn, nhưng 5 trận gần đây ${metric.name} thắng ${recentWins}/5. Có vẻ đang chạy nước rút khá khét.` | **Batch 1**: Implemented. | Rewards a weak season record with strong recent form. |
+| 59 | `late_choker` | `Rank <= 3`, `total >= 8`, `formScore <= 20`, and at least 5 recent results | occasional / 1 | `Đang Top ${leaderboardRank} BXH nhưng 5 trận gần đây ${metric.name} thua ${recentLosses}/5. Dấu hiệu hết xăng hơi rõ.` | **Batch 1**: Implemented. | Uses leaderboard rank plus recent form collapse. |
+| 60 | `drama_magnet` | `total >= 8`, `tightMatches >= 4`, and `tightMatches / total >= 0.35`; tight means score gap `<= 3` or winner score `> 11` | occasional / 1 | `Cứ hễ ${metric.name} lên sân là dễ có drama: ${tightMatches}/${metric.total} trận kết thúc sát nút hoặc kéo qua 11 điểm.` | **Batch 1**: Implemented. | `tightMatches` is computed from `rankingMatches` in `insights.ts`. |
+| 61 | `glass_cannon` | `Rank <= 3`, `losses >= 3`, and `avgLossDiff >= 4` | occasional / 1 | `Chễm chệ Top ${leaderboardRank} nhưng cứ hễ gãy kèo là ${metric.name} thua trung bình ${oneDecimal(metric.avgLossDiff)} điểm, đúng kiểu công to mà giáp hơi mỏng.` | **Batch 1**: Implemented. | Top-rank player, but losses are usually heavy. |
+| 62 | `stubborn_loser` | `Rank >= 5`, `losses >= 3`, and `avgLossDiff <= 3.5` | occasional / 1 | `Dù đang ở nhóm cuối bảng, ${metric.name} mỗi lần thua chỉ cách biệt trung bình ${oneDecimal(metric.avgLossDiff)} điểm. Không dễ bị out trình, chỉ thiếu duyên đóng kèo.` | **Batch 1**: Implemented. | Bottom-rank player whose losses are still close. |
 
 ## Known Implementation Notes To Review Next
 
@@ -241,11 +250,16 @@ update this table in the same unit of work.
   must phrase them as ELO expectation gaps.
 
 ## Completed Verification
-- Plan scenario types: 52.
+- Plan scenario types: 62.
 - Missing in code: none.
 - Extra in code: none.
-- Latest backup check generated 140 candidates across 44 triggered scenario
-  types; the remaining types were implemented but did not trigger on that data.
+- Latest backup check (`pickleball_backup_2026-05-14.json`, 1000 seeds,
+  `balanced-v1.1`) generated 157 candidates across 51 triggered scenario
+  types; all triggered types were selected at least once.
+- Batch 1 expansion implemented 10 rule types:
+  `casual_visitor`, `rank_camper`, `elo_inflated`, `elo_defied`,
+  `top1_gap`, `late_bloomer`, `late_choker`, `drama_magnet`,
+  `glass_cannon`, and `stubborn_loser`.
 - Current known sanity checks:
   - Trần Ngọc Hà total remains 15 in the current backup.
   - Hà vs Văn is `0W-6L`, not an impossible count above Hà's total.
@@ -254,7 +268,7 @@ update this table in the same unit of work.
 
 ## Next Review Step
 
-Review all 52 rows above with real dev data and tune:
+Review all 62 rows above with real dev data and tune:
 
 - trigger thresholds,
 - `frequency` and `appearanceRate`,
@@ -277,7 +291,7 @@ stepping stones are included below.
 
 ## V4 Narrative Expansion Roadmap: High-Engagement Stories
 
-This document outlines highly dynamic, story-driven insights for future implementation in V4. These rules extend the core 52-insight system with gamification elements focused directly on Leaderboard (Rank) movements, peer-to-peer stepping stones, and upcoming threats.
+This document outlines highly dynamic, story-driven insights for future implementation in V4. These rules extend the current insight system with gamification elements focused directly on Leaderboard (Rank) movements, peer-to-peer stepping stones, and upcoming threats.
 
 ## Design Principles for V4
 1. **Rank Over ELO**: User-facing stories must emphasize Bảng Xếp Hạng (Leaderboard Rank) and Win Rate, treating ELO as secondary.
@@ -288,6 +302,9 @@ This document outlines highly dynamic, story-driven insights for future implemen
 ---
 
 ## Expansion Rules Table (Standardized 7-Column Schema)
+
+Rows that already moved into the current trigger table above are historical
+roadmap references only; the current table is authoritative for code behavior.
 
 | # | Type | Proposed Trigger Logic | Freq / rate | Proposed Initial Sentence | Điều chỉnh | Notes / Technical Feasibility |
 |---:|---|---|---|---|---|---|
@@ -333,6 +350,7 @@ This document outlines highly dynamic, story-driven insights for future implemen
 ---
 
 ## Cross-Reference with Core Plan
-- Core baseline rules (1-52) are defined above in this file.
+- Current implemented rules are defined above in this file; Batch 1 expansion
+  rows have moved into the current trigger table.
 - Always ensure that V4 scenarios are registered under a low `baseWeight` or `appearanceRate` unless a highly dramatic crossover triggers (e.g. overtaking Rank #1).
 

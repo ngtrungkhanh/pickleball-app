@@ -29,7 +29,7 @@ Script details:
 - The script compiles `src/lib/analysis-core.ts`, `src/lib/insights.ts`, and
   `src/lib/guest.ts` to a temporary OS directory, then runs the real production
   insight engine.
-- It parses the current 52 implemented rule types from
+- It parses the current implemented rule types from
   `docs/ANALYSIS_INSIGHTS_RULES.md`, stopping before the future expansion
   roadmap so planned scenarios are not counted as current missing rules.
 - It reports candidates per rule, best selection score, feed appearance rate,
@@ -96,7 +96,7 @@ first.
 ### Semantic Groups
 
 Use groups to diversify the feed, not to block too broadly. The planned group
-taxonomy should support both the current 52-rule registry and V4 expansion:
+taxonomy should support both the current 62-rule registry and V4 expansion:
 
 - `rank_race`: leaderboard rank, rank takeover, hot-seat threats, top-1 gap or
   time, stuck-rank stories
@@ -239,7 +239,7 @@ Read this together with:
 
 ## Goals
 
-- Keep all 52 implemented rule types intact.
+- Keep all current implemented rule types intact.
 - Make every triggered scenario type capable of appearing in the Hub feed.
 - Prevent high-scoring or high-candidate-count scenarios from dominating every
   page load.
@@ -636,12 +636,42 @@ trigger adjustments:
 Current production audit after the port on the same backup:
 
 - `npm run audit:insights -- pickleball_backup_2026-05-14.json --seeds 1000 --strategy baseline`
-- 45/52 types triggered.
-- 45/52 types selected at least once.
+- 45/52 core types triggered.
+- 45/52 core types selected at least once.
 - Triggered but never selected: 0.
 - Top feed rate: 24.9%.
 - Top first-slot rate: 3.6%.
 
 The stateful UI behavior is closer to `balanced-v1.1` because the browser keeps
 cooldown/soft-pity state in localStorage across reloads.
+
+### Batch 1 Expansion Audit
+
+Batch 1 adds 10 rule types to production:
+
+- `casual_visitor`
+- `rank_camper`
+- `elo_inflated`
+- `elo_defied`
+- `top1_gap`
+- `late_bloomer`
+- `late_choker`
+- `drama_magnet`
+- `glass_cannon`
+- `stubborn_loser`
+
+Audit after Batch 1:
+
+- `npm run audit:insights -- pickleball_backup_2026-05-14.json --seeds 1000 --strategy balanced-v1.1`
+- Rule types in current table: 62.
+- Triggered scenario types: 51/62.
+- Scenario types selected at least once: 51/62.
+- Triggered but never selected: 0.
+- Production candidate total: 157.
+- Top feed rate: 22.3%.
+- Top first-slot rate: 3.4%.
+- Batch 1 types triggered in this backup: `casual_visitor`, `elo_inflated`,
+  `top1_gap`, `late_choker`, `drama_magnet`, and `glass_cannon`.
+- Batch 1 types not triggered in this backup: `rank_camper`, `elo_defied`,
+  `late_bloomer`, and `stubborn_loser`.
 
