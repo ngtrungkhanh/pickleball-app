@@ -279,3 +279,6 @@ repo.
   registry to 72 rule types with rank pressure, attendance/session behavior,
   streak-partner events, dependency, middle-rank gatekeeper, unlucky pairing,
   and partner/opponent crossover stories.
+- Moved `/analysis` zone navigation out of the fixed bottom bar into the header:
+  desktop uses segmented buttons beside season, while mobile uses a second
+  dropdown below season.

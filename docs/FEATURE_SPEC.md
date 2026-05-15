@@ -234,7 +234,8 @@ Current behavior:
 
 - season selector with all-season option
 - sync/cache badge showing current cached match count
-- 3-zone bottom navigation: `Tổng quan`, `Cá nhân`, and `Mạng lưới`
+- 3-zone navigation: `Tổng quan`, `Cá nhân`, and `Mạng lưới`; desktop shows it
+  in the header beside season, mobile shows it as a dropdown under season
 - overview zone: summary cards, ELO leaderboard/sparkline, and automated
   insight feed
 - profile zone: selected player, ELO rank, win rate, radar chart, current

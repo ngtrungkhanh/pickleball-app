@@ -154,8 +154,9 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
 
 ## Analysis UI
 
-- Analysis uses a 3-zone bottom navigation: `Tổng quan`, `Cá nhân`, and
-  `Mạng lưới`.
+- Analysis uses 3 zones: `Tổng quan`, `Cá nhân`, and `Mạng lưới`. On desktop,
+  the zone switcher sits in the header beside the season selector; on mobile,
+  it is a dropdown directly below the season dropdown.
 - Analysis should stay read-only.
 - The sync/cache badge should stay small and unobtrusive.
 - Do not show manual `Làm mới` buttons in Dashboard or Analysis. If users need

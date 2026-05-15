@@ -181,22 +181,55 @@ export function AnalysisCenter({
             </div>
           </div>
           
-          {/* Season Selector */}
-          <div className="mt-3">
+          {/* Header Controls */}
+          <div className="mt-3 flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-end">
             <select
               value={selectedSeason ?? 'all'}
               onChange={e => setSelectedSeason(e.target.value === 'all' ? null : e.target.value)}
-              className="w-full sm:w-48 rounded-lg bg-slate-900 border border-white/[0.08] px-3 py-2 text-sm font-semibold text-white/70"
+              className="w-full rounded-lg bg-slate-900 border border-white/[0.08] px-3 py-2 text-sm font-semibold text-white/70 md:w-48"
             >
               <option value="all">Tổng hợp</option>
               {seasonOptions.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
+
+            <select
+              value={activeNav}
+              onChange={e => setActiveNav(e.target.value)}
+              className="w-full rounded-lg bg-slate-900 border border-white/[0.08] px-3 py-2 text-sm font-black uppercase tracking-widest text-white/70 md:hidden"
+            >
+              {navItems.map(item => (
+                <option key={item.id} value={item.id}>{item.label}</option>
+              ))}
+            </select>
+
+            <div className="hidden items-center rounded-xl border border-white/[0.08] bg-slate-950/60 p-1 md:flex">
+              {navItems.map(item => {
+                const Icon = item.icon;
+                const isActive = activeNav === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setActiveNav(item.id)}
+                    className={cn(
+                      "inline-flex h-10 items-center gap-2 rounded-lg px-4 text-xs font-black uppercase tracking-widest transition-all",
+                      isActive
+                        ? "bg-white text-slate-950 shadow-[0_0_20px_rgba(190,242,100,0.15)]"
+                        : "text-white/35 hover:bg-white/[0.04] hover:text-white/70"
+                    )}
+                  >
+                    <Icon className={cn("h-4 w-4", isActive && "text-primary")} />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-[1500px] mx-auto px-4 py-4 pb-24">
+      <div className="max-w-[1500px] mx-auto px-4 py-4 pb-8">
         {/* ZONE 1: Hub (Tổng quan) */}
         {activeNav === 'hub' && (
           <HubZone 
@@ -236,33 +269,6 @@ export function AnalysisCenter({
         )}
       </div>
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl safe-area-pb md:px-6">
-        <div className="max-w-[1500px] mx-auto">
-          <div className="flex items-center justify-around md:justify-center md:gap-8">
-            {navItems.map(item => {
-              const Icon = item.icon;
-              const isActive = activeNav === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveNav(item.id)}
-                  className={cn(
-                    "flex flex-col items-center gap-1 px-4 py-2.5 md:py-3 transition-all duration-300 relative group",
-                    isActive ? "text-primary" : "text-white/30 hover:text-white/60"
-                  )}
-                >
-                  <Icon className={cn("w-5 h-5 md:w-6 md:h-6 transition-transform", isActive && "scale-110")} />
-                  <span className="text-[10px] md:text-[11px] font-black uppercase tracking-widest">{item.label}</span>
-                  {isActive && (
-                    <div className="absolute -bottom-1 w-8 h-1 bg-primary rounded-full shadow-[0_0_15px_rgba(190,242,100,0.8)]" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </nav>
     </div>
   );
 }

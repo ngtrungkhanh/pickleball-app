@@ -50,10 +50,12 @@ Read only when relevant:
   four-line expanded leaderboard detail with compact fun remarks.
 - Expanded leaderboard form remarks now read 5-match form newest-first and use
   seeded data-driven notes so similar players do not always get identical text.
-- `/analysis` is a read-only analytics center with a 3-zone Bottom Navigation
-  (Hub, Profile, Matrix). It now uses `src/lib/analysis-core.ts` as the shared
-  source for ELO, player metrics, partner/opponent impact edges, profile cards,
-  Network cards, and Hub insight comments.
+- `/analysis` is a read-only analytics center with 3 zones (Hub, Profile,
+  Matrix). Zone switching now lives in the header beside the season selector on
+  desktop, and as a second dropdown below season on mobile. It uses
+  `src/lib/analysis-core.ts` as the shared source for ELO, player metrics,
+  partner/opponent impact edges, profile cards, Network cards, and Hub insight
+  comments.
 - Dashboard and Analysis are moving toward a shared IndexedDB route cache:
   Postgres remains authoritative, Dashboard/F5/direct route preload seeds local
   cache, score-save responses replace optimistic local rows with canonical
