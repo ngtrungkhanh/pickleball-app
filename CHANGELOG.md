@@ -275,3 +275,7 @@ repo.
   registry to 62 rule types with activity, rank-vs-ELO, top-gap, late-form,
   drama, and score-style scenarios, and updated the audit/docs to count the
   expanded current rule set.
+- Implemented Batch 2 of the analysis insight expansion, bringing the current
+  registry to 72 rule types with rank pressure, attendance/session behavior,
+  streak-partner events, dependency, middle-rank gatekeeper, unlucky pairing,
+  and partner/opponent crossover stories.

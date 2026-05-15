@@ -96,7 +96,7 @@ first.
 ### Semantic Groups
 
 Use groups to diversify the feed, not to block too broadly. The planned group
-taxonomy should support both the current 62-rule registry and V4 expansion:
+taxonomy should support both the current 72-rule registry and V4 expansion:
 
 - `rank_race`: leaderboard rank, rank takeover, hot-seat threats, top-1 gap or
   time, stuck-rank stories
@@ -674,4 +674,35 @@ Audit after Batch 1:
   `top1_gap`, `late_choker`, `drama_magnet`, and `glass_cannon`.
 - Batch 1 types not triggered in this backup: `rank_camper`, `elo_defied`,
   `late_bloomer`, and `stubborn_loser`.
+
+### Batch 2 Expansion Audit
+
+Batch 2 adds 10 rule types to production:
+
+- `rank_launchpad`
+- `hot_seat_threat`
+- `buffet_eater`
+- `moody_player`
+- `king_rescue`
+- `anchor_drag`
+- `parasite_win`
+- `gatekeeper_boss`
+- `unlucky_draw`
+- `friendly_fire`
+
+Audit after Batch 2:
+
+- `npm run audit:insights -- pickleball_backup_2026-05-14.json --seeds 1000 --strategy balanced-v1.1`
+- Rule types in current table: 72.
+- Triggered scenario types: 57/72.
+- Scenario types selected at least once: 57/72.
+- Triggered but never selected: 0.
+- Production candidate total: 169.
+- Top feed rate: 20.7%.
+- Top first-slot rate: 3.2%.
+- Batch 2 types triggered in this backup: `rank_launchpad`,
+  `hot_seat_threat`, `king_rescue`, `anchor_drag`, `unlucky_draw`, and
+  `friendly_fire`.
+- Batch 2 types not triggered in this backup: `buffet_eater`,
+  `moody_player`, `parasite_win`, and `gatekeeper_boss`.
 

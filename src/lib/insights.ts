@@ -95,6 +95,8 @@ const SEMANTIC_GROUP_BY_TYPE: Record<string, string> = {
   rank_climber: 'rank_race',
   rank_camper: 'rank_race',
   top1_gap: 'rank_race',
+  rank_launchpad: 'rank_race',
+  hot_seat_threat: 'rank_race',
   hot_streak: 'form_streak',
   cold_streak: 'form_streak',
   perfect_form5: 'form_streak',
@@ -114,6 +116,10 @@ const SEMANTIC_GROUP_BY_TYPE: Record<string, string> = {
   carry_partner: 'partner_impact',
   heavy_backpack: 'partner_impact',
   cover_master: 'partner_impact',
+  parasite_win: 'partner_impact',
+  king_rescue: 'partner_impact',
+  anchor_drag: 'partner_impact',
+  unlucky_draw: 'partner_impact',
   partner_long_games: 'clutch_drama',
   dominant_closer: 'score_style',
   top_attack: 'score_style',
@@ -136,9 +142,13 @@ const SEMANTIC_GROUP_BY_TYPE: Record<string, string> = {
   balanced_rivalry: 'head_to_head',
   revenge_win: 'head_to_head',
   revenge_target: 'head_to_head',
+  gatekeeper_boss: 'head_to_head',
+  friendly_fire: 'head_to_head',
   iron_lung: 'activity_attendance',
   missing_player: 'activity_attendance',
   casual_visitor: 'activity_attendance',
+  buffet_eater: 'activity_attendance',
+  moody_player: 'activity_attendance',
   mercenary: 'activity_attendance',
   fine_sponsor: 'money_fun',
   experience_seeker: 'meta_weird',
@@ -197,6 +207,17 @@ function rate(wins: number, total: number) {
   return total > 0 ? Math.round((wins / total) * 100) : 0;
 }
 
+function average(values: number[]) {
+  return values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
+}
+
+function standardDeviation(values: number[]) {
+  if (values.length <= 1) return 0;
+  const avg = average(values);
+  const variance = values.reduce((sum, value) => sum + ((value - avg) ** 2), 0) / values.length;
+  return Math.sqrt(variance);
+}
+
 function resultForPlayer(match: AnalysisMatch, playerId: string): Result {
   return match.win_1 === playerId || match.win_2 === playerId ? 'W' : 'L';
 }
@@ -220,8 +241,20 @@ function opponentIdsForPlayer(match: AnalysisMatch, playerId: string) {
     : [match.win_1, match.win_2].filter((id): id is string => Boolean(id));
 }
 
+function partnerIdForPlayer(match: AnalysisMatch, playerId: string) {
+  if (match.win_1 === playerId) return match.win_2 || null;
+  if (match.win_2 === playerId) return match.win_1 || null;
+  if (match.lose_1 === playerId) return match.lose_2 || null;
+  if (match.lose_2 === playerId) return match.lose_1 || null;
+  return null;
+}
+
 function matchTime(match: AnalysisMatch) {
   return new Date(String(match.date || '')).getTime() || 0;
+}
+
+function matchDayKey(match: AnalysisMatch) {
+  return String(match.date || '').slice(0, 10);
 }
 
 function sortNewest(matches: AnalysisMatch[]) {
@@ -420,6 +453,48 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
       });
     }
   }
+
+  ranks.slice(0, 3).forEach(metric => {
+    const leaderboardRank = rankById.get(metric.id) || 0;
+    const launchpadEdge = snapshot.opponentEdges
+      .filter(edge => edge.playerId === metric.id && edge.wins >= 4)
+      .sort((a, b) => b.wins - a.wins || b.total - a.total)[0];
+    if (launchpadEdge) {
+      addCandidate(candidates, snapshot, {
+        type: 'rank_launchpad',
+        title: '🛫 BÀN ĐẠP THĂNG HẠNG',
+        group: 'rank',
+        participantIds: [metric.id, launchpadEdge.otherId],
+        rarity: launchpadEdge.wins >= 7 ? 'rare' : 'uncommon',
+        frequency: 'occasional',
+        baseWeight: 47,
+        evidenceStrength: evidence(launchpadEdge.total),
+        surpriseScore: launchpadEdge.wins * 2,
+        text: `Đang Top ${leaderboardRank} BXH, ${metric.name} chắc phải cảm ơn ${launchpadEdge.otherName} vì đã góp ${launchpadEdge.wins} trận thắng làm bàn đạp thăng hạng.`,
+      });
+    }
+  });
+
+  ranks.forEach((metric, index) => {
+    const playerAbove = ranks[index - 1];
+    if (!playerAbove || metric.total < 8 || playerAbove.total < 8) return;
+    const diff = playerAbove.winRate - metric.winRate;
+    if (diff > 0 && diff < 1.5) {
+      addCandidate(candidates, snapshot, {
+        type: 'hot_seat_threat',
+        title: '🔥 GHẾ NÓNG BÁO ĐỘNG',
+        group: 'rank',
+        participantIds: [metric.id, playerAbove.id],
+        rarity: diff < 0.8 ? 'rare' : 'uncommon',
+        frequency: 'frequent',
+        appearanceRate: 0.45,
+        baseWeight: 42,
+        evidenceStrength: evidence(Math.min(metric.total, playerAbove.total)),
+        surpriseScore: Math.max(0, 8 - (diff * 4)),
+        text: `Ghế nóng báo động: ${metric.name} chỉ còn kém ${playerAbove.name} ${oneDecimal(diff)} điểm win rate. Sơ sẩy một buổi là đảo vị trí ngay.`,
+      });
+    }
+  });
 
   active.forEach(metric => {
     if (metric.streakType === 'W' && metric.streakCount >= 4) {
@@ -711,6 +786,42 @@ function buildRevengeRows(snapshot: AnalysisSnapshot) {
   return rows.sort((a, b) => b.priorLosses - a.priorLosses || b.recentWins - a.recentWins);
 }
 
+function buildPartnerStreakEvents(snapshot: AnalysisSnapshot) {
+  const rows: Array<{ type: 'king_rescue' | 'anchor_drag'; playerId: string; partnerId: string; priorStreak: number; time: number }> = [];
+  const current = new Map<string, { type: Result | ''; count: number }>();
+  const topEloIds = new Set(snapshot.board.filter(metric => metric.total > 0).slice(0, 2).map(metric => metric.id));
+
+  sortOldest(snapshot.rankingMatches).forEach(match => {
+    const participants = [match.win_1, match.win_2, match.lose_1, match.lose_2].filter((id): id is string => Boolean(id));
+
+    participants.forEach(playerId => {
+      const before = current.get(playerId);
+      const partnerId = partnerIdForPlayer(match, playerId);
+      if (!before || !partnerId) return;
+
+      const partnerMetric = snapshot.metrics.get(partnerId);
+      const result = resultForPlayer(match, playerId);
+      if (result === 'W' && before.type === 'L' && before.count >= 4 && topEloIds.has(partnerId)) {
+        rows.push({ type: 'king_rescue', playerId, partnerId, priorStreak: before.count, time: matchTime(match) });
+      }
+      if (result === 'L' && before.type === 'W' && before.count >= 4 && partnerMetric && partnerMetric.winRate <= 38) {
+        rows.push({ type: 'anchor_drag', playerId, partnerId, priorStreak: before.count, time: matchTime(match) });
+      }
+    });
+
+    participants.forEach(playerId => {
+      const result = resultForPlayer(match, playerId);
+      const before = current.get(playerId);
+      current.set(playerId, {
+        type: result,
+        count: before?.type === result ? before.count + 1 : 1,
+      });
+    });
+  });
+
+  return rows.sort((a, b) => b.time - a.time || b.priorStreak - a.priorStreak);
+}
+
 function addStoryCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnapshot) {
   const breaker = buildStreakBreakers(snapshot)[0];
   if (breaker) {
@@ -731,6 +842,43 @@ function addStoryCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
       });
     }
   }
+
+  const partnerStreakEvents = buildPartnerStreakEvents(snapshot);
+  partnerStreakEvents.filter(row => row.type === 'king_rescue').slice(0, 2).forEach(row => {
+    const player = snapshot.metrics.get(row.playerId);
+    const partner = snapshot.metrics.get(row.partnerId);
+    if (!player || !partner) return;
+    addCandidate(candidates, snapshot, {
+      type: 'king_rescue',
+      title: '🛟 PHAO CỨU SINH',
+      group: 'partner',
+      participantIds: [player.id, partner.id],
+      rarity: row.priorStreak >= 6 ? 'epic' : 'rare',
+      frequency: 'rare',
+      baseWeight: 58,
+      evidenceStrength: evidence(row.priorStreak),
+      surpriseScore: row.priorStreak * 4,
+      text: `Chuỗi đỏ ${row.priorStreak} trận của ${player.name} vừa được dập tắt khi đứng cùng ${partner.name}, đúng ca hồi sinh nhờ phao cứu sinh Top ELO.`,
+    });
+  });
+
+  partnerStreakEvents.filter(row => row.type === 'anchor_drag').slice(0, 2).forEach(row => {
+    const player = snapshot.metrics.get(row.playerId);
+    const partner = snapshot.metrics.get(row.partnerId);
+    if (!player || !partner) return;
+    addCandidate(candidates, snapshot, {
+      type: 'anchor_drag',
+      title: '⚓ ĐỨT MẠCH VÌ KÈO NẶNG',
+      group: 'partner',
+      participantIds: [player.id, partner.id],
+      rarity: row.priorStreak >= 6 ? 'epic' : 'rare',
+      frequency: 'rare',
+      baseWeight: 56,
+      evidenceStrength: evidence(row.priorStreak),
+      surpriseScore: row.priorStreak * 4,
+      text: `Mạch thắng ${row.priorStreak} trận của ${player.name} vừa khựng lại khi ghép cùng ${partner.name}, kèo này đúng là hơi nặng dây xích.`,
+    });
+  });
 
   const revenge = buildRevengeRows(snapshot)[0];
   if (revenge) {
@@ -770,6 +918,9 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
   const repeated = snapshot.partnerEdges.filter(edge => edge.total >= 4);
   const pairEdges = uniquePartnerPairs(repeated);
   const glued = uniquePartnerPairs(snapshot.partnerEdges).sort((a, b) => b.edge.total - a.edge.total || b.edge.confidence - a.edge.confidence)[0]?.edge || null;
+  const ranks = rankBoard(snapshot);
+  const rankById = new Map(ranks.map((metric, index) => [metric.id, index + 1]));
+  const bottomRankIds = new Set(ranks.slice(-2).map(metric => metric.id));
 
   pairEdges.forEach(({ edge, maxAbsImpact }) => {
     if (edge.rate >= 75) {
@@ -929,6 +1080,34 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
     }
   });
 
+  repeated.forEach(edge => {
+    const playerMetric = snapshot.metrics.get(edge.playerId);
+    const otherRank = rankById.get(edge.otherId) || 0;
+    if (!playerMetric || playerMetric.wins <= 0 || otherRank > 2) return;
+
+    const matchesWithoutPartner = snapshot.rankingMatches.filter(match =>
+      playerInMatch(match, edge.playerId) && partnerIdForPlayer(match, edge.playerId) !== edge.otherId
+    );
+    const winsWithoutPartner = matchesWithoutPartner.filter(match => resultForPlayer(match, edge.playerId) === 'W').length;
+    const winRateWithoutPartner = rate(winsWithoutPartner, matchesWithoutPartner.length);
+    const winShareFromPartner = edge.wins / playerMetric.wins;
+
+    if (edge.wins >= 4 && winShareFromPartner >= 0.6 && matchesWithoutPartner.length >= 3 && winRateWithoutPartner < 30) {
+      addCandidate(candidates, snapshot, {
+        type: 'parasite_win',
+        title: '🧲 BÁM CÀNG KIẾM ĐIỂM',
+        group: 'partner',
+        participantIds: [edge.playerId, edge.otherId],
+        rarity: winShareFromPartner >= 0.75 ? 'epic' : 'rare',
+        frequency: 'rare',
+        baseWeight: 54,
+        evidenceStrength: evidence(edge.total),
+        surpriseScore: Math.round(winShareFromPartner * 20),
+        text: `${round(winShareFromPartner * 100)}% số trận thắng của ${edge.playerName} đến khi đứng cùng Top ${otherRank} ${edge.otherName}. Tách ra thì tỷ lệ thắng chỉ còn ${winRateWithoutPartner}%.`,
+      });
+    }
+  });
+
   if (glued && glued.total >= 8) {
     addCandidate(candidates, snapshot, {
       type: 'glued_pair',
@@ -945,6 +1124,26 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
   }
 
   snapshot.playerMetrics.forEach(metric => {
+    const partnerMatches = snapshot.rankingMatches.filter(match => playerInMatch(match, metric.id) && partnerIdForPlayer(match, metric.id));
+    const bottomPartnerMatches = partnerMatches.filter(match => {
+      const partnerId = partnerIdForPlayer(match, metric.id);
+      return Boolean(partnerId && bottomRankIds.has(partnerId));
+    });
+    if (partnerMatches.length >= 8 && bottomPartnerMatches.length >= 4 && bottomPartnerMatches.length / partnerMatches.length >= 0.5) {
+      addCandidate(candidates, snapshot, {
+        type: 'unlucky_draw',
+        title: '🎲 BỐC THĂM HƠI XUI',
+        group: 'partner',
+        participantIds: [metric.id],
+        rarity: bottomPartnerMatches.length / partnerMatches.length >= 0.65 ? 'rare' : 'uncommon',
+        frequency: 'occasional',
+        baseWeight: 42,
+        evidenceStrength: evidence(partnerMatches.length),
+        surpriseScore: (bottomPartnerMatches.length / partnerMatches.length) * 16,
+        text: `${metric.name} có ${bottomPartnerMatches.length}/${partnerMatches.length} trận ghép với nhóm cuối bảng, lịch bốc thăm đồng đội hơi thử thách.`,
+      });
+    }
+
     const playerEdges = snapshot.partnerEdges.filter(edge => edge.playerId === metric.id && edge.total >= 4);
     if (metric.total >= 8 && metric.attackScore <= 85 && metric.synergyScore >= 60 && playerEdges.length >= 2) {
       addCandidate(candidates, snapshot, {
@@ -1182,6 +1381,10 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
 function addOpponentCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnapshot) {
   const repeated = snapshot.opponentEdges.filter(edge => edge.total >= 4);
   const mostRepeated = mostFrequentDirectional(repeated);
+  const ranks = rankBoard(snapshot);
+  const rankById = new Map(ranks.map((metric, index) => [metric.id, index + 1]));
+  const topRankIds = new Set(ranks.slice(0, 2).map(metric => metric.id));
+  const partnerEdgeByPair = new Map(snapshot.partnerEdges.map(edge => [`${edge.playerId}|${edge.otherId}`, edge]));
 
   repeated.forEach(edge => {
     const metric = snapshot.metrics.get(edge.playerId);
@@ -1234,6 +1437,22 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
       });
     }
 
+    const partnerEdge = partnerEdgeByPair.get(`${edge.playerId}|${edge.otherId}`);
+    if (partnerEdge && partnerEdge.total >= 4 && partnerEdge.rate >= 60 && edge.rate >= 80) {
+      addCandidate(candidates, snapshot, {
+        type: 'friendly_fire',
+        title: '🎯 ĐỒNG ĐỘI HAY NẠN NHÂN',
+        group: 'opponent',
+        participantIds: [edge.playerId, edge.otherId],
+        rarity: edge.rate >= 90 ? 'rare' : 'uncommon',
+        frequency: 'rare',
+        baseWeight: 52,
+        evidenceStrength: evidence(edge.total + partnerEdge.total),
+        surpriseScore: (edge.rate - 70) / 2,
+        text: `${edge.playerName} đứng chung với ${edge.otherName} thắng ${partnerEdge.wins}/${partnerEdge.total}, nhưng cứ chia đội là lại thắng đối đầu ${edge.wins}/${edge.total}. Tình anh em hơi nhiều sát thương.`,
+      });
+    }
+
     if (edge.impact <= -15 && edge.rate <= 45) {
       addCandidate(candidates, snapshot, {
         type: 'mental_block',
@@ -1280,6 +1499,28 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
       text: `${mostRepeated.playerName} và ${mostRepeated.otherName} đã gặp ${mostRepeated.total} trận với tỷ số ${mostRepeated.wins}-${mostRepeated.losses}, đúng kèo kỳ phùng địch thủ.`,
     });
   }
+
+  snapshot.opponentEdges
+    .filter(edge => edge.total >= 3 && topRankIds.has(edge.otherId))
+    .forEach(edge => {
+      const metric = snapshot.metrics.get(edge.playerId);
+      const leaderboardRank = rankById.get(edge.playerId) || 0;
+      const targetRank = rankById.get(edge.otherId) || 0;
+      if (!metric || ![3, 4].includes(leaderboardRank) || edge.rate < 60) return;
+
+      addCandidate(candidates, snapshot, {
+        type: 'gatekeeper_boss',
+        title: '🚧 ẢI GIỮA BẢNG',
+        group: 'opponent',
+        participantIds: [edge.playerId, edge.otherId],
+        rarity: edge.rate >= 75 ? 'rare' : 'uncommon',
+        frequency: 'rare',
+        baseWeight: 50,
+        evidenceStrength: evidence(edge.total),
+        surpriseScore: edge.rate - 55,
+        text: `Đang hạng ${leaderboardRank} nhưng ${metric.name} lại là cửa ải khó chịu của Top ${targetRank}: gặp ${edge.otherName} thắng ${edge.wins}/${edge.total}.`,
+      });
+    });
 
   snapshot.playerMetrics.forEach(metric => {
     if (metric.winsVsHigherElo >= 3) {
@@ -1336,8 +1577,39 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
   const topActivity = [...active].sort((a, b) => b.total - a.total || b.dailyMaxMatches - a.dailyMaxMatches)[0];
   const topFine = [...active].sort((a, b) => b.money - a.money || b.losses - a.losses)[0];
   const avgMatches = active.reduce((sum, metric) => sum + metric.total, 0) / Math.max(1, active.length);
+  const dayCountsByPlayer = new Map<string, Map<string, number>>();
+
+  snapshot.rankingMatches.forEach(match => {
+    const day = matchDayKey(match);
+    if (!day) return;
+    [match.win_1, match.win_2, match.lose_1, match.lose_2].filter((id): id is string => Boolean(id)).forEach(playerId => {
+      const counts = dayCountsByPlayer.get(playerId) || new Map<string, number>();
+      counts.set(day, (counts.get(day) || 0) + 1);
+      dayCountsByPlayer.set(playerId, counts);
+    });
+  });
+
+  const attendanceRows = active.map(metric => {
+    const dayCounts = dayCountsByPlayer.get(metric.id) || new Map<string, number>();
+    const days = [...dayCounts.keys()].sort();
+    const sessionCounts = [...dayCounts.values()];
+    const dayTimes = days.map(day => new Date(`${day}T00:00:00Z`).getTime()).filter(time => Number.isFinite(time));
+    const gaps = dayTimes.slice(1).map((time, index) => Math.max(0, Math.round((time - dayTimes[index]) / 86400000)));
+    return {
+      metric,
+      uniqueDays: days.length,
+      matchesPerSession: sessionCounts.length ? metric.total / sessionCounts.length : 0,
+      gapStdDev: standardDeviation(gaps),
+      maxGap: gaps.length ? Math.max(...gaps) : 0,
+    };
+  });
+  const avgDays = average(attendanceRows.map(row => row.uniqueDays));
+  const avgMatchesPerSession = average(attendanceRows.map(row => row.matchesPerSession));
+  const attendanceById = new Map(attendanceRows.map(row => [row.metric.id, row]));
 
   active.forEach(metric => {
+    const attendance = attendanceById.get(metric.id);
+
     if (topActivity?.id === metric.id && metric.total >= 20) {
       addCandidate(candidates, snapshot, {
         type: 'iron_lung',
@@ -1397,6 +1669,36 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
         evidenceStrength: evidence(metric.total),
         surpriseScore: Math.max(0, avgMatches - metric.total) / 2,
         text: `${metric.name} dạo này mới ra sân ${metric.total} trận, thấp hơn hẳn trung bình nhóm ${round(avgMatches)} trận, đúng phong cách khách mời danh dự.`,
+      });
+    }
+
+    if (attendance && attendance.uniqueDays >= 2 && attendance.uniqueDays < avgDays && attendance.matchesPerSession >= avgMatchesPerSession + 1 && metric.total >= 6) {
+      addCandidate(candidates, snapshot, {
+        type: 'buffet_eater',
+        title: '🍽️ ĐI ĂN BUFFET',
+        group: 'fun',
+        participantIds: [metric.id],
+        rarity: attendance.matchesPerSession >= avgMatchesPerSession + 2 ? 'rare' : 'uncommon',
+        frequency: 'occasional',
+        baseWeight: 40,
+        evidenceStrength: evidence(metric.total),
+        surpriseScore: Math.max(0, attendance.matchesPerSession - avgMatchesPerSession) * 5,
+        text: `${metric.name} không ra sân quá nhiều ngày, nhưng mỗi buổi đã đánh trung bình ${oneDecimal(attendance.matchesPerSession)} trận. Đúng kiểu vác vợt đi ăn buffet.`,
+      });
+    }
+
+    if (attendance && attendance.uniqueDays >= 3 && attendance.gapStdDev >= 2.5 && attendance.maxGap >= 4) {
+      addCandidate(candidates, snapshot, {
+        type: 'moody_player',
+        title: '🌦️ LỊCH RA SÂN KHÓ ĐOÁN',
+        group: 'fun',
+        participantIds: [metric.id],
+        rarity: attendance.gapStdDev >= 4 ? 'rare' : 'uncommon',
+        frequency: 'occasional',
+        baseWeight: 38,
+        evidenceStrength: evidence(attendance.uniqueDays),
+        surpriseScore: attendance.gapStdDev * 3,
+        text: `Lịch ra sân của ${metric.name} hơi khó đoán: đã chơi ${attendance.uniqueDays} ngày nhưng khoảng nghỉ lúc dày lúc thưa, có đoạn cách tới ${attendance.maxGap} ngày.`,
       });
     }
 

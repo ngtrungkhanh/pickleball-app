@@ -7,10 +7,11 @@ frequency, or copy.
 
 ## Current Scope
 
-- Implemented rule types: 62 total (52 core rules + 10 Batch 1 expansion rules).
+- Implemented rule types: 72 total (52 core rules + 20 expansion rules through Batch 2).
 - Current copy scope: 1 sentence per rule.
-- Current expansion progress: Batch 1 implemented in `src/lib/insights.ts`;
-  continue with Batch 2 only after reviewing audit output for the 62-rule feed.
+- Current expansion progress: Batch 1 and Batch 2 implemented in
+  `src/lib/insights.ts`; continue with later batches only after reviewing audit
+  output for the 72-rule feed.
 
 ## User-Facing Wording Rules
 
@@ -235,6 +236,16 @@ update this table in the same unit of work.
 | 60 | `drama_magnet` | `total >= 8`, `tightMatches >= 4`, and `tightMatches / total >= 0.35`; tight means score gap `<= 3` or winner score `> 11` | occasional / 1 | `Cứ hễ ${metric.name} lên sân là dễ có drama: ${tightMatches}/${metric.total} trận kết thúc sát nút hoặc kéo qua 11 điểm.` | **Batch 1**: Implemented. | `tightMatches` is computed from `rankingMatches` in `insights.ts`. |
 | 61 | `glass_cannon` | `Rank <= 3`, `losses >= 3`, and `avgLossDiff >= 4` | occasional / 1 | `Chễm chệ Top ${leaderboardRank} nhưng cứ hễ gãy kèo là ${metric.name} thua trung bình ${oneDecimal(metric.avgLossDiff)} điểm, đúng kiểu công to mà giáp hơi mỏng.` | **Batch 1**: Implemented. | Top-rank player, but losses are usually heavy. |
 | 62 | `stubborn_loser` | `Rank >= 5`, `losses >= 3`, and `avgLossDiff <= 3.5` | occasional / 1 | `Dù đang ở nhóm cuối bảng, ${metric.name} mỗi lần thua chỉ cách biệt trung bình ${oneDecimal(metric.avgLossDiff)} điểm. Không dễ bị out trình, chỉ thiếu duyên đóng kèo.` | **Batch 1**: Implemented. | Bottom-rank player whose losses are still close. |
+| 63 | `rank_launchpad` | Top 3 leaderboard player; opponent edge has `wins >= 4` and is that player's best win source by opponent wins | occasional / 1 | `Đang Top ${leaderboardRank} BXH, ${metric.name} chắc phải cảm ơn ${launchpadEdge.otherName} vì đã góp ${launchpadEdge.wins} trận thắng làm bàn đạp thăng hạng.` | **Batch 2**: Implemented. | Uses directed opponent edges; celebrates/calls out the opponent who donated many wins to a top-ranked player. |
+| 64 | `hot_seat_threat` | Adjacent leaderboard rows where both have `total >= 8` and the win-rate gap is `> 0` and `< 1.5` | frequent / 0.45 | `Ghế nóng báo động: ${metric.name} chỉ còn kém ${playerAbove.name} ${oneDecimal(diff)} điểm win rate. Sơ sẩy một buổi là đảo vị trí ngay.` | **Batch 2**: Implemented. | Predictive rank-pressure story; no historical rank snapshot required. |
+| 65 | `buffet_eater` | `uniqueDays >= 2`, `uniqueDays < avgDays`, `matchesPerSession >= avgMatchesPerSession + 1`, and `total >= 6` | occasional / 1 | `${metric.name} không ra sân quá nhiều ngày, nhưng mỗi buổi đã đánh trung bình ${oneDecimal(attendance.matchesPerSession)} trận. Đúng kiểu vác vợt đi ăn buffet.` | **Batch 2**: Implemented. | `uniqueDays` and matches/session are computed from match dates inside `insights.ts`. |
+| 66 | `moody_player` | `uniqueDays >= 3`, attendance gap standard deviation `>= 2.5`, and max gap `>= 4` days | occasional / 1 | `Lịch ra sân của ${metric.name} hơi khó đoán: đã chơi ${attendance.uniqueDays} ngày nhưng khoảng nghỉ lúc dày lúc thưa, có đoạn cách tới ${attendance.maxGap} ngày.` | **Batch 2**: Implemented. | Uses date-gap variance as the current attendance-consistency proxy. |
+| 67 | `king_rescue` | Chronological event: player wins after a prior losing streak `>= 4` while paired with current Top 2 ELO partner | rare / 1 | `Chuỗi đỏ ${row.priorStreak} trận của ${player.name} vừa được dập tắt khi đứng cùng ${partner.name}, đúng ca hồi sinh nhờ phao cứu sinh Top ELO.` | **Batch 2**: Implemented. | Event-based story built from chronological match scan; emits the latest qualifying events. |
+| 68 | `anchor_drag` | Chronological event: player loses after a prior winning streak `>= 4` while paired with partner whose current win rate `<= 38` | rare / 1 | `Mạch thắng ${row.priorStreak} trận của ${player.name} vừa khựng lại khi ghép cùng ${partner.name}, kèo này đúng là hơi nặng dây xích.` | **Batch 2**: Implemented. | Event-based story built from chronological match scan; uses current partner win rate as the weak-partner proxy. |
+| 69 | `parasite_win` | Directed partner edge where `edge.wins >= 4`, `edge.wins / player.wins >= 0.6`, partner `Rank <= 2`, at least 3 matches without that partner, and win rate without partner `< 30` | rare / 1 | `${round(winShareFromPartner * 100)}% số trận thắng của ${edge.playerName} đến khi đứng cùng Top ${otherRank} ${edge.otherName}. Tách ra thì tỷ lệ thắng chỉ còn ${winRateWithoutPartner}%.` | **Batch 2**: Implemented. | Dependency story; guarded by sample without partner so it does not fire on zero-data separation. |
+| 70 | `gatekeeper_boss` | Player at leaderboard Rank 3 or 4, opponent edge versus a Top 2 player has `total >= 3` and `rate >= 60` | rare / 1 | `Đang hạng ${leaderboardRank} nhưng ${metric.name} lại là cửa ải khó chịu của Top ${targetRank}: gặp ${edge.otherName} thắng ${edge.wins}/${edge.total}.` | **Batch 2**: Implemented. | Middle-rank player who blocks top-ranked players in direct matchups. |
+| 71 | `unlucky_draw` | Player has at least 8 partner matches, at least 4 with bottom-2-ranked partners, and bottom-partner share `>= 0.5` | occasional / 1 | `${metric.name} có ${bottomPartnerMatches.length}/${partnerMatches.length} trận ghép với nhóm cuối bảng, lịch bốc thăm đồng đội hơi thử thách.` | **Batch 2**: Implemented. | Uses partner IDs from match teams and current bottom 2 leaderboard ranks. |
+| 72 | `friendly_fire` | Same two players have partner edge `total >= 4`, partner `rate >= 60`, opponent edge `total >= 4`, and opponent `rate >= 80` | rare / 1 | `${edge.playerName} đứng chung với ${edge.otherName} thắng ${partnerEdge.wins}/${partnerEdge.total}, nhưng cứ chia đội là lại thắng đối đầu ${edge.wins}/${edge.total}. Tình anh em hơi nhiều sát thương.` | **Batch 2**: Implemented. | Relationship crossover: good partner, dangerous opponent. |
 
 ## Known Implementation Notes To Review Next
 
@@ -250,16 +261,20 @@ update this table in the same unit of work.
   must phrase them as ELO expectation gaps.
 
 ## Completed Verification
-- Plan scenario types: 62.
+- Plan scenario types: 72.
 - Missing in code: none.
 - Extra in code: none.
 - Latest backup check (`pickleball_backup_2026-05-14.json`, 1000 seeds,
-  `balanced-v1.1`) generated 157 candidates across 51 triggered scenario
+  `balanced-v1.1`) generated 169 candidates across 57 triggered scenario
   types; all triggered types were selected at least once.
 - Batch 1 expansion implemented 10 rule types:
   `casual_visitor`, `rank_camper`, `elo_inflated`, `elo_defied`,
   `top1_gap`, `late_bloomer`, `late_choker`, `drama_magnet`,
   `glass_cannon`, and `stubborn_loser`.
+- Batch 2 expansion implemented 10 rule types:
+  `rank_launchpad`, `hot_seat_threat`, `buffet_eater`, `moody_player`,
+  `king_rescue`, `anchor_drag`, `parasite_win`, `gatekeeper_boss`,
+  `unlucky_draw`, and `friendly_fire`.
 - Current known sanity checks:
   - Trần Ngọc Hà total remains 15 in the current backup.
   - Hà vs Văn is `0W-6L`, not an impossible count above Hà's total.
@@ -268,7 +283,7 @@ update this table in the same unit of work.
 
 ## Next Review Step
 
-Review all 62 rows above with real dev data and tune:
+Review all 72 rows above with real dev data and tune:
 
 - trigger thresholds,
 - `frequency` and `appearanceRate`,
@@ -350,7 +365,7 @@ roadmap references only; the current table is authoritative for code behavior.
 ---
 
 ## Cross-Reference with Core Plan
-- Current implemented rules are defined above in this file; Batch 1 expansion
-  rows have moved into the current trigger table.
+- Current implemented rules are defined above in this file; Batch 1 and Batch 2
+  expansion rows have moved into the current trigger table.
 - Always ensure that V4 scenarios are registered under a low `baseWeight` or `appearanceRate` unless a highly dramatic crossover triggers (e.g. overtaking Rank #1).
 
