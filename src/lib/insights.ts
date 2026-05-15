@@ -1087,7 +1087,7 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
         baseWeight: 62,
         evidenceStrength: evidence(edge.total),
         surpriseScore: edge.impact,
-        text: `${edge.playerName} mỗi khi chạm trán ${edge.otherName} thường thi đấu cực kỳ thăng hoa, giúp hiệu suất thực tế vượt xa kỳ vọng từ ELO tới ${edge.impact} điểm.`,
+        text: `${edge.playerName} đối đầu ${edge.otherName} đang thắng ${edge.wins}/${edge.total} trận, hiệu suất cao hơn kỳ vọng từ ELO tới ${edge.impact} điểm.`,
       });
     }
   });
