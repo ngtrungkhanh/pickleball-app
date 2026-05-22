@@ -282,3 +282,7 @@ repo.
 - Moved `/analysis` zone navigation out of the fixed bottom bar into the header:
   desktop uses segmented buttons beside season, while mobile uses a second
   dropdown below season.
+- Added a Hall of Fame band to the `/analysis` overview. It uses full match
+  history, ignores the active season filter, only honors completed seasons, and
+  highlights the latest completed-season champion with a compact season-history
+  rail.

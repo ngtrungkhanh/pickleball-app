@@ -236,8 +236,8 @@ Current behavior:
 - sync/cache badge showing current cached match count
 - 3-zone navigation: `Tổng quan`, `Cá nhân`, and `Mạng lưới`; desktop shows it
   in the header beside season, mobile shows it as a dropdown under season
-- overview zone: summary cards, ELO leaderboard/sparkline, and automated
-  insight feed
+- overview zone: Hall of Fame, summary cards, ELO leaderboard/sparkline, and
+  automated insight feed
 - profile zone: selected player, ELO rank, win rate, radar chart, current
   streak, activity, best partner, toughest opponent, and recent matches
 - network zone: partner/opponent cards for the selected player with record,
@@ -250,6 +250,10 @@ Current analysis rules:
 - Guest matches are excluded from ranking analytics through `isRankingMatch`.
 - The selected season filters all tabs. `Tong hop` uses all cached/preloaded
   matches.
+- Hall of Fame is independent from the selected season filter. It reads full
+  match history, only includes completed seasons, uses the Dashboard ranking
+  sort to choose each champion, and keeps the active season as a "dang dien ra"
+  timeline item instead of naming a champion.
 - `src/lib/analysis-core.ts` normalizes the selected match set once and is the
   source of truth for Hub, Profile, Network, and Hub insights.
 - ELO is calculated client-side from full 2v2 ranking matches in chronological

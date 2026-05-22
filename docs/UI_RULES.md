@@ -164,6 +164,11 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
 - The analysis page is denser than the dashboard and should feel like an
   internal analytics tool, not a landing page.
 - Keep filters visible and compact: season selector first, then zone controls.
+- The Hub Hall of Fame sits above the season-filtered analytics but is not
+  affected by the season selector. Keep it ceremonial but compact: portrait
+  plaque, latest completed champion, and a small season-history rail. Do not
+  show a champion for the active season; show it as `dang dien ra`/waiting
+  instead.
 - Hub insight comments should not auto-rotate on a timer. On page refresh, wait
   for the initial cache/server match sync to finish before showing the insight
   feed so comments do not appear once and then immediately change a second

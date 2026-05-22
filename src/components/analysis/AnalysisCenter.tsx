@@ -6,14 +6,15 @@ import {
   ArrowLeft, RefreshCw, Database,
   LayoutGrid, User, Swords, History,
   TrendingUp, Flame, Trophy, Target,
-  Star, Zap, Award,
+  Star, Zap, Award, Crown, Medal, CalendarDays,
   type LucideIcon
 } from 'lucide-react';
-import { buildAnalysisSnapshot, edgeRecord, getAnalysisName, type AnalysisEdge, type EloResult, type PlayerMetrics, type PlayerProfile } from '@/lib/analysis-core';
+import { buildAnalysisElo, buildAnalysisSnapshot, edgeRecord, getAnalysisName, type AnalysisEdge, type EloResult, type PlayerMetrics, type PlayerProfile } from '@/lib/analysis-core';
 import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
 import { cn, getAvatarLetter } from '@/lib/utils';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
-import { isGuestId, loserFineCount } from '@/lib/guest';
+import { isGuestId, isRankingMatch, loserFineCount } from '@/lib/guest';
+import { calculateLeaderboard } from '@/lib/stats';
 
 // Navigation tabs - 4 zones instead of 6
 const navItems = [
@@ -39,11 +40,23 @@ type Match = {
   win_score?: number;
   lose_score?: number;
   season?: string;
+  deleted_at?: unknown;
 };
 type Season = { id?: string; name: string; active?: boolean; start_date?: string };
 type Insight = { type: string; title?: string; text: string; icon?: string; playersInvolved?: string[] };
 type RadarData = { attack: number; defense: number; brave: number; synergy: number; form: number; experience: number };
 type EloHistory = Array<{ date: string; ratings: Record<string, number> }>;
+type HallOfFameEntry = {
+  season: string;
+  playerId: string;
+  playerName: string;
+  wins: number;
+  losses: number;
+  total: number;
+  winRate: number;
+  rating: number;
+  lastMatchDate: string;
+};
 
 const INSIGHT_SELECTION_STATE_KEY = 'pickleball.analysis.insightSelection.v1';
 
@@ -122,6 +135,10 @@ export function AnalysisCenter({
   const seasonOptions = Array.from(new Set([currentActiveSeason, ...currentSeasons.map(s => s.name), ...allMatches.map(m => m.season || 'Season 1')].filter(Boolean)));
 
   const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(visiblePlayers, activeMatches, currentLoseMoney), [visiblePlayers, activeMatches, currentLoseMoney]);
+  const hallOfFameEntries = useMemo(
+    () => buildHallOfFameEntries(players, allMatches, currentSeasons, currentActiveSeason, currentLoseMoney),
+    [players, allMatches, currentSeasons, currentActiveSeason, currentLoseMoney]
+  );
   const rankingMatches = analysisSnapshot.rankingMatches;
   const elo = analysisSnapshot.elo;
   const board = analysisSnapshot.board;
@@ -240,6 +257,8 @@ export function AnalysisCenter({
             insights={insights}
             insightsReady={insightsReady}
             loseMoney={currentLoseMoney}
+            hallOfFameEntries={hallOfFameEntries}
+            activeSeason={currentActiveSeason}
           />
         )}
 
@@ -273,6 +292,65 @@ export function AnalysisCenter({
   );
 }
 
+function isFullDoublesHallMatch(match: Match) {
+  return Boolean(match.win_1 && match.win_2 && match.lose_1 && match.lose_2);
+}
+
+function matchTimeValue(match: Match) {
+  return new Date(String(match.date || '')).getTime() || 0;
+}
+
+function formatHallDate(date: string) {
+  const value = new Date(date);
+  if (Number.isNaN(value.getTime())) return '';
+  return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(value);
+}
+
+function buildHallOfFameEntries(players: Player[], matches: Match[], seasons: Season[], activeSeason: string, loseMoney: number): HallOfFameEntry[] {
+  const seasonMeta = new Map(seasons.filter(season => season.name).map(season => [season.name, season]));
+  const completedSeasonNames = Array.from(new Set(
+    seasons
+      .filter(season => season.name && season.name !== activeSeason && season.active !== true)
+      .map(season => season.name)
+  ));
+  const eligiblePlayers = players.filter(player => !isGuestId(player.id));
+
+  return completedSeasonNames
+    .map(seasonName => {
+      const seasonMatches = matches.filter(match => !match.deleted_at && (match.season || 'Season 1') === seasonName);
+      if (seasonMatches.length === 0) return null;
+
+      const board = calculateLeaderboard(eligiblePlayers, seasonMatches, loseMoney)
+        .filter(player => !isGuestId(player.id) && player.total > 0);
+      const champion = board[0];
+      if (!champion) return null;
+
+      const rankingMatches = seasonMatches.filter(match => isRankingMatch(match) && isFullDoublesHallMatch(match));
+      const rating = buildAnalysisElo(eligiblePlayers, rankingMatches).rating.get(champion.id) ?? 1000;
+      const lastMatch = [...rankingMatches].sort((a, b) => matchTimeValue(b) - matchTimeValue(a))[0];
+
+      return {
+        season: seasonName,
+        playerId: champion.id,
+        playerName: champion.name,
+        wins: champion.wins,
+        losses: champion.losses,
+        total: champion.total,
+        winRate: champion.winRate,
+        rating,
+        lastMatchDate: lastMatch?.date || '',
+      };
+    })
+    .filter((entry): entry is HallOfFameEntry => Boolean(entry))
+    .sort((a, b) => {
+      const aMeta = seasonMeta.get(a.season);
+      const bMeta = seasonMeta.get(b.season);
+      const aTime = new Date(String(aMeta?.start_date || a.lastMatchDate || '')).getTime() || 0;
+      const bTime = new Date(String(bMeta?.start_date || b.lastMatchDate || '')).getTime() || 0;
+      return bTime - aTime || b.season.localeCompare(a.season, 'vi');
+    });
+}
+
 // ============================================
 // ZONE 1: HUB (Tổng quan - Bento Grid)
 // ============================================
@@ -284,6 +362,8 @@ function HubZone({
   insights,
   insightsReady,
   loseMoney,
+  hallOfFameEntries,
+  activeSeason,
 }: {
   board: PlayerMetrics[];
   rankingMatches: Match[];
@@ -292,11 +372,15 @@ function HubZone({
   insights: Insight[];
   insightsReady: boolean;
   loseMoney: number;
+  hallOfFameEntries: HallOfFameEntry[];
+  activeSeason: string;
 }) {
   const totalFines = rankingMatches.reduce((sum, match) => sum + loserFineCount(match), 0) * loseMoney;
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+      <HallOfFame entries={hallOfFameEntries} activeSeason={activeSeason} />
+
       {/* Quick Stats Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label="Tổng trận" value={rankingMatches.length} icon={Target} color="primary" />
@@ -368,6 +452,149 @@ function HubZone({
           </div>
         </BentoCard>
       </div>
+    </div>
+  );
+}
+
+function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; activeSeason: string }) {
+  const latestChampion = entries[0] || null;
+  const historyItems = [
+    ...(activeSeason ? [{ type: 'active' as const, season: activeSeason }] : []),
+    ...entries.map(entry => ({ type: 'champion' as const, season: entry.season, entry })),
+  ];
+
+  return (
+    <section className="relative overflow-hidden rounded-[1.75rem] border border-amber-300/20 bg-slate-800/95 shadow-[0_28px_90px_rgba(0,0,0,0.32)]">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/60 to-transparent" />
+      <div className="absolute inset-x-8 top-12 h-px bg-white/[0.04]" />
+
+      <div className="relative p-5 sm:p-6 lg:p-7">
+        <div className="mb-5 text-center">
+          <div className="text-[10px] sm:text-xs font-black uppercase tracking-[0.55em] text-amber-200/70">
+            Hall of Fame
+          </div>
+          <h2 className="mt-1 text-2xl sm:text-3xl lg:text-4xl font-black uppercase tracking-[0.2em] text-white">
+            Bảng Vinh Danh
+          </h2>
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_310px] lg:items-stretch">
+          <div className="grid gap-5 md:grid-cols-[190px_minmax(0,1fr)] xl:grid-cols-[230px_minmax(0,1fr)]">
+            <ChampionPortrait entry={latestChampion} />
+
+            <div className="flex min-w-0 flex-col justify-center rounded-2xl border border-white/[0.06] bg-slate-950/35 p-5 sm:p-6">
+              {latestChampion ? (
+                <>
+                  <div className="mb-3 inline-flex w-fit items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-amber-200">
+                    <Crown className="h-3.5 w-3.5" />
+                    {latestChampion.season} - Nhà vô địch
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-4xl sm:text-5xl xl:text-6xl font-black uppercase leading-none tracking-[0.06em] text-white truncate">
+                      {latestChampion.playerName}
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/45">
+                      <span>#1 BXH mùa giải</span>
+                      {latestChampion.lastMatchDate && (
+                        <>
+                          <span className="text-amber-200/40">•</span>
+                          <span>Chốt {formatHallDate(latestChampion.lastMatchDate)}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <HallMetric label="Tỉ lệ" value={`${Math.round(latestChampion.winRate)}%`} />
+                    <HallMetric label="W-L" value={`${latestChampion.wins}W-${latestChampion.losses}L`} />
+                    <HallMetric label="Số trận" value={latestChampion.total} />
+                    <HallMetric label="ELO" value={latestChampion.rating} />
+                  </div>
+                </>
+              ) : (
+                <div className="py-5 text-center md:text-left">
+                  <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-amber-200/80">
+                    <Medal className="h-3.5 w-3.5" />
+                    Chờ ghi danh
+                  </div>
+                  <div className="text-2xl sm:text-3xl font-black uppercase tracking-[0.12em] text-white">
+                    Chưa có nhà vô địch
+                  </div>
+                  <p className="mt-3 max-w-xl text-sm font-bold leading-relaxed text-white/45">
+                    Mùa đầu tiên sẽ được lưu vào Bảng Vinh Danh sau khi khép lại.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/[0.06] bg-slate-950/35 p-4">
+            <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.26em] text-white/45">
+              <CalendarDays className="h-3.5 w-3.5 text-amber-200/70" />
+              Lịch sử mùa giải
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1 lg:max-h-[236px] lg:flex-col lg:overflow-y-auto lg:overflow-x-hidden custom-scrollbar">
+              {historyItems.length > 0 ? historyItems.map(item => (
+                item.type === 'active' ? (
+                  <div key={`active-${item.season}`} className="min-w-[220px] rounded-xl border border-primary/20 bg-primary/10 p-3 lg:min-w-0">
+                    <div className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/80">{item.season}</div>
+                    <div className="mt-1 text-sm font-black text-white">Đang diễn ra</div>
+                    <div className="mt-1 text-[11px] font-bold leading-snug text-white/40">Chờ nhà vô địch tiếp theo.</div>
+                  </div>
+                ) : (
+                  <div key={`champion-${item.season}`} className="min-w-[220px] rounded-xl border border-amber-300/18 bg-amber-300/[0.06] p-3 lg:min-w-0">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-200/75">{item.season}</div>
+                        <div className="mt-1 truncate text-sm font-black text-white">{item.entry.playerName}</div>
+                      </div>
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-200/30 bg-amber-200/10 text-xs font-black text-amber-100">
+                        {getAvatarLetter(item.entry.playerName)}
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[11px] font-bold text-white/45">
+                      {Math.round(item.entry.winRate)}% · {item.entry.wins}W-{item.entry.losses}L · {item.entry.rating} ELO
+                    </div>
+                  </div>
+                )
+              )) : (
+                <div className="rounded-xl border border-white/[0.05] bg-white/[0.03] p-4 text-sm font-bold text-white/35">
+                  Chưa có mùa giải nào để hiển thị.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ChampionPortrait({ entry }: { entry: HallOfFameEntry | null }) {
+  return (
+    <div className="mx-auto w-full max-w-[230px] md:max-w-none">
+      <div className="relative aspect-[3/4] overflow-hidden rounded-2xl border border-amber-200/35 bg-slate-950 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),0_20px_50px_rgba(0,0,0,0.32)]">
+        <div className="absolute inset-2 rounded-xl border border-amber-100/15" />
+        <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(251,191,36,0.18),rgba(15,23,42,0.08)_42%,rgba(255,255,255,0.08)_43%,rgba(15,23,42,0.02)_55%,rgba(15,23,42,0.55))]" />
+        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-950/80 to-transparent" />
+        <div className="relative flex h-full flex-col items-center justify-center p-5 text-center">
+          <div className="flex h-24 w-24 items-center justify-center rounded-full border border-amber-100/35 bg-amber-200/10 text-5xl font-black text-amber-100 shadow-[0_0_36px_rgba(251,191,36,0.16)]">
+            {entry ? getAvatarLetter(entry.playerName) : <Trophy className="h-12 w-12" />}
+          </div>
+          <div className="mt-4 text-[10px] font-black uppercase tracking-[0.3em] text-amber-100/65">
+            {entry ? entry.season : 'Chờ ghi danh'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HallMetric({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-white/[0.04] px-3 py-3 text-center">
+      <div className="text-xl sm:text-2xl font-black text-white">{value}</div>
+      <div className="mt-1 text-[9px] font-black uppercase tracking-[0.22em] text-white/35">{label}</div>
     </div>
   );
 }
