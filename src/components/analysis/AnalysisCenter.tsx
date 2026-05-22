@@ -19,6 +19,7 @@ import { calculateLeaderboard } from '@/lib/stats';
 // Navigation tabs - 4 zones instead of 6
 const navItems = [
   { id: 'hub', label: 'Tổng quan', icon: LayoutGrid },
+  { id: 'hall', label: 'Vinh danh', icon: Crown },
   { id: 'profile', label: 'Cá nhân', icon: User },
   { id: 'matrix', label: 'Mạng lưới', icon: Swords },
 ];
@@ -259,10 +260,16 @@ export function AnalysisCenter({
             loseMoney={currentLoseMoney}
             hallOfFameEntries={hallOfFameEntries}
             activeSeason={currentActiveSeason}
+            onOpenHall={() => setActiveNav('hall')}
           />
         )}
 
-        {/* ZONE 2: Profile (Cá nhân) */}
+        {/* ZONE 2: Hall of Fame (Vinh danh) */}
+        {activeNav === 'hall' && (
+          <HallOfFame entries={hallOfFameEntries} activeSeason={currentActiveSeason} />
+        )}
+
+        {/* ZONE 3: Profile (Cá nhân) */}
         {activeNav === 'profile' && (
           <ProfileZone
             playerId={playerId}
@@ -274,7 +281,7 @@ export function AnalysisCenter({
           />
         )}
 
-        {/* ZONE 3: Matrix (Đối đầu) */}
+        {/* ZONE 4: Matrix (Đối đầu) */}
         {activeNav === 'matrix' && (
           <MatrixZone
             matrixTab={matrixTab}
@@ -364,6 +371,7 @@ function HubZone({
   loseMoney,
   hallOfFameEntries,
   activeSeason,
+  onOpenHall,
 }: {
   board: PlayerMetrics[];
   rankingMatches: Match[];
@@ -374,12 +382,13 @@ function HubZone({
   loseMoney: number;
   hallOfFameEntries: HallOfFameEntry[];
   activeSeason: string;
+  onOpenHall: () => void;
 }) {
   const totalFines = rankingMatches.reduce((sum, match) => sum + loserFineCount(match), 0) * loseMoney;
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <HallOfFame entries={hallOfFameEntries} activeSeason={activeSeason} />
+      <HallOfFameStrip entries={hallOfFameEntries} activeSeason={activeSeason} onOpenHall={onOpenHall} />
 
       {/* Quick Stats Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -456,6 +465,47 @@ function HubZone({
   );
 }
 
+function HallOfFameStrip({ entries, activeSeason, onOpenHall }: { entries: HallOfFameEntry[]; activeSeason: string; onOpenHall: () => void }) {
+  const latestChampion = entries[0] || null;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpenHall}
+      className="group flex w-full flex-col gap-3 rounded-2xl border border-amber-300/18 bg-slate-800/75 px-4 py-3 text-left shadow-[0_16px_45px_rgba(0,0,0,0.18)] transition-all hover:border-amber-200/35 hover:bg-slate-800 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-amber-200/25 bg-amber-200/10 text-amber-100">
+          <Crown className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-[10px] font-black uppercase tracking-[0.28em] text-amber-200/70">Hall of Fame</div>
+          {latestChampion ? (
+            <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span className="text-sm font-black uppercase tracking-[0.12em] text-white/55">{latestChampion.season}</span>
+              <span className="truncate text-lg font-black text-white sm:text-xl">{latestChampion.playerName}</span>
+              <span className="text-xs font-black text-white/35">
+                {Math.round(latestChampion.winRate)}% · {latestChampion.wins}W-{latestChampion.losses}L
+              </span>
+            </div>
+          ) : (
+            <div className="mt-1 text-sm font-black text-white">Chưa có nhà vô địch được ghi danh</div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
+        <div className="hidden text-right text-[11px] font-bold leading-snug text-white/35 md:block">
+          {activeSeason ? `${activeSeason} đang diễn ra` : 'Lịch sử mùa giải'}
+        </div>
+        <div className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-white/55 transition-colors group-hover:text-amber-100">
+          Xem vinh danh
+        </div>
+      </div>
+    </button>
+  );
+}
+
 function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; activeSeason: string }) {
   const latestChampion = entries[0] || null;
   const historyItems = [
@@ -464,25 +514,29 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
   ];
 
   return (
-    <section className="relative overflow-hidden rounded-[1.75rem] border border-amber-300/20 bg-slate-800/95 shadow-[0_28px_90px_rgba(0,0,0,0.32)]">
+    <section className="relative overflow-hidden rounded-2xl border border-amber-300/18 bg-slate-800/85 shadow-[0_22px_70px_rgba(0,0,0,0.26)] animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/60 to-transparent" />
-      <div className="absolute inset-x-8 top-12 h-px bg-white/[0.04]" />
 
-      <div className="relative p-5 sm:p-6 lg:p-7">
-        <div className="mb-5 text-center">
-          <div className="text-[10px] sm:text-xs font-black uppercase tracking-[0.55em] text-amber-200/70">
-            Hall of Fame
+      <div className="relative p-4 sm:p-5 lg:p-6">
+        <div className="mb-4 flex flex-col gap-2 border-b border-white/[0.06] pb-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.44em] text-amber-200/70">
+              Hall of Fame
+            </div>
+            <h2 className="mt-1 text-2xl sm:text-3xl font-black uppercase tracking-[0.16em] text-white">
+              Bảng Vinh Danh
+            </h2>
           </div>
-          <h2 className="mt-1 text-2xl sm:text-3xl lg:text-4xl font-black uppercase tracking-[0.2em] text-white">
-            Bảng Vinh Danh
-          </h2>
+          <div className="text-xs font-bold text-white/35">
+            {entries.length > 0 ? `${entries.length} mùa đã ghi danh` : 'Chờ mùa giải đầu tiên khép lại'}
+          </div>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_310px] lg:items-stretch">
-          <div className="grid gap-5 md:grid-cols-[190px_minmax(0,1fr)] xl:grid-cols-[230px_minmax(0,1fr)]">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_290px] lg:items-stretch">
+          <div className="grid gap-4 md:grid-cols-[170px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
             <ChampionPortrait entry={latestChampion} />
 
-            <div className="flex min-w-0 flex-col justify-center rounded-2xl border border-white/[0.06] bg-slate-950/35 p-5 sm:p-6">
+            <div className="flex min-w-0 flex-col justify-center rounded-2xl border border-white/[0.06] bg-slate-950/30 p-4 sm:p-5">
               {latestChampion ? (
                 <>
                   <div className="mb-3 inline-flex w-fit items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-amber-200">
@@ -490,7 +544,7 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
                     {latestChampion.season} - Nhà vô địch
                   </div>
                   <div className="min-w-0">
-                    <div className="text-4xl sm:text-5xl xl:text-6xl font-black uppercase leading-none tracking-[0.06em] text-white truncate">
+                    <div className="text-3xl sm:text-4xl xl:text-5xl font-black uppercase leading-tight tracking-[0.04em] text-white break-words">
                       {latestChampion.playerName}
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/45">
@@ -504,7 +558,7 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
                     </div>
                   </div>
 
-                  <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                     <HallMetric label="Tỉ lệ" value={`${Math.round(latestChampion.winRate)}%`} />
                     <HallMetric label="W-L" value={`${latestChampion.wins}W-${latestChampion.losses}L`} />
                     <HallMetric label="Số trận" value={latestChampion.total} />
@@ -528,12 +582,12 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/[0.06] bg-slate-950/35 p-4">
+          <div className="rounded-2xl border border-white/[0.06] bg-slate-950/30 p-4">
             <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.26em] text-white/45">
               <CalendarDays className="h-3.5 w-3.5 text-amber-200/70" />
               Lịch sử mùa giải
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 lg:max-h-[236px] lg:flex-col lg:overflow-y-auto lg:overflow-x-hidden custom-scrollbar">
+            <div className="flex gap-2 overflow-x-auto pb-1 lg:max-h-[220px] lg:flex-col lg:overflow-y-auto lg:overflow-x-hidden custom-scrollbar">
               {historyItems.length > 0 ? historyItems.map(item => (
                 item.type === 'active' ? (
                   <div key={`active-${item.season}`} className="min-w-[220px] rounded-xl border border-primary/20 bg-primary/10 p-3 lg:min-w-0">
@@ -572,14 +626,14 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
 
 function ChampionPortrait({ entry }: { entry: HallOfFameEntry | null }) {
   return (
-    <div className="mx-auto w-full max-w-[230px] md:max-w-none">
-      <div className="relative aspect-[3/4] overflow-hidden rounded-2xl border border-amber-200/35 bg-slate-950 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),0_20px_50px_rgba(0,0,0,0.32)]">
+    <div className="mx-auto w-full max-w-[190px] md:max-w-none">
+      <div className="relative aspect-[3/4] overflow-hidden rounded-2xl border border-amber-200/30 bg-slate-950/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05),0_18px_42px_rgba(0,0,0,0.28)]">
         <div className="absolute inset-2 rounded-xl border border-amber-100/15" />
-        <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(251,191,36,0.18),rgba(15,23,42,0.08)_42%,rgba(255,255,255,0.08)_43%,rgba(15,23,42,0.02)_55%,rgba(15,23,42,0.55))]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(251,191,36,0.18),transparent_38%),linear-gradient(145deg,rgba(251,191,36,0.12),rgba(15,23,42,0.05)_42%,rgba(255,255,255,0.06)_43%,rgba(15,23,42,0.02)_55%,rgba(15,23,42,0.45))]" />
         <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-950/80 to-transparent" />
         <div className="relative flex h-full flex-col items-center justify-center p-5 text-center">
-          <div className="flex h-24 w-24 items-center justify-center rounded-full border border-amber-100/35 bg-amber-200/10 text-5xl font-black text-amber-100 shadow-[0_0_36px_rgba(251,191,36,0.16)]">
-            {entry ? getAvatarLetter(entry.playerName) : <Trophy className="h-12 w-12" />}
+          <div className="flex h-20 w-20 items-center justify-center rounded-full border border-amber-100/35 bg-amber-200/10 text-4xl font-black text-amber-100 shadow-[0_0_30px_rgba(251,191,36,0.14)]">
+            {entry ? getAvatarLetter(entry.playerName) : <Trophy className="h-10 w-10" />}
           </div>
           <div className="mt-4 text-[10px] font-black uppercase tracking-[0.3em] text-amber-100/65">
             {entry ? entry.season : 'Chờ ghi danh'}

@@ -234,10 +234,13 @@ Current behavior:
 
 - season selector with all-season option
 - sync/cache badge showing current cached match count
-- 3-zone navigation: `Tổng quan`, `Cá nhân`, and `Mạng lưới`; desktop shows it
-  in the header beside season, mobile shows it as a dropdown under season
-- overview zone: Hall of Fame, summary cards, ELO leaderboard/sparkline, and
-  automated insight feed
+- 4-zone navigation: `Tổng quan`, `Vinh danh`, `Cá nhân`, and `Mạng lưới`;
+  desktop shows it in the header beside season, mobile shows it as a dropdown
+  under season
+- overview zone: compact Hall of Fame strip, summary cards, ELO
+  leaderboard/sparkline, and automated insight feed
+- Hall of Fame zone: latest completed-season champion plaque and compact
+  season-history rail
 - profile zone: selected player, ELO rank, win rate, radar chart, current
   streak, activity, best partner, toughest opponent, and recent matches
 - network zone: partner/opponent cards for the selected player with record,

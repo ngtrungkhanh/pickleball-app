@@ -154,9 +154,9 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
 
 ## Analysis UI
 
-- Analysis uses 3 zones: `Tổng quan`, `Cá nhân`, and `Mạng lưới`. On desktop,
-  the zone switcher sits in the header beside the season selector; on mobile,
-  it is a dropdown directly below the season dropdown.
+- Analysis uses 4 zones: `Tổng quan`, `Vinh danh`, `Cá nhân`, and `Mạng lưới`.
+  On desktop, the zone switcher sits in the header beside the season selector;
+  on mobile, it is a dropdown directly below the season dropdown.
 - Analysis should stay read-only.
 - The sync/cache badge should stay small and unobtrusive.
 - Do not show manual `Làm mới` buttons in Dashboard or Analysis. If users need
@@ -164,10 +164,11 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
 - The analysis page is denser than the dashboard and should feel like an
   internal analytics tool, not a landing page.
 - Keep filters visible and compact: season selector first, then zone controls.
-- The Hub Hall of Fame sits above the season-filtered analytics but is not
-  affected by the season selector. Keep it ceremonial but compact: portrait
-  plaque, latest completed champion, and a small season-history rail. Do not
-  show a champion for the active season; show it as `dang dien ra`/waiting
+- The Hub overview only shows a compact Hall of Fame strip so ELO and insight
+  content remain near the top. The full Hall of Fame lives in the `Vinh danh`
+  zone with a portrait plaque, latest completed champion, and a small
+  season-history rail. Hall of Fame is not affected by the season selector. Do
+  not show a champion for the active season; show it as `dang dien ra`/waiting
   instead.
 - Hub insight comments should not auto-rotate on a timer. On page refresh, wait
   for the initial cache/server match sync to finish before showing the insight
