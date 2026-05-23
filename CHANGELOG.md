@@ -282,7 +282,8 @@ repo.
 - Moved `/analysis` zone navigation out of the fixed bottom bar into the header:
   desktop uses segmented buttons beside season, while mobile uses a second
   dropdown below season.
-- Added a Hall of Fame experience to `/analysis`: the overview now shows a
-  compact champion strip, while a dedicated `Vinh danh` zone shows the full
-  champion plaque and season-history rail. It uses full match history, ignores
-  the active season filter, and only names champions for completed seasons.
+- Added Hall of Fame handling for completed-season champions: the main
+  dashboard shows a compact previous-champion banner when available, and
+  `/analysis?zone=hall` opens the dedicated `Vinh danh` zone with the full
+  champion plaque and season-history rail. The `/analysis` overview no longer
+  shows Hall of Fame content.

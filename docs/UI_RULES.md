@@ -164,12 +164,15 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
 - The analysis page is denser than the dashboard and should feel like an
   internal analytics tool, not a landing page.
 - Keep filters visible and compact: season selector first, then zone controls.
-- The Hub overview only shows a compact Hall of Fame strip so ELO and insight
-  content remain near the top. The full Hall of Fame lives in the `Vinh danh`
-  zone with a portrait plaque, latest completed champion, and a small
+- The Hub overview should not show Hall of Fame content; keep ELO and insight
+  content near the top. The full Hall of Fame lives in the `Vinh danh` zone
+  with a prominent portrait plaque, latest completed champion, and a small
   season-history rail. Hall of Fame is not affected by the season selector. Do
   not show a champion for the active season; show it as `dang dien ra`/waiting
   instead.
+- The main dashboard may show a compact previous-champion banner before summary
+  cards. Keep it short enough that the leaderboard still feels close to the top,
+  but visually honorable enough to mark the prior season champion.
 - Hub insight comments should not auto-rotate on a timer. On page refresh, wait
   for the initial cache/server match sync to finish before showing the insight
   feed so comments do not appear once and then immediately change a second

@@ -237,8 +237,8 @@ Current behavior:
 - 4-zone navigation: `Tổng quan`, `Vinh danh`, `Cá nhân`, and `Mạng lưới`;
   desktop shows it in the header beside season, mobile shows it as a dropdown
   under season
-- overview zone: compact Hall of Fame strip, summary cards, ELO
-  leaderboard/sparkline, and automated insight feed
+- overview zone: summary cards, ELO leaderboard/sparkline, and automated
+  insight feed
 - Hall of Fame zone: latest completed-season champion plaque and compact
   season-history rail
 - profile zone: selected player, ELO rank, win rate, radar chart, current
@@ -257,6 +257,9 @@ Current analysis rules:
   match history, only includes completed seasons, uses the Dashboard ranking
   sort to choose each champion, and keeps the active season as a "dang dien ra"
   timeline item instead of naming a champion.
+- The main dashboard may show a compact previous-champion banner before the
+  summary cards. It links to `/analysis?zone=hall` and only appears when at
+  least one completed-season champion exists.
 - `src/lib/analysis-core.ts` normalizes the selected match set once and is the
   source of truth for Hub, Profile, Network, and Hub insights.
 - ELO is calculated client-side from full 2v2 ranking matches in chronological
