@@ -5,7 +5,6 @@ type SummaryGridProps = {
   players: unknown[];
   matches: Array<Record<string, unknown>>;
   loseMoney?: number;
-  compact?: boolean;
 };
 
 function formatCompactMoney(value: number) {
@@ -13,7 +12,7 @@ function formatCompactMoney(value: number) {
   return value.toLocaleString('vi-VN');
 }
 
-export function SummaryGrid({ matches, loseMoney = 5000, compact = false }: SummaryGridProps) {
+export function SummaryGrid({ matches, loseMoney = 5000 }: SummaryGridProps) {
   const s = getSeasonSummaryStats(matches, loseMoney);
 
   const cards = [
@@ -41,7 +40,7 @@ export function SummaryGrid({ matches, loseMoney = 5000, compact = false }: Summ
             style={{ background: `radial-gradient(circle at 50% 0%, ${color}, transparent 80%)` }}
           />
 
-          <div className={`relative z-10 min-h-[76px] sm:min-h-[68px] flex flex-col items-start justify-between gap-3 ${compact ? '' : 'sm:flex-row sm:items-center'}`}>
+          <div className="relative z-10 min-h-[76px] sm:min-h-[68px] flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
             <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto">
               <div className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.08] border border-white/[0.12]">
                 <Icon className="w-3.5 h-3.5" style={{ color }} />
@@ -51,7 +50,7 @@ export function SummaryGrid({ matches, loseMoney = 5000, compact = false }: Summ
               </span>
             </div>
 
-            <div className={`flex items-baseline justify-start gap-1.5 shrink-0 min-w-0 w-full ${compact ? '' : 'sm:w-auto sm:justify-end'}`}>
+            <div className="flex items-baseline justify-start sm:justify-end gap-1.5 shrink-0 min-w-0 w-full sm:w-auto">
               <span className="min-w-0 break-words text-xl min-[380px]:text-2xl sm:text-3xl lg:text-2xl xl:text-3xl 2xl:text-4xl font-black text-white leading-none">
                 {big}
               </span>
