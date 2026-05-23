@@ -16,6 +16,7 @@ type Match = { id?: string; date?: string; season?: string; [key: string]: unkno
 type Season = { id: string; name: string; active?: boolean; start_date?: string };
 const EDIT_EVENT = 'pickleball-edit-mode-change';
 const DESKTOP_PANEL_WIDTH = 'mx-auto w-full lg:w-[85%]';
+const DESKTOP_DOCK_PANEL_WIDTH = 'mx-auto w-full lg:w-[94%]';
 
 function subscribeEditMode(callback: () => void) {
   window.addEventListener('storage', callback);
@@ -139,29 +140,25 @@ export default function Dashboard({
         </div>
       )}
 
-      {/* 1. Summary */}
-      <div className={DESKTOP_PANEL_WIDTH}>
-        {previousChampion ? (
-          <div className="grid w-full items-stretch gap-3 xl:grid-cols-[220px_minmax(0,1fr)]">
-            <PreviousChampionSummaryPlaque champion={previousChampion} />
-            <SummaryGrid players={players} matches={viewedMatches} loseMoney={loseMoney} />
+      {/* 1. Summary + Leaderboard */}
+      <div className={previousChampion ? DESKTOP_DOCK_PANEL_WIDTH : DESKTOP_PANEL_WIDTH}>
+        <div className={previousChampion ? "grid w-full items-start gap-5 xl:grid-cols-[minmax(0,1fr)_220px] 2xl:grid-cols-[minmax(0,1fr)_240px]" : ""}>
+          <div className="min-w-0 space-y-5">
+            <SummaryGrid players={players} matches={viewedMatches} loseMoney={loseMoney} compact={Boolean(previousChampion)} />
+            <Leaderboard
+              players={players}
+              matches={matches}
+              seasons={seasons}
+              activeSeason={activeSeason}
+              selectedSeason={selectedSeason}
+              onSeasonChange={setSelectedSeason}
+              loseMoney={loseMoney}
+            />
           </div>
-        ) : (
-          <SummaryGrid players={players} matches={viewedMatches} loseMoney={loseMoney} />
-        )}
-      </div>
-
-      {/* 2. Leaderboard */}
-      <div className={DESKTOP_PANEL_WIDTH}>
-        <Leaderboard
-          players={players}
-          matches={matches}
-          seasons={seasons}
-          activeSeason={activeSeason}
-          selectedSeason={selectedSeason}
-          onSeasonChange={setSelectedSeason}
-          loseMoney={loseMoney}
-        />
+          {previousChampion && (
+            <PreviousChampionDock champion={previousChampion} />
+          )}
+        </div>
       </div>
 
       {/* 3. Score Form */}
@@ -206,47 +203,51 @@ export default function Dashboard({
   );
 }
 
-function PreviousChampionSummaryPlaque({ champion }: { champion: HallOfFameEntry }) {
+function PreviousChampionDock({ champion }: { champion: HallOfFameEntry }) {
   return (
     <Link
       href="/analysis?zone=hall"
-      className="group relative hidden min-w-0 overflow-hidden rounded-xl border border-amber-300/45 bg-[#1b2940]/95 p-2.5 text-left shadow-[0_10px_28px_rgba(0,0,0,0.22)] transition-all hover:-translate-y-0.5 hover:border-amber-200/70 hover:bg-[#20314f] xl:flex"
+      className="group relative hidden min-w-0 overflow-hidden rounded-2xl border border-amber-300/45 bg-[#17243c]/95 p-4 text-left shadow-[0_16px_44px_rgba(0,0,0,0.26)] transition-all hover:-translate-y-0.5 hover:border-amber-200/70 hover:bg-[#20314f] xl:flex xl:flex-col"
       aria-label={`Xem bảng vinh danh ${champion.season}`}
     >
-      <div className="absolute inset-0 opacity-45 [background:radial-gradient(circle_at_20%_0%,rgba(251,191,36,0.28),transparent_54%)]" />
+      <div className="absolute inset-0 opacity-50 [background:radial-gradient(circle_at_50%_0%,rgba(251,191,36,0.30),transparent_50%)]" />
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/70 to-transparent" />
 
-      <div className="relative flex min-w-0 flex-1 items-center gap-3">
-        <div className="relative aspect-[3/4] w-16 shrink-0 overflow-hidden rounded-lg border border-amber-200/50 bg-slate-950/85 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
-          <div className="absolute inset-1 rounded-md border border-amber-100/15" />
+      <div className="relative flex min-w-0 flex-1 flex-col items-center text-center">
+        <div className="mb-3 flex w-full min-w-0 items-center justify-between gap-2">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-300/40 bg-amber-300/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-amber-100">
+            <Crown className="h-3 w-3" />
+            Mùa trước
+          </span>
+          <span className="min-w-0 truncate text-[9px] font-black uppercase tracking-[0.18em] text-white/42">
+            {champion.season}
+          </span>
+        </div>
+
+        <div className="relative aspect-[3/4] w-[108px] shrink-0 overflow-hidden rounded-xl border border-amber-200/50 bg-slate-950/85 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),0_16px_34px_rgba(0,0,0,0.24)] 2xl:w-[120px]">
+          <div className="absolute inset-1.5 rounded-lg border border-amber-100/15" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,rgba(251,191,36,0.26),transparent_42%),linear-gradient(145deg,rgba(251,191,36,0.18),rgba(15,23,42,0.05)_42%,rgba(255,255,255,0.08)_43%,rgba(15,23,42,0.50))]" />
           <div className="relative flex h-full items-center justify-center">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-amber-100/45 bg-amber-200/10 text-xl font-black text-amber-100 shadow-[0_0_26px_rgba(251,191,36,0.18)]">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full border border-amber-100/45 bg-amber-200/10 text-3xl font-black text-amber-100 shadow-[0_0_30px_rgba(251,191,36,0.18)]">
               {getAvatarLetter(champion.playerName)}
             </div>
           </div>
         </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="mb-1 flex min-w-0 items-center gap-1.5">
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-300/40 bg-amber-300/15 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-amber-100">
-              <Crown className="h-2.5 w-2.5" />
-              Mùa trước
-            </span>
-            <span className="min-w-0 truncate text-[8px] font-black uppercase tracking-[0.16em] text-white/42">
-              {champion.season}
-            </span>
-          </div>
-          <div className="line-clamp-2 text-[15px] font-black uppercase leading-[1.08] tracking-[0.035em] text-white">
+        <div className="mt-4 min-w-0">
+          <div className="line-clamp-2 text-lg font-black uppercase leading-[1.08] tracking-[0.035em] text-white 2xl:text-xl">
             {champion.playerName}
           </div>
-          <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-[9px] font-black uppercase tracking-[0.08em] text-white/46">
+          <div className="mt-2 flex flex-wrap justify-center gap-x-2 gap-y-1 text-[10px] font-black uppercase tracking-[0.08em] text-white/48">
             <span>{Math.round(champion.winRate)}%</span>
             <span>{champion.wins}W-{champion.losses}L</span>
           </div>
-          <div className="mt-1.5 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-[0.16em] text-amber-100/70 transition-colors group-hover:text-amber-100">
-            Vinh danh
-            <ChevronRight className="h-3 w-3" />
+        </div>
+
+        <div className="mt-auto pt-4">
+          <div className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/72 transition-colors group-hover:text-amber-100">
+            Xem vinh danh
+            <ChevronRight className="h-3.5 w-3.5" />
           </div>
         </div>
       </div>
@@ -281,7 +282,7 @@ function PreviousChampionMobileCard({ champion }: { champion: HallOfFameEntry })
             </span>
             <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">{champion.season}</span>
           </div>
-          <div className="truncate text-xl font-black uppercase tracking-[0.04em] text-white">
+          <div className="line-clamp-2 text-xl font-black uppercase leading-tight tracking-[0.04em] text-white">
             {champion.playerName}
           </div>
           <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-[11px] font-black uppercase tracking-[0.1em] text-white/45">

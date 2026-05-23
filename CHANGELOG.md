@@ -283,8 +283,8 @@ repo.
   desktop uses segmented buttons beside season, while mobile uses a second
   dropdown below season.
 - Added Hall of Fame handling for completed-season champions: the main
-  dashboard shows a previous-champion plaque as a real summary-row tile on
-  desktop and a compact card on smaller screens when available, and
+  dashboard shows a previous-champion honor dock beside the main desktop
+  dashboard content and a compact card on smaller screens when available, and
   `/analysis?zone=hall` opens the dedicated `Vinh danh` zone with the full
   champion plaque and season-history rail. The `/analysis` overview no longer
   shows Hall of Fame content.

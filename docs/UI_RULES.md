@@ -170,11 +170,12 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
   season-history rail. Hall of Fame is not affected by the season selector. Do
   not show a champion for the active season; show it as `dang dien ra`/waiting
   instead.
-- The main dashboard may show a previous-champion plaque as the first desktop
-  summary-row tile, and a compact card before summary cards on smaller screens.
-  Keep it visually honorable without pushing the leaderboard too far down. The
-  portrait frame should preserve a 3:4 feel, and the dashboard title area
-  should not use absolutely-positioned champion elements.
+- The main dashboard may show a previous-champion honor dock beside the
+  desktop summary/leaderboard content, and a compact card before summary cards
+  on smaller screens. Keep it visually honorable without pushing the
+  leaderboard too far down or compressing summary-card labels. The portrait
+  frame should preserve a 3:4 feel, and the dashboard title area should not use
+  absolutely-positioned champion elements.
 - Hub insight comments should not auto-rotate on a timer. On page refresh, wait
   for the initial cache/server match sync to finish before showing the insight
   feed so comments do not appear once and then immediately change a second
