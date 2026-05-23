@@ -399,7 +399,7 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
   const latestChampion = entries[0] || null;
   const historyItems = [
     ...(activeSeason ? [{ type: 'active' as const, season: activeSeason }] : []),
-    ...entries.map(entry => ({ type: 'champion' as const, season: entry.season, entry })),
+    ...entries.map((entry, index) => ({ type: 'champion' as const, season: entry.season, entry, isLatest: index === 0 })),
   ];
 
   return (
@@ -423,7 +423,7 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-stretch">
+        <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_320px] 2xl:items-stretch">
           <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)] 2xl:grid-cols-[260px_minmax(0,1fr)]">
             <ChampionPortrait entry={latestChampion} />
 
@@ -478,27 +478,46 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
               <CalendarDays className="h-3.5 w-3.5 text-amber-200/70" />
               Lịch sử mùa giải
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 xl:max-h-[300px] xl:flex-col xl:overflow-y-auto xl:overflow-x-hidden custom-scrollbar">
+            <div className="flex gap-2 overflow-x-auto pb-1 2xl:max-h-[300px] 2xl:flex-col 2xl:overflow-y-auto 2xl:overflow-x-hidden custom-scrollbar">
               {historyItems.length > 0 ? historyItems.map(item => (
                 item.type === 'active' ? (
-                  <div key={`active-${item.season}`} className="min-w-[220px] rounded-xl border border-primary/20 bg-primary/10 p-3 lg:min-w-0">
+                  <div key={`active-${item.season}`} className="min-w-[220px] rounded-xl border border-primary/20 bg-primary/10 p-3 2xl:min-w-0">
                     <div className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/80">{item.season}</div>
                     <div className="mt-1 text-sm font-black text-white">Đang diễn ra</div>
                     <div className="mt-1 text-[11px] font-bold leading-snug text-white/40">Chờ nhà vô địch tiếp theo.</div>
                   </div>
                 ) : (
-                  <div key={`champion-${item.season}`} className="min-w-[220px] rounded-xl border border-amber-300/18 bg-amber-300/[0.06] p-3 lg:min-w-0">
+                  <div
+                    key={`champion-${item.season}`}
+                    className={cn(
+                      "min-w-[220px] rounded-xl border p-3 2xl:min-w-0",
+                      item.isLatest
+                        ? "border-amber-300/30 bg-amber-300/[0.08]"
+                        : "border-white/[0.06] bg-white/[0.035]"
+                    )}
+                  >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-200/75">{item.season}</div>
+                        <div className={cn(
+                          "text-[10px] font-black uppercase tracking-[0.2em]",
+                          item.isLatest ? "text-amber-200/80" : "text-white/35"
+                        )}>{item.season}</div>
                         <div className="mt-1 truncate text-sm font-black text-white">{item.entry.playerName}</div>
                       </div>
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-200/30 bg-amber-200/10 text-xs font-black text-amber-100">
+                      <div className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-black",
+                        item.isLatest
+                          ? "border-amber-200/35 bg-amber-200/10 text-amber-100"
+                          : "border-white/10 bg-white/[0.04] text-white/45"
+                      )}>
                         {getAvatarLetter(item.entry.playerName)}
                       </div>
                     </div>
-                    <div className="mt-2 text-[11px] font-bold text-white/45">
-                      {Math.round(item.entry.winRate)}% · {item.entry.wins}W-{item.entry.losses}L · {item.entry.rating} ELO
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-bold text-white/45">
+                      <span>{item.isLatest ? 'Đang vinh danh' : 'Đã ghi danh'}</span>
+                      <span>{Math.round(item.entry.winRate)}%</span>
+                      <span>{item.entry.wins}W-{item.entry.losses}L</span>
+                      <span>{item.entry.rating} ELO</span>
                     </div>
                   </div>
                 )

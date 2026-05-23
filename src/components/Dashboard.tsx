@@ -110,21 +110,25 @@ export default function Dashboard({
 
   return (
     <div className="space-y-5 transition-all duration-500 w-full">
-      <div className={`${DESKTOP_PANEL_WIDTH} flex items-center justify-end gap-2`}>
-        {sharedData.syncMessage && (
-          <div className="mr-auto hidden sm:flex items-center gap-2 rounded-xl border border-slate-500/20 bg-[#142034]/80 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300/60">
+      <div className={`${DESKTOP_PANEL_WIDTH} flex items-center gap-2`}>
+        {previousChampion ? (
+          <PreviousChampionRibbon champion={previousChampion} />
+        ) : sharedData.syncMessage ? (
+          <div className="hidden sm:flex items-center gap-2 rounded-xl border border-slate-500/20 bg-[#142034]/80 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300/60">
             <RefreshCw className={`w-3.5 h-3.5 ${sharedData.syncState === 'syncing' ? 'animate-spin' : ''}`} />
             {sharedData.syncMessage}
           </div>
-        )}
-        <Link href="/analysis" className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
-          <BarChart3 className="w-4 h-4" />
-          Trung tâm phân tích
-        </Link>
-        <button onClick={() => setSettingsOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
-          <Settings className="w-4 h-4" />
-          Cài đặt
-        </button>
+        ) : null}
+        <div className="ml-auto flex items-center justify-end gap-2">
+          <Link href="/analysis" className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
+            <BarChart3 className="w-4 h-4" />
+            Trung tâm phân tích
+          </Link>
+          <button onClick={() => setSettingsOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
+            <Settings className="w-4 h-4" />
+            Cài đặt
+          </button>
+        </div>
       </div>
 
       {previewWritesBlocked && (
@@ -134,8 +138,8 @@ export default function Dashboard({
       )}
 
       {previousChampion && (
-        <div className={DESKTOP_PANEL_WIDTH}>
-          <PreviousChampionBanner champion={previousChampion} />
+        <div className={`${DESKTOP_PANEL_WIDTH} lg:hidden`}>
+          <PreviousChampionMobileCard champion={previousChampion} />
         </div>
       )}
 
@@ -199,21 +203,66 @@ export default function Dashboard({
   );
 }
 
-function PreviousChampionBanner({ champion }: { champion: HallOfFameEntry }) {
+function PreviousChampionRibbon({ champion }: { champion: HallOfFameEntry }) {
   return (
     <Link
       href="/analysis?zone=hall"
-      className="group relative flex min-h-[120px] overflow-hidden rounded-2xl border border-amber-300/20 bg-[#17243c]/95 px-4 py-3 shadow-[0_16px_48px_rgba(0,0,0,0.22)] transition-all hover:border-amber-200/40 hover:bg-[#1b2b48] sm:min-h-[112px] sm:items-center sm:px-5"
+      className="group relative hidden h-[66px] min-w-0 max-w-[560px] flex-1 overflow-hidden rounded-2xl border border-amber-300/35 bg-[#1b2940]/95 px-3 py-2 shadow-[0_12px_36px_rgba(0,0,0,0.22)] transition-all hover:border-amber-200/60 hover:bg-[#21324d] lg:flex lg:items-center"
       aria-label={`Xem bảng vinh danh ${champion.season}`}
     >
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/55 to-transparent" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/70 to-transparent" />
 
-      <div className="flex w-full items-center gap-4">
-        <div className="relative h-[92px] w-[69px] shrink-0 overflow-hidden rounded-xl border border-amber-200/35 bg-slate-950/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] sm:h-[96px] sm:w-[72px]">
-          <div className="absolute inset-1.5 rounded-lg border border-amber-100/15" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,rgba(251,191,36,0.18),transparent_40%),linear-gradient(145deg,rgba(251,191,36,0.12),rgba(15,23,42,0.05)_42%,rgba(255,255,255,0.06)_43%,rgba(15,23,42,0.50))]" />
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="relative h-[54px] w-[41px] shrink-0 overflow-hidden rounded-lg border border-amber-200/45 bg-slate-950/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+          <div className="absolute inset-1 rounded-md border border-amber-100/15" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,rgba(251,191,36,0.24),transparent_42%),linear-gradient(145deg,rgba(251,191,36,0.16),rgba(15,23,42,0.05)_42%,rgba(255,255,255,0.08)_43%,rgba(15,23,42,0.50))]" />
           <div className="relative flex h-full items-center justify-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-amber-100/35 bg-amber-200/10 text-2xl font-black text-amber-100">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full border border-amber-100/40 bg-amber-200/10 text-sm font-black text-amber-100">
+              {getAvatarLetter(champion.playerName)}
+            </div>
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="mb-0.5 flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/35 bg-amber-300/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-amber-100">
+              <Crown className="h-3 w-3" />
+              Mùa trước
+            </span>
+            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">{champion.season}</span>
+          </div>
+          <div className="truncate text-base font-black uppercase tracking-[0.04em] text-white xl:text-lg">
+            {champion.playerName}
+          </div>
+          <div className="mt-0.5 flex gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-white/45">
+            <span>{Math.round(champion.winRate)}%</span>
+            <span>{champion.wins}W-{champion.losses}L</span>
+          </div>
+        </div>
+
+        <div className="ml-2 hidden shrink-0 items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-white/55 transition-colors group-hover:text-amber-100 xl:flex">
+          Vinh danh
+          <ChevronRight className="h-3.5 w-3.5" />
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function PreviousChampionMobileCard({ champion }: { champion: HallOfFameEntry }) {
+  return (
+    <Link
+      href="/analysis?zone=hall"
+      className="group relative flex min-h-[96px] overflow-hidden rounded-2xl border border-amber-300/30 bg-[#1b2940]/95 px-3 py-3 shadow-[0_12px_34px_rgba(0,0,0,0.20)] transition-all active:scale-[0.99]"
+      aria-label={`Xem bảng vinh danh ${champion.season}`}
+    >
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/65 to-transparent" />
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="relative h-[78px] w-[59px] shrink-0 overflow-hidden rounded-xl border border-amber-200/40 bg-slate-950/80">
+          <div className="absolute inset-1.5 rounded-lg border border-amber-100/15" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,rgba(251,191,36,0.22),transparent_42%),linear-gradient(145deg,rgba(251,191,36,0.14),rgba(15,23,42,0.05)_42%,rgba(255,255,255,0.07)_43%,rgba(15,23,42,0.50))]" />
+          <div className="relative flex h-full items-center justify-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-100/40 bg-amber-200/10 text-xl font-black text-amber-100">
               {getAvatarLetter(champion.playerName)}
             </div>
           </div>
@@ -221,26 +270,22 @@ function PreviousChampionBanner({ champion }: { champion: HallOfFameEntry }) {
 
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-200">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/35 bg-amber-300/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-amber-100">
               <Crown className="h-3 w-3" />
               Nhà vô địch mùa trước
             </span>
-            <span className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">{champion.season}</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">{champion.season}</span>
           </div>
-          <div className="truncate text-2xl font-black uppercase tracking-[0.05em] text-white sm:text-3xl">
+          <div className="truncate text-xl font-black uppercase tracking-[0.04em] text-white">
             {champion.playerName}
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-black uppercase tracking-[0.13em] text-white/45">
-            <span>Tỉ lệ {Math.round(champion.winRate)}%</span>
+          <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-[11px] font-black uppercase tracking-[0.1em] text-white/45">
+            <span>{Math.round(champion.winRate)}%</span>
             <span>{champion.wins}W-{champion.losses}L</span>
-            <span className="hidden sm:inline">{champion.total} trận</span>
+            <span>{champion.total} trận</span>
           </div>
         </div>
-
-        <div className="hidden shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-white/50 transition-colors group-hover:text-amber-100 md:flex">
-          Vinh danh
-          <ChevronRight className="h-4 w-4" />
-        </div>
+        <ChevronRight className="h-4 w-4 shrink-0 text-white/35 transition-colors group-hover:text-amber-100" />
       </div>
     </Link>
   );
