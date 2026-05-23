@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useState, useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { BarChart3, ChevronRight, Crown, RefreshCw, Settings } from 'lucide-react';
 import { SummaryGrid } from './dashboard/SummaryGrid';
@@ -8,7 +8,7 @@ import { RecentHistory } from './dashboard/RecentHistory';
 import { ScoreForm } from './ScoreForm';
 import { SettingsModal } from './SettingsModal';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
-import { buildHallOfFameEntries, getLatestHallOfFameEntry, type HallOfFameEntry } from '@/lib/hall-of-fame';
+import { type HallOfFameEntry } from '@/lib/hall-of-fame';
 import { getAvatarLetter } from '@/lib/utils';
 
 type Player = { id: string; name: string; active?: boolean; [key: string]: unknown };
@@ -35,12 +35,14 @@ export default function Dashboard({
   initialMatches,
   initialConfig = {},
   initialSeasons = [],
+  previousChampion = null,
   previewWritesBlocked = false,
 }: {
   initialPlayers: Player[],
   initialMatches: Match[],
   initialConfig?: Record<string, string>,
   initialSeasons?: Season[],
+  previousChampion?: HallOfFameEntry | null,
   previewWritesBlocked?: boolean,
 }) {
   const sharedData = useSharedAppData({
@@ -88,10 +90,6 @@ export default function Dashboard({
   const [selectedSeason, setSelectedSeason] = useState<string | null>(activeSeason);
   const loseMoney = Number(config.lose_money || 5000);
   const viewedMatches = selectedSeason === null ? matches : matches.filter(m => (m.season || 'Season 1') === selectedSeason);
-  const previousChampion = useMemo(() => {
-    const entries = buildHallOfFameEntries(players, matches, seasons, activeSeason, loseMoney);
-    return getLatestHallOfFameEntry(entries);
-  }, [players, matches, seasons, activeSeason, loseMoney]);
 
   const unlock = (password: string) => {
     const expected = process.env.NEXT_PUBLIC_EDIT_PASS || 'pickleball';
@@ -111,9 +109,7 @@ export default function Dashboard({
   return (
     <div className="space-y-5 transition-all duration-500 w-full">
       <div className={`${DESKTOP_PANEL_WIDTH} flex items-center gap-2`}>
-        {previousChampion ? (
-          <PreviousChampionRibbon champion={previousChampion} />
-        ) : sharedData.syncMessage ? (
+        {sharedData.syncMessage ? (
           <div className="hidden sm:flex items-center gap-2 rounded-xl border border-slate-500/20 bg-[#142034]/80 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300/60">
             <RefreshCw className={`w-3.5 h-3.5 ${sharedData.syncState === 'syncing' ? 'animate-spin' : ''}`} />
             {sharedData.syncMessage}
@@ -138,7 +134,7 @@ export default function Dashboard({
       )}
 
       {previousChampion && (
-        <div className={`${DESKTOP_PANEL_WIDTH} lg:hidden`}>
+        <div className={`${DESKTOP_PANEL_WIDTH} xl:hidden`}>
           <PreviousChampionMobileCard champion={previousChampion} />
         </div>
       )}
@@ -200,52 +196,6 @@ export default function Dashboard({
       />
 
     </div>
-  );
-}
-
-function PreviousChampionRibbon({ champion }: { champion: HallOfFameEntry }) {
-  return (
-    <Link
-      href="/analysis?zone=hall"
-      className="group relative hidden h-[66px] min-w-0 max-w-[560px] flex-1 overflow-hidden rounded-2xl border border-amber-300/35 bg-[#1b2940]/95 px-3 py-2 shadow-[0_12px_36px_rgba(0,0,0,0.22)] transition-all hover:border-amber-200/60 hover:bg-[#21324d] lg:flex lg:items-center"
-      aria-label={`Xem bảng vinh danh ${champion.season}`}
-    >
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/70 to-transparent" />
-
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="relative h-[54px] w-[41px] shrink-0 overflow-hidden rounded-lg border border-amber-200/45 bg-slate-950/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
-          <div className="absolute inset-1 rounded-md border border-amber-100/15" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,rgba(251,191,36,0.24),transparent_42%),linear-gradient(145deg,rgba(251,191,36,0.16),rgba(15,23,42,0.05)_42%,rgba(255,255,255,0.08)_43%,rgba(15,23,42,0.50))]" />
-          <div className="relative flex h-full items-center justify-center">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full border border-amber-100/40 bg-amber-200/10 text-sm font-black text-amber-100">
-              {getAvatarLetter(champion.playerName)}
-            </div>
-          </div>
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="mb-0.5 flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/35 bg-amber-300/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-amber-100">
-              <Crown className="h-3 w-3" />
-              Mùa trước
-            </span>
-            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">{champion.season}</span>
-          </div>
-          <div className="truncate text-base font-black uppercase tracking-[0.04em] text-white xl:text-lg">
-            {champion.playerName}
-          </div>
-          <div className="mt-0.5 flex gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-white/45">
-            <span>{Math.round(champion.winRate)}%</span>
-            <span>{champion.wins}W-{champion.losses}L</span>
-          </div>
-        </div>
-
-        <div className="ml-2 hidden shrink-0 items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-white/55 transition-colors group-hover:text-amber-100 xl:flex">
-          Vinh danh
-          <ChevronRight className="h-3.5 w-3.5" />
-        </div>
-      </div>
-    </Link>
   );
 }
 

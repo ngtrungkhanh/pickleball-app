@@ -257,10 +257,11 @@ Current analysis rules:
   match history, only includes completed seasons, uses the Dashboard ranking
   sort to choose each champion, and keeps the active season as a "dang dien ra"
   timeline item instead of naming a champion.
-- The main dashboard may show the latest completed-season champion. On desktop
-  it appears as a compact ribbon in the action row; on mobile it appears as a
-  compact card before the summary cards. It links to `/analysis?zone=hall` and
-  only appears when at least one completed-season champion exists.
+- The main dashboard may show the latest completed-season champion. On wide
+  desktop it appears as a vertical portrait plaque near the top-left title
+  area; on smaller screens it appears as a compact card before the summary
+  cards. It links to `/analysis?zone=hall` and only appears when at least one
+  completed-season champion exists.
 - `src/lib/analysis-core.ts` normalizes the selected match set once and is the
   source of truth for Hub, Profile, Network, and Hub insights.
 - ELO is calculated client-side from full 2v2 ranking matches in chronological
