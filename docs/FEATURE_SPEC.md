@@ -258,9 +258,9 @@ Current analysis rules:
   sort to choose each champion, and keeps the active season as a "dang dien ra"
   timeline item instead of naming a champion.
 - The main dashboard may show the latest completed-season champion. On wide
-  desktop it appears as a vertical portrait plaque near the top-left title
-  area; on smaller screens it appears as a compact card before the summary
-  cards. It links to `/analysis?zone=hall` and only appears when at least one
+  desktop it appears as a real summary-row tile before the four summary cards;
+  on smaller screens it appears as a compact card before the summary cards. It
+  links to `/analysis?zone=hall` and only appears when at least one
   completed-season champion exists.
 - `src/lib/analysis-core.ts` normalizes the selected match set once and is the
   source of truth for Hub, Profile, Network, and Hub insights.
