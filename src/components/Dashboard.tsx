@@ -1,14 +1,13 @@
 'use client';
 import { useState, useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import { BarChart3, ChevronRight, Crown, RefreshCw, Settings } from 'lucide-react';
+import { BarChart3, RefreshCw, Settings } from 'lucide-react';
 import { SummaryGrid } from './dashboard/SummaryGrid';
 import { Leaderboard } from './dashboard/Leaderboard';
 import { RecentHistory } from './dashboard/RecentHistory';
 import { ScoreForm } from './ScoreForm';
 import { SettingsModal } from './SettingsModal';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
-import { type HallOfFameEntry } from '@/lib/hall-of-fame';
 
 type Player = { id: string; name: string; active?: boolean; [key: string]: unknown };
 type Match = { id?: string; date?: string; season?: string; [key: string]: unknown };
@@ -34,14 +33,12 @@ export default function Dashboard({
   initialMatches,
   initialConfig = {},
   initialSeasons = [],
-  previousChampion = null,
   previewWritesBlocked = false,
 }: {
   initialPlayers: Player[],
   initialMatches: Match[],
   initialConfig?: Record<string, string>,
   initialSeasons?: Season[],
-  previousChampion?: HallOfFameEntry | null,
   previewWritesBlocked?: boolean,
 }) {
   const sharedData = useSharedAppData({
@@ -107,27 +104,22 @@ export default function Dashboard({
 
   return (
     <div className="space-y-5 transition-all duration-500 w-full">
-      <div className={`${DESKTOP_PANEL_WIDTH} flex flex-col gap-2 sm:flex-row sm:items-center`}>
+      <div className={`${DESKTOP_PANEL_WIDTH} flex items-center gap-2`}>
         {sharedData.syncMessage ? (
           <div className="hidden sm:flex items-center gap-2 rounded-xl border border-slate-500/20 bg-[#142034]/80 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300/60">
             <RefreshCw className={`w-3.5 h-3.5 ${sharedData.syncState === 'syncing' ? 'animate-spin' : ''}`} />
             {sharedData.syncMessage}
           </div>
         ) : null}
-        <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:items-center sm:justify-end">
-          {previousChampion && (
-            <PreviousChampionChip champion={previousChampion} />
-          )}
-          <div className="flex items-center justify-end gap-2">
-            <Link href="/analysis" className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
-              <BarChart3 className="w-4 h-4" />
-              Trung tâm phân tích
-            </Link>
-            <button onClick={() => setSettingsOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
-              <Settings className="w-4 h-4" />
-              Cài đặt
-            </button>
-          </div>
+        <div className="ml-auto flex items-center justify-end gap-2">
+          <Link href="/analysis" className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
+            <BarChart3 className="w-4 h-4" />
+            Trung tâm phân tích
+          </Link>
+          <button onClick={() => setSettingsOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
+            <Settings className="w-4 h-4" />
+            Cài đặt
+          </button>
         </div>
       </div>
 
@@ -194,33 +186,5 @@ export default function Dashboard({
       />
 
     </div>
-  );
-}
-
-function PreviousChampionChip({ champion }: { champion: HallOfFameEntry }) {
-  return (
-    <Link
-      href="/analysis?zone=hall"
-      className="group inline-flex min-h-10 w-full min-w-0 items-center justify-between gap-2 overflow-hidden rounded-xl border border-amber-300/35 bg-amber-300/10 px-3 py-2 text-left shadow-[0_8px_22px_rgba(0,0,0,0.18)] transition-all hover:border-amber-200/65 hover:bg-amber-300/15 active:scale-[0.99] sm:w-auto sm:max-w-[360px]"
-      aria-label={`Xem bảng vinh danh ${champion.season}`}
-    >
-      <span className="flex min-w-0 items-center gap-2">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-amber-200/35 bg-amber-200/12 text-amber-100">
-          <Crown className="h-3.5 w-3.5" />
-        </span>
-        <span className="min-w-0">
-          <span className="block text-[9px] font-black uppercase tracking-[0.16em] text-amber-100/75">
-            Mùa trước · {champion.season}
-          </span>
-          <span className="block truncate text-xs font-black uppercase tracking-[0.04em] text-white sm:max-w-[220px]">
-            {champion.playerName}
-          </span>
-        </span>
-      </span>
-      <span className="hidden shrink-0 text-[10px] font-black uppercase tracking-[0.12em] text-white/45 md:inline">
-        {Math.round(champion.winRate)}%
-      </span>
-      <ChevronRight className="h-4 w-4 shrink-0 text-amber-100/50 transition-colors group-hover:text-amber-100" />
-    </Link>
   );
 }

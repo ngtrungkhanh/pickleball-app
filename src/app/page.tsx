@@ -1,6 +1,7 @@
 // Task 15: ISR — trang tĩnh, chỉ rebuild khi có thao tác ghi/xóa
 import { sql } from '@vercel/postgres';
 import Dashboard from '@/components/Dashboard';
+import { PreviousChampionTitleLine } from '@/components/PreviousChampionTitleLine';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
 import { buildHallOfFameEntries, getLatestHallOfFameEntry } from '@/lib/hall-of-fame';
 
@@ -70,12 +71,14 @@ export default async function HomePage() {
         <h1 className="font-black tracking-tighter text-white drop-shadow-[0_0_30px_rgba(34,197,94,0.3)] leading-none text-5xl sm:text-7xl lg:text-[5rem] xl:text-[6rem]">
           Pickleball <span className="text-primary italic">Ranking</span>
         </h1>
+        {previousChampion && (
+          <PreviousChampionTitleLine champion={previousChampion} />
+        )}
         <Dashboard
           initialPlayers={players as Player[]}
           initialMatches={matches as Match[]}
           initialConfig={config}
           initialSeasons={seasons}
-          previousChampion={previousChampion}
           previewWritesBlocked={shouldBlockPreviewWrites()}
         />
       </div>

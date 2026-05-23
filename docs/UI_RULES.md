@@ -170,11 +170,12 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
   season-history rail. Hall of Fame is not affected by the season selector. Do
   not show a champion for the active season; show it as `dang dien ra`/waiting
   instead.
-- The main dashboard may show a previous-champion chip in the action row. Keep
-  it compact, link it to `/analysis?zone=hall`, and do not show champion
-  portraits on the main dashboard. Portrait frames belong in the full Hall of
-  Fame zone, and the dashboard title/summary/leaderboard areas should not use
-  absolutely-positioned champion elements.
+- The main dashboard may show a previous-champion title line directly under the
+  main `Pickleball Ranking` heading. Keep it typographic, centered, link it to
+  `/analysis?zone=hall`, and do not show champion portraits on the main
+  dashboard. Portrait frames belong in the full Hall of Fame zone, and the
+  dashboard title/summary/leaderboard areas should not use absolutely-positioned
+  champion elements.
 - Hub insight comments should not auto-rotate on a timer. On page refresh, wait
   for the initial cache/server match sync to finish before showing the insight
   feed so comments do not appear once and then immediately change a second
