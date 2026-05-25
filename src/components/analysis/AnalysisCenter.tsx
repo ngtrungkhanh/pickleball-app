@@ -31,7 +31,7 @@ const matrixTabs = [
   { id: 'opponent', label: 'Đối đầu' },
 ];
 
-type Player = { id: string; name: string; active?: boolean };
+type Player = { id: string; name: string; active?: boolean; hidden?: boolean; pay_fine?: boolean };
 type Match = {
   id?: string;
   date?: string;

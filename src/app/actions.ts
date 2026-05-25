@@ -667,8 +667,61 @@ export async function deleteChampionImageAction(formData: FormData) {
 }
 
 export async function rebuildStatsAction() {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
+  try {
+    // Ensure table exists just in case
+    await sql`
+      CREATE TABLE IF NOT EXISTS player_stats (
+        player_id VARCHAR(10) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        season VARCHAR(50) NOT NULL,
+        wins INT DEFAULT 0,
+        losses INT DEFAULT 0,
+        total INT DEFAULT 0,
+        money INT DEFAULT 0,
+        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (player_id, season)
+      )
+    `;
+
+    const lose_money = parseInt(await getConfigValue('lose_money', '5000')) || 5000;
+    
+    const { rows: players } = await sql`SELECT id, pay_fine FROM players WHERE deleted_at IS NULL`;
+    const validPlayerIds = new Set(players.map(p => p.id).filter(id => !isGuestId(id)));
+    const noFinePlayerIds = new Set(players.filter(p => p.pay_fine === false).map(p => p.id));
+    
+    const { rows: matches } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL`;
+    
+    const statsMap = new Map<string, { wins: number; losses: number; money: number }>();
+    
+    for (const m of matches) {
+      const season = m.season || 'Season 1';
+      const hasGuest = matchHasGuest(m);
+      const winners = [m.win_1, m.win_2].filter(pid => pid && validPlayerIds.has(pid));
+      const losers = [m.lose_1, m.lose_2].filter(pid => pid && validPlayerIds.has(pid));
+
+      if (!hasGuest) {
+        winners.forEach(pid => {
+          const key = `${pid}:${season}`;
+          const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
+          s.wins++;
+          statsMap.set(key, s);
+        });
+
+        losers.forEach(pid => {
+          const key = `${pid}:${season}`;
+          const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
+          s.losses++;
+          statsMap.set(key, s);
+        });
+      }
+
+      losers.forEach(pid => {
+        const key = `${pid}:${season}`;
         const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-        s.money += lose_money;
+        if (!noFinePlayerIds.has(pid)) {
+          s.money += lose_money;
+        }
         statsMap.set(key, s);
       });
     }

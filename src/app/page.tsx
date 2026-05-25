@@ -32,6 +32,7 @@ export default async function HomePage() {
     await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_url TEXT`;
     await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_path TEXT`;
     await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_updated_at TIMESTAMP`;
+    await sql`
       INSERT INTO players (id, name, active)
       VALUES ('__GUEST__', 'Khách', true)
       ON CONFLICT (id) DO UPDATE SET name = 'Khách', deleted_at = NULL
