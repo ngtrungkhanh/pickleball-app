@@ -16,6 +16,7 @@ import { useSharedAppData } from '@/lib/use-shared-app-data';
 import { isGuestId, loserFineCount } from '@/lib/guest';
 import { buildHallOfFameEntries, formatHallDate, type HallOfFameEntry } from '@/lib/hall-of-fame';
 import { getHallImageLocal, removeHallImageLocal, saveHallImageLocal, type StoredPlayerSeasonSetting } from '@/lib/db';
+import { getGlobalSelectedSeason, setGlobalSelectedSeason } from '@/lib/season-state';
 
 // Navigation tabs - 4 zones instead of 6
 const navItems = [
@@ -130,7 +131,12 @@ export function AnalysisCenter({
   const [insightSeed, setInsightSeed] = useState<number | null>(null);
   const [insightSelectionState, setInsightSelectionState] = useState<InsightSelectionState | null>(null);
   const committedInsightSeedRef = useRef<number | null>(null);
-  const [selectedSeason, setSelectedSeason] = useState<string | null>(currentActiveSeason);
+  const [selectedSeason, setSelectedSeason] = useState<string | null>(getGlobalSelectedSeason(currentActiveSeason));
+
+  const handleSeasonChange = (season: string | null) => {
+    setSelectedSeason(season);
+    setGlobalSelectedSeason(season);
+  };
 
   const getPlayerSetting = useCallback((playerId: string, seasonName: string) => {
     const setting = sharedData.playerSeasonSettings.find(s => s.player_id === playerId && s.season === seasonName);
@@ -269,7 +275,7 @@ export function AnalysisCenter({
             <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-end lg:shrink-0">
               <select
                 value={selectedSeason ?? 'all'}
-                onChange={e => setSelectedSeason(e.target.value === 'all' ? null : e.target.value)}
+                onChange={e => handleSeasonChange(e.target.value === 'all' ? null : e.target.value)}
                 className="h-8 w-full rounded-lg bg-slate-900 border border-white/[0.08] px-3 text-sm font-semibold text-white/70 md:w-48"
               >
                 <option value="all">Tổng hợp</option>
@@ -521,11 +527,6 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
   const columnCount = useHallColumnCount();
   const selectedEntry = entries.find(entry => entry.season === selectedSeason) || null;
   const rows = useMemo(() => chunkHallEntries(entries, columnCount), [entries, columnCount]);
-  const rowGridClass = columnCount >= 3
-    ? "grid grid-cols-1 gap-3 lg:grid-cols-3"
-    : columnCount === 2
-      ? "grid grid-cols-1 gap-3 lg:grid-cols-2"
-      : "grid grid-cols-1 gap-3";
 
   return (
     <section className="relative overflow-hidden rounded-[1.75rem] border border-amber-300/25 bg-slate-800/90 shadow-[0_30px_100px_rgba(0,0,0,0.34)] animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -574,9 +575,14 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
           <div className="space-y-3">
             {rows.map((row, rowIndex) => {
               const rowHasSelected = row.some(entry => entry.season === selectedSeason);
+              const rowGridClass = row.length >= 3
+                ? "grid grid-cols-1 gap-3 lg:grid-cols-3"
+                : row.length === 2
+                  ? "grid grid-cols-1 gap-3 lg:grid-cols-2"
+                  : "grid grid-cols-1 gap-3";
               return (
                 <div key={`hall-row-${rowIndex}`} className="space-y-3">
-                  <div className={cn(rowGridClass, entries.length === 1 && "max-w-[720px]")}>
+                  <div className={cn(rowGridClass, row.length === 1 && "max-w-[420px]")}>
                     {row.map((entry, index) => (
                       <ChampionGalleryCard
                         key={entry.season}

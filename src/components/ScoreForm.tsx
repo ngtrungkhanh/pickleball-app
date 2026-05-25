@@ -507,15 +507,15 @@ export function ScoreForm({
         <div className="flex flex-col items-center gap-4">
           <button
             type="submit"
-            disabled={ui === 'saved'}
+            disabled={ui === 'saved' || sync === 'syncing'}
             className={cn(
               'w-full min-h-12 py-3 rounded-2xl font-black text-xs sm:text-sm uppercase tracking-[0.24em] transition-all duration-300 flex items-center justify-center gap-3',
-              ui === 'saved'
+              (ui === 'saved' || sync === 'syncing')
                 ? 'bg-primary/20 text-primary/60 cursor-default'
                 : 'bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20 active:scale-95'
             )}
           >
-            {ui === 'saved' ? <><CheckCircle2 className="w-5 h-5" /> Đã lưu</> : <><Send className="w-5 h-5" /> Ghi kết quả</>}
+            {ui === 'saved' ? <><CheckCircle2 className="w-5 h-5" /> Đã lưu</> : sync === 'syncing' ? <><RefreshCw className="w-5 h-5 animate-spin" /> Đang lưu</> : <><Send className="w-5 h-5" /> Ghi kết quả</>}
           </button>
         </div>
       </form>

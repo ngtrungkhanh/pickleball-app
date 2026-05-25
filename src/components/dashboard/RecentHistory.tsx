@@ -1,7 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { cn } from '@/lib/utils';
-import { History, Clock, X, Trash2, Calendar, AlertTriangle } from 'lucide-react';
+import { History, Clock, X, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import { deleteMatchAction } from '@/app/actions';
 import { isGuestId } from '@/lib/guest';
 
@@ -35,9 +35,9 @@ function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCance
   );
 }
 
-// ─── Full history modal ───────────────────────────────────────────────────────
 function HistoryModal({ matches, players, onClose, canEdit }: { matches: any[]; players: any[]; onClose: () => void; canEdit: boolean }) {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [member1, setMember1] = useState('');
   const [member2, setMember2] = useState('');
   const [relation, setRelation] = useState<'-' | 'partner' | 'opponent'>('-');
@@ -84,7 +84,11 @@ function HistoryModal({ matches, players, onClose, canEdit }: { matches: any[]; 
           onConfirm={() => {
             const id = deleteTarget;
             setDeleteTarget(null);
-            start(async () => { await deleteMatchAction(id!); });
+            setIsDeletingId(id);
+            start(async () => {
+              await deleteMatchAction(id);
+              setIsDeletingId(null);
+            });
           }}
         />
       )}
@@ -139,7 +143,7 @@ function HistoryModal({ matches, players, onClose, canEdit }: { matches: any[]; 
               </div>
               <div className="space-y-2">
                 {list.map((m: any) => (
-                  <MatchCard key={m.id} m={m} players={players} canEdit={canEdit} onDelete={() => setDeleteTarget(m.id)} />
+                  <MatchCard key={m.id} m={m} players={players} canEdit={canEdit} isDeleting={isDeletingId === m.id} onDelete={() => setDeleteTarget(m.id)} />
                 ))}
               </div>
             </div>
@@ -151,7 +155,7 @@ function HistoryModal({ matches, players, onClose, canEdit }: { matches: any[]; 
 }
 
 // ─── Shared match card (used in modal) ───────────────────────────────────────
-function MatchCard({ m, players, onDelete, canEdit }: { m: any; players: any[]; onDelete: () => void; canEdit: boolean }) {
+function MatchCard({ m, players, onDelete, canEdit, isDeleting }: { m: any; players: any[]; onDelete: () => void; canEdit: boolean; isDeleting?: boolean }) {
   const name = (id: string) => players.find(p => p.id === id)?.name ?? id;
   const d = new Date(m.date);
   const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
@@ -163,8 +167,8 @@ function MatchCard({ m, players, onDelete, canEdit }: { m: any; players: any[]; 
           <Calendar className="w-3 h-3 opacity-40" />{date}<span className="mx-1 opacity-20">·</span><Clock className="w-3 h-3 opacity-40" />{time}
         </span>
         {canEdit && (
-          <button onClick={onDelete} className="text-white/10 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-all active:scale-90">
-            <Trash2 className="w-3.5 h-3.5" />
+          <button disabled={isDeleting} onClick={onDelete} className={cn("text-white/10 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-all active:scale-90", isDeleting && "opacity-50 pointer-events-none")}>
+            {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
           </button>
         )}
       </div>
@@ -189,6 +193,7 @@ function MatchCard({ m, players, onDelete, canEdit }: { m: any; players: any[]; 
 export function RecentHistory({ matches, players, canEdit = false }: { matches: any[]; players: any[]; canEdit?: boolean }) {
   const [showAll, setShowAll] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [, start] = useTransition();
   const name = (id: string) => players.find(p => p.id === id)?.name ?? id;
 
@@ -209,7 +214,11 @@ export function RecentHistory({ matches, players, canEdit = false }: { matches: 
           onConfirm={() => {
             const id = deleteTarget;
             setDeleteTarget(null);
-            start(async () => { await deleteMatchAction(id!); });
+            setIsDeletingId(id);
+            start(async () => {
+              await deleteMatchAction(id);
+              setIsDeletingId(null);
+            });
           }}
         />
       )}
@@ -264,9 +273,9 @@ export function RecentHistory({ matches, players, canEdit = false }: { matches: 
 
                 <div className="shrink-0 flex items-center justify-center w-12">
                   {canEdit && (
-                    <button onClick={() => setDeleteTarget(m.id)}
-                      className="p-2 text-white/15 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
-                      <Trash2 className="w-3.5 h-3.5" />
+                    <button disabled={isDeletingId === m.id} onClick={() => setDeleteTarget(m.id)}
+                      className={cn("p-2 text-white/15 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors", isDeletingId === m.id && "opacity-50 pointer-events-none")}>
+                      {isDeletingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                     </button>
                   )}
                 </div>
@@ -281,9 +290,9 @@ export function RecentHistory({ matches, players, canEdit = false }: { matches: 
                     {date} <span className="text-white/10">·</span> {time}
                   </span>
                   {canEdit && (
-                    <button onClick={() => setDeleteTarget(m.id)}
-                      className="text-white/15 hover:text-red-400 p-1 rounded-lg transition-colors">
-                      <Trash2 className="w-3.5 h-3.5" />
+                    <button disabled={isDeletingId === m.id} onClick={() => setDeleteTarget(m.id)}
+                      className={cn("text-white/15 hover:text-red-400 p-1 rounded-lg transition-colors", isDeletingId === m.id && "opacity-50 pointer-events-none")}>
+                      {isDeletingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                     </button>
                   )}
                 </div>

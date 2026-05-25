@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils';
 import { type StoredPlayerSeasonSetting } from '@/lib/db';
 import { GUEST_NAME, isGuestId } from '@/lib/guest';
 import { buildHallOfFameEntries, type HallOfFameEntry } from '@/lib/hall-of-fame';
+import { getGlobalSelectedSeason, setGlobalSelectedSeason } from '@/lib/season-state';
 
 type Player = { id: string; name: string; active?: boolean; pay_fine?: boolean; hidden?: boolean; deleted_at?: unknown };
 type Match = { id?: string; date?: string; season?: string; deleted_at?: unknown; [key: string]: unknown };
@@ -177,9 +178,18 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [deleteTarget, setDeleteTarget] = useState<Player | null>(null);
   const [deleteSeasonTarget, setDeleteSeasonTarget] = useState<string | null>(null);
-  const [isPending, start] = useTransition();
+  const [isSaving, setIsSaving] = useState(false);
+  const [isRefreshing, startTransition] = useTransition();
+  const isPending = isSaving || isRefreshing;
 
-  const [selectedConfigSeason, setSelectedConfigSeason] = useState<string>(config.active_season || '');
+  const [selectedConfigSeason, setSelectedConfigSeason] = useState<string>(
+    getGlobalSelectedSeason(config.active_season || '') || config.active_season || ''
+  );
+
+  const handleConfigSeasonChange = (season: string) => {
+    setSelectedConfigSeason(season);
+    setGlobalSelectedSeason(season);
+  };
 
   const getPlayerSetting = (playerId: string, seasonName: string) => {
     const setting = playerSeasonSettings?.find(s => s.player_id === playerId && s.season === seasonName);
@@ -223,78 +233,106 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
 
   if (!open) return null;
 
-  const submit = (action: (fd: FormData) => Promise<ActionResult>, formData: FormData, target: string, successText = 'Đã lưu') => {
+  const submit = async (action: (fd: FormData) => Promise<ActionResult>, formData: FormData, target: string, successText = 'Đã lưu') => {
+    if (isPending) return;
     setFeedback({ target, type: 'saving', text: 'Đang lưu...' });
-    start(async () => {
+    setIsSaving(true);
+    try {
       const res = await action(formData);
       const error = actionError(res);
       if (error) {
         setFeedback({ target, type: 'error', text: error });
+        setIsSaving(false);
         return;
       }
 
       setFeedback({ target, type: 'success', text: successText });
-      router.refresh();
-    });
+      startTransition(() => {
+        router.refresh();
+        setIsSaving(false);
+      });
+    } catch {
+      setIsSaving(false);
+    }
   };
 
-  const submitDirect = (action: () => Promise<ActionResult>, target: string, successText = 'Đã lưu') => {
+  const submitDirect = async (action: () => Promise<ActionResult>, target: string, successText = 'Đã lưu') => {
+    if (isPending) return;
     setFeedback({ target, type: 'saving', text: 'Đang lưu...' });
-    start(async () => {
+    setIsSaving(true);
+    try {
       const res = await action();
       const error = actionError(res);
       if (error) {
         setFeedback({ target, type: 'error', text: error });
+        setIsSaving(false);
         return;
       }
       setFeedback({ target, type: 'success', text: successText });
-      router.refresh();
-    });
+      startTransition(() => {
+        router.refresh();
+        setIsSaving(false);
+      });
+    } catch {
+      setIsSaving(false);
+    }
   };
 
-  const uploadChampionImage = (entry: HallOfFameEntry, file: File | null) => {
-    if (!file) return;
+  const uploadChampionImage = async (entry: HallOfFameEntry, file: File | null) => {
+    if (!file || isPending) return;
     const target = `hall-${entry.season}`;
     setFeedback({ target, type: 'saving', text: 'Đang xử lý ảnh...' });
-    start(async () => {
-      try {
-        const resized = await resizeChampionImage(file);
-        const fd = new FormData();
-        fd.append('seasonName', entry.season);
-        fd.append('file', resized);
-        const res = await uploadChampionImageAction(fd);
-        const error = actionError(res);
-        if (error) {
-          setFeedback({ target, type: 'error', text: error });
-          return;
-        }
-        setFeedback({ target, type: 'success', text: 'Đã tải ảnh' });
-        router.refresh();
-      } catch (error) {
-        setFeedback({
-          target,
-          type: 'error',
-          text: error instanceof Error ? error.message : 'Không xử lý được ảnh.',
-        });
+    setIsSaving(true);
+    try {
+      const resized = await resizeChampionImage(file);
+      const fd = new FormData();
+      fd.append('seasonName', entry.season);
+      fd.append('file', resized);
+      const res = await uploadChampionImageAction(fd);
+      const error = actionError(res);
+      if (error) {
+        setFeedback({ target, type: 'error', text: error });
+        setIsSaving(false);
+        return;
       }
-    });
+      setFeedback({ target, type: 'success', text: 'Đã tải ảnh' });
+      startTransition(() => {
+        router.refresh();
+        setIsSaving(false);
+      });
+    } catch (error) {
+      setFeedback({
+        target,
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Không xử lý được ảnh.',
+      });
+      setIsSaving(false);
+    }
   };
 
-  const deleteChampionImage = (entry: HallOfFameEntry) => {
+  const deleteChampionImage = async (entry: HallOfFameEntry) => {
+    if (isPending) return;
     const target = `hall-${entry.season}`;
     setFeedback({ target, type: 'saving', text: 'Đang xóa ảnh...' });
-    start(async () => {
+    setIsSaving(true);
+    try {
       const fd = new FormData();
       fd.append('seasonName', entry.season);
       const res = await deleteChampionImageAction(fd);
       const error = actionError(res);
       if (error) {
         setFeedback({ target, type: 'error', text: error });
+        setIsSaving(false);
         return;
       }
       setFeedback({ target, type: 'success', text: 'Đã xóa ảnh' });
-      router.refresh();
-    });
+      startTransition(() => {
+        router.refresh();
+        setIsSaving(false);
+      });
+    } catch {
+      setIsSaving(false);
+    }
   };
 
   const visibleTabs = canEdit 
@@ -354,7 +392,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                 </div>
                 <select
                   value={selectedConfigSeason}
-                  onChange={(e) => setSelectedConfigSeason(e.target.value)}
+                  onChange={(e) => handleConfigSeasonChange(e.target.value)}
                   className="rounded-xl bg-[#0f1a2c] border border-slate-500/25 px-4 py-2 text-xs font-bold text-white outline-none focus:border-primary/50 transition-all min-w-44"
                 >
                   {seasons.map(s => (
@@ -758,20 +796,30 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                   <button onClick={() => setDeleteTarget(null)} className="flex-1 rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] px-4 py-4 text-xs font-black text-slate-300/75 uppercase tracking-widest transition-all">Hủy</button>
                   <button
                     onClick={() => {
+                      if (isPending) return;
                       const fd = new FormData();
                       fd.append('id', deleteTarget.id);
                       setFeedback({ target: 'delete-player', type: 'saving', text: 'Đang xóa...' });
-                      start(async () => {
-                        const res = await deletePlayerAction(fd);
-                        const error = actionError(res);
-                        if (error) {
-                          setFeedback({ target: 'delete-player', type: 'error', text: error });
-                          return;
+                      setIsSaving(true);
+                      (async () => {
+                        try {
+                          const res = await deletePlayerAction(fd);
+                          const error = actionError(res);
+                          if (error) {
+                            setFeedback({ target: 'delete-player', type: 'error', text: error });
+                            setIsSaving(false);
+                            return;
+                          }
+                          setFeedback({ target: 'delete-player', type: 'success', text: 'Đã xóa' });
+                          setDeleteTarget(null);
+                          startTransition(() => {
+                            router.refresh();
+                            setIsSaving(false);
+                          });
+                        } catch {
+                          setIsSaving(false);
                         }
-                        setFeedback({ target: 'delete-player', type: 'success', text: 'Đã xóa' });
-                        setDeleteTarget(null);
-                        router.refresh();
-                      });
+                      })();
                     }}
                     className="flex-1 rounded-2xl bg-red-500 hover:bg-red-600 px-4 py-4 text-xs font-black text-white uppercase tracking-widest shadow-lg shadow-red-500/20 active:scale-95 transition-all"
                   >
@@ -802,20 +850,30 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                   <button onClick={() => setDeleteSeasonTarget(null)} className="flex-1 rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] px-4 py-4 text-xs font-black text-slate-300/75 uppercase tracking-widest transition-all">Hủy</button>
                   <button
                     onClick={() => {
+                      if (isPending) return;
                       const fd = new FormData();
                       fd.append('name', deleteSeasonTarget);
                       setFeedback({ target: 'delete-season', type: 'saving', text: 'Đang xóa...' });
-                      start(async () => {
-                        const res = await deleteSeasonAction(fd);
-                        const error = actionError(res);
-                        if (error) {
-                          setFeedback({ target: 'delete-season', type: 'error', text: error });
-                          return;
+                      setIsSaving(true);
+                      (async () => {
+                        try {
+                          const res = await deleteSeasonAction(fd);
+                          const error = actionError(res);
+                          if (error) {
+                            setFeedback({ target: 'delete-season', type: 'error', text: error });
+                            setIsSaving(false);
+                            return;
+                          }
+                          setFeedback({ target: 'delete-season', type: 'success', text: 'Đã xóa' });
+                          setDeleteSeasonTarget(null);
+                          startTransition(() => {
+                            router.refresh();
+                            setIsSaving(false);
+                          });
+                        } catch {
+                          setIsSaving(false);
                         }
-                        setFeedback({ target: 'delete-season', type: 'success', text: 'Đã xóa' });
-                        setDeleteSeasonTarget(null);
-                        router.refresh();
-                      });
+                      })();
                     }}
                     className="flex-1 rounded-2xl bg-red-500 hover:bg-red-600 px-4 py-4 text-xs font-black text-white uppercase tracking-widest shadow-lg shadow-red-500/20 active:scale-95 transition-all"
                   >

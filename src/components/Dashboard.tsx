@@ -12,6 +12,7 @@ import { type StoredPlayerSeasonSetting } from '@/lib/db';
 import { isGuestId } from '@/lib/guest';
 import { buildAnalysisSnapshot } from '@/lib/analysis-core';
 import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
+import { getGlobalSelectedSeason, setGlobalSelectedSeason } from '@/lib/season-state';
 
 const INSIGHT_SELECTION_STATE_KEY = 'pickleball.analysis.insightSelection.v1';
 
@@ -144,7 +145,13 @@ export default function Dashboard({
   const canEdit = useSyncExternalStore(subscribeEditMode, getEditModeSnapshot, () => false);
   const canWrite = canEdit && !previewWritesBlocked;
   const activeSeason = config.active_season || 'Season 1';
-  const [selectedSeason, setSelectedSeason] = useState<string | null>(activeSeason);
+  const [selectedSeason, setSelectedSeason] = useState<string | null>(getGlobalSelectedSeason(activeSeason));
+
+  const handleSeasonChange = (season: string | null) => {
+    setSelectedSeason(season);
+    setGlobalSelectedSeason(season);
+  };
+
   const getPlayerSetting = useCallback((playerId: string, seasonName: string) => {
     const setting = sharedData.playerSeasonSettings.find(s => s.player_id === playerId && s.season === seasonName);
     if (setting) {
@@ -245,10 +252,10 @@ export default function Dashboard({
     const container = tickerContainerRef.current;
     const marquee = marqueeRef.current;
 
-    // Tốc độ chạy nhanh hơn 10% (giảm thời gian chạy từ 65s xuống 59s, tương ứng tăng tốc độ 10%)
+    // Tốc độ chạy nhanh hơn thêm 10% (tổng cộng 21% nhanh hơn base)
     const halfWidth = marquee.offsetWidth / 2;
     const baseSpeed = halfWidth > 0 ? (halfWidth / (65 * 60)) : 1.0;
-    const speed = baseSpeed * 1.1;
+    const speed = baseSpeed * 1.21;
 
     const step = () => {
       if (isPausedRef.current) {
@@ -256,45 +263,12 @@ export default function Dashboard({
         return;
       }
 
-      if (isStoppingRef.current) {
-        const containerRect = container.getBoundingClientRect();
-        const items = marquee.querySelectorAll('.ticker-item');
-        let targetItem: HTMLElement | null = null;
-        let minDistance = Infinity;
-
-        items.forEach(item => {
-          const rect = item.getBoundingClientRect();
-          const dist = rect.left - containerRect.left;
-          if (dist >= -2 && dist < minDistance) {
-            minDistance = dist;
-            targetItem = item as HTMLElement;
-          }
-        });
-
-        if (targetItem && minDistance !== Infinity) {
-          if (minDistance <= speed + 0.5) {
-            translateXRef.current -= minDistance;
-            marquee.style.transform = `translateX(${translateXRef.current}px)`;
-            isPausedRef.current = true;
-            isStoppingRef.current = false;
-            setTickerPaused(true);
-          } else {
-            translateXRef.current -= speed;
-            marquee.style.transform = `translateX(${translateXRef.current}px)`;
-          }
-        } else {
-          isPausedRef.current = true;
-          isStoppingRef.current = false;
-          setTickerPaused(true);
-        }
-      } else {
-        translateXRef.current -= speed;
-        const marqueeWidth = marquee.offsetWidth;
-        if (Math.abs(translateXRef.current) >= marqueeWidth / 2) {
-          translateXRef.current = 0;
-        }
-        marquee.style.transform = `translateX(${translateXRef.current}px)`;
+      translateXRef.current -= speed;
+      const marqueeWidth = marquee.offsetWidth;
+      if (Math.abs(translateXRef.current) >= marqueeWidth / 2) {
+        translateXRef.current = 0;
       }
+      marquee.style.transform = `translateX(${translateXRef.current}px)`;
 
       animationFrameIdRef.current = requestAnimationFrame(step);
     };
@@ -309,13 +283,8 @@ export default function Dashboard({
   }, [tickerOpen, insightsReady, insights]);
 
   const handleTickerClick = () => {
-    if (isPausedRef.current) {
-      isPausedRef.current = false;
-      isStoppingRef.current = false;
-      setTickerPaused(false);
-    } else if (!isStoppingRef.current) {
-      isStoppingRef.current = true;
-    }
+    isPausedRef.current = !isPausedRef.current;
+    setTickerPaused(isPausedRef.current);
   };
 
   const handleCloseTicker = () => {
@@ -408,18 +377,40 @@ export default function Dashboard({
               ref={tickerContainerRef}
               onClick={handleTickerClick}
               className="flex-1 overflow-hidden relative h-full flex items-center"
-              title={tickerPaused ? "Click để tiếp tục chạy" : "Click để dừng tại tin tiếp theo"}
+              title={tickerPaused ? "Click để tiếp tục chạy" : "Click để tạm dừng"}
             >
               <div ref={marqueeRef} className="sports-ticker-marquee py-1 select-none">
-                {[...insights, ...insights].map((insight, idx) => (
-                  <span key={idx} className="ticker-item inline-flex items-center text-[11px] font-bold text-slate-300 mx-6 gap-2 shrink-0">
-                    <span className="text-[9px] font-black text-primary uppercase shrink-0 bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded">
-                      {insight.title || 'ĐIỂM NHẤN'}
+                {[...insights, ...insights].map((insight, idx) => {
+                  const rarity = insight.rarity || 'common';
+                  let rarityBadge = insight.title || 'ĐIỂM NHẤN';
+                  let badgeClass = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
+                  let icon = '⭐';
+                  let iconClass = 'text-emerald-500/50';
+
+                  if (rarity === 'uncommon') {
+                    badgeClass = 'text-blue-400 bg-blue-500/10 border-blue-500/20';
+                    icon = '⭐';
+                    iconClass = 'text-blue-500/50';
+                  } else if (rarity === 'rare') {
+                    badgeClass = 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+                    icon = '⭐';
+                    iconClass = 'text-amber-500/50';
+                  } else if (rarity === 'epic') {
+                    badgeClass = 'text-fuchsia-300 bg-fuchsia-500/15 border-fuchsia-500/30';
+                    icon = '⚡';
+                    iconClass = 'text-fuchsia-500/50';
+                  }
+
+                  return (
+                    <span key={idx} className="ticker-item inline-flex items-center text-[11px] font-bold text-slate-300 mx-6 gap-2 shrink-0">
+                      <span className={`text-[9px] font-black uppercase shrink-0 px-1.5 py-0.5 rounded border ${badgeClass}`}>
+                        {rarityBadge}
+                      </span>
+                      <span className="text-white/90">{insight.text}</span>
+                      <span className={`text-xs select-none ml-2 ${iconClass}`}>{icon}</span>
                     </span>
-                    <span className="text-white/90">{insight.text}</span>
-                    <span className="text-primary/50 text-xs select-none ml-2">⭐</span>
-                  </span>
-                ))}
+                  );
+                })}
               </div>
             </div>
             
@@ -449,7 +440,7 @@ export default function Dashboard({
           seasons={seasons}
           activeSeason={activeSeason}
           selectedSeason={selectedSeason}
-          onSeasonChange={setSelectedSeason}
+          onSeasonChange={handleSeasonChange}
           loseMoney={loseMoney}
         />
       </div>
