@@ -1,5 +1,6 @@
 'use server';
 import { sql } from '@vercel/postgres';
+import { del, put } from '@vercel/blob';
 import { revalidatePath } from 'next/cache';
 import { GUEST_ID, GUEST_NAME, isGuestId, matchHasGuest } from '@/lib/guest';
 import { previewWriteBlockedResult, shouldBlockPreviewWrites } from '@/lib/environment';
@@ -14,9 +15,19 @@ async function ensureSeasonTable() {
       end_date TIMESTAMP,
       active BOOLEAN DEFAULT FALSE,
       archived BOOLEAN DEFAULT FALSE,
+      champion_image_url TEXT,
+      champion_image_path TEXT,
+      champion_image_updated_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `;
+}
+
+async function ensureChampionImageColumns() {
+  await ensureSeasonTable();
+  await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_url TEXT`;
+  await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_path TEXT`;
+  await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_updated_at TIMESTAMP`;
 }
 
 async function ensureConfigTable() {
@@ -520,6 +531,128 @@ export async function updateFineAction(formData: FormData) {
   }
 }
 
+function blobSafeSeasonName(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'season';
+}
+
+export async function uploadChampionImageAction(formData: FormData) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
+  try {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return { error: 'Chưa cấu hình BLOB_READ_WRITE_TOKEN cho Vercel Blob.' };
+    }
+
+    await ensureChampionImageColumns();
+    const seasonName = String(formData.get('seasonName') || '').trim();
+    const file = formData.get('file');
+    if (!seasonName) return { error: 'Season không hợp lệ.' };
+    if (!(file instanceof File) || file.size <= 0) return { error: 'Ảnh tải lên không hợp lệ.' };
+
+    const allowedTypes = new Set(['image/webp', 'image/jpeg', 'image/png']);
+    if (!allowedTypes.has(file.type)) return { error: 'Chỉ hỗ trợ JPG, PNG hoặc WebP.' };
+    if (file.size > 1.5 * 1024 * 1024) return { error: 'Ảnh sau xử lý phải nhỏ hơn 1.5MB.' };
+
+    const { rows } = await sql`
+      SELECT name, active, champion_image_path
+      FROM seasons
+      WHERE name = ${seasonName} AND archived = false
+      LIMIT 1
+    `;
+    const season = rows[0];
+    if (!season) return { error: 'Không tìm thấy Season.' };
+    if (season.active) return { error: 'Season đang diễn ra chưa có ảnh vinh danh.' };
+
+    const pathname = `hall-of-fame/${blobSafeSeasonName(seasonName)}-${Date.now()}.webp`;
+    const uploaded = await put(pathname, file, {
+      access: 'public',
+      contentType: file.type || 'image/webp',
+    });
+
+    const oldPath = season.champion_image_path ? String(season.champion_image_path) : '';
+    if (oldPath) {
+      try {
+        await del(oldPath);
+      } catch (error) {
+        console.warn('Failed to delete old champion image blob:', error);
+      }
+    }
+
+    await sql`
+      UPDATE seasons
+      SET champion_image_url = ${uploaded.url},
+          champion_image_path = ${uploaded.pathname},
+          champion_image_updated_at = NOW()
+      WHERE name = ${seasonName}
+    `;
+
+    await logAudit('UPLOAD_CHAMPION_IMAGE', `Uploaded Hall of Fame image for ${seasonName}`);
+    await bumpDataVersion();
+    revalidatePath('/');
+    revalidatePath('/analysis');
+    return { success: true, url: uploaded.url };
+  } catch (error) {
+    console.error('Failed to upload champion image:', error);
+    return { error: 'Lỗi khi tải ảnh vinh danh.' };
+  }
+}
+
+export async function deleteChampionImageAction(formData: FormData) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
+  try {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return { error: 'Chưa cấu hình BLOB_READ_WRITE_TOKEN cho Vercel Blob.' };
+    }
+
+    await ensureChampionImageColumns();
+    const seasonName = String(formData.get('seasonName') || '').trim();
+    if (!seasonName) return { error: 'Season không hợp lệ.' };
+
+    const { rows } = await sql`
+      SELECT name, active, champion_image_path
+      FROM seasons
+      WHERE name = ${seasonName} AND archived = false
+      LIMIT 1
+    `;
+    const season = rows[0];
+    if (!season) return { error: 'Không tìm thấy Season.' };
+    if (season.active) return { error: 'Season đang diễn ra chưa có ảnh vinh danh.' };
+
+    const oldPath = season.champion_image_path ? String(season.champion_image_path) : '';
+    if (oldPath) {
+      try {
+        await del(oldPath);
+      } catch (error) {
+        console.warn('Failed to delete champion image blob:', error);
+      }
+    }
+
+    await sql`
+      UPDATE seasons
+      SET champion_image_url = NULL,
+          champion_image_path = NULL,
+          champion_image_updated_at = NULL
+      WHERE name = ${seasonName}
+    `;
+
+    await logAudit('DELETE_CHAMPION_IMAGE', `Deleted Hall of Fame image for ${seasonName}`);
+    await bumpDataVersion();
+    revalidatePath('/');
+    revalidatePath('/analysis');
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to delete champion image:', error);
+    return { error: 'Lỗi khi xóa ảnh vinh danh.' };
+  }
+}
+
 export async function rebuildStatsAction() {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
 
@@ -677,6 +810,7 @@ export async function verifyAdminAction(pass: string) {
 export async function getAppDataManifestAction() {
   try {
     await ensureConfigTable();
+    await ensureChampionImageColumns();
 
     const [configResult, matchSummary, seasonSummary, seasonsResult] = await Promise.all([
       sql`SELECT key, value FROM config`,
@@ -699,7 +833,7 @@ export async function getAppDataManifestAction() {
         GROUP BY COALESCE(season, 'Season 1')
         ORDER BY latest_date DESC NULLS LAST
       `,
-      sql`SELECT id, name, active, start_date FROM seasons WHERE archived = false ORDER BY start_date DESC`,
+      sql`SELECT id, name, active, start_date, champion_image_url, champion_image_path, champion_image_updated_at FROM seasons WHERE archived = false ORDER BY start_date DESC`,
     ]);
 
     const config: Record<string, string> = {};
@@ -728,6 +862,9 @@ export async function getAppDataManifestAction() {
         name: String(row.name),
         active: Boolean(row.active),
         start_date: row.start_date ? String(row.start_date) : undefined,
+        champion_image_url: row.champion_image_url ? String(row.champion_image_url) : null,
+        champion_image_path: row.champion_image_path ? String(row.champion_image_path) : null,
+        champion_image_updated_at: row.champion_image_updated_at ? String(row.champion_image_updated_at) : null,
       })),
       config,
     };
@@ -740,11 +877,12 @@ export async function getAppDataManifestAction() {
 export async function getAppDataAction() {
   try {
     await ensureConfigTable();
+    await ensureChampionImageColumns();
     const [playersResult, matchesResult, configResult, seasonsResult] = await Promise.all([
       sql`SELECT * FROM players WHERE deleted_at IS NULL ORDER BY active DESC, name ASC`,
       sql`SELECT * FROM matches WHERE deleted_at IS NULL ORDER BY date DESC`,
       sql`SELECT key, value FROM config`,
-      sql`SELECT id, name, active, start_date FROM seasons WHERE archived = false ORDER BY start_date DESC`,
+      sql`SELECT id, name, active, start_date, champion_image_url, champion_image_path, champion_image_updated_at FROM seasons WHERE archived = false ORDER BY start_date DESC`,
     ]);
 
     const config: Record<string, string> = {};
@@ -786,6 +924,9 @@ export async function getAppDataAction() {
         name: String(row.name),
         active: Boolean(row.active),
         start_date: row.start_date ? String(row.start_date) : undefined,
+        champion_image_url: row.champion_image_url ? String(row.champion_image_url) : null,
+        champion_image_path: row.champion_image_path ? String(row.champion_image_path) : null,
+        champion_image_updated_at: row.champion_image_updated_at ? String(row.champion_image_updated_at) : null,
       })),
       dataVersion: configVersion || await getDataVersion(),
     };
@@ -831,6 +972,7 @@ export async function getPlayersAction() {
 
 export async function getSeasonsAction() {
   try {
+    await ensureChampionImageColumns();
     const { rows } = await sql`SELECT * FROM seasons ORDER BY start_date DESC`;
     return rows;
   } catch (error) {

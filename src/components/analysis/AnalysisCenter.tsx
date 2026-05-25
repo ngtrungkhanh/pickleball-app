@@ -6,7 +6,7 @@ import {
   ArrowLeft, RefreshCw, Database,
   LayoutGrid, User, Swords, History,
   TrendingUp, Flame, Trophy, Target,
-  Star, Zap, Award, Crown, Medal, CalendarDays,
+  Star, Zap, Award, Crown, Medal, CalendarDays, ChevronDown,
   type LucideIcon
 } from 'lucide-react';
 import { buildAnalysisSnapshot, edgeRecord, getAnalysisName, type AnalysisEdge, type EloResult, type PlayerMetrics, type PlayerProfile } from '@/lib/analysis-core';
@@ -43,7 +43,15 @@ type Match = {
   season?: string;
   deleted_at?: unknown;
 };
-type Season = { id?: string; name: string; active?: boolean; start_date?: string };
+type Season = {
+  id?: string;
+  name: string;
+  active?: boolean;
+  start_date?: string;
+  champion_image_url?: string | null;
+  champion_image_path?: string | null;
+  champion_image_updated_at?: string | null;
+};
 type Insight = { type: string; title?: string; text: string; icon?: string; playersInvolved?: string[] };
 type RadarData = { attack: number; defense: number; brave: number; synergy: number; form: number; experience: number };
 type EloHistory = Array<{ date: string; ratings: Record<string, number> }>;
@@ -397,172 +405,202 @@ function HubZone({
 
 function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; activeSeason: string }) {
   const latestChampion = entries[0] || null;
-  const historyItems = [
-    ...(activeSeason ? [{ type: 'active' as const, season: activeSeason }] : []),
-    ...entries.map((entry, index) => ({ type: 'champion' as const, season: entry.season, entry, isLatest: index === 0 })),
-  ];
+  const oldChampions = entries.slice(1);
+  const [expandedSeason, setExpandedSeason] = useState<string | null>(oldChampions[0]?.season || null);
 
   return (
     <section className="relative overflow-hidden rounded-[1.75rem] border border-amber-300/25 bg-slate-800/90 shadow-[0_30px_100px_rgba(0,0,0,0.34)] animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/60 to-transparent" />
-      <div className="absolute -left-24 top-16 h-64 w-64 rounded-full bg-amber-300/[0.055] blur-3xl" />
-      <div className="absolute -right-24 bottom-10 h-64 w-64 rounded-full bg-primary/[0.04] blur-3xl" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(251,191,36,0.10),transparent_34%),radial-gradient(circle_at_90%_24%,rgba(34,197,94,0.06),transparent_30%)]" />
 
-      <div className="relative p-5 sm:p-7 lg:p-8">
-        <div className="mb-6 flex flex-col gap-3 border-b border-white/[0.06] pb-5 sm:flex-row sm:items-end sm:justify-between">
+      <div className="relative p-4 sm:p-7 lg:p-8">
+        <div className="mb-5 flex flex-col gap-2 border-b border-white/[0.06] pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="text-[10px] sm:text-xs font-black uppercase tracking-[0.5em] text-amber-200/70">
+            <div className="text-[10px] sm:text-xs font-black uppercase tracking-[0.22em] sm:tracking-[0.34em] text-amber-200/70">
               Hall of Fame
             </div>
-            <h2 className="mt-1 text-3xl sm:text-4xl lg:text-5xl font-black uppercase tracking-[0.16em] text-white">
+            <h2 className="mt-1 text-3xl sm:text-4xl lg:text-5xl font-black uppercase tracking-[0.06em] sm:tracking-[0.12em] text-white">
               Bảng Vinh Danh
             </h2>
           </div>
-          <div className="text-xs font-bold text-white/35">
-            {entries.length > 0 ? `${entries.length} mùa đã ghi danh` : 'Chờ mùa giải đầu tiên khép lại'}
+          <div className="w-fit rounded-full border border-white/[0.08] bg-white/[0.035] px-3 py-1 text-xs font-black text-white/45">
+            {entries.length > 0 ? `${entries.length} mùa đã ghi danh` : 'Chờ mùa đầu tiên khép lại'}
           </div>
         </div>
 
-        <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_320px] 2xl:items-stretch">
-          <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)] 2xl:grid-cols-[260px_minmax(0,1fr)]">
-            <ChampionPortrait entry={latestChampion} />
-
-            <div className="flex min-w-0 flex-col justify-center rounded-2xl border border-white/[0.07] bg-slate-950/35 p-5 sm:p-7">
-              {latestChampion ? (
-                <>
-                  <div className="mb-3 inline-flex w-fit items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-amber-200">
-                    <Crown className="h-3.5 w-3.5" />
-                    {latestChampion.season} - Nhà vô địch
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-4xl sm:text-5xl 2xl:text-6xl font-black uppercase leading-tight tracking-[0.04em] text-white break-words">
-                      {latestChampion.playerName}
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/45">
-                      <span>#1 BXH mùa giải</span>
-                      {latestChampion.lastMatchDate && (
-                        <>
-                          <span className="text-amber-200/40">•</span>
-                          <span>Chốt {formatHallDate(latestChampion.lastMatchDate)}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <HallMetric label="Tỉ lệ" value={`${Math.round(latestChampion.winRate)}%`} />
-                    <HallMetric label="W-L" value={`${latestChampion.wins}W-${latestChampion.losses}L`} />
-                    <HallMetric label="Số trận" value={latestChampion.total} />
-                    <HallMetric label="ELO" value={latestChampion.rating} />
-                  </div>
-                </>
-              ) : (
-                <div className="py-5 text-center md:text-left">
-                  <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-amber-200/80">
-                    <Medal className="h-3.5 w-3.5" />
-                    Chờ ghi danh
-                  </div>
-                  <div className="text-2xl sm:text-3xl font-black uppercase tracking-[0.12em] text-white">
-                    Chưa có nhà vô địch
-                  </div>
-                  <p className="mt-3 max-w-xl text-sm font-bold leading-relaxed text-white/45">
-                    Mùa đầu tiên sẽ được lưu vào Bảng Vinh Danh sau khi khép lại.
-                  </p>
-                </div>
-              )}
+        {latestChampion ? (
+          <FeaturedChampionCard entry={latestChampion} />
+        ) : (
+          <div className="rounded-3xl border border-amber-300/20 bg-slate-950/35 p-6 text-center sm:p-10">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-200/25 bg-amber-200/10 text-amber-100">
+              <Medal className="h-8 w-8" />
             </div>
+            <div className="text-2xl font-black uppercase tracking-[0.08em] text-white">Chưa có nhà vô địch</div>
+            <p className="mx-auto mt-3 max-w-xl text-sm font-bold leading-relaxed text-white/45">
+              Season đầu tiên sẽ được lưu vào Bảng Vinh Danh sau khi khép lại.
+            </p>
           </div>
+        )}
 
-          <div className="rounded-2xl border border-white/[0.07] bg-slate-950/35 p-4">
-            <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.26em] text-white/45">
+        {activeSeason && (
+          <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/10 p-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 text-primary" />
+                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-primary/80">{activeSeason}</div>
+              </div>
+              <div className="text-sm font-black text-white">Đang diễn ra</div>
+            </div>
+            <div className="mt-1 text-xs font-bold text-white/40">Chưa ghi danh champion cho Season hiện tại.</div>
+          </div>
+        )}
+
+        {oldChampions.length > 0 && (
+          <div className="mt-6">
+            <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-white/45">
               <CalendarDays className="h-3.5 w-3.5 text-amber-200/70" />
-              Lịch sử mùa giải
+              Các mùa trước
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 2xl:max-h-[300px] 2xl:flex-col 2xl:overflow-y-auto 2xl:overflow-x-hidden custom-scrollbar">
-              {historyItems.length > 0 ? historyItems.map(item => (
-                item.type === 'active' ? (
-                  <div key={`active-${item.season}`} className="min-w-[220px] rounded-xl border border-primary/20 bg-primary/10 p-3 2xl:min-w-0">
-                    <div className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/80">{item.season}</div>
-                    <div className="mt-1 text-sm font-black text-white">Đang diễn ra</div>
-                    <div className="mt-1 text-[11px] font-bold leading-snug text-white/40">Chờ nhà vô địch tiếp theo.</div>
-                  </div>
-                ) : (
-                  <div
-                    key={`champion-${item.season}`}
-                    className={cn(
-                      "min-w-[220px] rounded-xl border p-3 2xl:min-w-0",
-                      item.isLatest
-                        ? "border-amber-300/30 bg-amber-300/[0.08]"
-                        : "border-white/[0.06] bg-white/[0.035]"
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className={cn(
-                          "text-[10px] font-black uppercase tracking-[0.2em]",
-                          item.isLatest ? "text-amber-200/80" : "text-white/35"
-                        )}>{item.season}</div>
-                        <div className="mt-1 truncate text-sm font-black text-white">{item.entry.playerName}</div>
-                      </div>
-                      <div className={cn(
-                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-black",
-                        item.isLatest
-                          ? "border-amber-200/35 bg-amber-200/10 text-amber-100"
-                          : "border-white/10 bg-white/[0.04] text-white/45"
-                      )}>
-                        {getAvatarLetter(item.entry.playerName)}
-                      </div>
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-bold text-white/45">
-                      <span>{item.isLatest ? 'Đang vinh danh' : 'Đã ghi danh'}</span>
-                      <span>{Math.round(item.entry.winRate)}%</span>
-                      <span>{item.entry.wins}W-{item.entry.losses}L</span>
-                      <span>{item.entry.rating} ELO</span>
-                    </div>
-                  </div>
-                )
-              )) : (
-                <div className="rounded-xl border border-white/[0.05] bg-white/[0.03] p-4 text-sm font-bold text-white/35">
-                  Chưa có mùa giải nào để hiển thị.
-                </div>
-              )}
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+              {oldChampions.map((entry) => (
+                <OldChampionCard
+                  key={entry.season}
+                  entry={entry}
+                  expanded={expandedSeason === entry.season}
+                  onToggle={() => setExpandedSeason(prev => prev === entry.season ? null : entry.season)}
+                />
+              ))}
             </div>
           </div>
-        </div>
+        )}
       </div>
     </section>
   );
 }
 
-function ChampionPortrait({ entry }: { entry: HallOfFameEntry | null }) {
+function FeaturedChampionCard({ entry }: { entry: HallOfFameEntry }) {
   return (
-    <div className="mx-auto w-full max-w-[230px] md:max-w-none">
-      <div className="relative aspect-[3/4] overflow-hidden rounded-2xl border border-amber-200/40 bg-slate-950/85 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),0_24px_58px_rgba(0,0,0,0.34)]">
-        <div className="absolute inset-2 rounded-xl border border-amber-100/15" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(251,191,36,0.24),transparent_40%),linear-gradient(145deg,rgba(251,191,36,0.16),rgba(15,23,42,0.05)_42%,rgba(255,255,255,0.08)_43%,rgba(15,23,42,0.02)_55%,rgba(15,23,42,0.50))]" />
-        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-950/80 to-transparent" />
-        <div className="relative flex h-full flex-col items-center justify-center p-5 text-center">
-          <div className="flex h-24 w-24 items-center justify-center rounded-full border border-amber-100/40 bg-amber-200/10 text-5xl font-black text-amber-100 shadow-[0_0_40px_rgba(251,191,36,0.18)]">
-            {entry ? getAvatarLetter(entry.playerName) : <Trophy className="h-12 w-12" />}
-          </div>
-          <div className="mt-4 text-[10px] font-black uppercase tracking-[0.3em] text-amber-100/65">
-            {entry ? entry.season : 'Chờ ghi danh'}
-          </div>
+    <div className="group grid gap-4 rounded-3xl border border-amber-300/25 bg-slate-950/35 p-3 transition-colors duration-300 hover:border-amber-200/45 sm:gap-5 sm:p-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center lg:p-6 2xl:grid-cols-[240px_minmax(0,1fr)]">
+      <ChampionPortraitV2 entry={entry} featured />
+      <div className="min-w-0">
+        <div className="mb-3 inline-flex w-fit items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-200">
+          <Crown className="h-3.5 w-3.5" />
+          {entry.season} · Nhà vô địch
+        </div>
+        <div className="text-2xl font-black uppercase leading-tight tracking-[0.03em] text-white break-words sm:text-4xl lg:text-5xl">
+          {entry.playerName}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-[0.12em] text-white/45">
+          <span>#1 BXH mùa giải</span>
+          {entry.lastMatchDate && (
+            <>
+              <span className="text-amber-200/40">·</span>
+              <span>Chốt {formatHallDate(entry.lastMatchDate)}</span>
+            </>
+          )}
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:mt-5 sm:grid-cols-4">
+          <HallMetricV2 label="Tỉ lệ" value={`${Math.round(entry.winRate)}%`} />
+          <HallMetricV2 label="W-L" value={`${entry.wins}W-${entry.losses}L`} />
+          <HallMetricV2 label="Số trận" value={entry.total} />
+          <HallMetricV2 label="ELO" value={entry.rating} />
         </div>
       </div>
     </div>
   );
 }
 
-function HallMetric({ label, value }: { label: string; value: ReactNode }) {
+function OldChampionCard({ entry, expanded, onToggle }: { entry: HallOfFameEntry; expanded: boolean; onToggle: () => void }) {
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-white/[0.04] px-3 py-3 text-center">
-      <div className="text-xl sm:text-2xl font-black text-white">{value}</div>
-      <div className="mt-1 text-[9px] font-black uppercase tracking-[0.22em] text-white/35">{label}</div>
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        "group min-w-0 rounded-2xl border bg-white/[0.035] p-3 text-left transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-white/[0.055] active:scale-[0.99]",
+        expanded ? "border-amber-300/35 lg:col-span-2 2xl:col-span-3" : "border-white/[0.07]",
+      )}
+    >
+      <div className={cn("grid gap-3", expanded ? "sm:grid-cols-[112px_minmax(0,1fr)]" : "grid-cols-[72px_minmax(0,1fr)]")}>
+        <ChampionPortraitV2 entry={entry} compact={!expanded} />
+        <div className="min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200/75">{entry.season}</div>
+              <div className="mt-1 truncate text-lg font-black text-white">{entry.playerName}</div>
+              <div className="mt-1 flex flex-wrap gap-2 text-[11px] font-bold text-white/45">
+                <span>Đã ghi danh</span>
+                <span>{Math.round(entry.winRate)}%</span>
+                <span>{entry.wins}W-{entry.losses}L</span>
+              </div>
+            </div>
+            <ChevronDown className={cn("h-4 w-4 shrink-0 text-white/35 transition-transform duration-300", expanded && "rotate-180 text-amber-200")} />
+          </div>
+
+          <div className={cn("grid transition-[grid-template-rows] duration-300 ease-out", expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+            <div className="overflow-hidden">
+              <div className={cn("pt-4 transition-all duration-300 ease-out", expanded ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0")}>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <HallMetricV2 label="Tỉ lệ" value={`${Math.round(entry.winRate)}%`} />
+                  <HallMetricV2 label="W-L" value={`${entry.wins}W-${entry.losses}L`} />
+                  <HallMetricV2 label="Số trận" value={entry.total} />
+                  <HallMetricV2 label="ELO" value={entry.rating} />
+                </div>
+                {entry.lastMatchDate && (
+                  <div className="mt-3 text-xs font-bold text-white/40">Chốt mùa: {formatHallDate(entry.lastMatchDate)}</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function ChampionPortraitV2({ entry, featured = false, compact = false }: { entry: HallOfFameEntry | null; featured?: boolean; compact?: boolean }) {
+  return (
+    <div className={cn("mx-auto w-full", featured ? "max-w-[145px] sm:max-w-[190px] lg:max-w-none" : compact ? "max-w-[72px]" : "max-w-[112px]")}>
+      <div className="relative aspect-[3/4] overflow-hidden rounded-2xl border border-amber-200/40 bg-slate-950/85 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),0_20px_44px_rgba(0,0,0,0.26)]">
+        {entry?.imageUrl ? (
+          <div
+            role="img"
+            aria-label={`Ảnh vinh danh ${entry.playerName}`}
+            className="absolute inset-0 bg-cover bg-center transition duration-300 group-hover:brightness-110"
+            style={{ backgroundImage: `url("${entry.imageUrl}")` }}
+          />
+        ) : (
+          <>
+            <div className="absolute inset-2 rounded-xl border border-amber-100/15" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(251,191,36,0.24),transparent_40%),linear-gradient(145deg,rgba(251,191,36,0.16),rgba(15,23,42,0.05)_42%,rgba(255,255,255,0.08)_43%,rgba(15,23,42,0.02)_55%,rgba(15,23,42,0.50))]" />
+            <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/80 to-transparent" />
+            <div className="relative flex h-full flex-col items-center justify-center p-3 text-center">
+              <div className={cn(
+                "flex items-center justify-center rounded-full border border-amber-100/40 bg-amber-200/10 font-black text-amber-100 shadow-[0_0_40px_rgba(251,191,36,0.18)]",
+                compact ? "h-10 w-10 text-lg" : "h-20 w-20 text-4xl",
+              )}>
+                {entry ? getAvatarLetter(entry.playerName) : <Trophy className="h-9 w-9" />}
+              </div>
+              {!compact && (
+                <div className="mt-3 text-[10px] font-black uppercase tracking-[0.22em] text-amber-100/65">
+                  {entry ? entry.season : 'Chờ ghi danh'}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
+function HallMetricV2({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-white/[0.04] px-3 py-2.5 text-center sm:py-3">
+      <div className="text-base font-black text-white sm:text-xl">{value}</div>
+      <div className="mt-1 text-[9px] font-black uppercase tracking-[0.16em] text-white/35">{label}</div>
+    </div>
+  );
+}
 
 function RadarChart({ data }: { data: RadarData }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);

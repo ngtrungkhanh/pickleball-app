@@ -2,7 +2,7 @@ import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     if (shouldBlockPreviewWrites()) {
       return NextResponse.json(
@@ -70,9 +70,16 @@ export async function GET(request: Request) {
         end_date TIMESTAMP,
         active BOOLEAN DEFAULT FALSE,
         archived BOOLEAN DEFAULT FALSE,
+        champion_image_url TEXT,
+        champion_image_path TEXT,
+        champion_image_updated_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
+
+    await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_url TEXT;`;
+    await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_path TEXT;`;
+    await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_updated_at TIMESTAMP;`;
 
     // 5. Create player_stats table (Incremental Stats)
     await sql`
@@ -130,7 +137,8 @@ export async function GET(request: Request) {
     `;
 
     return NextResponse.json({ message: 'Database schema upgraded with Stats and Logs tables!' }, { status: 200 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

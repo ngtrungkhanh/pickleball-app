@@ -165,11 +165,15 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
   internal analytics tool, not a landing page.
 - Keep filters visible and compact: season selector first, then zone controls.
 - The Hub overview should not show Hall of Fame content; keep ELO and insight
-  content near the top. The full Hall of Fame lives in the `Vinh danh` zone
-  with a prominent portrait plaque, latest completed champion, and a small
-  season-history rail. Hall of Fame is not affected by the season selector. Do
-  not show a champion for the active season; show it as `dang dien ra`/waiting
-  instead.
+  content near the top. The full Hall of Fame lives in the `Vinh danh` zone.
+  Hall of Fame is not affected by the season selector. Do not show a champion
+  for the active season; show it as `dang dien ra`/waiting instead.
+- Hall of Fame layout: the latest completed champion is a fixed featured card
+  with a 3:4 portrait and metric strip. Older champions use inline expandable
+  cards, one open at a time, without modal or horizontal scroll on mobile. The
+  active season appears as a small status card only.
+- Champion images belong to the season champion record. Upload/delete controls
+  live in Settings `Vinh danh`; Analysis remains read-only.
 - The main dashboard may show a previous-champion title line directly under the
   main `Pickleball Ranking` heading. Keep it typographic, centered, link it to
   `/analysis?zone=hall`, and do not show champion portraits on the main

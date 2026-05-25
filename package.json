@@ -10,6 +10,7 @@
     "audit:insights": "node scripts/audit-insight-selection.mjs"
   },
   "dependencies": {
+    "@vercel/blob": "^2.4.0",
     "@vercel/postgres": "^0.10.0",
     "clsx": "^2.1.1",
     "lucide-react": "^1.14.0",

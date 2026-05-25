@@ -1,35 +1,49 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   Banknote,
   CheckCircle2,
+  Image as ImageIcon,
   Loader2,
   Lock,
   ShieldCheck,
   Trash2,
   Trophy,
+  Upload,
   Users,
   X,
 } from 'lucide-react';
 import {
   addPlayerAction,
   createSeasonAction,
+  deleteChampionImageAction,
   deletePlayerAction,
   deleteSeasonAction,
   endSeasonAction,
   setActiveSeasonAction,
   updateFineAction,
   updatePlayerAction,
+  uploadChampionImageAction,
 } from '@/app/actions';
 import { cn } from '@/lib/utils';
 import { GUEST_NAME, isGuestId } from '@/lib/guest';
+import { buildHallOfFameEntries, type HallOfFameEntry } from '@/lib/hall-of-fame';
 
 type Player = { id: string; name: string; active?: boolean; deleted_at?: unknown };
-type Season = { id: string; name: string; active?: boolean; start_date?: string };
-type ActionResult = { error?: string; success?: boolean };
+type Match = { id?: string; date?: string; season?: string; deleted_at?: unknown; [key: string]: unknown };
+type Season = {
+  id: string;
+  name: string;
+  active?: boolean;
+  start_date?: string;
+  champion_image_url?: string | null;
+  champion_image_path?: string | null;
+  champion_image_updated_at?: string | null;
+};
+type ActionResult = { error?: string; success?: boolean; url?: string };
 type Feedback = { target: string; type: 'saving' | 'success' | 'error'; text: string } | null;
 
 type Props = {
@@ -39,6 +53,7 @@ type Props = {
   onUnlock: (password: string) => boolean;
   onLock: () => void;
   players: Player[];
+  matches: Match[];
   seasons: Season[];
   config: Record<string, string>;
 };
@@ -47,6 +62,7 @@ const tabs = [
   { id: 'access', label: 'Quyền', Icon: Lock },
   { id: 'players', label: 'Thành viên', Icon: Users },
   { id: 'seasons', label: 'Season', Icon: Trophy },
+  { id: 'hall', label: 'Vinh danh', Icon: ImageIcon },
   { id: 'money', label: 'Tiền phạt', Icon: Banknote },
 ] as const;
 
@@ -66,11 +82,90 @@ function InlineFeedback({ feedback, target }: { feedback: Feedback; target: stri
   );
 }
 
+function HallImagePreview({ entry }: { entry: HallOfFameEntry }) {
+  return (
+    <div className="relative aspect-[3/4] w-20 shrink-0 overflow-hidden rounded-xl border border-amber-200/25 bg-slate-950/75 sm:w-24">
+      {entry.imageUrl ? (
+        <div
+          role="img"
+          aria-label={`Ảnh vinh danh ${entry.playerName}`}
+          className="h-full w-full bg-cover bg-center"
+          style={{ backgroundImage: `url("${entry.imageUrl}")` }}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_50%_30%,rgba(251,191,36,0.22),transparent_45%),linear-gradient(145deg,rgba(251,191,36,0.10),rgba(15,23,42,0.75))]">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full border border-amber-100/35 bg-amber-200/10 text-xl font-black text-amber-100">
+            {entry.playerName.trim().charAt(0).toUpperCase() || 'C'}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function actionError(res: { success?: boolean } | { error?: string } | undefined) {
   return res && 'error' in res ? res.error : undefined;
 }
 
-export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, players, seasons, config }: Props) {
+function loadImage(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new window.Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Invalid image'));
+    };
+    image.src = url;
+  });
+}
+
+async function resizeChampionImage(file: File) {
+  const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  if (!allowedTypes.has(file.type)) {
+    throw new Error('Chỉ hỗ trợ JPG, PNG hoặc WebP.');
+  }
+
+  const image = await loadImage(file);
+  const targetWidth = 900;
+  const targetHeight = 1200;
+  const targetRatio = targetWidth / targetHeight;
+  const sourceRatio = image.naturalWidth / image.naturalHeight;
+  let sourceWidth = image.naturalWidth;
+  let sourceHeight = image.naturalHeight;
+  let sourceX = 0;
+  let sourceY = 0;
+
+  if (sourceRatio > targetRatio) {
+    sourceWidth = image.naturalHeight * targetRatio;
+    sourceX = (image.naturalWidth - sourceWidth) / 2;
+  } else {
+    sourceHeight = image.naturalWidth / targetRatio;
+    sourceY = (image.naturalHeight - sourceHeight) / 2;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Không thể xử lý ảnh trên trình duyệt này.');
+  context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, targetWidth, targetHeight);
+
+  const qualities = [0.86, 0.76, 0.66, 0.56];
+  for (const quality of qualities) {
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', quality));
+    if (blob && blob.size <= 1.5 * 1024 * 1024) {
+      return new File([blob], 'champion.webp', { type: 'image/webp' });
+    }
+  }
+
+  throw new Error('Ảnh sau xử lý vẫn lớn hơn 1.5MB.');
+}
+
+export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, players, matches, seasons, config }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<(typeof tabs)[number]['id']>(canEdit ? 'players' : 'access');
   const [password, setPassword] = useState('');
@@ -78,6 +173,16 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
   const [deleteTarget, setDeleteTarget] = useState<Player | null>(null);
   const [deleteSeasonTarget, setDeleteSeasonTarget] = useState<string | null>(null);
   const [isPending, start] = useTransition();
+  const hallEntries = useMemo(
+    () => buildHallOfFameEntries(
+      players,
+      matches,
+      seasons,
+      config.active_season || 'Season 1',
+      Number(config.lose_money || 5000),
+    ),
+    [players, matches, seasons, config.active_season, config.lose_money],
+  );
 
   // Reset tab when modal opens
   useEffect(() => {
@@ -104,6 +209,51 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
       }
 
       setFeedback({ target, type: 'success', text: successText });
+      router.refresh();
+    });
+  };
+
+  const uploadChampionImage = (entry: HallOfFameEntry, file: File | null) => {
+    if (!file) return;
+    const target = `hall-${entry.season}`;
+    setFeedback({ target, type: 'saving', text: 'Đang xử lý ảnh...' });
+    start(async () => {
+      try {
+        const resized = await resizeChampionImage(file);
+        const fd = new FormData();
+        fd.append('seasonName', entry.season);
+        fd.append('file', resized);
+        const res = await uploadChampionImageAction(fd);
+        const error = actionError(res);
+        if (error) {
+          setFeedback({ target, type: 'error', text: error });
+          return;
+        }
+        setFeedback({ target, type: 'success', text: 'Đã tải ảnh' });
+        router.refresh();
+      } catch (error) {
+        setFeedback({
+          target,
+          type: 'error',
+          text: error instanceof Error ? error.message : 'Không xử lý được ảnh.',
+        });
+      }
+    });
+  };
+
+  const deleteChampionImage = (entry: HallOfFameEntry) => {
+    const target = `hall-${entry.season}`;
+    setFeedback({ target, type: 'saving', text: 'Đang xóa ảnh...' });
+    start(async () => {
+      const fd = new FormData();
+      fd.append('seasonName', entry.season);
+      const res = await deleteChampionImageAction(fd);
+      const error = actionError(res);
+      if (error) {
+        setFeedback({ target, type: 'error', text: error });
+        return;
+      }
+      setFeedback({ target, type: 'success', text: 'Đã xóa ảnh' });
       router.refresh();
     });
   };
@@ -360,6 +510,85 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                     ))}
                   </div>
                 </div>
+              </div>
+            )}
+
+            {canEdit && activeTab === 'hall' && (
+              <div className="space-y-5">
+                <div className="rounded-2xl border border-amber-300/20 bg-amber-300/[0.06] p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-200/25 bg-amber-200/10 text-amber-100">
+                      <ImageIcon className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-base font-black text-white">Ảnh vinh danh champion</h3>
+                      <p className="mt-1 text-xs font-bold leading-relaxed text-slate-300/65">
+                        Ảnh được gắn theo Season đã kết thúc, không gắn vào hồ sơ người chơi. Hệ thống sẽ crop về tỉ lệ 3:4 và lưu dưới dạng WebP.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {hallEntries.length === 0 ? (
+                  <div className="rounded-2xl border border-slate-500/20 bg-white/[0.045] p-6 text-sm font-bold text-slate-300/60">
+                    Chưa có Season đã kết thúc có champion để tải ảnh.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {hallEntries.map((entry) => {
+                      const target = `hall-${entry.season}`;
+                      return (
+                        <div key={entry.season} className="rounded-2xl border border-slate-500/20 bg-white/[0.045] p-3 sm:p-4">
+                          <div className="flex gap-3 sm:gap-4">
+                            <HallImagePreview entry={entry} />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
+                                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-200/80">{entry.season}</div>
+                                  <div className="mt-1 truncate text-base font-black text-white">{entry.playerName}</div>
+                                  <div className="mt-1 text-xs font-bold text-slate-300/55">
+                                    {Math.round(entry.winRate)}% · {entry.wins}W-{entry.losses}L · {entry.total} trận
+                                  </div>
+                                </div>
+                                <InlineFeedback feedback={feedback} target={target} />
+                              </div>
+
+                              <div className="mt-3 flex flex-wrap items-center gap-2">
+                                <label className={cn(
+                                  "inline-flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-3 py-2 text-[10px] font-black uppercase tracking-widest text-black transition-all active:scale-95",
+                                  isPending && "pointer-events-none opacity-60",
+                                )}>
+                                  <Upload className="h-3.5 w-3.5" />
+                                  Tải ảnh
+                                  <input
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    className="hidden"
+                                    disabled={isPending}
+                                    onChange={(event) => {
+                                      const file = event.target.files?.[0] || null;
+                                      uploadChampionImage(entry, file);
+                                      event.target.value = '';
+                                    }}
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  disabled={isPending || !entry.imageUrl}
+                                  onClick={() => deleteChampionImage(entry)}
+                                  className="inline-flex items-center gap-2 rounded-xl border border-red-400/15 bg-red-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-300 transition-all hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  Xóa ảnh
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 

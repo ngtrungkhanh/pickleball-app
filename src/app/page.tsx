@@ -9,7 +9,15 @@ export const revalidate = false; // Static by default, revalidated on demand via
 
 type Player = { id: string; name: string; active?: boolean; [key: string]: unknown };
 type Match = { id?: string; date?: string; season?: string; [key: string]: unknown };
-type Season = { id: string; name: string; active?: boolean; start_date?: string };
+type Season = {
+  id: string;
+  name: string;
+  active?: boolean;
+  start_date?: string;
+  champion_image_url?: string | null;
+  champion_image_path?: string | null;
+  champion_image_updated_at?: string | null;
+};
 
 export default async function HomePage() {
   try {
@@ -19,6 +27,9 @@ export default async function HomePage() {
     await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80)`;
     await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
     await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80)`;
+    await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_url TEXT`;
+    await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_path TEXT`;
+    await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_updated_at TIMESTAMP`;
     await sql`
       INSERT INTO players (id, name, active)
       VALUES ('__GUEST__', 'Khách', true)
@@ -51,12 +62,15 @@ export default async function HomePage() {
 
   let seasons: Season[] = [{ id: activeSeason, name: activeSeason, active: true }];
   try {
-    const { rows } = await sql`SELECT id, name, active, start_date FROM seasons WHERE archived = false ORDER BY start_date DESC`;
+    const { rows } = await sql`SELECT id, name, active, start_date, champion_image_url, champion_image_path, champion_image_updated_at FROM seasons WHERE archived = false ORDER BY start_date DESC`;
     if (rows.length > 0) seasons = rows.map((r) => ({
       id: String(r.id),
       name: String(r.name),
       active: Boolean(r.active),
       start_date: r.start_date ? String(r.start_date) : undefined,
+      champion_image_url: r.champion_image_url ? String(r.champion_image_url) : null,
+      champion_image_path: r.champion_image_path ? String(r.champion_image_path) : null,
+      champion_image_updated_at: r.champion_image_updated_at ? String(r.champion_image_updated_at) : null,
     }));
   } catch {}
 

@@ -11,6 +11,15 @@ repo.
 
 ## Major Completed Work
 
+### Hall of Fame Champion Images
+
+- Reworked the Analysis `Vinh danh` zone around a fixed featured champion card
+  for the latest completed season and inline-expand cards for older champions.
+- Added Settings `Vinh danh` controls to upload/delete a 3:4 champion image per
+  completed season champion.
+- Added Vercel Blob image storage wiring and season metadata fields for
+  champion image URL/path/update time.
+
 ### Next.js Migration
 
 - Migrated from legacy Google Apps Script + Sheets toward Next.js + Vercel

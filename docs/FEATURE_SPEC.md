@@ -165,6 +165,7 @@ Settings supports:
 - member management
 - active/inactive members
 - season management
+- Hall of Fame champion image management
 - fine amount
 
 Settings details:
@@ -177,6 +178,9 @@ Settings details:
 - Guest cannot be renamed and cannot be deleted.
 - Season tab can create a season, activate a season, end current season and
   create the next one, and request season deletion.
+- Hall of Fame tab lists completed seasons with a computed champion and lets
+  editors upload/delete a 3:4 champion image for that season. Images belong to
+  the season champion record, not to the player profile.
 - Money tab updates `lose_money`.
 
 Admin page supports:
@@ -212,6 +216,10 @@ Standalone `/history`:
 ## Analysis Center
 
 `/analysis` is read-only and uses IndexedDB as a local cache for match history.
+The `Vinh danh` zone is independent of the selected analysis season. It only
+shows completed-season champions: the latest completed season is featured, the
+active season is marked as in progress, and older champions expand inline for
+additional details.
 
 Current implementation files:
 

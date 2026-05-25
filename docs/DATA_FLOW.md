@@ -6,6 +6,7 @@ logic, caching/revalidation, localStorage, or Vercel compute behavior.
 ## Data Stores
 
 - Vercel Postgres is the source of truth.
+- Vercel Blob stores public Hall of Fame champion images.
 - Browser localStorage is only for local UX state, draft/pending protection,
   device identity, and edit unlock state.
 - IndexedDB stores cached match history for the analysis center.
@@ -31,6 +32,9 @@ The exact schema lives in setup/migration code. Current important concepts:
 - `matches` - match history
 - `config` - app config such as active season and fine amount
 - `seasons` - season records, including seasons with 0 matches
+  - Hall of Fame image metadata lives on `seasons`:
+    `champion_image_url`, `champion_image_path`, and
+    `champion_image_updated_at`
 - `player_stats` - incremental per-player/per-season wins, losses, total, money
 - `audit_logs` - admin/action log
 - `archives` - soft-delete archive/recycle-bin data
@@ -64,6 +68,27 @@ Route cache notes:
 - `/history` and `/add-match` currently use `revalidate = 0` and hit the server
   on request.
 - Server actions revalidate `/`, `/history`, and/or `/analysis` after writes.
+
+## Hall of Fame Image Flow
+
+Champion images are stored per completed season champion, not per player.
+
+Expected upload flow:
+
+1. Settings `Vinh danh` derives completed-season champions from players,
+   matches, seasons, and active-season config.
+2. The browser validates JPG/PNG/WebP, crops center to 3:4, converts to WebP,
+   and keeps the processed file below about 1.5MB.
+3. `uploadChampionImageAction` validates the file, uploads it to Vercel Blob,
+   deletes the old blob path when replacing an image, and stores URL/path/update
+   time on the matching `seasons` row.
+4. `deleteChampionImageAction` deletes the blob path when available and clears
+   the image columns on the season.
+5. Both actions bump `data_version` and revalidate `/` and `/analysis`.
+
+The Vercel project must provide `BLOB_READ_WRITE_TOKEN`; without it, upload and
+delete actions return a clear error while Hall of Fame falls back to the
+placeholder portrait.
 
 ## Match Save Flow
 

@@ -88,6 +88,7 @@ Read only when relevant:
 - Tailwind CSS
 - Vercel Postgres
 - Vercel hosting
+- Vercel Blob for Hall of Fame champion portrait images
 - Server actions for writes
 - Static/ISR-style reads where possible
 - `legacy/` is reference-only for old Apps Script behavior. Current app data

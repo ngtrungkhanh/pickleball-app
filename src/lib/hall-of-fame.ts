@@ -28,6 +28,9 @@ export type HallOfFameSeason = {
   name: string;
   active?: boolean;
   start_date?: string;
+  champion_image_url?: string | null;
+  champion_image_path?: string | null;
+  champion_image_updated_at?: string | null;
 };
 
 export type HallOfFameEntry = {
@@ -40,6 +43,9 @@ export type HallOfFameEntry = {
   winRate: number;
   rating: number;
   lastMatchDate: string;
+  imageUrl?: string;
+  imagePath?: string;
+  imageUpdatedAt?: string;
 };
 
 function isFullDoublesHallMatch(match: HallOfFameMatch) {
@@ -85,7 +91,8 @@ export function buildHallOfFameEntries(
       const rating = buildAnalysisElo(eligiblePlayers, rankingMatches).rating.get(champion.id) ?? 1000;
       const lastMatch = [...rankingMatches].sort((a, b) => matchTimeValue(b) - matchTimeValue(a))[0];
 
-      return {
+      const imageMeta = seasonMeta.get(seasonName);
+      const entry: HallOfFameEntry = {
         season: seasonName,
         playerId: champion.id,
         playerName: champion.name,
@@ -96,6 +103,10 @@ export function buildHallOfFameEntries(
         rating,
         lastMatchDate: String(lastMatch?.date || ''),
       };
+      if (imageMeta?.champion_image_url) entry.imageUrl = imageMeta.champion_image_url;
+      if (imageMeta?.champion_image_path) entry.imagePath = imageMeta.champion_image_path;
+      if (imageMeta?.champion_image_updated_at) entry.imageUpdatedAt = imageMeta.champion_image_updated_at;
+      return entry;
     })
     .filter((entry): entry is HallOfFameEntry => Boolean(entry))
     .sort((a, b) => {

@@ -11,7 +11,15 @@ import { useSharedAppData } from '@/lib/use-shared-app-data';
 
 type Player = { id: string; name: string; active?: boolean; [key: string]: unknown };
 type Match = { id?: string; date?: string; season?: string; [key: string]: unknown };
-type Season = { id: string; name: string; active?: boolean; start_date?: string };
+type Season = {
+  id: string;
+  name: string;
+  active?: boolean;
+  start_date?: string;
+  champion_image_url?: string | null;
+  champion_image_path?: string | null;
+  champion_image_updated_at?: string | null;
+};
 const EDIT_EVENT = 'pickleball-edit-mode-change';
 const DESKTOP_PANEL_WIDTH = 'mx-auto w-full lg:w-[85%]';
 
@@ -181,6 +189,7 @@ export default function Dashboard({
         onUnlock={unlock}
         onLock={lock}
         players={players}
+        matches={matches}
         seasons={seasons}
         config={config}
       />

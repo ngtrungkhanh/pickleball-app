@@ -29,6 +29,10 @@ export async function POST(request: Request) {
 
     const { players = [], matches = [], logs = [], archives = [], seasons = [] } = data;
 
+    await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_url TEXT`;
+    await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_path TEXT`;
+    await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_updated_at TIMESTAMP`;
+
     // Delete in reverse dependency order to prevent FK violations
     await sql`DELETE FROM audit_logs`;
     await sql`DELETE FROM archives`;
@@ -39,8 +43,8 @@ export async function POST(request: Request) {
     // 1. Restore Seasons
     for (const s of seasons) {
       await sql`
-        INSERT INTO seasons (id, name, start_date, end_date, active, archived, created_at)
-        VALUES (${s.id}, ${s.name}, ${s.start_date || new Date().toISOString()}, ${s.end_date || null}, ${s.active ? true : false}, ${s.archived ? true : false}, ${s.created_at || new Date().toISOString()})
+        INSERT INTO seasons (id, name, start_date, end_date, active, archived, champion_image_url, champion_image_path, champion_image_updated_at, created_at)
+        VALUES (${s.id}, ${s.name}, ${s.start_date || new Date().toISOString()}, ${s.end_date || null}, ${s.active ? true : false}, ${s.archived ? true : false}, ${s.champion_image_url || null}, ${s.champion_image_path || null}, ${s.champion_image_updated_at || null}, ${s.created_at || new Date().toISOString()})
       `;
     }
 
