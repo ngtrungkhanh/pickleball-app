@@ -74,9 +74,10 @@ When starting:
 3. State what you will check or implement first.
 6. When done, report changed files, verification run, and any remaining risk.
 7. CURRENT PENDING TASKS TO IMPLEMENT:
-   - **Shared Data Cache Validation**: Test local-first Dashboard/Analysis cache, canonical score-save replacement, and reload/F5 reconciliation on Vercel Preview before resuming insight-copy expansion.
-   - **UI/UX Polishing**: Implement "Sports Ticker" or "Flash News Card" style for the Analytics Center Insights as requested by user.
-   - **Data Validation**: Ensure the 72-rule Insights engine handles edge cases without crashing when data is sparse.
-   - **Insight Selection Review**: Batch 1 and Batch 2 expansion are implemented; use `docs/ANALYSIS_INSIGHTS_SELECTION.md` and audit script results when tuning wording/rule weights after Vercel Preview review or adding later batches.
+   - **Insight Scenarios Wording Review (High Priority)**: Currently reviewing and expanding the 72 insight scenarios in [ANALYSIS_INSIGHTS_RULES.md](file:///d:/Pickleball%20App/docs/ANALYSIS_INSIGHTS_RULES.md).
+     - **Progress**: Reviewed and committed approved trigger adjustments and 5 copy variants for **Scenarios 1 to 37**.
+     - **Next Step**: Resume the review starting from **Scenario 38 (`target_dummy` - Kỵ rơ đối đầu)**.
+     - **Workflow**: Present 2 scenarios at a time. Explain the trigger logic in plain Vietnamese first, present 5 natural copy variants, obtain user approval in chat, update the "Điều chỉnh" column of `ANALYSIS_INSIGHTS_RULES.md`, and then proceed. (Do not edit `insights.ts` until all 72 are approved).
+   - **Shared Data Cache Validation**: Test local-first Dashboard/Analysis cache.
    - **Merge & Deploy**: Merge `dev` to `main` when features are validated.
 ```
