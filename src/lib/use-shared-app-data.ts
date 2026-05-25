@@ -8,6 +8,7 @@ import {
   type StoredMatch,
   type StoredPlayer,
   type StoredSeason,
+  type StoredPlayerSeasonSetting,
 } from '@/lib/db';
 
 type SharedConfig = Record<string, string>;
@@ -17,6 +18,7 @@ type SharedData = {
   matches: StoredMatch[];
   seasons: StoredSeason[];
   config: SharedConfig;
+  playerSeasonSettings: StoredPlayerSeasonSetting[];
 };
 
 type SyncState = 'idle' | 'syncing' | 'error';
@@ -45,6 +47,7 @@ function snapshotToData(
     matches: snapshot.matches.length > 0 ? snapshot.matches : fallback.matches,
     seasons: snapshot.seasons.length > 0 ? snapshot.seasons : fallback.seasons,
     config: Object.keys(snapshot.config).length > 0 ? snapshot.config : fallback.config,
+    playerSeasonSettings: snapshot.playerSeasonSettings.length > 0 ? snapshot.playerSeasonSettings : fallback.playerSeasonSettings,
   };
 }
 
@@ -53,12 +56,14 @@ export function useSharedAppData({
   initialMatches,
   initialConfig,
   initialSeasons,
+  initialPlayerSeasonSettings = [],
   routeKey,
 }: {
   initialPlayers: StoredPlayer[];
   initialMatches: StoredMatch[];
   initialConfig: SharedConfig;
   initialSeasons: StoredSeason[];
+  initialPlayerSeasonSettings?: StoredPlayerSeasonSetting[];
   routeKey: string;
 }) {
   const initialData = useMemo<SharedData>(() => ({
@@ -66,7 +71,8 @@ export function useSharedAppData({
     matches: initialMatches,
     seasons: initialSeasons,
     config: initialConfig,
-  }), [initialConfig, initialMatches, initialPlayers, initialSeasons]);
+    playerSeasonSettings: initialPlayerSeasonSettings,
+  }), [initialConfig, initialMatches, initialPlayers, initialSeasons, initialPlayerSeasonSettings]);
 
   const [data, setData] = useState<SharedData>(initialData);
   const [syncState, setSyncState] = useState<SyncState>('idle');
@@ -98,12 +104,13 @@ export function useSharedAppData({
       matches: initialMatches,
       seasons: initialSeasons,
       config: initialConfig,
+      playerSeasonSettings: initialPlayerSeasonSettings,
       dataVersion: initialVersion,
       manifestCheckedAt: Date.now(),
     });
     if (!isCurrentRun()) return;
     setData(initialData);
-  }, [initialConfig, initialData, initialMatches, initialPlayers, initialSeasons]);
+  }, [initialConfig, initialData, initialMatches, initialPlayers, initialSeasons, initialPlayerSeasonSettings]);
 
   const refresh = useCallback(async () => {
     const runId = refreshRunIdRef.current + 1;
@@ -122,6 +129,7 @@ export function useSharedAppData({
         matches: appData.matches as StoredMatch[],
         seasons: appData.seasons,
         config: appData.config,
+        playerSeasonSettings: appData.playerSeasonSettings || [],
       };
 
       await seedAppCache({

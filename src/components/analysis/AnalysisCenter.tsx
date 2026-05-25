@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, RefreshCw, Database,
@@ -15,7 +15,7 @@ import { cn, getAvatarLetter } from '@/lib/utils';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
 import { isGuestId, loserFineCount } from '@/lib/guest';
 import { buildHallOfFameEntries, formatHallDate, type HallOfFameEntry } from '@/lib/hall-of-fame';
-import { getHallImageLocal, removeHallImageLocal, saveHallImageLocal } from '@/lib/db';
+import { getHallImageLocal, removeHallImageLocal, saveHallImageLocal, type StoredPlayerSeasonSetting } from '@/lib/db';
 
 // Navigation tabs - 4 zones instead of 6
 const navItems = [
@@ -52,6 +52,7 @@ type Season = {
   champion_image_url?: string | null;
   champion_image_path?: string | null;
   champion_image_updated_at?: string | null;
+  lose_money?: number;
 };
 type Insight = { type: string; title?: string; text: string; icon?: string; playersInvolved?: string[]; rarity?: string };
 type RadarData = { attack: number; defense: number; brave: number; synergy: number; form: number; experience: number };
@@ -92,6 +93,7 @@ export function AnalysisCenter({
   players: initialPlayers,
   matches: initialMatches,
   seasons = [],
+  playerSeasonSettings: initialPlayerSeasonSettings = [],
   activeSeason = 'Season 1',
   loseMoney = 5000,
   config: initialConfig = {},
@@ -99,6 +101,7 @@ export function AnalysisCenter({
   players: Player[];
   matches: Match[];
   seasons?: Season[];
+  playerSeasonSettings?: StoredPlayerSeasonSetting[];
   activeSeason?: string;
   loseMoney?: number;
   config?: Record<string, string>;
@@ -114,37 +117,74 @@ export function AnalysisCenter({
     initialMatches,
     initialConfig: resolvedConfig,
     initialSeasons: seasons,
+    initialPlayerSeasonSettings,
     routeKey: 'analysis',
   });
   const players = sharedData.players.length > 0 ? sharedData.players as Player[] : initialPlayers;
   const allMatches = (sharedData.matches.length > 0 ? sharedData.matches : initialMatches) as Match[];
   const currentSeasons = sharedData.seasons.length > 0 ? sharedData.seasons as Season[] : seasons;
   const config = Object.keys(sharedData.config).length > 0 ? sharedData.config : initialConfig;
-  const currentLoseMoney = Number(config.lose_money || loseMoney);
   const currentActiveSeason = config.active_season || activeSeason;
   const [activeNav, setActiveNav] = useState(navItems[0].id);
   const [matrixTab, setMatrixTab] = useState('partner');
   const [insightSeed, setInsightSeed] = useState<number | null>(null);
   const [insightSelectionState, setInsightSelectionState] = useState<InsightSelectionState | null>(null);
   const committedInsightSeedRef = useRef<number | null>(null);
-  const visiblePlayers = players.filter(p => p.active !== false && p.hidden !== true && !isGuestId(p.id));
-  const [playerId, setPlayerId] = useState(visiblePlayers[0]?.id || '');
   const [selectedSeason, setSelectedSeason] = useState<string | null>(currentActiveSeason);
 
-  // Lọc bỏ các trận đấu có sự tham gia của bất kỳ người chơi không hoạt động (active === false)
-  const inactivePlayerIds = useMemo(() => {
-    return new Set(players.filter(p => p.active === false).map(p => p.id));
-  }, [players]);
+  const getPlayerSetting = useCallback((playerId: string, seasonName: string) => {
+    const setting = sharedData.playerSeasonSettings.find(s => s.player_id === playerId && s.season === seasonName);
+    if (setting) {
+      return {
+        active: setting.active !== false,
+        pay_fine: setting.pay_fine !== false,
+        hidden: setting.hidden === true
+      };
+    }
+    // Fallback: lấy từ bảng players gốc
+    const player = players.find(p => p.id === playerId);
+    return {
+      active: player?.active !== false,
+      pay_fine: player?.pay_fine !== false,
+      hidden: player?.hidden === true
+    };
+  }, [sharedData.playerSeasonSettings, players]);
+
+  // Tiền phạt lose_money tính theo season
+  const currentSeasonInfo = useMemo(() => {
+    const seasonName = selectedSeason || currentActiveSeason;
+    return currentSeasons.find(s => s.name === seasonName);
+  }, [currentSeasons, selectedSeason, currentActiveSeason]);
+
+  const currentLoseMoney = useMemo(() => {
+    if (currentSeasonInfo && typeof currentSeasonInfo.lose_money === 'number') {
+      return currentSeasonInfo.lose_money;
+    }
+    return Number(config.lose_money || loseMoney);
+  }, [currentSeasonInfo, config.lose_money, loseMoney]);
+
+  const visiblePlayers = useMemo(() => {
+    const seasonForSettings = selectedSeason || currentActiveSeason;
+    return players.filter(p => {
+      const settings = getPlayerSetting(p.id, seasonForSettings);
+      return settings.active && !settings.hidden && !isGuestId(p.id);
+    });
+  }, [players, getPlayerSetting, selectedSeason, currentActiveSeason]);
+
+  const [playerId, setPlayerId] = useState(visiblePlayers[0]?.id || '');
 
   const filteredAllMatches = useMemo(() => {
     return allMatches.filter(m => {
-      const isWin1Inactive = m.win_1 && inactivePlayerIds.has(String(m.win_1));
-      const isWin2Inactive = m.win_2 && inactivePlayerIds.has(String(m.win_2));
-      const isLose1Inactive = m.lose_1 && inactivePlayerIds.has(String(m.lose_1));
-      const isLose2Inactive = m.lose_2 && inactivePlayerIds.has(String(m.lose_2));
+      const matchSeason = m.season || 'Season 1';
+      const isPlayerActive = (playerId: string) => getPlayerSetting(playerId, matchSeason).active;
+
+      const isWin1Inactive = m.win_1 && !isPlayerActive(String(m.win_1));
+      const isWin2Inactive = m.win_2 && !isPlayerActive(String(m.win_2));
+      const isLose1Inactive = m.lose_1 && !isPlayerActive(String(m.lose_1));
+      const isLose2Inactive = m.lose_2 && !isPlayerActive(String(m.lose_2));
       return !m.deleted_at && !isWin1Inactive && !isWin2Inactive && !isLose1Inactive && !isLose2Inactive;
     });
-  }, [allMatches, inactivePlayerIds]);
+  }, [allMatches, getPlayerSetting]);
 
   const activeMatches = selectedSeason === null ? filteredAllMatches : filteredAllMatches.filter(m => (m.season || 'Season 1') === selectedSeason);
   const seasonOptions = Array.from(new Set([currentActiveSeason, ...currentSeasons.map(s => s.name), ...allMatches.map(m => m.season || 'Season 1')].filter(Boolean)));

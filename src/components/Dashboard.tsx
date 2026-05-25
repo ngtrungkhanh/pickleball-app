@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useSyncExternalStore, useMemo, useRef } from 'react';
+import { useState, useEffect, useSyncExternalStore, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { BarChart3, RefreshCw, Settings, X } from 'lucide-react';
 import { SummaryGrid } from './dashboard/SummaryGrid';
@@ -8,6 +8,7 @@ import { RecentHistory } from './dashboard/RecentHistory';
 import { ScoreForm } from './ScoreForm';
 import { SettingsModal } from './SettingsModal';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
+import { type StoredPlayerSeasonSetting } from '@/lib/db';
 import { isGuestId } from '@/lib/guest';
 import { buildAnalysisSnapshot } from '@/lib/analysis-core';
 import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
@@ -45,6 +46,7 @@ type Season = {
   champion_image_url?: string | null;
   champion_image_path?: string | null;
   champion_image_updated_at?: string | null;
+  lose_money?: number;
 };
 const EDIT_EVENT = 'pickleball-edit-mode-change';
 const DESKTOP_PANEL_WIDTH = 'mx-auto w-full lg:w-[85%]';
@@ -67,12 +69,14 @@ export default function Dashboard({
   initialMatches,
   initialConfig = {},
   initialSeasons = [],
+  initialPlayerSeasonSettings = [],
   previewWritesBlocked = false,
 }: {
   initialPlayers: Player[],
   initialMatches: Match[],
   initialConfig?: Record<string, string>,
   initialSeasons?: Season[],
+  initialPlayerSeasonSettings?: StoredPlayerSeasonSetting[],
   previewWritesBlocked?: boolean,
 }) {
   const sharedData = useSharedAppData({
@@ -80,6 +84,7 @@ export default function Dashboard({
     initialMatches,
     initialConfig,
     initialSeasons,
+    initialPlayerSeasonSettings,
     routeKey: 'dashboard',
   });
   const players = (sharedData.players.length > 0 ? sharedData.players : initialPlayers) as Player[];
@@ -140,28 +145,66 @@ export default function Dashboard({
   const canWrite = canEdit && !previewWritesBlocked;
   const activeSeason = config.active_season || 'Season 1';
   const [selectedSeason, setSelectedSeason] = useState<string | null>(activeSeason);
-  const loseMoney = Number(config.lose_money || 5000);
+  const getPlayerSetting = useCallback((playerId: string, seasonName: string) => {
+    const setting = sharedData.playerSeasonSettings.find(s => s.player_id === playerId && s.season === seasonName);
+    if (setting) {
+      return {
+        active: setting.active !== false,
+        pay_fine: setting.pay_fine !== false,
+        hidden: setting.hidden === true
+      };
+    }
+    // Fallback: lấy từ bảng players gốc
+    const player = players.find(p => p.id === playerId);
+    return {
+      active: player?.active !== false,
+      pay_fine: player?.pay_fine !== false,
+      hidden: player?.hidden === true
+    };
+  }, [sharedData.playerSeasonSettings, players]);
 
-  // Lọc bỏ các trận đấu có sự tham gia của bất kỳ người chơi không hoạt động (active === false)
-  const inactivePlayerIds = useMemo(() => {
-    return new Set(players.filter(p => p.active === false).map(p => p.id));
-  }, [players]);
+  // Tiền phạt lose_money tính theo mùa giải
+  const currentSeasonInfo = useMemo(() => {
+    const seasonName = selectedSeason || activeSeason;
+    return seasons.find(s => s.name === seasonName);
+  }, [seasons, selectedSeason, activeSeason]);
+
+  const loseMoney = useMemo(() => {
+    if (currentSeasonInfo && typeof currentSeasonInfo.lose_money === 'number') {
+      return currentSeasonInfo.lose_money;
+    }
+    return Number(config.lose_money || 5000);
+  }, [currentSeasonInfo, config.lose_money]);
 
   const activeMatches = useMemo(() => {
     return matches.filter(m => {
-      const isWin1Inactive = m.win_1 && inactivePlayerIds.has(String(m.win_1));
-      const isWin2Inactive = m.win_2 && inactivePlayerIds.has(String(m.win_2));
-      const isLose1Inactive = m.lose_1 && inactivePlayerIds.has(String(m.lose_1));
-      const isLose2Inactive = m.lose_2 && inactivePlayerIds.has(String(m.lose_2));
+      const matchSeason = m.season || 'Season 1';
+      const isPlayerActive = (playerId: string) => getPlayerSetting(playerId, matchSeason).active;
+
+      const isWin1Inactive = m.win_1 && !isPlayerActive(String(m.win_1));
+      const isWin2Inactive = m.win_2 && !isPlayerActive(String(m.win_2));
+      const isLose1Inactive = m.lose_1 && !isPlayerActive(String(m.lose_1));
+      const isLose2Inactive = m.lose_2 && !isPlayerActive(String(m.lose_2));
       return !m.deleted_at && !isWin1Inactive && !isWin2Inactive && !isLose1Inactive && !isLose2Inactive;
     });
-  }, [matches, inactivePlayerIds]);
+  }, [matches, getPlayerSetting]);
 
   const viewedMatches = selectedSeason === null ? activeMatches : activeMatches.filter(m => (m.season || 'Season 1') === selectedSeason);
 
-  const leaderboardPlayers = useMemo(() => players.filter(p => p.hidden !== true), [players]);
-  const visiblePlayers = useMemo(() => players.filter(p => p.active !== false && p.hidden !== true && !isGuestId(p.id)), [players]);
-  const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(visiblePlayers as any[], viewedMatches as any[], loseMoney), [visiblePlayers, viewedMatches, loseMoney]);
+  const leaderboardPlayers = useMemo(() => {
+    const seasonForSettings = selectedSeason || activeSeason;
+    return players.filter(p => !getPlayerSetting(p.id, seasonForSettings).hidden);
+  }, [players, getPlayerSetting, selectedSeason, activeSeason]);
+
+  const visiblePlayers = useMemo(() => {
+    const seasonForSettings = selectedSeason || activeSeason;
+    return players.filter(p => {
+      const settings = getPlayerSetting(p.id, seasonForSettings);
+      return settings.active && !settings.hidden && !isGuestId(p.id);
+    });
+  }, [players, getPlayerSetting, selectedSeason, activeSeason]);
+
+  const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(visiblePlayers as Parameters<typeof buildAnalysisSnapshot>[0], viewedMatches as Parameters<typeof buildAnalysisSnapshot>[1], loseMoney), [visiblePlayers, viewedMatches, loseMoney]);
 
   const insightsReady = sharedData.syncState !== 'syncing' && insightSeed !== null && insightSelectionState !== null;
   const insightSelectionResult = useMemo(() => (
@@ -448,6 +491,7 @@ export default function Dashboard({
         matches={matches}
         seasons={seasons}
         config={config}
+        playerSeasonSettings={sharedData.playerSeasonSettings}
       />
 
     </div>

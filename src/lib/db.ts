@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'PickleballDB';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 const STORES = {
   matches: 'matches',
@@ -13,6 +13,7 @@ const STORES = {
   hallImages: 'hall_images',
   config: 'config',
   syncMeta: 'sync_meta',
+  playerSeasonSettings: 'player_season_settings',
 } as const;
 
 export type StoredMatch = {
@@ -34,7 +35,17 @@ export type StoredSeason = {
   name: string;
   active?: boolean;
   start_date?: string;
+  lose_money?: number;
   [key: string]: unknown;
+};
+
+export type StoredPlayerSeasonSetting = {
+  id: string; // `${player_id}_${season}`
+  player_id: string;
+  season: string;
+  active: boolean;
+  pay_fine: boolean;
+  hidden: boolean;
 };
 
 export type StoredHallImage = {
@@ -61,6 +72,7 @@ export type AppCacheInput = {
   matches?: StoredMatch[];
   seasons?: StoredSeason[];
   config?: Record<string, string>;
+  playerSeasonSettings?: StoredPlayerSeasonSetting[];
   dataVersion?: number;
   manifestCheckedAt?: number;
 };
@@ -70,6 +82,7 @@ export type AppCacheSnapshot = {
   matches: StoredMatch[];
   seasons: StoredSeason[];
   config: Record<string, string>;
+  playerSeasonSettings: StoredPlayerSeasonSetting[];
   dataVersion: number;
   lastManifestCheck: number;
 };
@@ -126,6 +139,9 @@ export async function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORES.syncMeta)) {
         db.createObjectStore(STORES.syncMeta, { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(STORES.playerSeasonSettings)) {
+        db.createObjectStore(STORES.playerSeasonSettings, { keyPath: 'id' });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -240,6 +256,7 @@ export async function seedAppCache(input: AppCacheInput) {
   if (input.players) writes.push(replaceStore(STORES.players, input.players));
   if (input.seasons) writes.push(replaceStore(STORES.seasons, input.seasons));
   if (input.config) writes.push(replaceStore(STORES.config, configToEntries(input.config)));
+  if (input.playerSeasonSettings) writes.push(replaceStore(STORES.playerSeasonSettings, input.playerSeasonSettings));
   if (typeof input.dataVersion === 'number') {
     writes.push(setMetaValue('dataVersion', input.dataVersion));
   }
@@ -251,11 +268,12 @@ export async function seedAppCache(input: AppCacheInput) {
 }
 
 export async function getAppCacheSnapshot(): Promise<AppCacheSnapshot> {
-  const [players, matches, seasons, configEntries, dataVersion, lastManifestCheck] = await Promise.all([
+  const [players, matches, seasons, configEntries, playerSeasonSettings, dataVersion, lastManifestCheck] = await Promise.all([
     getAllFromStore<StoredPlayer>(STORES.players),
     getLocalMatches(),
     getAllFromStore<StoredSeason>(STORES.seasons),
     getAllFromStore<ConfigEntry>(STORES.config),
+    getAllFromStore<StoredPlayerSeasonSetting>(STORES.playerSeasonSettings),
     getMetaValue<number>('dataVersion', 0),
     getMetaValue<number>('lastManifestCheck', 0),
   ]);
@@ -265,6 +283,7 @@ export async function getAppCacheSnapshot(): Promise<AppCacheSnapshot> {
     matches,
     seasons,
     config: entriesToConfig(configEntries),
+    playerSeasonSettings,
     dataVersion,
     lastManifestCheck,
   };

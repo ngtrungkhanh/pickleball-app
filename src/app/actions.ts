@@ -34,6 +34,20 @@ async function ensureConfigTable() {
   await ensureSharedConfigTable();
 }
 
+async function ensurePlayerSeasonSettingsTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS player_season_settings (
+      player_id VARCHAR(80) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      season VARCHAR(80) NOT NULL,
+      active BOOLEAN DEFAULT TRUE,
+      pay_fine BOOLEAN DEFAULT TRUE,
+      hidden BOOLEAN DEFAULT FALSE,
+      PRIMARY KEY (player_id, season)
+    )
+  `;
+  await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS lose_money INT DEFAULT 5000`;
+}
+
 async function ensureSoftDeleteColumns() {
   await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
   await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80)`;
@@ -41,6 +55,7 @@ async function ensureSoftDeleteColumns() {
   await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS hidden BOOLEAN DEFAULT FALSE`;
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80)`;
+  await ensurePlayerSeasonSettingsTable();
 }
 
 async function ensureGuestPlayer() {
@@ -894,11 +909,12 @@ export async function getAppDataAction() {
   try {
     await ensureConfigTable();
     await ensureChampionImageColumns();
-    const [playersResult, matchesResult, configResult, seasonsResult] = await Promise.all([
+    const [playersResult, matchesResult, configResult, seasonsResult, playerSeasonSettingsResult] = await Promise.all([
       sql`SELECT * FROM players WHERE deleted_at IS NULL ORDER BY active DESC, name ASC`,
       sql`SELECT * FROM matches WHERE deleted_at IS NULL ORDER BY date DESC`,
       sql`SELECT key, value FROM config`,
-      sql`SELECT id, name, active, start_date, champion_image_url, champion_image_path, champion_image_updated_at FROM seasons WHERE archived = false ORDER BY start_date DESC`,
+      sql`SELECT id, name, active, start_date, champion_image_url, champion_image_path, champion_image_updated_at, lose_money FROM seasons WHERE archived = false ORDER BY start_date DESC`,
+      sql`SELECT * FROM player_season_settings`,
     ]);
 
     const config: Record<string, string> = {};
@@ -931,6 +947,15 @@ export async function getAppDataAction() {
       delete_group_id: row.delete_group_id ? String(row.delete_group_id) : null,
     }));
 
+    const playerSeasonSettings = playerSeasonSettingsResult.rows.map((row) => ({
+      id: `${row.player_id}_${row.season}`,
+      player_id: String(row.player_id),
+      season: String(row.season),
+      active: Boolean(row.active),
+      pay_fine: Boolean(row.pay_fine),
+      hidden: Boolean(row.hidden),
+    }));
+
     return {
       players,
       matches,
@@ -943,7 +968,9 @@ export async function getAppDataAction() {
         champion_image_url: row.champion_image_url ? String(row.champion_image_url) : null,
         champion_image_path: row.champion_image_path ? String(row.champion_image_path) : null,
         champion_image_updated_at: row.champion_image_updated_at ? String(row.champion_image_updated_at) : null,
+        lose_money: row.lose_money !== null && row.lose_money !== undefined ? Number(row.lose_money) : 5000,
       })),
+      playerSeasonSettings,
       dataVersion: configVersion || await getDataVersion(),
     };
   } catch (error) {
@@ -1086,6 +1113,53 @@ export async function updateMatchAction(formData: FormData) {
     console.error('Update match failed:', error);
     const message = error instanceof Error ? error.message : String(error);
     return { error: `Lỗi khi sửa trận đấu: ${message}` };
+  }
+}
+
+export async function updatePlayerSeasonSettingsAction(
+  playerId: string,
+  season: string,
+  active: boolean,
+  pay_fine: boolean,
+  hidden: boolean
+) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
+  try {
+    await sql`
+      INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden)
+      VALUES (${playerId}, ${season}, ${active}, ${pay_fine}, ${hidden})
+      ON CONFLICT (player_id, season) 
+      DO UPDATE SET active = EXCLUDED.active, pay_fine = EXCLUDED.pay_fine, hidden = EXCLUDED.hidden
+    `;
+    await logAudit('UPDATE_PLAYER_SEASON_SETTINGS', `Updated settings for player ${playerId} in ${season}: active=${active}, pay_fine=${pay_fine}, hidden=${hidden}`);
+    await bumpDataVersion();
+    revalidatePath('/');
+    revalidatePath('/analysis');
+    return { success: true };
+  } catch (error) {
+    console.error('Update player season settings failed:', error);
+    return { error: 'Lỗi khi cập nhật cấu hình thành viên cho mùa giải' };
+  }
+}
+
+export async function updateSeasonFineAction(seasonId: string, loseMoney: number) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+
+  try {
+    await sql`
+      UPDATE seasons 
+      SET lose_money = ${loseMoney}
+      WHERE id = ${seasonId}
+    `;
+    await logAudit('UPDATE_SEASON_FINE', `Updated fine amount for season ${seasonId} to ${loseMoney}`);
+    await bumpDataVersion();
+    revalidatePath('/');
+    revalidatePath('/analysis');
+    return { success: true };
+  } catch (error) {
+    console.error('Update season fine failed:', error);
+    return { error: 'Lỗi khi cập nhật tiền phạt của mùa giải' };
   }
 }
 

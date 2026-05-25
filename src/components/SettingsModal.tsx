@@ -25,11 +25,13 @@ import {
   deleteSeasonAction,
   endSeasonAction,
   setActiveSeasonAction,
-  updateFineAction,
   updatePlayerAction,
   uploadChampionImageAction,
+  updatePlayerSeasonSettingsAction,
+  updateSeasonFineAction,
 } from '@/app/actions';
 import { cn } from '@/lib/utils';
+import { type StoredPlayerSeasonSetting } from '@/lib/db';
 import { GUEST_NAME, isGuestId } from '@/lib/guest';
 import { buildHallOfFameEntries, type HallOfFameEntry } from '@/lib/hall-of-fame';
 
@@ -43,6 +45,7 @@ type Season = {
   champion_image_url?: string | null;
   champion_image_path?: string | null;
   champion_image_updated_at?: string | null;
+  lose_money?: number;
 };
 type ActionResult = { error?: string; success?: boolean; url?: string };
 type Feedback = { target: string; type: 'saving' | 'success' | 'error'; text: string } | null;
@@ -57,6 +60,7 @@ type Props = {
   matches: Match[];
   seasons: Season[];
   config: Record<string, string>;
+  playerSeasonSettings?: StoredPlayerSeasonSetting[];
 };
 
 const tabs = [
@@ -166,7 +170,7 @@ async function resizeChampionImage(file: File) {
   throw new Error('Ảnh sau xử lý vẫn lớn hơn 1.5MB.');
 }
 
-export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, players, matches, seasons, config }: Props) {
+export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, players, matches, seasons, config, playerSeasonSettings = [] }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<(typeof tabs)[number]['id']>(canEdit ? 'players' : 'access');
   const [password, setPassword] = useState('');
@@ -174,6 +178,26 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
   const [deleteTarget, setDeleteTarget] = useState<Player | null>(null);
   const [deleteSeasonTarget, setDeleteSeasonTarget] = useState<string | null>(null);
   const [isPending, start] = useTransition();
+
+  const [selectedConfigSeason, setSelectedConfigSeason] = useState<string>(config.active_season || '');
+
+  const getPlayerSetting = (playerId: string, seasonName: string) => {
+    const setting = playerSeasonSettings?.find(s => s.player_id === playerId && s.season === seasonName);
+    if (setting) {
+      return {
+        active: setting.active !== false,
+        pay_fine: setting.pay_fine !== false,
+        hidden: setting.hidden === true
+      };
+    }
+    const p = players.find(x => x.id === playerId);
+    return {
+      active: p?.active !== false,
+      pay_fine: p?.pay_fine !== false,
+      hidden: p?.hidden === true
+    };
+  };
+
   const hallEntries = useMemo(
     () => buildHallOfFameEntries(
       players,
@@ -209,6 +233,20 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
         return;
       }
 
+      setFeedback({ target, type: 'success', text: successText });
+      router.refresh();
+    });
+  };
+
+  const submitDirect = (action: () => Promise<ActionResult>, target: string, successText = 'Đã lưu') => {
+    setFeedback({ target, type: 'saving', text: 'Đang lưu...' });
+    start(async () => {
+      const res = await action();
+      const error = actionError(res);
+      if (error) {
+        setFeedback({ target, type: 'error', text: error });
+        return;
+      }
       setFeedback({ target, type: 'success', text: successText });
       router.refresh();
     });
@@ -308,7 +346,25 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 sm:p-10 space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-            {activeTab === 'access' && (
+            {/* Season Selector for Configuration */}
+            {canEdit && (activeTab === 'players' || activeTab === 'money') && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-500/20 pb-4 shrink-0">
+                <div className="text-xs font-black text-slate-300 uppercase tracking-widest">
+                  Mùa giải đang cấu hình
+                </div>
+                <select
+                  value={selectedConfigSeason}
+                  onChange={(e) => setSelectedConfigSeason(e.target.value)}
+                  className="rounded-xl bg-[#0f1a2c] border border-slate-500/25 px-4 py-2 text-xs font-bold text-white outline-none focus:border-primary/50 transition-all min-w-44"
+                >
+                  {seasons.map(s => (
+                    <option key={s.id} value={s.name}>{s.name} {s.active ? '(Đang diễn ra)' : ''}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {canEdit && activeTab === 'access' && (
               <div className="rounded-2xl border border-slate-500/25 bg-white/[0.055] p-6">
                 <div className="flex items-center gap-4 mb-5">
                   <div className={cn(
@@ -390,103 +446,111 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
 
                   <div className="space-y-2">
                     <div className="text-[10px] font-black text-slate-300/65 uppercase tracking-[0.2em] px-1">Danh sách thành viên</div>
-                    <div className="grid grid-cols-1 gap-1">
-                      {[...players].sort((a, b) => (a.active === b.active ? 0 : a.active ? -1 : 1)).map(p => (
-                        <div key={p.id} className={cn(
-                          "group flex items-center gap-2 rounded-xl border p-1.5 transition-all",
-                          p.active !== false 
-                            ? "bg-white/[0.045] border-slate-500/20 hover:bg-white/[0.07]"
-                            : "bg-black/20 border-slate-500/12 opacity-55"
-                        )}>
-                          <div className="flex-1 flex items-center gap-2 min-w-0">
-                            <input 
-                              defaultValue={isGuestId(p.id) ? GUEST_NAME : p.name}
-                              disabled={isGuestId(p.id)}
-                              onBlur={(e) => {
-                                if (!isGuestId(p.id) && e.target.value.trim() !== p.name) {
-                                  const fd = new FormData();
-                                  fd.append('id', p.id);
-                                  fd.append('name', e.target.value.trim());
-                                  fd.append('active', String(p.active !== false));
-                                  fd.append('pay_fine', String(p.pay_fine !== false));
-                                  fd.append('hidden', String(p.hidden === true));
-                                  submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu');
-                                }
-                              }}
-                              className="flex-1 bg-transparent px-2 py-0.5 text-sm font-bold text-white outline-none focus:text-primary transition-colors min-w-0 disabled:text-primary disabled:cursor-not-allowed" 
-                            />
-                            <InlineFeedback feedback={feedback} target={`player-${p.id}`} />
+                    <div className="grid grid-cols-1 gap-1" key={selectedConfigSeason}>
+                      {[...players]
+                        .map(p => {
+                          const s = getPlayerSetting(p.id, selectedConfigSeason);
+                          return {
+                            ...p,
+                            active: s.active,
+                            pay_fine: s.pay_fine,
+                            hidden: s.hidden
+                          };
+                        })
+                        .sort((a, b) => (a.active === b.active ? 0 : a.active ? -1 : 1))
+                        .map(p => (
+                          <div key={p.id} className={cn(
+                            "group flex items-center gap-2 rounded-xl border p-1.5 transition-all",
+                            p.active !== false 
+                              ? "bg-white/[0.045] border-slate-500/20 hover:bg-white/[0.07]"
+                              : "bg-black/20 border-slate-500/12 opacity-55"
+                          )}>
+                            <div className="flex-1 flex items-center gap-2 min-w-0">
+                              <input 
+                                defaultValue={isGuestId(p.id) ? GUEST_NAME : p.name}
+                                disabled={isGuestId(p.id)}
+                                onBlur={(e) => {
+                                  if (!isGuestId(p.id) && e.target.value.trim() !== p.name) {
+                                    const fd = new FormData();
+                                    fd.append('id', p.id);
+                                    fd.append('name', e.target.value.trim());
+                                    fd.append('active', String(p.active !== false));
+                                    fd.append('pay_fine', String(p.pay_fine !== false));
+                                    fd.append('hidden', String(p.hidden === true));
+                                    submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu');
+                                  }
+                                }}
+                                className="flex-1 bg-transparent px-2 py-0.5 text-sm font-bold text-white outline-none focus:text-primary transition-colors min-w-0 disabled:text-primary disabled:cursor-not-allowed" 
+                              />
+                              <InlineFeedback feedback={feedback} target={`player-${p.id}`} />
+                            </div>
+                            
+                            <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0">
+                              <input 
+                                type="checkbox" 
+                                defaultChecked={p.active !== false} 
+                                onChange={(e) => {
+                                  const isChecked = e.target.checked;
+                                  submitDirect(
+                                    () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, isChecked, p.pay_fine !== false, p.hidden === true),
+                                    `player-${p.id}`,
+                                    'Đã lưu'
+                                  );
+                                }}
+                                className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0" 
+                              />
+                              <span className="text-[9px] font-black text-slate-300/65 uppercase tracking-widest hidden sm:inline">{isGuestId(p.id) ? 'Dropdown' : 'Active'}</span>
+                            </label>
+
+                            {!isGuestId(p.id) && (
+                              <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0" title="Phạt tiền">
+                                <input 
+                                  type="checkbox" 
+                                  defaultChecked={p.pay_fine !== false} 
+                                  onChange={(e) => {
+                                    const isChecked = e.target.checked;
+                                    submitDirect(
+                                      () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, p.active !== false, isChecked, p.hidden === true),
+                                      `player-${p.id}`,
+                                      'Đã lưu'
+                                    );
+                                  }}
+                                  className="w-3.5 h-3.5 rounded border-amber-500/20 bg-white/5 text-amber-500 focus:ring-0 focus:ring-offset-0" 
+                                />
+                                <Banknote className="w-3.5 h-3.5 text-amber-500 hidden sm:inline" />
+                              </label>
+                            )}
+
+                            {!isGuestId(p.id) && (
+                              <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0" title="Ẩn khỏi BXH">
+                                <input 
+                                  type="checkbox" 
+                                  defaultChecked={p.hidden === true} 
+                                  onChange={(e) => {
+                                    const isChecked = e.target.checked;
+                                    submitDirect(
+                                      () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, p.active !== false, p.pay_fine !== false, isChecked),
+                                      `player-${p.id}`,
+                                      'Đã lưu'
+                                    );
+                                  }}
+                                  className="w-3.5 h-3.5 rounded border-slate-500/20 bg-white/5 text-slate-400 focus:ring-0 focus:ring-offset-0" 
+                                />
+                                <EyeOff className="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />
+                              </label>
+                            )}
+
+                            {!isGuestId(p.id) && (
+                              <button
+                                type="button"
+                                onClick={() => setDeleteTarget(p)}
+                                className="w-7 h-7 rounded-lg border border-red-500/10 bg-red-500/5 text-red-400/20 hover:text-red-400 hover:bg-red-500/15 flex items-center justify-center transition-all shrink-0"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
                           </div>
-                          
-                          <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0">
-                            <input 
-                              type="checkbox" 
-                              defaultChecked={p.active !== false} 
-                              onChange={(e) => {
-                                const fd = new FormData();
-                                fd.append('id', p.id);
-                                fd.append('name', p.name);
-                                fd.append('active', String(e.target.checked));
-                                fd.append('pay_fine', String(p.pay_fine !== false));
-                                fd.append('hidden', String(p.hidden === true));
-                                submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu');
-                              }}
-                              className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0" 
-                            />
-                            <span className="text-[9px] font-black text-slate-300/65 uppercase tracking-widest hidden sm:inline">{isGuestId(p.id) ? 'Dropdown' : 'Active'}</span>
-                          </label>
-
-                          {!isGuestId(p.id) && (
-                            <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0" title="Phạt tiền">
-                              <input 
-                                type="checkbox" 
-                                defaultChecked={p.pay_fine !== false} 
-                                onChange={(e) => {
-                                  const fd = new FormData();
-                                  fd.append('id', p.id);
-                                  fd.append('name', p.name);
-                                  fd.append('active', String(p.active !== false));
-                                  fd.append('pay_fine', String(e.target.checked));
-                                  fd.append('hidden', String(p.hidden === true));
-                                  submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu');
-                                }}
-                                className="w-3.5 h-3.5 rounded border-amber-500/20 bg-white/5 text-amber-500 focus:ring-0 focus:ring-offset-0" 
-                              />
-                              <Banknote className="w-3.5 h-3.5 text-amber-500 hidden sm:inline" />
-                            </label>
-                          )}
-
-                          {!isGuestId(p.id) && (
-                            <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0" title="Ẩn khỏi BXH">
-                              <input 
-                                type="checkbox" 
-                                defaultChecked={p.hidden === true} 
-                                onChange={(e) => {
-                                  const fd = new FormData();
-                                  fd.append('id', p.id);
-                                  fd.append('name', p.name);
-                                  fd.append('active', String(p.active !== false));
-                                  fd.append('pay_fine', String(p.pay_fine !== false));
-                                  fd.append('hidden', String(e.target.checked));
-                                  submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu');
-                                }}
-                                className="w-3.5 h-3.5 rounded border-slate-500/20 bg-white/5 text-slate-400 focus:ring-0 focus:ring-offset-0" 
-                              />
-                              <EyeOff className="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />
-                            </label>
-                          )}
-
-                          {!isGuestId(p.id) && (
-                            <button
-                              type="button"
-                              onClick={() => setDeleteTarget(p)}
-                              className="w-7 h-7 rounded-lg border border-red-500/10 bg-red-500/5 text-red-400/20 hover:text-red-400 hover:bg-red-500/15 flex items-center justify-center transition-all shrink-0"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
-                      ))}
+                        ))}
                     </div>
                   </div>
                 </div>
@@ -637,24 +701,42 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
               </div>
             )}
 
-            {canEdit && activeTab === 'money' && (
-              <div className="space-y-4">
-                <div className="text-[10px] font-black text-slate-300/70 uppercase tracking-[0.2em] px-1">Cấu hình tài chính</div>
-                <form action={(fd) => submit(updateFineAction, fd, 'fine', 'Đã lưu')} className="space-y-5 rounded-2xl border border-slate-500/25 bg-white/[0.055] p-6">
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-slate-300/75 uppercase tracking-widest">Mức phạt mỗi lượt thua</label>
-                    <div className="relative">
-                      <input name="lose_money" type="number" defaultValue={config.lose_money || '5000'} className="w-full rounded-2xl bg-[#0f1a2c] border border-slate-500/25 px-5 py-4 text-white font-black text-xl outline-none focus:border-primary/50 transition-all pl-12" />
-                      <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300/65 font-black text-lg">₫</div>
+            {canEdit && activeTab === 'money' && (() => {
+              const selectedSeasonInfo = seasons.find(s => s.name === selectedConfigSeason);
+              const currentSeasonLoseMoney = selectedSeasonInfo?.lose_money !== undefined ? selectedSeasonInfo.lose_money : Number(config.lose_money || 5000);
+
+              const handleSaveSeasonFine = (e: React.FormEvent<HTMLFormElement>) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                const amount = Number(fd.get('lose_money') || 5000);
+                const seasonId = selectedSeasonInfo?.id || selectedConfigSeason;
+                
+                submitDirect(
+                  () => updateSeasonFineAction(seasonId, amount),
+                  'fine',
+                  'Đã lưu'
+                );
+              };
+
+              return (
+                <div className="space-y-4">
+                  <div className="text-[10px] font-black text-slate-300/70 uppercase tracking-[0.2em] px-1">Cấu hình tài chính</div>
+                  <form onSubmit={handleSaveSeasonFine} className="space-y-5 rounded-2xl border border-slate-500/25 bg-white/[0.055] p-6">
+                    <div className="space-y-2">
+                      <label className="text-xs font-black text-slate-300/75 uppercase tracking-widest">Mức phạt mỗi lượt thua ({selectedConfigSeason})</label>
+                      <div className="relative">
+                        <input key={selectedConfigSeason} name="lose_money" type="number" defaultValue={currentSeasonLoseMoney} className="w-full rounded-2xl bg-[#0f1a2c] border border-slate-500/25 px-5 py-4 text-white font-black text-xl outline-none focus:border-primary/50 transition-all pl-12" />
+                        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300/65 font-black text-lg">₫</div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <InlineFeedback feedback={feedback} target="fine" />
-                    <button disabled={isPending} className="rounded-2xl bg-primary px-10 py-4 text-xs font-black text-black uppercase tracking-widest shadow-lg shadow-primary/20 active:scale-95 transition-all">Lưu cấu hình</button>
-                  </div>
-                </form>
-              </div>
-            )}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <InlineFeedback feedback={feedback} target="fine" />
+                      <button disabled={isPending} className="rounded-2xl bg-primary px-10 py-4 text-xs font-black text-black uppercase tracking-widest shadow-lg shadow-primary/20 active:scale-95 transition-all">Lưu cấu hình</button>
+                    </div>
+                  </form>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
