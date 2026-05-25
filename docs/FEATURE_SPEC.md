@@ -217,9 +217,10 @@ Standalone `/history`:
 
 `/analysis` is read-only and uses IndexedDB as a local cache for match history.
 The `Vinh danh` zone is independent of the selected analysis season. It only
-shows completed-season champions: the latest completed season is featured, the
-active season is marked as in progress, and older champions expand inline for
-additional details.
+shows completed-season champions as an equal gallery. The latest completed
+season gets a small `Mới nhất` badge, the active season is marked as in
+progress, and clicking a champion opens a full-width detail panel below that
+card row.
 
 Current implementation files:
 
@@ -247,8 +248,8 @@ Current behavior:
   under season
 - overview zone: summary cards, ELO leaderboard/sparkline, and automated
   insight feed
-- Hall of Fame zone: latest completed-season champion plaque and compact
-  season-history rail
+- Hall of Fame zone: completed-season champion gallery with 3:4 portraits and
+  row-level inline detail panels
 - profile zone: selected player, ELO rank, win rate, radar chart, current
   streak, activity, best partner, toughest opponent, and recent matches
 - network zone: partner/opponent cards for the selected player with record,

@@ -13,12 +13,14 @@ repo.
 
 ### Hall of Fame Champion Images
 
-- Reworked the Analysis `Vinh danh` zone around a fixed featured champion card
-  for the latest completed season and inline-expand cards for older champions.
+- Reworked the Analysis `Vinh danh` zone into an equal champion gallery with
+  row-level inline detail panels.
 - Added Settings `Vinh danh` controls to upload/delete a 3:4 champion image per
   completed season champion.
 - Added Vercel Blob image storage wiring and season metadata fields for
   champion image URL/path/update time.
+- Added IndexedDB local champion-image caching so unchanged Hall of Fame images
+  do not need to be fetched again after the first load.
 
 ### Next.js Migration
 

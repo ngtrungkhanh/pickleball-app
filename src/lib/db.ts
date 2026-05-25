@@ -4,12 +4,13 @@
  */
 
 const DB_NAME = 'PickleballDB';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const STORES = {
   matches: 'matches',
   players: 'players',
   seasons: 'seasons',
+  hallImages: 'hall_images',
   config: 'config',
   syncMeta: 'sync_meta',
 } as const;
@@ -33,6 +34,15 @@ export type StoredSeason = {
   name: string;
   active?: boolean;
   start_date?: string;
+  [key: string]: unknown;
+};
+
+export type StoredHallImage = {
+  season: string;
+  imagePath: string;
+  imageUpdatedAt: string;
+  blob: Blob;
+  cachedAt: number;
   [key: string]: unknown;
 };
 
@@ -107,6 +117,9 @@ export async function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORES.seasons)) {
         db.createObjectStore(STORES.seasons, { keyPath: 'name' });
+      }
+      if (!db.objectStoreNames.contains(STORES.hallImages)) {
+        db.createObjectStore(STORES.hallImages, { keyPath: 'season' });
       }
       if (!db.objectStoreNames.contains(STORES.config)) {
         db.createObjectStore(STORES.config, { keyPath: 'key' });
@@ -271,4 +284,30 @@ export async function markManifestChecked(dataVersion: number) {
     setMetaValue('dataVersion', dataVersion),
     setMetaValue('lastManifestCheck', Date.now()),
   ]);
+}
+
+export async function getHallImageLocal(season: string): Promise<StoredHallImage | null> {
+  const db = await openDB();
+  const tx = db.transaction(STORES.hallImages, 'readonly');
+  const store = tx.objectStore(STORES.hallImages);
+  const request = store.get(season);
+  return new Promise((resolve) => {
+    request.onsuccess = () => resolve((request.result as StoredHallImage | undefined) || null);
+    request.onerror = () => resolve(null);
+  });
+}
+
+export async function saveHallImageLocal(record: StoredHallImage) {
+  await putStore<StoredHallImage>(STORES.hallImages, [record]);
+}
+
+export async function removeHallImageLocal(season: string) {
+  const db = await openDB();
+  const tx = db.transaction(STORES.hallImages, 'readwrite');
+  const store = tx.objectStore(STORES.hallImages);
+  store.delete(season);
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
 }

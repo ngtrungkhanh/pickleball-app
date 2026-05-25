@@ -60,6 +60,8 @@ Read only when relevant:
   Postgres remains authoritative, Dashboard/F5/direct route preload seeds local
   cache, score-save responses replace optimistic local rows with canonical
   server matches, and Analysis reads local cache unless the user reloads.
+- Hall of Fame champion portraits are stored in Vercel Blob and cached locally
+  in IndexedDB by season image path/update timestamp.
 - Dashboard and Analysis no longer show manual `Làm mới` buttons; browser
   reload/F5 is the intended fresh-data action.
 - Admin dashboard supports both `.xlsx` bulk migration and `.json` full database backup/restore mechanisms.

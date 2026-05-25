@@ -90,6 +90,11 @@ The Vercel project must provide `BLOB_READ_WRITE_TOKEN`; without it, upload and
 delete actions return a clear error while Hall of Fame falls back to the
 placeholder portrait.
 
+Hall of Fame images are also cached in browser IndexedDB. The cache key uses
+the season plus `champion_image_path` and `champion_image_updated_at`; if either
+server value changes, the client fetches the new Blob image once and replaces
+the local cached blob.
+
 ## Match Save Flow
 
 Expected save flow:
@@ -182,6 +187,7 @@ to repeatedly send between routes:
   - `matches`
   - `players`
   - `seasons`
+  - `hall_images`
   - `config`
   - `sync_meta`
 

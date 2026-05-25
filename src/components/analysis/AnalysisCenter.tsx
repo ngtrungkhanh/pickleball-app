@@ -6,7 +6,7 @@ import {
   ArrowLeft, RefreshCw, Database,
   LayoutGrid, User, Swords, History,
   TrendingUp, Flame, Trophy, Target,
-  Star, Zap, Award, Crown, Medal, CalendarDays, ChevronDown,
+  Star, Zap, Award, Crown, Medal, CalendarDays,
   type LucideIcon
 } from 'lucide-react';
 import { buildAnalysisSnapshot, edgeRecord, getAnalysisName, type AnalysisEdge, type EloResult, type PlayerMetrics, type PlayerProfile } from '@/lib/analysis-core';
@@ -15,6 +15,7 @@ import { cn, getAvatarLetter } from '@/lib/utils';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
 import { isGuestId, loserFineCount } from '@/lib/guest';
 import { buildHallOfFameEntries, formatHallDate, type HallOfFameEntry } from '@/lib/hall-of-fame';
+import { getHallImageLocal, removeHallImageLocal, saveHallImageLocal } from '@/lib/db';
 
 // Navigation tabs - 4 zones instead of 6
 const navItems = [
@@ -404,9 +405,10 @@ function HubZone({
 }
 
 function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; activeSeason: string }) {
-  const latestChampion = entries[0] || null;
-  const oldChampions = entries.slice(1);
-  const [expandedSeason, setExpandedSeason] = useState<string | null>(oldChampions[0]?.season || null);
+  const [selectedSeason, setSelectedSeason] = useState<string | null>(null);
+  const columnCount = useHallColumnCount();
+  const selectedEntry = entries.find(entry => entry.season === selectedSeason) || null;
+  const rows = useMemo(() => chunkHallEntries(entries, columnCount), [entries, columnCount]);
 
   return (
     <section className="relative overflow-hidden rounded-[1.75rem] border border-amber-300/25 bg-slate-800/90 shadow-[0_30px_100px_rgba(0,0,0,0.34)] animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -428,22 +430,8 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
           </div>
         </div>
 
-        {latestChampion ? (
-          <FeaturedChampionCard entry={latestChampion} />
-        ) : (
-          <div className="rounded-3xl border border-amber-300/20 bg-slate-950/35 p-6 text-center sm:p-10">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-200/25 bg-amber-200/10 text-amber-100">
-              <Medal className="h-8 w-8" />
-            </div>
-            <div className="text-2xl font-black uppercase tracking-[0.08em] text-white">Chưa có nhà vô địch</div>
-            <p className="mx-auto mt-3 max-w-xl text-sm font-bold leading-relaxed text-white/45">
-              Season đầu tiên sẽ được lưu vào Bảng Vinh Danh sau khi khép lại.
-            </p>
-          </div>
-        )}
-
         {activeSeason && (
-          <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/10 p-4">
+          <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/10 p-4">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-4 w-4 text-primary" />
@@ -455,22 +443,37 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
           </div>
         )}
 
-        {oldChampions.length > 0 && (
-          <div className="mt-6">
-            <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-white/45">
-              <CalendarDays className="h-3.5 w-3.5 text-amber-200/70" />
-              Các mùa trước
+        {entries.length === 0 ? (
+          <div className="rounded-3xl border border-amber-300/20 bg-slate-950/35 p-6 text-center sm:p-10">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-200/25 bg-amber-200/10 text-amber-100">
+              <Medal className="h-8 w-8" />
             </div>
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-              {oldChampions.map((entry) => (
-                <OldChampionCard
-                  key={entry.season}
-                  entry={entry}
-                  expanded={expandedSeason === entry.season}
-                  onToggle={() => setExpandedSeason(prev => prev === entry.season ? null : entry.season)}
-                />
-              ))}
-            </div>
+            <div className="text-2xl font-black uppercase tracking-[0.08em] text-white">Chưa có nhà vô địch</div>
+            <p className="mx-auto mt-3 max-w-xl text-sm font-bold leading-relaxed text-white/45">
+              Season đầu tiên sẽ được lưu vào Bảng Vinh Danh sau khi khép lại.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {rows.map((row, rowIndex) => {
+              const rowHasSelected = row.some(entry => entry.season === selectedSeason);
+              return (
+                <div key={`hall-row-${rowIndex}`} className="space-y-3">
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+                    {row.map((entry, index) => (
+                      <ChampionGalleryCard
+                        key={entry.season}
+                        entry={entry}
+                        selected={entry.season === selectedSeason}
+                        isLatest={rowIndex === 0 && index === 0}
+                        onSelect={() => setSelectedSeason(current => current === entry.season ? null : entry.season)}
+                      />
+                    ))}
+                  </div>
+                  <HallDetailPanel entry={rowHasSelected ? selectedEntry : null} />
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -478,78 +481,146 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
   );
 }
 
-function FeaturedChampionCard({ entry }: { entry: HallOfFameEntry }) {
-  return (
-    <div className="group grid gap-4 rounded-3xl border border-amber-300/25 bg-slate-950/35 p-3 transition-colors duration-300 hover:border-amber-200/45 sm:gap-5 sm:p-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center lg:p-6 2xl:grid-cols-[240px_minmax(0,1fr)]">
-      <ChampionPortraitV2 entry={entry} featured />
-      <div className="min-w-0">
-        <div className="mb-3 inline-flex w-fit items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-200">
-          <Crown className="h-3.5 w-3.5" />
-          {entry.season} · Nhà vô địch
-        </div>
-        <div className="text-2xl font-black uppercase leading-tight tracking-[0.03em] text-white break-words sm:text-4xl lg:text-5xl">
-          {entry.playerName}
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-[0.12em] text-white/45">
-          <span>#1 BXH mùa giải</span>
-          {entry.lastMatchDate && (
-            <>
-              <span className="text-amber-200/40">·</span>
-              <span>Chốt {formatHallDate(entry.lastMatchDate)}</span>
-            </>
-          )}
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:mt-5 sm:grid-cols-4">
-          <HallMetricV2 label="Tỉ lệ" value={`${Math.round(entry.winRate)}%`} />
-          <HallMetricV2 label="W-L" value={`${entry.wins}W-${entry.losses}L`} />
-          <HallMetricV2 label="Số trận" value={entry.total} />
-          <HallMetricV2 label="ELO" value={entry.rating} />
-        </div>
-      </div>
-    </div>
-  );
+function useHallColumnCount() {
+  const [columnCount, setColumnCount] = useState(1);
+
+  useEffect(() => {
+    const update = () => {
+      if (window.matchMedia('(min-width: 1536px)').matches) {
+        setColumnCount(3);
+      } else if (window.matchMedia('(min-width: 1024px)').matches) {
+        setColumnCount(2);
+      } else {
+        setColumnCount(1);
+      }
+    };
+
+    update();
+    const wide = window.matchMedia('(min-width: 1536px)');
+    const medium = window.matchMedia('(min-width: 1024px)');
+    wide.addEventListener('change', update);
+    medium.addEventListener('change', update);
+    return () => {
+      wide.removeEventListener('change', update);
+      medium.removeEventListener('change', update);
+    };
+  }, []);
+
+  return columnCount;
 }
 
-function OldChampionCard({ entry, expanded, onToggle }: { entry: HallOfFameEntry; expanded: boolean; onToggle: () => void }) {
+function chunkHallEntries(entries: HallOfFameEntry[], size: number) {
+  const rows: HallOfFameEntry[][] = [];
+  for (let index = 0; index < entries.length; index += size) {
+    rows.push(entries.slice(index, index + size));
+  }
+  return rows;
+}
+
+function useCachedHallImage(entry: HallOfFameEntry | null) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    async function resolveImage() {
+      await Promise.resolve();
+      if (!cancelled) setImageUrl(null);
+
+      if (!entry?.imageUrl || !entry.imagePath) {
+        if (entry?.season) {
+          try {
+            await removeHallImageLocal(entry.season);
+          } catch {
+            // Local image cache is best effort.
+          }
+        }
+        return;
+      }
+
+      const imageUpdatedAt = entry.imageUpdatedAt || '';
+      try {
+        const cached = await getHallImageLocal(entry.season);
+        if (
+          cached &&
+          cached.imagePath === entry.imagePath &&
+          cached.imageUpdatedAt === imageUpdatedAt
+        ) {
+          objectUrl = URL.createObjectURL(cached.blob);
+          if (!cancelled) setImageUrl(objectUrl);
+          return;
+        }
+
+        const response = await fetch(entry.imageUrl, { cache: 'force-cache' });
+        if (!response.ok) throw new Error('Image fetch failed');
+        const blob = await response.blob();
+        await saveHallImageLocal({
+          season: entry.season,
+          imagePath: entry.imagePath,
+          imageUpdatedAt,
+          blob,
+          cachedAt: Date.now(),
+        });
+        objectUrl = URL.createObjectURL(blob);
+        if (!cancelled) setImageUrl(objectUrl);
+      } catch (error) {
+        console.warn('Hall image cache failed:', error);
+        if (!cancelled) setImageUrl(entry.imageUrl);
+      }
+    }
+
+    void resolveImage();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [entry?.imagePath, entry?.imageUpdatedAt, entry?.imageUrl, entry?.season]);
+
+  return imageUrl;
+}
+
+function ChampionGalleryCard({
+  entry,
+  selected,
+  isLatest,
+  onSelect,
+}: {
+  entry: HallOfFameEntry;
+  selected: boolean;
+  isLatest: boolean;
+  onSelect: () => void;
+}) {
   return (
     <button
       type="button"
-      onClick={onToggle}
+      onClick={onSelect}
       className={cn(
-        "group min-w-0 rounded-2xl border bg-white/[0.035] p-3 text-left transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-white/[0.055] active:scale-[0.99]",
-        expanded ? "border-amber-300/35 lg:col-span-2 2xl:col-span-3" : "border-white/[0.07]",
+        "group min-w-0 rounded-2xl border bg-slate-950/32 p-3 text-left transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-amber-300/45 hover:bg-white/[0.06] hover:shadow-[0_16px_48px_rgba(251,191,36,0.10)] active:scale-[0.99]",
+        selected
+          ? "border-amber-300/60 bg-amber-300/[0.075] shadow-[0_0_0_1px_rgba(251,191,36,0.10),0_20px_58px_rgba(251,191,36,0.12)]"
+          : isLatest
+            ? "border-amber-300/32"
+            : "border-white/[0.07]",
       )}
     >
-      <div className={cn("grid gap-3", expanded ? "sm:grid-cols-[112px_minmax(0,1fr)]" : "grid-cols-[72px_minmax(0,1fr)]")}>
-        <ChampionPortraitV2 entry={entry} compact={!expanded} />
-        <div className="min-w-0">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200/75">{entry.season}</div>
-              <div className="mt-1 truncate text-lg font-black text-white">{entry.playerName}</div>
-              <div className="mt-1 flex flex-wrap gap-2 text-[11px] font-bold text-white/45">
-                <span>Đã ghi danh</span>
-                <span>{Math.round(entry.winRate)}%</span>
-                <span>{entry.wins}W-{entry.losses}L</span>
-              </div>
-            </div>
-            <ChevronDown className={cn("h-4 w-4 shrink-0 text-white/35 transition-transform duration-300", expanded && "rotate-180 text-amber-200")} />
+      <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 sm:grid-cols-[112px_minmax(0,1fr)] 2xl:grid-cols-1">
+        <HallPortrait entry={entry} compact />
+        <div className="flex min-w-0 flex-col justify-center 2xl:pt-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {isLatest && (
+              <span className="rounded-full border border-amber-200/30 bg-amber-200/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.18em] text-amber-100">
+                Mới nhất
+              </span>
+            )}
+            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200/75">{entry.season}</span>
           </div>
-
-          <div className={cn("grid transition-[grid-template-rows] duration-300 ease-out", expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
-            <div className="overflow-hidden">
-              <div className={cn("pt-4 transition-all duration-300 ease-out", expanded ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0")}>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <HallMetricV2 label="Tỉ lệ" value={`${Math.round(entry.winRate)}%`} />
-                  <HallMetricV2 label="W-L" value={`${entry.wins}W-${entry.losses}L`} />
-                  <HallMetricV2 label="Số trận" value={entry.total} />
-                  <HallMetricV2 label="ELO" value={entry.rating} />
-                </div>
-                {entry.lastMatchDate && (
-                  <div className="mt-3 text-xs font-bold text-white/40">Chốt mùa: {formatHallDate(entry.lastMatchDate)}</div>
-                )}
-              </div>
-            </div>
+          <div className="mt-2 line-clamp-2 text-xl font-black uppercase leading-tight text-white 2xl:min-h-[3rem]">
+            {entry.playerName}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold text-white/45">
+            <span>{Math.round(entry.winRate)}%</span>
+            <span>{entry.wins}W-{entry.losses}L</span>
           </div>
         </div>
       </div>
@@ -557,16 +628,58 @@ function OldChampionCard({ entry, expanded, onToggle }: { entry: HallOfFameEntry
   );
 }
 
-function ChampionPortraitV2({ entry, featured = false, compact = false }: { entry: HallOfFameEntry | null; featured?: boolean; compact?: boolean }) {
+function HallDetailPanel({ entry }: { entry: HallOfFameEntry | null }) {
   return (
-    <div className={cn("mx-auto w-full", featured ? "max-w-[145px] sm:max-w-[190px] lg:max-w-none" : compact ? "max-w-[72px]" : "max-w-[112px]")}>
+    <div className={cn("grid transition-[grid-template-rows] duration-300 ease-out", entry ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+      <div className="overflow-hidden">
+        <div className={cn("transition-all duration-300 ease-out", entry ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0")}>
+          {entry && (
+            <div key={entry.season} className="animate-in fade-in slide-in-from-top-2 duration-300 rounded-3xl border border-amber-300/35 bg-slate-950/45 p-4 shadow-[0_22px_70px_rgba(0,0,0,0.24)] sm:p-5 lg:grid lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-5 lg:p-6">
+              <HallPortrait entry={entry} />
+              <div className="mt-4 min-w-0 lg:mt-0">
+                <div className="mb-3 inline-flex w-fit items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-200">
+                  <Crown className="h-3.5 w-3.5" />
+                  {entry.season} · Nhà vô địch
+                </div>
+                <div className="text-2xl font-black uppercase leading-tight tracking-[0.03em] text-white break-words sm:text-4xl">
+                  {entry.playerName}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-[0.12em] text-white/45">
+                  <span>#1 BXH mùa giải</span>
+                  {entry.lastMatchDate && (
+                    <>
+                      <span className="text-amber-200/40">·</span>
+                      <span>Chốt {formatHallDate(entry.lastMatchDate)}</span>
+                    </>
+                  )}
+                </div>
+                <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <HallMetric label="Tỉ lệ" value={`${Math.round(entry.winRate)}%`} />
+                  <HallMetric label="W-L" value={`${entry.wins}W-${entry.losses}L`} />
+                  <HallMetric label="Số trận" value={entry.total} />
+                  <HallMetric label="ELO" value={entry.rating} />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HallPortrait({ entry, compact = false }: { entry: HallOfFameEntry | null; compact?: boolean }) {
+  const cachedImageUrl = useCachedHallImage(entry);
+
+  return (
+    <div className={cn("mx-auto w-full", compact ? "max-w-[112px]" : "max-w-[180px]")}>
       <div className="relative aspect-[3/4] overflow-hidden rounded-2xl border border-amber-200/40 bg-slate-950/85 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),0_20px_44px_rgba(0,0,0,0.26)]">
-        {entry?.imageUrl ? (
+        {cachedImageUrl ? (
           <div
             role="img"
-            aria-label={`Ảnh vinh danh ${entry.playerName}`}
-            className="absolute inset-0 bg-cover bg-center transition duration-300 group-hover:brightness-110"
-            style={{ backgroundImage: `url("${entry.imageUrl}")` }}
+            aria-label={`Ảnh vinh danh ${entry?.playerName || ''}`}
+            className="absolute inset-0 bg-cover bg-center opacity-100 transition duration-300 group-hover:brightness-110 group-hover:contrast-110"
+            style={{ backgroundImage: `url("${cachedImageUrl}")` }}
           />
         ) : (
           <>
@@ -576,7 +689,7 @@ function ChampionPortraitV2({ entry, featured = false, compact = false }: { entr
             <div className="relative flex h-full flex-col items-center justify-center p-3 text-center">
               <div className={cn(
                 "flex items-center justify-center rounded-full border border-amber-100/40 bg-amber-200/10 font-black text-amber-100 shadow-[0_0_40px_rgba(251,191,36,0.18)]",
-                compact ? "h-10 w-10 text-lg" : "h-20 w-20 text-4xl",
+                compact ? "h-11 w-11 text-xl" : "h-20 w-20 text-4xl",
               )}>
                 {entry ? getAvatarLetter(entry.playerName) : <Trophy className="h-9 w-9" />}
               </div>
@@ -593,7 +706,7 @@ function ChampionPortraitV2({ entry, featured = false, compact = false }: { entr
   );
 }
 
-function HallMetricV2({ label, value }: { label: string; value: ReactNode }) {
+function HallMetric({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-xl border border-white/[0.06] bg-white/[0.04] px-3 py-2.5 text-center sm:py-3">
       <div className="text-base font-black text-white sm:text-xl">{value}</div>

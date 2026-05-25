@@ -168,10 +168,12 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
   content near the top. The full Hall of Fame lives in the `Vinh danh` zone.
   Hall of Fame is not affected by the season selector. Do not show a champion
   for the active season; show it as `dang dien ra`/waiting instead.
-- Hall of Fame layout: the latest completed champion is a fixed featured card
-  with a 3:4 portrait and metric strip. Older champions use inline expandable
-  cards, one open at a time, without modal or horizontal scroll on mobile. The
-  active season appears as a small status card only.
+- Hall of Fame layout: completed champions use an equal gallery of 3:4 portrait
+  cards. The latest completed champion gets only a small `Moi nhat` badge and
+  slightly stronger gold accent, not a larger hero card. Clicking a card opens a
+  full-width detail panel directly below that card row; use inline animation,
+  not a modal or horizontal scroll on mobile. The active season appears as a
+  small status card only.
 - Champion images belong to the season champion record. Upload/delete controls
   live in Settings `Vinh danh`; Analysis remains read-only.
 - The main dashboard may show a previous-champion title line directly under the
