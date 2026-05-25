@@ -15,6 +15,7 @@ import {
   Upload,
   Users,
   X,
+  EyeOff,
 } from 'lucide-react';
 import {
   addPlayerAction,
@@ -32,7 +33,7 @@ import { cn } from '@/lib/utils';
 import { GUEST_NAME, isGuestId } from '@/lib/guest';
 import { buildHallOfFameEntries, type HallOfFameEntry } from '@/lib/hall-of-fame';
 
-type Player = { id: string; name: string; active?: boolean; deleted_at?: unknown };
+type Player = { id: string; name: string; active?: boolean; pay_fine?: boolean; hidden?: boolean; deleted_at?: unknown };
 type Match = { id?: string; date?: string; season?: string; deleted_at?: unknown; [key: string]: unknown };
 type Season = {
   id: string;
@@ -407,6 +408,8 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                                   fd.append('id', p.id);
                                   fd.append('name', e.target.value.trim());
                                   fd.append('active', String(p.active !== false));
+                                  fd.append('pay_fine', String(p.pay_fine !== false));
+                                  fd.append('hidden', String(p.hidden === true));
                                   submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu');
                                 }
                               }}
@@ -424,12 +427,54 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                                 fd.append('id', p.id);
                                 fd.append('name', p.name);
                                 fd.append('active', String(e.target.checked));
+                                fd.append('pay_fine', String(p.pay_fine !== false));
+                                fd.append('hidden', String(p.hidden === true));
                                 submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu');
                               }}
                               className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0" 
                             />
                             <span className="text-[9px] font-black text-slate-300/65 uppercase tracking-widest hidden sm:inline">{isGuestId(p.id) ? 'Dropdown' : 'Active'}</span>
                           </label>
+
+                          {!isGuestId(p.id) && (
+                            <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0" title="Phạt tiền">
+                              <input 
+                                type="checkbox" 
+                                defaultChecked={p.pay_fine !== false} 
+                                onChange={(e) => {
+                                  const fd = new FormData();
+                                  fd.append('id', p.id);
+                                  fd.append('name', p.name);
+                                  fd.append('active', String(p.active !== false));
+                                  fd.append('pay_fine', String(e.target.checked));
+                                  fd.append('hidden', String(p.hidden === true));
+                                  submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu');
+                                }}
+                                className="w-3.5 h-3.5 rounded border-amber-500/20 bg-white/5 text-amber-500 focus:ring-0 focus:ring-offset-0" 
+                              />
+                              <Banknote className="w-3.5 h-3.5 text-amber-500 hidden sm:inline" />
+                            </label>
+                          )}
+
+                          {!isGuestId(p.id) && (
+                            <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0" title="Ẩn khỏi BXH">
+                              <input 
+                                type="checkbox" 
+                                defaultChecked={p.hidden === true} 
+                                onChange={(e) => {
+                                  const fd = new FormData();
+                                  fd.append('id', p.id);
+                                  fd.append('name', p.name);
+                                  fd.append('active', String(p.active !== false));
+                                  fd.append('pay_fine', String(p.pay_fine !== false));
+                                  fd.append('hidden', String(e.target.checked));
+                                  submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu');
+                                }}
+                                className="w-3.5 h-3.5 rounded border-slate-500/20 bg-white/5 text-slate-400 focus:ring-0 focus:ring-offset-0" 
+                              />
+                              <EyeOff className="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />
+                            </label>
+                          )}
 
                           {!isGuestId(p.id) && (
                             <button

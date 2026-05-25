@@ -127,7 +127,7 @@ export function AnalysisCenter({
   const [insightSeed, setInsightSeed] = useState<number | null>(null);
   const [insightSelectionState, setInsightSelectionState] = useState<InsightSelectionState | null>(null);
   const committedInsightSeedRef = useRef<number | null>(null);
-  const visiblePlayers = players.filter(p => p.active !== false && !isGuestId(p.id));
+  const visiblePlayers = players.filter(p => p.active !== false && p.hidden !== true && !isGuestId(p.id));
   const [playerId, setPlayerId] = useState(visiblePlayers[0]?.id || '');
   const [selectedSeason, setSelectedSeason] = useState<string | null>(currentActiveSeason);
   const activeMatches = selectedSeason === null ? allMatches : allMatches.filter(m => (m.season || 'Season 1') === selectedSeason);

@@ -143,7 +143,8 @@ export default function Dashboard({
   const loseMoney = Number(config.lose_money || 5000);
   const viewedMatches = selectedSeason === null ? matches : matches.filter(m => (m.season || 'Season 1') === selectedSeason);
 
-  const visiblePlayers = useMemo(() => players.filter(p => p.active !== false && !isGuestId(p.id)), [players]);
+  const leaderboardPlayers = useMemo(() => players.filter(p => p.hidden !== true), [players]);
+  const visiblePlayers = useMemo(() => players.filter(p => p.active !== false && p.hidden !== true && !isGuestId(p.id)), [players]);
   const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(visiblePlayers as any[], viewedMatches as any[], loseMoney), [visiblePlayers, viewedMatches, loseMoney]);
 
   const insightsReady = sharedData.syncState !== 'syncing' && insightSeed !== null && insightSelectionState !== null;
@@ -204,6 +205,20 @@ export default function Dashboard({
             <Settings className="w-4 h-4" />
             Cài đặt
           </button>
+          {!tickerOpen && (
+            <button onClick={() => {
+              setTickerOpen(true);
+              if (typeof window !== 'undefined') {
+                window.sessionStorage.removeItem('pickleball_ticker_closed');
+              }
+            }} className="inline-flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-black text-primary hover:bg-primary/20 transition-colors relative overflow-hidden group">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+              </span>
+              Hiện tin nhanh
+            </button>
+          )}
         </div>
       </div>
 
@@ -238,7 +253,7 @@ export default function Dashboard({
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-950 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-slate-950"></span>
               </span>
-              <span className="text-[9px] font-black tracking-widest text-slate-950 uppercase">TIN NHANH</span>
+              <span className="text-[9px] font-black tracking-widest text-slate-950 uppercase hidden sm:inline">TIN NHANH</span>
             </div>
             
             {/* Dòng chữ chạy */}
@@ -277,7 +292,7 @@ export default function Dashboard({
       {/* 2. Leaderboard */}
       <div className={DESKTOP_PANEL_WIDTH}>
         <Leaderboard
-          players={players}
+          players={leaderboardPlayers}
           matches={matches}
           seasons={seasons}
           activeSeason={activeSeason}

@@ -37,6 +37,8 @@ async function ensureConfigTable() {
 async function ensureSoftDeleteColumns() {
   await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
   await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80)`;
+  await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS pay_fine BOOLEAN DEFAULT TRUE`;
+  await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS hidden BOOLEAN DEFAULT FALSE`;
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80)`;
 }
@@ -87,9 +89,18 @@ async function setConfigValue(key: string, value: string) {
 
 async function updatePlayerStatsIncremental(playerId: string, season: string, deltaWins: number, deltaLosses: number, deltaMoney: number) {
   if (!playerId || isGuestId(playerId)) return;
+  
+  let moneyToChange = deltaMoney;
+  if (deltaMoney !== 0) {
+    const { rows } = await sql`SELECT pay_fine FROM players WHERE id = ${playerId} LIMIT 1`;
+    if (rows[0] && rows[0].pay_fine === false) {
+      moneyToChange = 0;
+    }
+  }
+
   await sql`
     INSERT INTO player_stats (player_id, season, wins, losses, total, money)
-    VALUES (${playerId}, ${season}, ${deltaWins}, ${deltaLosses}, ${deltaWins + deltaLosses}, ${deltaMoney})
+    VALUES (${playerId}, ${season}, ${deltaWins}, ${deltaLosses}, ${deltaWins + deltaLosses}, ${moneyToChange})
     ON CONFLICT (player_id, season) DO UPDATE SET
       wins = player_stats.wins + EXCLUDED.wins,
       losses = player_stats.losses + EXCLUDED.losses,
@@ -260,12 +271,14 @@ export async function updatePlayerAction(formData: FormData) {
     const id = String(formData.get('id') || '');
     const name = String(formData.get('name') || '').trim();
     const active = String(formData.get('active') || 'true') === 'true';
+    const pay_fine = String(formData.get('pay_fine') || 'true') === 'true';
+    const hidden = String(formData.get('hidden') || 'false') === 'true';
     if (!id || !name) return { error: 'Thông tin thành viên không hợp lệ' };
 
     if (isGuestId(id)) {
       await sql`UPDATE players SET name = ${GUEST_NAME}, active = ${active}, deleted_at = NULL WHERE id = ${GUEST_ID}`;
     } else {
-      await sql`UPDATE players SET name = ${name}, active = ${active} WHERE id = ${id}`;
+      await sql`UPDATE players SET name = ${name}, active = ${active}, pay_fine = ${pay_fine}, hidden = ${hidden} WHERE id = ${id}`;
     }
     await bumpDataVersion();
     revalidatePath('/');
@@ -654,56 +667,6 @@ export async function deleteChampionImageAction(formData: FormData) {
 }
 
 export async function rebuildStatsAction() {
-  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
-
-  try {
-    // Ensure table exists just in case
-    await sql`
-      CREATE TABLE IF NOT EXISTS player_stats (
-        player_id VARCHAR(10) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-        season VARCHAR(50) NOT NULL,
-        wins INT DEFAULT 0,
-        losses INT DEFAULT 0,
-        total INT DEFAULT 0,
-        money INT DEFAULT 0,
-        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (player_id, season)
-      )
-    `;
-
-    const lose_money = parseInt(await getConfigValue('lose_money', '5000')) || 5000;
-    
-    const { rows: players } = await sql`SELECT id FROM players WHERE deleted_at IS NULL`;
-    const validPlayerIds = new Set(players.map(p => p.id).filter(id => !isGuestId(id)));
-    
-    const { rows: matches } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL`;
-    
-    const statsMap = new Map<string, { wins: number; losses: number; money: number }>();
-    
-    for (const m of matches) {
-      const season = m.season || 'Season 1';
-      const hasGuest = matchHasGuest(m);
-      const winners = [m.win_1, m.win_2].filter(pid => pid && validPlayerIds.has(pid));
-      const losers = [m.lose_1, m.lose_2].filter(pid => pid && validPlayerIds.has(pid));
-
-      if (!hasGuest) {
-        winners.forEach(pid => {
-          const key = `${pid}:${season}`;
-          const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-          s.wins++;
-          statsMap.set(key, s);
-        });
-
-        losers.forEach(pid => {
-          const key = `${pid}:${season}`;
-          const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-          s.losses++;
-          statsMap.set(key, s);
-        });
-      }
-
-      losers.forEach(pid => {
-        const key = `${pid}:${season}`;
         const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
         s.money += lose_money;
         statsMap.set(key, s);

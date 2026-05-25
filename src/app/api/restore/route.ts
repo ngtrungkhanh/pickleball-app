@@ -51,8 +51,8 @@ export async function POST(request: Request) {
     // 2. Restore Players
     for (const p of players) {
       await sql`
-        INSERT INTO players (id, name, active, deleted_at, delete_group_id)
-        VALUES (${p.id}, ${p.name}, ${p.active ? true : false}, ${p.deleted_at || null}, ${p.delete_group_id || null})
+        INSERT INTO players (id, name, active, pay_fine, hidden, deleted_at, delete_group_id)
+        VALUES (${p.id}, ${p.name}, ${p.active ? true : false}, ${p.pay_fine !== false ? true : false}, ${p.hidden ? true : false}, ${p.deleted_at || null}, ${p.delete_group_id || null})
       `;
     }
 

@@ -17,6 +17,8 @@ export async function GET() {
         id VARCHAR(10) PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
         active BOOLEAN DEFAULT TRUE,
+        pay_fine BOOLEAN DEFAULT TRUE,
+        hidden BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
         delete_group_id VARCHAR(80),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -49,6 +51,8 @@ export async function GET() {
       await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80);`;
       await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`;
       await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80);`;
+      await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS pay_fine BOOLEAN DEFAULT TRUE;`;
+      await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS hidden BOOLEAN DEFAULT FALSE;`;
     } catch (err) {
       console.warn('created_by column update failed', err);
     }

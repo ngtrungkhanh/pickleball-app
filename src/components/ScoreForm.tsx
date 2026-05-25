@@ -290,7 +290,7 @@ export function ScoreForm({
   const [deviceInfo, setDeviceInfo] = useState('');
 
   const active: ScorePlayer[] = players
-    .filter(p => p.active && !p.deleted_at && p.id && p.name)
+    .filter(p => p.active && !p.deleted_at && p.id && p.name && p.hidden !== true)
     .map(p => ({
       id: String(p.id),
       name: String(p.name),
