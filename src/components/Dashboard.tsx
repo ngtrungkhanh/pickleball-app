@@ -141,7 +141,23 @@ export default function Dashboard({
   const activeSeason = config.active_season || 'Season 1';
   const [selectedSeason, setSelectedSeason] = useState<string | null>(activeSeason);
   const loseMoney = Number(config.lose_money || 5000);
-  const viewedMatches = selectedSeason === null ? matches : matches.filter(m => (m.season || 'Season 1') === selectedSeason);
+
+  // Lọc bỏ các trận đấu có sự tham gia của bất kỳ người chơi không hoạt động (active === false)
+  const inactivePlayerIds = useMemo(() => {
+    return new Set(players.filter(p => p.active === false).map(p => p.id));
+  }, [players]);
+
+  const activeMatches = useMemo(() => {
+    return matches.filter(m => {
+      const isWin1Inactive = m.win_1 && inactivePlayerIds.has(String(m.win_1));
+      const isWin2Inactive = m.win_2 && inactivePlayerIds.has(String(m.win_2));
+      const isLose1Inactive = m.lose_1 && inactivePlayerIds.has(String(m.lose_1));
+      const isLose2Inactive = m.lose_2 && inactivePlayerIds.has(String(m.lose_2));
+      return !m.deleted_at && !isWin1Inactive && !isWin2Inactive && !isLose1Inactive && !isLose2Inactive;
+    });
+  }, [matches, inactivePlayerIds]);
+
+  const viewedMatches = selectedSeason === null ? activeMatches : activeMatches.filter(m => (m.season || 'Season 1') === selectedSeason);
 
   const leaderboardPlayers = useMemo(() => players.filter(p => p.hidden !== true), [players]);
   const visiblePlayers = useMemo(() => players.filter(p => p.active !== false && p.hidden !== true && !isGuestId(p.id)), [players]);
@@ -164,6 +180,100 @@ export default function Dashboard({
     writeInsightSelectionState(insightSelectionResult.nextSelectionState);
     committedInsightSeedRef.current = insightSeed;
   }, [insightSeed, insightSelectionResult.nextSelectionState, insightsReady]);
+
+  // Ticker animation refs and states
+  const tickerContainerRef = useRef<HTMLDivElement>(null);
+  const marqueeRef = useRef<HTMLDivElement>(null);
+  const isPausedRef = useRef(false);
+  const isStoppingRef = useRef(false);
+  const translateXRef = useRef(0);
+  const animationFrameIdRef = useRef<number | null>(null);
+  const [tickerPaused, setTickerPaused] = useState(false);
+
+  useEffect(() => {
+    if (!tickerOpen || !insightsReady || insights.length === 0 || !marqueeRef.current || !tickerContainerRef.current) {
+      if (animationFrameIdRef.current) {
+        cancelAnimationFrame(animationFrameIdRef.current);
+        animationFrameIdRef.current = null;
+      }
+      return;
+    }
+
+    const container = tickerContainerRef.current;
+    const marquee = marqueeRef.current;
+
+    // Tốc độ chạy nhanh hơn 10% (giảm thời gian chạy từ 65s xuống 59s, tương ứng tăng tốc độ 10%)
+    const halfWidth = marquee.offsetWidth / 2;
+    const baseSpeed = halfWidth > 0 ? (halfWidth / (65 * 60)) : 1.0;
+    const speed = baseSpeed * 1.1;
+
+    const step = () => {
+      if (isPausedRef.current) {
+        animationFrameIdRef.current = requestAnimationFrame(step);
+        return;
+      }
+
+      if (isStoppingRef.current) {
+        const containerRect = container.getBoundingClientRect();
+        const items = marquee.querySelectorAll('.ticker-item');
+        let targetItem: HTMLElement | null = null;
+        let minDistance = Infinity;
+
+        items.forEach(item => {
+          const rect = item.getBoundingClientRect();
+          const dist = rect.left - containerRect.left;
+          if (dist >= -2 && dist < minDistance) {
+            minDistance = dist;
+            targetItem = item as HTMLElement;
+          }
+        });
+
+        if (targetItem && minDistance !== Infinity) {
+          if (minDistance <= speed + 0.5) {
+            translateXRef.current -= minDistance;
+            marquee.style.transform = `translateX(${translateXRef.current}px)`;
+            isPausedRef.current = true;
+            isStoppingRef.current = false;
+            setTickerPaused(true);
+          } else {
+            translateXRef.current -= speed;
+            marquee.style.transform = `translateX(${translateXRef.current}px)`;
+          }
+        } else {
+          isPausedRef.current = true;
+          isStoppingRef.current = false;
+          setTickerPaused(true);
+        }
+      } else {
+        translateXRef.current -= speed;
+        const marqueeWidth = marquee.offsetWidth;
+        if (Math.abs(translateXRef.current) >= marqueeWidth / 2) {
+          translateXRef.current = 0;
+        }
+        marquee.style.transform = `translateX(${translateXRef.current}px)`;
+      }
+
+      animationFrameIdRef.current = requestAnimationFrame(step);
+    };
+
+    animationFrameIdRef.current = requestAnimationFrame(step);
+
+    return () => {
+      if (animationFrameIdRef.current) {
+        cancelAnimationFrame(animationFrameIdRef.current);
+      }
+    };
+  }, [tickerOpen, insightsReady, insights]);
+
+  const handleTickerClick = () => {
+    if (isPausedRef.current) {
+      isPausedRef.current = false;
+      isStoppingRef.current = false;
+      setTickerPaused(false);
+    } else if (!isStoppingRef.current) {
+      isStoppingRef.current = true;
+    }
+  };
 
   const handleCloseTicker = () => {
     setTickerOpen(false);
@@ -233,17 +343,11 @@ export default function Dashboard({
         <div className={DESKTOP_PANEL_WIDTH}>
           <div className="relative overflow-hidden rounded-xl border border-white/[0.05] bg-slate-950/40 backdrop-blur-md h-9 flex items-center shadow-inner">
             <style>{`
-              @keyframes ticker-marquee {
-                0% { transform: translateX(0%); }
-                100% { transform: translateX(-50%); }
-              }
               .sports-ticker-marquee {
                 display: flex;
                 width: max-content;
-                animation: ticker-marquee 65s linear infinite;
-              }
-              .sports-ticker-marquee:hover {
-                animation-play-state: paused;
+                will-change: transform;
+                cursor: pointer;
               }
             `}</style>
             
@@ -257,10 +361,15 @@ export default function Dashboard({
             </div>
             
             {/* Dòng chữ chạy */}
-            <div className="flex-1 overflow-hidden relative h-full flex items-center">
-              <div className="sports-ticker-marquee py-1 select-none">
+            <div 
+              ref={tickerContainerRef}
+              onClick={handleTickerClick}
+              className="flex-1 overflow-hidden relative h-full flex items-center"
+              title={tickerPaused ? "Click để tiếp tục chạy" : "Click để dừng tại tin tiếp theo"}
+            >
+              <div ref={marqueeRef} className="sports-ticker-marquee py-1 select-none">
                 {[...insights, ...insights].map((insight, idx) => (
-                  <span key={idx} className="inline-flex items-center text-[11px] font-bold text-slate-300 mx-6 gap-2 shrink-0">
+                  <span key={idx} className="ticker-item inline-flex items-center text-[11px] font-bold text-slate-300 mx-6 gap-2 shrink-0">
                     <span className="text-[9px] font-black text-primary uppercase shrink-0 bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded">
                       {insight.title || 'ĐIỂM NHẤN'}
                     </span>
@@ -293,7 +402,7 @@ export default function Dashboard({
       <div className={DESKTOP_PANEL_WIDTH}>
         <Leaderboard
           players={leaderboardPlayers}
-          matches={matches}
+          matches={activeMatches}
           seasons={seasons}
           activeSeason={activeSeason}
           selectedSeason={selectedSeason}

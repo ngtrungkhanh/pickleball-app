@@ -130,7 +130,23 @@ export function AnalysisCenter({
   const visiblePlayers = players.filter(p => p.active !== false && p.hidden !== true && !isGuestId(p.id));
   const [playerId, setPlayerId] = useState(visiblePlayers[0]?.id || '');
   const [selectedSeason, setSelectedSeason] = useState<string | null>(currentActiveSeason);
-  const activeMatches = selectedSeason === null ? allMatches : allMatches.filter(m => (m.season || 'Season 1') === selectedSeason);
+
+  // Lọc bỏ các trận đấu có sự tham gia của bất kỳ người chơi không hoạt động (active === false)
+  const inactivePlayerIds = useMemo(() => {
+    return new Set(players.filter(p => p.active === false).map(p => p.id));
+  }, [players]);
+
+  const filteredAllMatches = useMemo(() => {
+    return allMatches.filter(m => {
+      const isWin1Inactive = m.win_1 && inactivePlayerIds.has(String(m.win_1));
+      const isWin2Inactive = m.win_2 && inactivePlayerIds.has(String(m.win_2));
+      const isLose1Inactive = m.lose_1 && inactivePlayerIds.has(String(m.lose_1));
+      const isLose2Inactive = m.lose_2 && inactivePlayerIds.has(String(m.lose_2));
+      return !m.deleted_at && !isWin1Inactive && !isWin2Inactive && !isLose1Inactive && !isLose2Inactive;
+    });
+  }, [allMatches, inactivePlayerIds]);
+
+  const activeMatches = selectedSeason === null ? filteredAllMatches : filteredAllMatches.filter(m => (m.season || 'Season 1') === selectedSeason);
   const seasonOptions = Array.from(new Set([currentActiveSeason, ...currentSeasons.map(s => s.name), ...allMatches.map(m => m.season || 'Season 1')].filter(Boolean)));
 
   const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(visiblePlayers, activeMatches, currentLoseMoney), [visiblePlayers, activeMatches, currentLoseMoney]);
