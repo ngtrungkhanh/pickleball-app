@@ -1,13 +1,39 @@
 'use client';
-import { useState, useEffect, useSyncExternalStore } from 'react';
+import { useState, useEffect, useSyncExternalStore, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { BarChart3, RefreshCw, Settings } from 'lucide-react';
+import { BarChart3, RefreshCw, Settings, X } from 'lucide-react';
 import { SummaryGrid } from './dashboard/SummaryGrid';
 import { Leaderboard } from './dashboard/Leaderboard';
 import { RecentHistory } from './dashboard/RecentHistory';
 import { ScoreForm } from './ScoreForm';
 import { SettingsModal } from './SettingsModal';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
+import { isGuestId } from '@/lib/guest';
+import { buildAnalysisSnapshot } from '@/lib/analysis-core';
+import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
+
+const INSIGHT_SELECTION_STATE_KEY = 'pickleball.analysis.insightSelection.v1';
+
+function readInsightSelectionState(): InsightSelectionState {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(INSIGHT_SELECTION_STATE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as InsightSelectionState;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeInsightSelectionState(state: InsightSelectionState) {
+  try {
+    window.localStorage.setItem(INSIGHT_SELECTION_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignore storage failures; the feed can still render without persistence.
+  }
+}
+
 
 type Player = { id: string; name: string; active?: boolean; [key: string]: unknown };
 type Match = { id?: string; date?: string; season?: string; [key: string]: unknown };
@@ -63,7 +89,29 @@ export default function Dashboard({
   // Use local state for matches to ensure instant updates that persist 
   // until the server-side ISR revalidation completes in the background.
   const [matches, setMatches] = useState(initialMatches);
-  
+
+  // Ticker open/close state stored in sessionStorage
+  const [tickerOpen, setTickerOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.sessionStorage.getItem('pickleball_ticker_closed') !== 'true';
+    }
+    return true;
+  });
+
+  const [insightSeed, setInsightSeed] = useState<number | null>(null);
+  const [insightSelectionState, setInsightSelectionState] = useState<InsightSelectionState | null>(null);
+  const committedInsightSeedRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const seedId = window.setTimeout(() => {
+      setInsightSelectionState(readInsightSelectionState());
+      setInsightSeed(Date.now() + Math.floor(Math.random() * 100000));
+    }, 0);
+    return () => window.clearTimeout(seedId);
+  }, []);
+
+
+
   // Sync state if shared route cache changes (e.g. after manifest detects fresh data).
   // Do not let an older shared cache wipe the optimistic TMP row after a local save.
   useEffect(() => {
@@ -94,6 +142,34 @@ export default function Dashboard({
   const [selectedSeason, setSelectedSeason] = useState<string | null>(activeSeason);
   const loseMoney = Number(config.lose_money || 5000);
   const viewedMatches = selectedSeason === null ? matches : matches.filter(m => (m.season || 'Season 1') === selectedSeason);
+
+  const visiblePlayers = useMemo(() => players.filter(p => p.active !== false && !isGuestId(p.id)), [players]);
+  const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(visiblePlayers as any[], viewedMatches as any[], loseMoney), [visiblePlayers, viewedMatches, loseMoney]);
+
+  const insightsReady = sharedData.syncState !== 'syncing' && insightSeed !== null && insightSelectionState !== null;
+  const insightSelectionResult = useMemo(() => (
+    insightsReady
+      ? generateInsightSelectionResultFromSnapshot(analysisSnapshot, {
+        seed: insightSeed ?? 0,
+        selectionState: insightSelectionState || {},
+      })
+      : { insights: [], nextSelectionState: insightSelectionState || {} }
+  ), [analysisSnapshot, insightSeed, insightSelectionState, insightsReady]);
+
+  const insights = insightSelectionResult.insights;
+
+  useEffect(() => {
+    if (!insightsReady || insightSeed === null || committedInsightSeedRef.current === insightSeed) return;
+    writeInsightSelectionState(insightSelectionResult.nextSelectionState);
+    committedInsightSeedRef.current = insightSeed;
+  }, [insightSeed, insightSelectionResult.nextSelectionState, insightsReady]);
+
+  const handleCloseTicker = () => {
+    setTickerOpen(false);
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem('pickleball_ticker_closed', 'true');
+    }
+  };
 
   const unlock = (password: string) => {
     const expected = process.env.NEXT_PUBLIC_EDIT_PASS || 'pickleball';
@@ -134,6 +210,62 @@ export default function Dashboard({
       {previewWritesBlocked && (
         <div className={`${DESKTOP_PANEL_WIDTH} rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-left text-xs font-bold text-amber-200`}>
           Dev preview đang dùng chung database với production nên các thao tác ghi/sửa/xóa đã bị khóa để bảo vệ data thật.
+        </div>
+      )}
+
+      {/* Tin nhanh chạy ngang kiểu Sports Ticker */}
+      {tickerOpen && insightsReady && insights.length > 0 && (
+        <div className={DESKTOP_PANEL_WIDTH}>
+          <div className="relative overflow-hidden rounded-xl border border-white/[0.05] bg-slate-950/40 backdrop-blur-md h-9 flex items-center shadow-inner">
+            <style>{`
+              @keyframes ticker-marquee {
+                0% { transform: translateX(0%); }
+                100% { transform: translateX(-50%); }
+              }
+              .sports-ticker-marquee {
+                display: flex;
+                width: max-content;
+                animation: ticker-marquee 65s linear infinite;
+              }
+              .sports-ticker-marquee:hover {
+                animation-play-state: paused;
+              }
+            `}</style>
+            
+            {/* Badge Tin Nhanh */}
+            <div className="z-10 bg-primary px-3 py-1 flex items-center h-full gap-1 shrink-0 select-none shadow-[4px_0_15px_rgba(34,197,94,0.15)]">
+              <span className="relative flex h-1.5 w-1.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-950 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-slate-950"></span>
+              </span>
+              <span className="text-[9px] font-black tracking-widest text-slate-950 uppercase">TIN NHANH</span>
+            </div>
+            
+            {/* Dòng chữ chạy */}
+            <div className="flex-1 overflow-hidden relative h-full flex items-center">
+              <div className="sports-ticker-marquee py-1 select-none">
+                {[...insights, ...insights].map((insight, idx) => (
+                  <span key={idx} className="inline-flex items-center text-[11px] font-bold text-slate-300 mx-6 gap-2 shrink-0">
+                    <span className="text-[9px] font-black text-primary uppercase shrink-0 bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded">
+                      {insight.title || 'ĐIỂM NHẤN'}
+                    </span>
+                    <span className="text-white/90">{insight.text}</span>
+                    <span className="text-primary/50 text-xs select-none ml-2">⭐</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+            
+            {/* Nút đóng */}
+            <button 
+              type="button" 
+              onClick={handleCloseTicker}
+              className="z-10 shrink-0 h-full w-9 flex items-center justify-center bg-slate-950/20 text-slate-400 hover:text-white border-l border-white/[0.05] hover:bg-slate-950/40 transition-colors cursor-pointer"
+              aria-label="Đóng tin nhanh"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
 

@@ -53,7 +53,7 @@ type Season = {
   champion_image_path?: string | null;
   champion_image_updated_at?: string | null;
 };
-type Insight = { type: string; title?: string; text: string; icon?: string; playersInvolved?: string[] };
+type Insight = { type: string; title?: string; text: string; icon?: string; playersInvolved?: string[]; rarity?: string };
 type RadarData = { attack: number; defense: number; brave: number; synergy: number; form: number; experience: number };
 type EloHistory = Array<{ date: string; ratings: Record<string, number> }>;
 
@@ -383,18 +383,72 @@ function HubZone({
               const icon = (firstSpaceIdx > 0 && firstSpaceIdx <= 3) ? rawTitle.substring(0, firstSpaceIdx) : '👑';
               const textTitle = (firstSpaceIdx > 0 && firstSpaceIdx <= 3) ? rawTitle.substring(firstSpaceIdx + 1) : rawTitle;
 
+              const rarity = insight.rarity || 'common';
+              let rarityBadge = 'TIN THƯỜNG';
+              let rarityBg = 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400';
+              let borderStyle = 'border-white/5 hover:border-emerald-500/20 bg-slate-900/50';
+              let iconStyle = 'border-white/5 text-emerald-400 group-hover:border-emerald-500/30';
+              let gradientVia = 'hover:via-emerald-500/30';
+              let glowStyle = '';
+
+              if (rarity === 'uncommon') {
+                rarityBadge = 'TIN MỚI';
+                rarityBg = 'bg-blue-500/10 border-blue-500/20 text-blue-400';
+                borderStyle = 'border-white/5 hover:border-blue-500/20 bg-slate-900/50';
+                iconStyle = 'border-white/5 text-blue-400 group-hover:border-blue-500/30';
+                gradientVia = 'hover:via-blue-500/30';
+              } else if (rarity === 'rare') {
+                rarityBadge = 'ĐẶC BIỆT ⭐';
+                rarityBg = 'bg-amber-500/10 border-amber-500/20 text-amber-400';
+                borderStyle = 'border-amber-500/10 hover:border-amber-500/30 bg-slate-900/60';
+                iconStyle = 'border-amber-500/20 text-amber-400 group-hover:border-amber-500/40';
+                gradientVia = 'hover:via-amber-500/45';
+              } else if (rarity === 'epic') {
+                rarityBadge = 'KINH ĐIỂN ⚡';
+                rarityBg = 'bg-fuchsia-500/15 border-fuchsia-500/30 text-fuchsia-300 animate-pulse';
+                borderStyle = 'border-fuchsia-500/15 hover:border-fuchsia-500/40 bg-slate-900/70 shadow-[0_0_20px_rgba(240,76,242,0.03)] hover:shadow-[0_0_25px_rgba(240,76,242,0.06)]';
+                iconStyle = 'border-fuchsia-500/25 text-fuchsia-400 group-hover:border-fuchsia-500/50';
+                gradientVia = 'hover:via-fuchsia-500/60';
+                glowStyle = 'after:absolute after:inset-0 after:rounded-xl after:bg-fuchsia-500/[0.01] hover:after:bg-fuchsia-500/[0.02] after:transition-all';
+              }
+
               return (
-                <div key={`${insight.type}-${insight.playersInvolved?.join('|') || index}`} className="flex gap-3 p-3 rounded-xl bg-slate-900/50 border border-white/5 hover:border-primary/20 transition-all group">
-                  <div className="mt-0.5 w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center shrink-0 text-xl shadow-inner border border-white/5 group-hover:scale-110 transition-transform">
-                    {icon}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-0.5">
-                      {textTitle}
+                <div 
+                  key={`${insight.type}-${insight.playersInvolved?.join('|') || index}`} 
+                  className={cn(
+                    "relative p-[1px] rounded-xl bg-gradient-to-r from-transparent via-white/[0.04] to-transparent transition-all duration-500 overflow-hidden group",
+                    gradientVia
+                  )}
+                >
+                  <div className={cn(
+                    "relative flex gap-3 p-3.5 rounded-[11px] border transition-all duration-300 backdrop-blur-sm select-none",
+                    borderStyle,
+                    glowStyle
+                  )}>
+                    {/* Icon container */}
+                    <div className={cn(
+                      "mt-0.5 w-11 h-11 rounded-full bg-slate-800/80 flex items-center justify-center shrink-0 text-xl shadow-inner border group-hover:scale-105 transition-transform duration-300",
+                      iconStyle
+                    )}>
+                      {icon}
                     </div>
-                    <p className="text-sm sm:text-base font-bold text-white/90 leading-relaxed">
-                      {insight.text}
-                    </p>
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                        <div className="text-[10px] font-black text-white/50 uppercase tracking-widest truncate">
+                          {textTitle}
+                        </div>
+                        <span className={cn(
+                          "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border shrink-0",
+                          rarityBg
+                        )}>
+                          {rarityBadge}
+                        </span>
+                      </div>
+                      <p className="text-sm sm:text-base font-bold text-white/90 leading-relaxed">
+                        {insight.text}
+                      </p>
+                    </div>
                   </div>
                 </div>
               );

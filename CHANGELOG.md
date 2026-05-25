@@ -11,6 +11,17 @@ repo.
 
 ## Major Completed Work
 
+### Sports Ticker & Flash News Cards
+
+- Tích hợp thanh chạy tin tức thể thao chạy ngang (**Sports Ticker** / Marquee) trên Dashboard trang Home để hiển thị nhanh các nhận xét Insights của giải đấu.
+  - Ticker hỗ trợ tự động tạm dừng khi rê chuột (hover pause) để dễ đọc các tin dài.
+  - Tích hợp nút đóng `(X)` lưu trạng thái ẩn vào `sessionStorage` của trình duyệt để không làm phiền người dùng.
+  - Chiều rộng ticker đồng bộ 85% trên PC và tự động co giãn full width 100% trên Mobile để đảm bảo thẩm mỹ tối đa.
+- Nâng cấp nhận xét thành các thẻ tin nhanh thể thao (**Flash News Cards**) tại khu vực Tổng quan của Trung tâm phân tích (`/analysis`).
+  - Đọc cấp độ độ hiếm `rarity` của từng tin tức (`common`, `uncommon`, `rare`, `epic`) để hiển thị nhãn độ hiếm tương ứng (TIN THƯỜNG, TIN MỚI, ĐẶC BIỆT, KINH ĐIỂN).
+  - Tự động thay đổi giao diện thẻ, đổi màu sắc viền/nền và thêm các hiệu ứng gradient động/phát sáng mờ phù hợp với từng cấp độ độ hiếm của tin.
+- Rà soát an toàn dữ liệu thưa thớt (Sparse Data) cho engine 72 quy tắc phân tích và cơ chế lưu trữ IndexedDB cache, đảm bảo hệ thống không bị crash hay trắng trang khi dữ liệu rỗng.
+
 ### Hall of Fame Champion Images
 
 - Reworked the Analysis `Vinh danh` zone into an equal champion gallery with
