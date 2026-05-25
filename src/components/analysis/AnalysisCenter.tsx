@@ -184,72 +184,74 @@ export function AnalysisCenter({
   return (
     <div className="min-h-screen bg-slate-900">
       {/* Header */}
-      <div className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-xl border-b border-white/[0.08]">
-        <div className="max-w-[1500px] mx-auto px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <Link href="/" className="inline-flex items-center gap-2 text-sm font-black text-white/45 hover:text-primary transition-colors">
-              <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Dashboard</span>
-            </Link>
-            <div className="flex flex-col items-end">
-              <h1 className="text-xl sm:text-2xl font-black text-white">Trung tâm phân tích</h1>
-              <div className="flex items-center gap-2 mt-0.5">
-                <div className={cn(
-                  "flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all",
-                  sharedData.syncState === 'syncing' ? "bg-primary/10 text-primary animate-pulse" : "bg-white/5 text-white/30"
-                )}>
-                  {sharedData.syncState === 'syncing' ? (
-                    <><RefreshCw className="w-3 h-3 animate-spin" /> Syncing...</>
-                  ) : (
-                    <><Database className="w-3 h-3" /> {activeMatches.length} cached</>
-                  )}
+      <div className="sticky top-0 z-50 bg-slate-900/92 backdrop-blur-xl border-b border-white/[0.08]">
+        <div className="max-w-[1500px] mx-auto px-4 py-2">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center justify-between gap-3 lg:min-w-0 lg:justify-start">
+              <Link href="/" className="inline-flex shrink-0 items-center gap-2 text-xs font-black text-white/45 transition-colors hover:text-primary sm:text-sm">
+                <ArrowLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Dashboard</span>
+              </Link>
+              <div className="flex min-w-0 flex-1 flex-col items-end lg:flex-row lg:items-center lg:gap-2">
+                <h1 className="min-w-0 truncate !text-lg !leading-tight font-black text-white sm:!text-xl lg:!text-2xl">Trung tâm phân tích</h1>
+                <div className="mt-0.5 flex items-center gap-2 lg:mt-0">
+                  <div className={cn(
+                    "flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all",
+                    sharedData.syncState === 'syncing' ? "bg-primary/10 text-primary animate-pulse" : "bg-white/5 text-white/30"
+                  )}>
+                    {sharedData.syncState === 'syncing' ? (
+                      <><RefreshCw className="w-3 h-3 animate-spin" /> Syncing...</>
+                    ) : (
+                      <><Database className="w-3 h-3" /> {activeMatches.length} cached</>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
           
-          {/* Header Controls */}
-          <div className="mt-3 flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-end">
-            <select
-              value={selectedSeason ?? 'all'}
-              onChange={e => setSelectedSeason(e.target.value === 'all' ? null : e.target.value)}
-              className="w-full rounded-lg bg-slate-900 border border-white/[0.08] px-3 py-2 text-sm font-semibold text-white/70 md:w-48"
-            >
-              <option value="all">Tổng hợp</option>
-              {seasonOptions.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            {/* Header Controls */}
+            <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-end lg:shrink-0">
+              <select
+                value={selectedSeason ?? 'all'}
+                onChange={e => setSelectedSeason(e.target.value === 'all' ? null : e.target.value)}
+                className="h-8 w-full rounded-lg bg-slate-900 border border-white/[0.08] px-3 text-sm font-semibold text-white/70 md:w-48"
+              >
+                <option value="all">Tổng hợp</option>
+                {seasonOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
 
-            <select
-              value={activeNav}
-              onChange={e => setActiveNav(e.target.value)}
-              className="w-full rounded-lg bg-slate-900 border border-white/[0.08] px-3 py-2 text-sm font-black uppercase tracking-widest text-white/70 md:hidden"
-            >
-              {navItems.map(item => (
-                <option key={item.id} value={item.id}>{item.label}</option>
-              ))}
-            </select>
+              <select
+                value={activeNav}
+                onChange={e => setActiveNav(e.target.value)}
+                className="h-8 w-full rounded-lg bg-slate-900 border border-white/[0.08] px-3 text-sm font-black uppercase tracking-widest text-white/70 md:hidden"
+              >
+                {navItems.map(item => (
+                  <option key={item.id} value={item.id}>{item.label}</option>
+                ))}
+              </select>
 
-            <div className="hidden items-center rounded-xl border border-white/[0.08] bg-slate-950/60 p-1 md:flex">
-              {navItems.map(item => {
-                const Icon = item.icon;
-                const isActive = activeNav === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setActiveNav(item.id)}
-                    className={cn(
-                      "inline-flex h-10 items-center gap-2 rounded-lg px-4 text-xs font-black uppercase tracking-widest transition-all",
-                      isActive
-                        ? "bg-white text-slate-950 shadow-[0_0_20px_rgba(190,242,100,0.15)]"
-                        : "text-white/35 hover:bg-white/[0.04] hover:text-white/70"
-                    )}
-                  >
-                    <Icon className={cn("h-4 w-4", isActive && "text-primary")} />
-                    {item.label}
-                  </button>
-                );
-              })}
+              <div className="hidden items-center rounded-xl border border-white/[0.08] bg-slate-950/60 p-1 md:flex">
+                {navItems.map(item => {
+                  const Icon = item.icon;
+                  const isActive = activeNav === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setActiveNav(item.id)}
+                      className={cn(
+                        "inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[11px] font-black uppercase tracking-widest transition-all",
+                        isActive
+                          ? "bg-white text-slate-950 shadow-[0_0_20px_rgba(190,242,100,0.15)]"
+                          : "text-white/35 hover:bg-white/[0.04] hover:text-white/70"
+                      )}
+                    >
+                      <Icon className={cn("h-3.5 w-3.5", isActive && "text-primary")} />
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -409,6 +411,11 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
   const columnCount = useHallColumnCount();
   const selectedEntry = entries.find(entry => entry.season === selectedSeason) || null;
   const rows = useMemo(() => chunkHallEntries(entries, columnCount), [entries, columnCount]);
+  const rowGridClass = columnCount >= 3
+    ? "grid grid-cols-1 gap-3 lg:grid-cols-3"
+    : columnCount === 2
+      ? "grid grid-cols-1 gap-3 lg:grid-cols-2"
+      : "grid grid-cols-1 gap-3";
 
   return (
     <section className="relative overflow-hidden rounded-[1.75rem] border border-amber-300/25 bg-slate-800/90 shadow-[0_30px_100px_rgba(0,0,0,0.34)] animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -459,7 +466,7 @@ function HallOfFame({ entries, activeSeason }: { entries: HallOfFameEntry[]; act
               const rowHasSelected = row.some(entry => entry.season === selectedSeason);
               return (
                 <div key={`hall-row-${rowIndex}`} className="space-y-3">
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+                  <div className={cn(rowGridClass, entries.length === 1 && "max-w-[720px]")}>
                     {row.map((entry, index) => (
                       <ChampionGalleryCard
                         key={entry.season}
@@ -486,7 +493,7 @@ function useHallColumnCount() {
 
   useEffect(() => {
     const update = () => {
-      if (window.matchMedia('(min-width: 1536px)').matches) {
+      if (window.matchMedia('(min-width: 2200px)').matches) {
         setColumnCount(3);
       } else if (window.matchMedia('(min-width: 1024px)').matches) {
         setColumnCount(2);
@@ -496,7 +503,7 @@ function useHallColumnCount() {
     };
 
     update();
-    const wide = window.matchMedia('(min-width: 1536px)');
+    const wide = window.matchMedia('(min-width: 2200px)');
     const medium = window.matchMedia('(min-width: 1024px)');
     wide.addEventListener('change', update);
     medium.addEventListener('change', update);
@@ -596,7 +603,7 @@ function ChampionGalleryCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        "group min-w-0 rounded-2xl border bg-slate-950/32 p-3 text-left transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-amber-300/45 hover:bg-white/[0.06] hover:shadow-[0_16px_48px_rgba(251,191,36,0.10)] active:scale-[0.99]",
+        "group min-h-[172px] min-w-0 rounded-2xl border bg-slate-950/32 p-4 text-left transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-amber-300/45 hover:bg-white/[0.06] hover:shadow-[0_16px_48px_rgba(251,191,36,0.10)] active:scale-[0.99] sm:min-h-[196px]",
         selected
           ? "border-amber-300/60 bg-amber-300/[0.075] shadow-[0_0_0_1px_rgba(251,191,36,0.10),0_20px_58px_rgba(251,191,36,0.12)]"
           : isLatest
@@ -604,9 +611,9 @@ function ChampionGalleryCard({
             : "border-white/[0.07]",
       )}
     >
-      <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 sm:grid-cols-[112px_minmax(0,1fr)] 2xl:grid-cols-1">
+      <div className="grid h-full grid-cols-[98px_minmax(0,1fr)] gap-4 sm:grid-cols-[132px_minmax(0,1fr)]">
         <HallPortrait entry={entry} compact />
-        <div className="flex min-w-0 flex-col justify-center 2xl:pt-1">
+        <div className="flex min-w-0 flex-col justify-center">
           <div className="flex flex-wrap items-center gap-1.5">
             {isLatest && (
               <span className="rounded-full border border-amber-200/30 bg-amber-200/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.18em] text-amber-100">
@@ -615,7 +622,7 @@ function ChampionGalleryCard({
             )}
             <span className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200/75">{entry.season}</span>
           </div>
-          <div className="mt-2 line-clamp-2 text-xl font-black uppercase leading-tight text-white 2xl:min-h-[3rem]">
+          <div className="mt-2 line-clamp-2 text-xl font-black uppercase leading-tight text-white">
             {entry.playerName}
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold text-white/45">
@@ -672,7 +679,7 @@ function HallPortrait({ entry, compact = false }: { entry: HallOfFameEntry | nul
   const cachedImageUrl = useCachedHallImage(entry);
 
   return (
-    <div className={cn("mx-auto w-full", compact ? "max-w-[112px]" : "max-w-[180px]")}>
+    <div className={cn("w-full", compact ? "max-w-[98px] sm:max-w-[132px]" : "mx-auto max-w-[170px] sm:max-w-[180px]")}>
       <div className="relative aspect-[3/4] overflow-hidden rounded-2xl border border-amber-200/40 bg-slate-950/85 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),0_20px_44px_rgba(0,0,0,0.26)]">
         {cachedImageUrl ? (
           <div

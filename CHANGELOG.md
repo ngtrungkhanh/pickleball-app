@@ -15,6 +15,9 @@ repo.
 
 - Reworked the Analysis `Vinh danh` zone into an equal champion gallery with
   row-level inline detail panels.
+- Tightened the Analysis header into a compact toolbar and refined Hall cards
+  into horizontal portrait/detail layouts: 2 columns on Full HD, 3 columns only
+  on very wide desktop.
 - Added Settings `Vinh danh` controls to upload/delete a 3:4 champion image per
   completed season champion.
 - Added Vercel Blob image storage wiring and season metadata fields for

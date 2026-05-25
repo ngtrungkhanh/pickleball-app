@@ -221,6 +221,9 @@ shows completed-season champions as an equal gallery. The latest completed
 season gets a small `Mới nhất` badge, the active season is marked as in
 progress, and clicking a champion opens a full-width detail panel below that
 card row.
+The Analysis header is a compact toolbar. Hall cards use a horizontal portrait
+left/details right layout, with 2 columns on normal Full HD widths and 3 columns
+only on very wide desktop viewports.
 
 Current implementation files:
 

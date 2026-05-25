@@ -157,6 +157,9 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
 - Analysis uses 4 zones: `Tổng quan`, `Vinh danh`, `Cá nhân`, and `Mạng lưới`.
   On desktop, the zone switcher sits in the header beside the season selector;
   on mobile, it is a dropdown directly below the season dropdown.
+- The Analysis header should behave like a compact toolbar, not a hero. Keep
+  the title around 2xl on desktop, keep season/tabs close to it, and avoid
+  pushing the first content block deep down the viewport.
 - Analysis should stay read-only.
 - The sync/cache badge should stay small and unobtrusive.
 - Do not show manual `Làm mới` buttons in Dashboard or Analysis. If users need
@@ -174,6 +177,9 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
   full-width detail panel directly below that card row; use inline animation,
   not a modal or horizontal scroll on mobile. The active season appears as a
   small status card only.
+- Hall cards should stay horizontal: portrait on the left, champion details on
+  the right. Use 2 columns through normal Full HD widths and reserve 3 columns
+  for very wide/2K-class viewports so cards do not become cramped or square.
 - Champion images belong to the season champion record. Upload/delete controls
   live in Settings `Vinh danh`; Analysis remains read-only.
 - The main dashboard may show a previous-champion title line directly under the
