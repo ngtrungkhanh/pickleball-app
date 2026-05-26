@@ -79,11 +79,35 @@ export default function AdminPage() {
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [isPending, startTransition] = useTransition();
 
+  const loadData = async () => {
+    setLoading(true);
+    console.log('Admin: Loading all data...');
+    try {
+      const [l, a, p, s, m] = await Promise.all([
+        getAuditLogs(),
+        getArchives(),
+        getPlayersAction(),
+        getSeasonsAction(),
+        getMatchesAfterAction('')
+      ]);
+      console.log('Admin Data Loaded:', { logs: l?.length, players: p?.length, matches: m?.length });
+      setLogs(l || []);
+      setArchives(a || []);
+      setPlayers(p || []);
+      setSeasons(s || []);
+      setMatches(m || []);
+    } catch (err) {
+      console.error('Admin Load Failed:', err);
+      setMsg({ type: 'error', text: 'Không thể tải dữ liệu từ server.' });
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
     try {
       const today = new Date().toLocaleDateString('en-CA');
       if (localStorage.getItem(ADMIN_AUTH_DATE_KEY) === today) {
-        setIsAuth(true);
+        setTimeout(() => setIsAuth(true), 0);
       }
     } catch {}
   }, []);
@@ -91,7 +115,10 @@ export default function AdminPage() {
   // Task 20: Auto-load data on auth
   useEffect(() => {
     if (isAuth) {
-      loadData();
+      const timer = setTimeout(() => {
+        void loadData();
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [isAuth]);
 
@@ -116,30 +143,6 @@ export default function AdminPage() {
       }
     } catch (err) {
       setMsg({ type: 'error', text: 'Lỗi kết nối server.' });
-    }
-    setLoading(false);
-  };
-
-  const loadData = async () => {
-    setLoading(true);
-    console.log('Admin: Loading all data...');
-    try {
-      const [l, a, p, s, m] = await Promise.all([
-        getAuditLogs(),
-        getArchives(),
-        getPlayersAction(),
-        getSeasonsAction(),
-        getMatchesAfterAction('')
-      ]);
-      console.log('Admin Data Loaded:', { logs: l?.length, players: p?.length, matches: m?.length });
-      setLogs(l || []);
-      setArchives(a || []);
-      setPlayers(p || []);
-      setSeasons(s || []);
-      setMatches(m || []);
-    } catch (err) {
-      console.error('Admin Load Failed:', err);
-      setMsg({ type: 'error', text: 'Không thể tải dữ liệu từ server.' });
     }
     setLoading(false);
   };

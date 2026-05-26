@@ -382,7 +382,7 @@ export default function Dashboard({
               <div ref={marqueeRef} className="sports-ticker-marquee py-1 select-none">
                 {[...insights, ...insights].map((insight, idx) => {
                   const rarity = insight.rarity || 'common';
-                  let rarityBadge = insight.title || 'ĐIỂM NHẤN';
+                  const rarityBadge = insight.title || 'ĐIỂM NHẤN';
                   let badgeClass = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
                   let icon = '⭐';
                   let iconClass = 'text-emerald-500/50';
