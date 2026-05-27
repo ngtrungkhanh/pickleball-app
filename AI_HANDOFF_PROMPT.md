@@ -74,10 +74,10 @@ When starting:
 3. State what you will check or implement first.
 6. When done, report changed files, verification run, and any remaining risk.
 7. CURRENT PENDING TASKS TO IMPLEMENT:
-    - **Insight Scenarios Wording Review (High Priority)**: Currently reviewing and expanding the 72 insight scenarios in [ANALYSIS_INSIGHTS_RULES.md](file:///d:/Pickleball%20App/docs/ANALYSIS_INSIGHTS_RULES.md).
-      - **Progress**: Reviewed and committed approved trigger adjustments and 5 copy variants for **Scenarios 1 to 53**.
-      - **Next Step**: Resume the review starting from **Scenario 54 (`rank_camper` - Giữ rank)**.
-      - **Workflow**: Present 2 scenarios at a time. Explain the trigger logic in plain Vietnamese first, present 5 natural copy variants, obtain user approval in chat, update the "Điều chỉnh" column of `ANALYSIS_INSIGHTS_RULES.md`, and then proceed. (Do not edit `insights.ts` until all 72 are approved).
+    - **Insight Scenarios Wording Review (High Priority)**: Currently reviewing and expanding the 86 insight scenarios in [ANALYSIS_INSIGHTS_RULES.md](file:///d:/Pickleball%20App/docs/ANALYSIS_INSIGHTS_RULES.md).
+      - **Progress**: Reviewed and committed approved trigger adjustments and 5 copy variants for **Scenarios 1 to 75**.
+      - **Next Step**: Resume the review starting from **Scenario 76 (`quantity_over_quality` - Số lượng hơn chất lượng)**.
+      - **Workflow**: Present 2 scenarios at a time. Explain the trigger logic in plain Vietnamese first, present 5 natural copy variants, obtain user approval in chat, update the "Điều chỉnh" column of `ANALYSIS_INSIGHTS_RULES.md`, and then proceed. (Do not edit `insights.ts` until all 86 are approved).
    - **Shared Data Cache Validation**: Test local-first Dashboard/Analysis cache.
    - **Merge & Deploy**: Merge `dev` to `main` when features are validated.
 ```
