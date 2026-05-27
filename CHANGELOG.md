@@ -39,6 +39,7 @@ repo.
 
 ### Sports Ticker & Flash News Cards
 
+- Sửa lỗi giật/reset chuyển động chạy của Sports Ticker (Tin Nhanh) sau mỗi chu kỳ (khoảng hơn 1 phút). Tự động nhân bản các tin tức để đảm bảo độ dài vượt quá chiều rộng màn hình (kể cả trên màn hình lớn/4K), đo đạc chính xác chiều rộng một chu kỳ lặp mà không gây lag trình duyệt (layout thrashing), và thực hiện dịch chuyển lặp vô hạn mượt mà, không có khe hở hay giật hình khi kết thúc một vòng chạy.
 - Tích hợp thanh chạy tin tức thể thao chạy ngang (**Sports Ticker** / Marquee) trên Dashboard trang Home để hiển thị nhanh các nhận xét Insights của giải đấu.
   - Ticker hỗ trợ tự động tạm dừng khi rê chuột (hover pause) để dễ đọc các tin dài.
   - Tích hợp nút đóng `(X)` lưu trạng thái ẩn vào `sessionStorage` của trình duyệt để không làm phiền người dùng.

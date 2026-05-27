@@ -224,6 +224,19 @@ export default function Dashboard({
   ), [analysisSnapshot, insightSeed, insightSelectionState, insightsReady]);
 
   const insights = insightSelectionResult.insights;
+
+  const repeatedInsights = useMemo(() => {
+    if (insights.length === 0) return [];
+    // Repeat insights so we have enough items to exceed the viewport width.
+    // Safe minimum of at least 30 items or 4 full cycles, whichever is larger.
+    const minItems = Math.max(30, insights.length * 4);
+    const result = [];
+    while (result.length < minItems) {
+      result.push(...insights);
+    }
+    return result;
+  }, [insights]);
+
   const tickerContentKey = useMemo(() => (
     insights.map(insight => [
       insight.type,
@@ -262,14 +275,40 @@ export default function Dashboard({
       animationFrameIdRef.current = null;
     }
 
+    // Measure oneCycleWidth once at start to avoid layout thrashing
+    let oneCycleWidth = 0;
+    if (marquee.children && marquee.children.length > insights.length) {
+      const parentLeft = marquee.getBoundingClientRect().left;
+      const childLeft = marquee.children[insights.length].getBoundingClientRect().left;
+      oneCycleWidth = childLeft - parentLeft;
+    }
+
+    // Fallback if not ready
+    if (oneCycleWidth <= 0) {
+      oneCycleWidth = marquee.offsetWidth / (repeatedInsights.length / insights.length);
+    }
+
     // Tốc độ chạy nhanh hơn thêm 10% (tổng cộng 21% nhanh hơn base)
-    const halfWidth = marquee.offsetWidth / 2;
-    const baseSpeed = halfWidth > 0 ? (halfWidth / (65 * 60)) : 1.0;
+    const baseSpeed = oneCycleWidth > 0 ? (oneCycleWidth / (65 * 60)) : 1.0;
     const speed = baseSpeed * 1.21;
-    if (halfWidth > 0 && Math.abs(translateXRef.current) >= halfWidth) {
-      translateXRef.current = 0;
+
+    if (oneCycleWidth > 0 && Math.abs(translateXRef.current) >= oneCycleWidth) {
+      translateXRef.current = translateXRef.current % oneCycleWidth;
     }
     marquee.style.transform = `translateX(${translateXRef.current}px)`;
+
+    // Resize handler to update oneCycleWidth if window resizes
+    const handleResize = () => {
+      if (marquee.children && marquee.children.length > insights.length) {
+        const parentLeft = marquee.getBoundingClientRect().left;
+        const childLeft = marquee.children[insights.length].getBoundingClientRect().left;
+        const newWidth = childLeft - parentLeft;
+        if (newWidth > 0) {
+          oneCycleWidth = newWidth;
+        }
+      }
+    };
+    window.addEventListener('resize', handleResize);
 
     const step = () => {
       if (isPausedRef.current) {
@@ -278,24 +317,32 @@ export default function Dashboard({
       }
 
       translateXRef.current -= speed;
-      const marqueeWidth = marquee.offsetWidth;
-      if (Math.abs(translateXRef.current) >= marqueeWidth / 2) {
-        translateXRef.current = 0;
+      
+      if (oneCycleWidth > 0) {
+        if (Math.abs(translateXRef.current) >= oneCycleWidth) {
+          translateXRef.current += oneCycleWidth;
+        }
+      } else {
+        const marqueeWidth = marquee.offsetWidth;
+        if (Math.abs(translateXRef.current) >= marqueeWidth / 2) {
+          translateXRef.current = 0;
+        }
       }
-      marquee.style.transform = `translateX(${translateXRef.current}px)`;
 
+      marquee.style.transform = `translateX(${translateXRef.current}px)`;
       animationFrameIdRef.current = requestAnimationFrame(step);
     };
 
     animationFrameIdRef.current = requestAnimationFrame(step);
 
     return () => {
+      window.removeEventListener('resize', handleResize);
       if (animationFrameIdRef.current) {
         cancelAnimationFrame(animationFrameIdRef.current);
         animationFrameIdRef.current = null;
       }
     };
-  }, [tickerOpen, insightsReady, insights.length, tickerContentKey]);
+  }, [tickerOpen, insightsReady, insights.length, tickerContentKey, repeatedInsights]);
 
   const handleTickerClick = () => {
     isPausedRef.current = !isPausedRef.current;
@@ -395,7 +442,7 @@ export default function Dashboard({
               title={tickerPaused ? "Click để tiếp tục chạy" : "Click để tạm dừng"}
             >
               <div ref={marqueeRef} className="sports-ticker-marquee py-1 select-none">
-                {[...insights, ...insights].map((insight, idx) => {
+                {repeatedInsights.map((insight, idx) => {
                   const rarity = insight.rarity || 'common';
                   const rarityBadge = insight.title || 'ĐIỂM NHẤN';
                   let badgeClass = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
