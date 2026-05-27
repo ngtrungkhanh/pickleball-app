@@ -32,15 +32,6 @@ function getVietnamWeekMondayStr(dateStr: string): string {
   return `${y}-${m}-${date}`;
 }
 
-function getSundayDecayTime(mondayStr: string): string {
-  const monday = new Date(mondayStr + 'T00:00:00+07:00');
-  const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000);
-  const y = sunday.getFullYear();
-  const m = String(sunday.getMonth() + 1).padStart(2, '0');
-  const d = String(sunday.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}T23:59:59+07:00`;
-}
-
 // Navigation tabs - 5 zones
 const navItems = [
   { id: 'hub', label: 'Tổng quan', icon: LayoutGrid },
@@ -471,12 +462,12 @@ function HubZone({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
         {/* Left Column (ELO & Performance) */}
         <div className="flex flex-col gap-4">
-          <BentoCard title="Bảng xếp hạng ELO" icon={TrendingUp} className="flex flex-col h-full">
-            <div className="space-y-0.5 flex-1">
+          <BentoCard title="Bảng xếp hạng ELO" icon={TrendingUp} className="flex flex-col">
+            <div className="space-y-0.5">
               {board.slice(0, 8).map((player, index) => (
-                <div key={player.id} className="flex items-center gap-2 py-2 border-b border-white/5 last:border-0">
+                <div key={player.id} className="flex items-center gap-2 py-1.5 border-b border-white/5 last:border-0">
                   <div className={cn(
-                    "w-9 h-9 rounded-full flex items-center justify-center text-base font-black shrink-0 shadow-inner",
+                    "w-8 h-8 rounded-full flex items-center justify-center text-sm font-black shrink-0 shadow-inner",
                     index === 0 ? "bg-amber-500/20 text-amber-400" :
                     index === 1 ? "bg-slate-400/20 text-slate-300" :
                     index === 2 ? "bg-orange-600/20 text-orange-400" :
@@ -485,8 +476,8 @@ function HubZone({
                     {index + 1}
                   </div>
                   <div className="flex-1 flex items-center justify-between min-w-0 pr-4">
-                    <div className="font-black text-white text-xl truncate">{player.name}</div>
-                    <div className="text-xl font-black text-primary shrink-0 ml-2">{player.rating}</div>
+                    <div className="font-black text-white text-base sm:text-lg truncate">{player.name}</div>
+                    <div className="text-base sm:text-lg font-black text-primary shrink-0 ml-2">{player.rating}</div>
                   </div>
                   <div className="w-20 h-6 shrink-0 hidden sm:block">
                     <EloSparkline history={elo.history} playerId={player.id} />
@@ -497,7 +488,7 @@ function HubZone({
           </BentoCard>
 
           {/* Weekly ELO Performance */}
-          <BentoCard title="Phong độ ELO Tuần này" icon={Flame}>
+          <BentoCard title="Phong độ ELO Tuần này" icon={Flame} className="flex flex-col flex-1">
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-2xl p-3 flex flex-col items-center justify-center text-center">
                 <Crown className="w-6 h-6 text-amber-400 mb-1" />
@@ -513,9 +504,9 @@ function HubZone({
               </div>
             </div>
 
-            <div className="space-y-0.5 flex-1 max-h-[180px] overflow-y-auto pr-1 custom-scrollbar">
-              {weeklyStats.map(({ player, delta }) => (
-                <div key={player.id} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0 pr-2">
+            <div className="space-y-0.5 flex-1 pr-1">
+              {weeklyStats.slice(0, 8).map(({ player, delta }) => (
+                <div key={player.id} className="flex items-center justify-between py-2.5 border-b border-white/5 last:border-0 pr-2">
                   <div className="font-bold text-sm text-white/90">{player.name}</div>
                   <div className={cn(
                     "text-xs font-black tabular-nums",
@@ -527,74 +518,6 @@ function HubZone({
               ))}
             </div>
           </BentoCard>
-
-          {/* ELO Accordion explanation */}
-          <div className="rounded-2xl border border-white/5 bg-slate-900/60 overflow-hidden transition-all">
-            <button
-              onClick={() => setIsEloExplainerOpen(!isEloExplainerOpen)}
-              className="w-full px-5 py-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors text-left"
-            >
-              <div className="flex items-center gap-2">
-                <HelpCircle className="w-4 h-4 text-primary" />
-                <span className="text-xs font-black text-white/70 uppercase tracking-widest">👉 Hướng dẫn tính ELO & Luật Drama tuần</span>
-              </div>
-              <span className={cn("text-xs text-white/30 font-bold transition-transform duration-300", isEloExplainerOpen && "rotate-180")}>
-                ▼
-              </span>
-            </button>
-            
-            {isEloExplainerOpen && (
-              <div className="px-5 pb-5 border-t border-white/[0.03] pt-4 text-xs text-white/60 space-y-4 leading-relaxed animate-in slide-in-from-top-2 duration-200">
-                <div>
-                  <h4 className="font-black text-white/90 text-sm mb-1 uppercase tracking-tight text-primary">📊 ELO HOẠT ĐỘNG NHƯ THẾ NÀO?</h4>
-                  <p>Hệ thống điểm ELO tự động đo lường trình độ của bạn dựa trên kết quả các trận đấu, tự cân bằng theo thực lực thực tế (bắt đầu từ <strong>1500 ELO</strong>).</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <h5 className="font-bold text-white/80">1. Nguyên lý cộng/trừ ELO:</h5>
-                    <ul className="list-disc list-inside space-y-1">
-                      <li><strong className="text-emerald-400">Thắng kèo khó</strong> (đối thủ ELO cao hơn): Cộng rất nhiều ELO.</li>
-                      <li><strong>Thắng kèo dễ</strong> (đối thủ ELO thấp hơn): Cộng rất ít ELO.</li>
-                      <li><strong className="text-red-400">Thua kèo dễ</strong> (thua đối thủ yếu): Bị trừ cực kỳ nặng ELO.</li>
-                      <li><strong>Thua kèo khó</strong> (thua đối thủ mạnh): Bị trừ nhẹ ELO.</li>
-                      <li><strong>Hiệu số bàn thắng</strong>: Thắng cách biệt lớn (ví dụ 11-1) nhận nhiều ELO hơn thắng sít sao (12-10).</li>
-                    </ul>
-                  </div>
-                  <div className="space-y-1.5">
-                    <h5 className="font-bold text-white/80">2. Hệ số K phân cấp động:</h5>
-                    <ul className="list-disc list-inside space-y-1">
-                      <li><strong>Dưới 15 trận</strong>: <strong className="text-primary">K = 32</strong> (Tân binh / Khách - ELO đổi nhanh).</li>
-                      <li><strong>Từ 15 đến 40 trận</strong>: <strong className="text-primary">K = 20</strong> (Hội viên - Thay đổi ổn định).</li>
-                      <li><strong>Trên 40 trận</strong>: <strong className="text-primary">K = 16</strong> (Lão làng - ELO ổn định phong độ).</li>
-                    </ul>
-                  </div>
-                </div>
-                <div className="border-t border-white/5 pt-3">
-                  <h4 className="font-black text-white/90 text-sm mb-2 uppercase tracking-tight text-primary">⚡ LUẬT DRAMA HÀNG TUẦN</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl space-y-1">
-                      <div className="flex items-center gap-1.5 font-bold text-emerald-400">
-                        <Flame className="w-3.5 h-3.5" /> Lên đồng
-                      </div>
-                      <p className="text-[10px] text-white/50 leading-relaxed">Chuỗi <strong>&ge; 3 trận thắng liên tiếp</strong>. Từ trận thứ 4 trở đi, hệ số K của bạn được <strong>nhân đôi (K x 2)</strong>. Reset khi thua.</p>
-                    </div>
-                    <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl space-y-1">
-                      <div className="flex items-center gap-1.5 font-bold text-red-400">
-                        <TrendingDown className="w-3.5 h-3.5" /> Vợ mắng
-                      </div>
-                      <p className="text-[10px] text-white/50 leading-relaxed">Chuỗi <strong>&ge; 3 trận thua liên tiếp</strong>. Từ trận thứ 4 trở đi, ELO bị trừ khi thua tiếp theo được <strong>nhân đôi (x2)</strong>. Reset khi thắng.</p>
-                    </div>
-                    <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl space-y-1">
-                      <div className="flex items-center gap-1.5 font-bold text-amber-400">
-                        <Zap className="w-3.5 h-3.5" /> Phạt trốn đấu
-                      </div>
-                      <p className="text-[10px] text-white/50 leading-relaxed">Quét tự động lúc <strong>23:59 Chủ Nhật</strong>. Nếu đánh <strong>N &lt; 10 trận</strong> trong tuần, bạn bị trừ <strong>(10 - N) x 5</strong> ELO.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Right Column: Expert Insights (50%) */}
@@ -687,11 +610,80 @@ function HubZone({
           </div>
         </BentoCard>
       </div>
+
+      {/* ELO Accordion explanation */}
+      <div className="rounded-2xl border border-white/5 bg-slate-900/60 overflow-hidden transition-all">
+        <button
+          onClick={() => setIsEloExplainerOpen(!isEloExplainerOpen)}
+          className="w-full px-5 py-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors text-left"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <HelpCircle className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-xs font-black text-white/70 uppercase tracking-widest">👉 Hướng dẫn tính ELO & Luật Drama tuần</span>
+          </div>
+          <span className={cn("text-xs text-white/30 font-bold transition-transform duration-300 shrink-0", isEloExplainerOpen && "rotate-180")}>
+            ▼
+          </span>
+        </button>
+
+        {isEloExplainerOpen && (
+          <div className="px-5 pb-5 border-t border-white/[0.03] pt-4 text-xs text-white/60 space-y-4 leading-relaxed animate-in slide-in-from-top-2 duration-200">
+            <div>
+              <h4 className="font-black text-white/90 text-sm mb-1 uppercase tracking-tight text-primary">📊 ELO HOẠT ĐỘNG NHƯ THẾ NÀO?</h4>
+              <p>Hệ thống điểm ELO tự động đo lường trình độ của bạn dựa trên kết quả các trận đấu, tự cân bằng theo thực lực thực tế (bắt đầu từ <strong>1500 ELO</strong>).</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <h5 className="font-bold text-white/80">1. Nguyên lý cộng/trừ ELO:</h5>
+                <ul className="list-disc list-inside space-y-1">
+                  <li><strong className="text-emerald-400">Thắng kèo khó</strong> (đối thủ ELO cao hơn): Cộng rất nhiều ELO.</li>
+                  <li><strong>Thắng kèo dễ</strong> (đối thủ ELO thấp hơn): Cộng rất ít ELO.</li>
+                  <li><strong className="text-red-400">Thua kèo dễ</strong> (thua đối thủ yếu): Bị trừ cực kỳ nặng ELO.</li>
+                  <li><strong>Thua kèo khó</strong> (thua đối thủ mạnh): Bị trừ nhẹ ELO.</li>
+                  <li><strong>Hiệu số bàn thắng</strong>: Thắng cách biệt lớn (ví dụ 11-1) nhận nhiều ELO hơn thắng sít sao (12-10).</li>
+                </ul>
+              </div>
+              <div className="space-y-1.5">
+                <h5 className="font-bold text-white/80">2. Hệ số K phân cấp động:</h5>
+                <ul className="list-disc list-inside space-y-1">
+                  <li><strong>Hệ số K</strong> là độ nhạy của ELO: K càng cao thì một trận thắng/thua làm điểm đổi càng mạnh.</li>
+                  <li><strong>Người mới chơi ít trận</strong> có K cao hơn, nên ELO bắt nhịp nhanh với phong độ thật.</li>
+                  <li><strong>Người đã đánh nhiều</strong> có K thấp hơn, nên ELO ổn định hơn và cần nhiều kết quả tốt/xấu liên tiếp để dịch chuyển mạnh.</li>
+                </ul>
+              </div>
+            </div>
+            <div className="border-t border-white/5 pt-3">
+              <h4 className="font-black text-white/90 text-sm mb-2 uppercase tracking-tight text-primary">⚡ LUẬT DRAMA HÀNG TUẦN</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-400">
+                    <Flame className="w-3.5 h-3.5" /> Lên đồng
+                  </div>
+                  <p className="text-[10px] text-white/50 leading-relaxed">Chuỗi <strong>&ge; 3 trận thắng liên tiếp</strong>. Từ trận thứ 4 trở đi, hệ số K của bạn được <strong>nhân đôi (K x 2)</strong>. Reset khi thua.</p>
+                </div>
+                <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-red-400">
+                    <TrendingDown className="w-3.5 h-3.5" /> Vợ mắng
+                  </div>
+                  <p className="text-[10px] text-white/50 leading-relaxed">Chuỗi <strong>&ge; 3 trận thua liên tiếp</strong>. Từ trận thứ 4 trở đi, ELO bị trừ khi thua tiếp theo được <strong>nhân đôi (x2)</strong>. Reset khi thắng.</p>
+                </div>
+                <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-400">
+                    <Zap className="w-3.5 h-3.5" /> Phạt trốn đấu
+                  </div>
+                  <p className="text-[10px] text-white/50 leading-relaxed">Cuối tuần hệ thống nhìn lại nhịp ra sân. Người đang trên mốc 1500 ELO mà đánh dưới 8 trận trong tuần sẽ bị trừ nhẹ, để bảng điểm ưu tiên phong độ được duy trì đều đặn.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 function PairZone({ matches, players }: { matches: Match[]; players: Player[] }) {
+  const [isPairsExplainerOpen, setIsPairsExplainerOpen] = useState(false);
   const pairMap = new Map<string, {
     player1Id: string;
     player1Name: string;
@@ -858,6 +850,55 @@ function PairZone({ matches, players }: { matches: Match[]; players: Player[] })
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Pairs Accordion explanation */}
+      <div className="rounded-2xl border border-white/5 bg-slate-900/60 overflow-hidden transition-all">
+        <button
+          onClick={() => setIsPairsExplainerOpen(!isPairsExplainerOpen)}
+          className="w-full px-5 py-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors text-left"
+        >
+          <div className="flex items-center gap-2">
+            <HelpCircle className="w-4 h-4 text-primary" />
+            <span className="text-xs font-black text-white/70 uppercase tracking-widest">👉 Hướng dẫn cơ chế tính điểm & Xếp hạng Cặp đôi</span>
+          </div>
+          <span className={cn("text-xs text-white/30 font-bold transition-transform duration-300", isPairsExplainerOpen && "rotate-180")}>
+            ▼
+          </span>
+        </button>
+
+        {isPairsExplainerOpen && (
+          <div className="px-5 pb-5 border-t border-white/[0.03] pt-4 text-xs text-white/60 space-y-4 leading-relaxed animate-in slide-in-from-top-2 duration-200">
+            <div>
+              <h4 className="font-black text-white/90 text-sm mb-1 uppercase tracking-tight text-primary">📈 CÔNG THỨC TÍNH ĐIỂM TÍCH LŨY CẶP ĐÔI</h4>
+              <p>Điểm xếp hạng cặp đôi được tính tự động dựa trên hiệu số trận thắng-thua và tỷ lệ thắng thực tế khi hai người cùng đứng chung sân:</p>
+              <div className="bg-slate-950/40 p-3 rounded-xl border border-white/[0.03] font-mono text-center text-sm font-black text-primary my-2 italic">
+                Điểm tích lũy = (Thắng - Thua) x 15 + Tỷ lệ thắng (%)
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <h5 className="font-bold text-white/80">1. Quy tắc tính điểm:</h5>
+                <ul className="list-disc list-inside space-y-1">
+                  <li><strong>Hiệu số thắng-thua</strong> đóng vai trò chủ đạo (mỗi trận thắng chênh lệch mang lại <strong>15 điểm</strong>), khuyến khích các cặp đôi thi đấu nhiều trận.</li>
+                  <li><strong>Tỷ lệ thắng</strong> đóng vai trò làm điểm phụ để phân thứ hạng khi các cặp đôi có cùng hiệu số trận đấu.</li>
+                </ul>
+              </div>
+              <div className="space-y-1.5">
+                <h5 className="font-bold text-white/80">2. Điều kiện xếp hạng & Vinh danh:</h5>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Cặp đôi phải thi đấu <strong>tối thiểu 3 trận chung</strong> cùng nhau trong mùa giải hiện tại để được đưa vào danh sách xếp hạng.</li>
+                  <li>Cặp dẫn đầu BXH điểm tích lũy sẽ nhận cúp vinh danh <strong>🏆 Cặp Bài Trùng</strong> trên bục vinh quang.</li>
+                </ul>
+              </div>
+            </div>
+            <div className="border-t border-white/5 pt-3">
+              <span className="font-bold text-white/80">Ví dụ cụ thể:</span> Cặp đôi X và Y đánh chung 6 trận, thắng 4 trận, thua 2 trận (tỷ lệ thắng 66.7%).
+              <br />
+              Điểm tích lũy = <code className="text-primary font-bold">(4 - 2) x 15 + 66.7 = 30 + 66.7 = 96.7 điểm</code>.
+            </div>
+          </div>
+        )}
       </div>
 
       <BentoCard title="Bảng xếp hạng Cặp Đôi (Tối thiểu 3 trận chung)" icon={Users}>

@@ -53,10 +53,10 @@ Recent behavior updates to remember:
   goes online through route preload/reload.
 - Dashboard and Analysis should not show manual `Làm mới` buttons; use browser
   reload/F5 when fresh server data is needed.
-- `/analysis` Hub insight rules are now 72 current rule types: 52 core rules
-  plus Batch 1 and Batch 2 expansion. Read
+- `/analysis` Hub insight rules are now 86 current rule types with randomized
+  Vietnamese copy variants. Read
   `docs/ANALYSIS_INSIGHTS_RULES.md` and `docs/ANALYSIS_INSIGHTS_SELECTION.md`
-  before adding later batches or tuning weights.
+  before changing triggers, copy, semantic groups, or weights.
 
 Working rules:
 - Do not touch main unless the user explicitly asks for a release.
@@ -74,9 +74,8 @@ When starting:
 3. State what you will check or implement first.
 6. When done, report changed files, verification run, and any remaining risk.
 7. CURRENT PENDING TASKS TO IMPLEMENT:
-    - **Insight Scenarios Implementation (High Priority)**: Implement the approved trigger adjustments and 5 copy variants for all 86 scenarios from [ANALYSIS_INSIGHTS_RULES.md](file:///d:/Pickleball%20App/docs/ANALYSIS_INSIGHTS_RULES.md) into [insights.ts](file:///d:/Pickleball%20App/src/lib/insights.ts).
-      - **Progress**: Reviewed and committed approved copy variants for all 86 scenarios in the markdown plan.
-      - **Next Step**: Update `src/lib/insights.ts` to support the 86 approved scenarios and integrate the 5 randomized copy variants for each scenario.
+   - **Dev Preview Validation**: Test Dashboard ticker, Analysis Flash News Cards, Hall of Fame, Pair analysis, Hub layout, and radar scores on Vercel Preview.
+   - **Admin JSON Restore Validation**: Confirm JSON restore replaces seasons exactly from the backup file and refreshes the shared IndexedDB cache.
    - **Shared Data Cache Validation**: Test local-first Dashboard/Analysis cache.
    - **Merge & Deploy**: Merge `dev` to `main` when features are validated.
 ```

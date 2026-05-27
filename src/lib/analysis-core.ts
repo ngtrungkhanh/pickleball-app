@@ -195,6 +195,22 @@ function sampleConfidence(total: number) {
   return 0.35;
 }
 
+function percentileScore(value: number, values: number[], higherIsBetter: boolean) {
+  if (values.length <= 1) return 60;
+  const equal = values.filter(v => Math.abs(v - value) < 0.0001).length;
+  const lower = values.filter(v => v < value - 0.0001).length;
+  const percentile = (lower + Math.max(0, equal - 1) / 2) / (values.length - 1);
+  const adjusted = higherIsBetter ? percentile : 1 - percentile;
+  return 25 + adjusted * 70;
+}
+
+function hybridScore(rawScore: number, relativeScore: number, total: number) {
+  if (total <= 0) return 0;
+  const blended = rawScore * 0.35 + relativeScore * 0.65;
+  const confidence = sampleConfidence(total);
+  return clamp(50 + (blended - 50) * confidence, 10, 100);
+}
+
 function playerInMatch(match: AnalysisMatch, playerId: string) {
   return match.win_1 === playerId || match.win_2 === playerId || match.lose_1 === playerId || match.lose_2 === playerId;
 }
@@ -342,9 +358,9 @@ export function buildAnalysisElo(players: AnalysisPlayer[], matches: AnalysisMat
     players.forEach(player => {
       if (!playersPlayed.has(player.id)) return;
       const count = weeklyMatchCount.get(player.id) || 0;
-      if (count < 10) {
-        const decay = (10 - count) * 5;
-        const currentElo = rating.get(player.id) ?? 1500;
+      const currentElo = rating.get(player.id) ?? 1500;
+      if (currentElo > 1500 && count < 8) {
+        const decay = (8 - count) * 5;
         rating.set(player.id, Math.round(Math.max(0, currentElo - decay) * 10) / 10);
       }
     });
@@ -508,11 +524,11 @@ function edgeConfidence(total: number, rate: number, avgDiff: number, impact: nu
     + recentBonus;
 }
 
-function ratingAtOrBefore(history: EloResult['history'], playerId: string, time: number) {
+function ratingBefore(history: EloResult['history'], playerId: string, time: number) {
   let value: number | null = null;
   history.forEach(point => {
     const pointTime = new Date(point.date || '').getTime() || 0;
-    if (pointTime <= time && typeof point.ratings[playerId] === 'number') {
+    if (pointTime < time && typeof point.ratings[playerId] === 'number') {
       value = point.ratings[playerId];
     }
   });
@@ -532,6 +548,24 @@ function buildPlayerMetrics(
     ...players.map(player => rankingMatches.filter(match => playerInMatch(match, player.id)).length)
   );
 
+  const scoreBaselines = players.map(player => {
+    const playerMatches = rankingMatches.filter(match => playerInMatch(match, player.id));
+    const total = playerMatches.length;
+    const pointsFor = playerMatches.reduce((sum, match) => sum + pointsForPlayer(match, player.id), 0);
+    const pointsConceded = playerMatches.reduce((sum, match) => sum + pointsConcededByPlayer(match, player.id), 0);
+    return {
+      playerId: player.id,
+      total,
+      avgPointsFor: total > 0 ? pointsFor / total : 0,
+      avgConceded: total > 0 ? pointsConceded / total : 0,
+    };
+  });
+  const attackValues = scoreBaselines.filter(row => row.total > 0).map(row => row.avgPointsFor);
+  const defenseValues = scoreBaselines.filter(row => row.total > 0).map(row => row.avgConceded);
+  const scoreBaselineByPlayer = new Map(scoreBaselines.map(row => [row.playerId, row]));
+  const weekMondayStr = getVietnamWeekMondayStr(now.toISOString());
+  const startOfWeekMs = weekMondayStr ? new Date(`${weekMondayStr}T00:00:00+07:00`).getTime() : 0;
+
   return players.map(player => {
     const playerMatches = rankingMatches.filter(match => playerInMatch(match, player.id));
     const recentMatches = playerMatches.slice(0, 10);
@@ -541,6 +575,13 @@ function buildPlayerMetrics(
     const total = playerMatches.length;
     const pointsFor = playerMatches.reduce((sum, match) => sum + pointsForPlayer(match, player.id), 0);
     const pointsConceded = playerMatches.reduce((sum, match) => sum + pointsConcededByPlayer(match, player.id), 0);
+    const avgPointsFor = total > 0 ? pointsFor / total : 0;
+    const avgConceded = total > 0 ? pointsConceded / total : 0;
+    const scoreBaseline = scoreBaselineByPlayer.get(player.id);
+    const rawAttackScore = clamp(((avgPointsFor - 5.5) / (10.0 - 5.5)) * 100, 10, 100);
+    const rawDefenseScore = clamp(((10.5 - avgConceded) / (10.5 - 6.0)) * 100, 10, 100);
+    const relativeAttackScore = percentileScore(scoreBaseline?.avgPointsFor ?? avgPointsFor, attackValues, true);
+    const relativeDefenseScore = percentileScore(scoreBaseline?.avgConceded ?? avgConceded, defenseValues, false);
     const diffs = playerMatches.map(match => scoreDiffForPlayer(match, player.id));
     const closeWins = diffs.filter(diff => diff > 0 && diff <= 2).length;
     const closeLosses = diffs.filter(diff => diff < 0 && diff >= -2).length;
@@ -601,11 +642,10 @@ function buildPlayerMetrics(
     const lastMatch = playerMatches[0] || null;
     const lastMatchDate = lastMatch?.date || '';
     const lastMatchMs = lastMatch ? matchTime(lastMatch) : 0;
-    const oldRecentMatch = playerMatches[Math.min(9, playerMatches.length - 1)] || null;
-    const oldRecentRating = oldRecentMatch && playerMatches.length >= 5
-      ? ratingAtOrBefore(elo.history, player.id, matchTime(oldRecentMatch))
-      : null;
-    const recentEloDelta = oldRecentRating === null ? 0 : (elo.rating.get(player.id) ?? 1500) - oldRecentRating;
+    const weekStartRating = startOfWeekMs > 0
+      ? ratingBefore(elo.history, player.id, startOfWeekMs) ?? 1500
+      : 1500;
+    const recentEloDelta = (elo.rating.get(player.id) ?? 1500) - weekStartRating;
     const daysAbsent = lastMatchMs > 0 ? Math.floor((now.getTime() - lastMatchMs) / 86400000) : null;
     const money = visibleMatches.reduce((sum, match) => {
       return sum + ([match.lose_1, match.lose_2].includes(player.id) && !isGuestId(player.id) ? loseMoney : 0);
@@ -621,10 +661,10 @@ function buildPlayerMetrics(
       rating: elo.rating.get(player.id) ?? 1500,
       pointsFor,
       pointsConceded,
-      avgPointsFor: total > 0 ? pointsFor / total : 0,
-      avgConceded: total > 0 ? pointsConceded / total : 0,
-      attackScore: total > 0 ? clamp(((pointsFor / total - 7.5) / (10.2 - 7.5)) * 100, 10, 100) : 0,
-      defenseScore: total > 0 ? clamp(((9.5 - pointsConceded / total) / (9.5 - 7.0)) * 100, 10, 100) : 0,
+      avgPointsFor,
+      avgConceded,
+      attackScore: hybridScore(rawAttackScore, relativeAttackScore, total),
+      defenseScore: hybridScore(rawDefenseScore, relativeDefenseScore, total),
       braveScore: clamp(50 + overallPs * 200, 0, 100),
       synergyScore,
       formScore,

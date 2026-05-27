@@ -65,23 +65,29 @@ Read only when relevant:
 - Dashboard and Analysis no longer show manual `Làm mới` buttons; browser
   reload/F5 is the intended fresh-data action.
 - Admin dashboard supports both `.xlsx` bulk migration and `.json` full database backup/restore mechanisms.
+- Sports Ticker on Dashboard and Flash News Cards in `/analysis` are implemented.
 - Local demo routes such as `/ui-demo` and `/picker-demo` may exist on one
   machine for review, but should not be pushed unless explicitly requested.
 
 ## Current Pending Tasks (Next Session)
 
-- **UI/UX Refinement**: Implement "Sports Ticker" style (marquee) or dynamic Flash Cards for displaying the generated Insights on the Home screen.
+- **Dev Preview Validation**: Review Dashboard ticker, Analysis Flash News
+  Cards, Hall of Fame, Pair analysis, and Hub layout on Vercel Preview.
+- **Admin JSON Restore Review**: Validate that JSON restore replaces seasons
+  exactly from the backup file and refreshes the shared IndexedDB cache so old
+  seasons do not reappear.
+- **Analysis Radar Review**: Validate the calibrated Attack/Defense radar
+  scores with real dev data across multiple seasons/backups.
 - **Shared Data Cache Review**: Validate local-first Dashboard/Analysis cache,
   canonical score-save replacement, and reload/F5 reconciliation before
   resuming insight-copy expansion work.
 - **Analysis Copy Review**: Review Hub insight comment tone on Vercel Preview
   after the shared analysis core has real dev data.
-- **Analysis Insights Review**: The first-pass 52-scenario insight registry plus
-  Batch 1 and Batch 2 expansion is implemented as 72 rule types, with
-  type-first weighted selection, semantic-group diversity, cooldown/soft pity,
-  and the relative `defense_wall` trigger. Next review Vercel Preview with real
-  dev data, then continue later expansion batches or tune wording/rule weights
-  if needed.
+- **Analysis Insights Review**: The insight registry is implemented as 86 rule
+  types with 5 Vietnamese copy variants where applicable, type-first weighted
+  selection, semantic-group diversity, cooldown/soft pity, and the relative
+  `defense_wall` trigger. Next review Vercel Preview with real dev data, then
+  tune wording/rule weights if needed.
 - **Merge & Deploy**: Validate `dev` on Vercel preview, then merge to `main`.
 
 ## Architecture Snapshot

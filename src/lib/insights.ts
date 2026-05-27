@@ -785,11 +785,11 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
       absRound = (v: number) => Math.abs(Math.round(v))
     } = ctx;
     return [
-      `${metric.name} bứt phá mạnh mẽ khi tăng liền ${round(metric.recentEloDelta)} điểm ELO trong các trận gần đây.`,
-      `${metric.name} đang có phong độ thăng hoa, tích lũy thêm ${round(metric.recentEloDelta)} ELO qua chuỗi trận gần nhất.`,
-      `${metric.name} cho thấy sự tiến bộ rõ rệt với ${round(metric.recentEloDelta)} điểm ELO cộng thêm gần đây.`,
-      `${metric.name} đang trên đà thăng tiến lớn khi tăng ${round(metric.recentEloDelta)} điểm ELO sau loạt trận vừa qua.`,
-      `${metric.name} củng cố thứ hạng với ${round(metric.recentEloDelta)} điểm ELO gia tăng trong thời gian gần đây.`,
+      `${metric.name} bứt phá mạnh mẽ khi tăng liền ${round(metric.recentEloDelta)} điểm ELO trong tuần này.`,
+      `${metric.name} đang có phong độ thăng hoa, tích lũy thêm ${round(metric.recentEloDelta)} ELO từ đầu tuần.`,
+      `${metric.name} cho thấy sự tiến bộ rõ rệt với ${round(metric.recentEloDelta)} điểm ELO cộng thêm trong tuần này.`,
+      `${metric.name} đang trên đà thăng tiến lớn khi tăng ${round(metric.recentEloDelta)} điểm ELO qua các trận tuần này.`,
+      `${metric.name} củng cố thứ hạng với ${round(metric.recentEloDelta)} điểm ELO gia tăng từ đầu tuần.`,
     ];
   },
   free_fall: (ctx) => {
@@ -810,11 +810,11 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
       absRound = (v: number) => Math.abs(Math.round(v))
     } = ctx;
     return [
-      `${metric.name} đang có dấu hiệu chững lại khi sụt giảm ${absRound(metric.recentEloDelta)} điểm ELO gần đây.`,
-      `${metric.name} gặp khó khăn trong các trận qua, để rơi mất ${absRound(metric.recentEloDelta)} điểm ELO.`,
-      `${metric.name} đang tạm thời sa sút phong độ, đánh mất ${absRound(metric.recentEloDelta)} điểm ELO gần đây.`,
-      `${metric.name} bị trừ ${absRound(metric.recentEloDelta)} điểm ELO sau những kết quả không như ý vừa qua.`,
-      `${metric.name} đang rơi vào chuỗi khó khăn khi đánh mất ${absRound(metric.recentEloDelta)} ELO trong thời gian gần đây.`,
+      `${metric.name} đang có dấu hiệu chững lại khi sụt giảm ${absRound(metric.recentEloDelta)} điểm ELO trong tuần này.`,
+      `${metric.name} gặp khó khăn trong các trận tuần này, để rơi mất ${absRound(metric.recentEloDelta)} điểm ELO.`,
+      `${metric.name} đang tạm thời sa sút phong độ, đánh mất ${absRound(metric.recentEloDelta)} điểm ELO từ đầu tuần.`,
+      `${metric.name} bị trừ ${absRound(metric.recentEloDelta)} điểm ELO sau những kết quả không như ý trong tuần này.`,
+      `${metric.name} đang rơi vào chuỗi khó khăn khi đánh mất ${absRound(metric.recentEloDelta)} ELO từ đầu tuần.`,
     ];
   },
   streak_breaker: (ctx) => {
@@ -1459,7 +1459,7 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
       absRound = (v: number) => Math.abs(Math.round(v))
     } = ctx;
     return [
-      `Chiến thắng thuyết phục nhất: Mỗi khi giành thắng lợi, đội của ${metric.name} dẫn trước đối thủ trung bình tới <u>${oneDecimal(metric.avgWinDiff)} điểm</u>, cao nhất toàn giải.`,
+      `Thắng là thắng sâu: Mỗi khi giành thắng lợi, đội của ${metric.name} dẫn trước đối thủ trung bình tới ${oneDecimal(metric.avgWinDiff)} điểm, cao nhất toàn giải.`,
       `Hiệu suất áp đảo đỉnh bảng: ${metric.name} là tay vợt có khoảng cách điểm thắng trung bình lớn nhất sân khi đạt ${oneDecimal(metric.avgWinDiff)} điểm mỗi trận thắng.`,
       `Khi đã thắng là thắng đậm nhất sân: đội của ${metric.name} vượt qua đối thủ với cách biệt trung bình kỷ lục ${oneDecimal(metric.avgWinDiff)} điểm mỗi trận.`,
       `Sức ép thế trận lớn nhất: ${metric.name} dẫn đầu giải đấu về chỉ số thắng cách biệt trung bình, đạt ${oneDecimal(metric.avgWinDiff)} điểm mỗi trận thắng.`,
@@ -1611,7 +1611,7 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
     return [
       `Thợ săn trùm: ${metric.name} đã giành tới ${kingWins} chiến thắng khi đối đầu với đội có sự góp mặt của Top 1 ELO ${kingName}.`,
       `Đối thủ khó chịu của nhà vua: ${metric.name} xuất sắc bỏ túi ${kingWins} trận thắng trước đội của Top 1 ELO ${kingName}.`,
-      `Khả năng hạ gục đối thủ mạnh: ${metric.name} có tới ${kingWins} lần đánh bại đội của người đứng đầu bảng xếp hạng ELO <u>${kingName}</u>.`,
+      `Khả năng hạ gục đối thủ mạnh: ${metric.name} có tới ${kingWins} lần đánh bại đội của người đứng đầu bảng xếp hạng ELO ${kingName}.`,
       `Không e ngại vị trí số 1: ${metric.name} gặt hái ${kingWins} chiến thắng trong các trận chạm trán đội của Top 1 ELO ${kingName}.`,
       `Hiệu suất đối đầu ấn tượng: ${metric.name} gieo sầu cho đội của Top 1 ELO ${kingName} with ${kingWins} lần giành phần thắng.`,
     ];
@@ -2359,11 +2359,11 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
       absRound = (v: number) => Math.abs(Math.round(v))
     } = ctx;
     return [
-      `Nhân phẩm bốc thăm hơi thử thách: ${metric.name} có tới ${bottomPartnerMatches.length}/${partnerMatches.length} trận phải gánh cặp với nhóm cuối bảng.`,
-      `Thử thách tinh thần đồng đội: ${metric.name} nhận lịch ghép cặp khá "nặng vai" với ${bottomPartnerMatches.length}/${partnerMatches.length} trận đứng chung sân cùng nhóm cuối bảng.`,
-      `Bốc thăm thử thách độ kiên nhẫn: ${metric.name} có ${bottomPartnerMatches.length}/${partnerMatches.length} lần xuất trận kẹp chung với các tay vợt nhóm dưới.`,
-      `Hệ tâm linh bốc thăm dạo này hơi đỏ... lửa: ${metric.name} bắt cặp ${bottomPartnerMatches.length}/${partnerMatches.length} trận với những tay vợt đang chật vật ở cuối bảng xếp hạng.`,
-      `Thử lửa bản lĩnh gánh tạ: ${metric.name} phải đứng cặp tới ${bottomPartnerMatches.length}/${partnerMatches.length} trận với nhóm cuối bảng đấu.`,
+      `Bốc thăm hơi xui: ${metric.name} có ${bottomPartnerMatches.length}/${partnerMatches.length} trận đứng cùng đồng đội thuộc nhóm cuối bảng mùa này, lịch ghép cặp đúng là hơi thử thách.`,
+      `Nhân phẩm ghép cặp hơi rén: hơn nửa số trận của ${metric.name} rơi vào kèo đứng cùng đồng đội đang chật vật ở nhóm cuối bảng.`,
+      `Đường bốc cặp không mấy bằng phẳng: ${metric.name} thường xuyên phải ráp đội với những đồng đội đang ở nhóm dưới mùa này.`,
+      `Lịch ghép đôi hơi khó thở: ${metric.name} có ${bottomPartnerMatches.length}/${partnerMatches.length} trận bắt cặp với đồng đội đang trong giai đoạn khó khăn.`,
+      `Vận may chia đội chưa mỉm cười: ${metric.name} nhiều lần rơi vào kèo phối hợp với đồng đội nhóm dưới, cà khịa nhẹ lịch bốc cặp thôi chứ không trách ai.`,
     ];
   },
   friendly_fire: (ctx) => {
@@ -3666,7 +3666,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
       const partnerId = partnerForPlayer(match, metric.id);
       return Boolean(partnerId && bottomRankIds.has(partnerId));
     });
-    if (partnerMatches.length >= 8 && bottomPartnerMatches.length >= 4 && bottomPartnerMatches.length / partnerMatches.length >= 0.5) {
+    if (!bottomRankIds.has(metric.id) && partnerMatches.length >= 10 && bottomPartnerMatches.length / partnerMatches.length >= 0.51) {
       const text = getRandomVariant(VARIANTS.unlucky_draw({ metric, bottomPartnerMatches, partnerMatches }), random);
       addCandidate(candidates, snapshot, {
         type: 'unlucky_draw',

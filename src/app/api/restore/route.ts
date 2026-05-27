@@ -2,7 +2,84 @@ import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
-import { bumpDataVersion } from '@/lib/data-version';
+import { bumpDataVersion, ensureConfigTable } from '@/lib/data-version';
+
+type BackupMatch = {
+  id?: string;
+  date?: string;
+  season?: string;
+  [key: string]: unknown;
+};
+
+type BackupSeason = {
+  id?: string;
+  name?: string;
+  start_date?: string;
+  end_date?: string | null;
+  active?: boolean;
+  archived?: boolean;
+  champion_image_url?: string | null;
+  champion_image_path?: string | null;
+  champion_image_updated_at?: string | null;
+  created_at?: string;
+  lose_money?: number;
+};
+
+function synthesizeSeasons(matches: BackupMatch[], config: Record<string, unknown>): BackupSeason[] {
+  const bySeason = new Map<string, { name: string; startDate: string }>();
+
+  for (const match of matches) {
+    const name = String(match.season || 'Season 1').trim() || 'Season 1';
+    const date = String(match.date || new Date().toISOString());
+    const current = bySeason.get(name);
+    if (!current || new Date(date).getTime() < new Date(current.startDate).getTime()) {
+      bySeason.set(name, { name, startDate: date });
+    }
+  }
+
+  if (bySeason.size === 0) {
+    const activeSeason = String(config.active_season || 'Season 1');
+    bySeason.set(activeSeason, { name: activeSeason, startDate: new Date().toISOString() });
+  }
+
+  return Array.from(bySeason.values()).map(row => ({
+    id: row.name,
+    name: row.name,
+    start_date: row.startDate,
+    active: false,
+    archived: false,
+  }));
+}
+
+async function ensureRestoreColumns() {
+  await ensureConfigTable();
+  await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_url TEXT`;
+  await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_path TEXT`;
+  await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_updated_at TIMESTAMP`;
+  await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS lose_money INT DEFAULT 5000`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS player_season_settings (
+      player_id VARCHAR(80) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      season VARCHAR(80) NOT NULL,
+      active BOOLEAN DEFAULT TRUE,
+      pay_fine BOOLEAN DEFAULT TRUE,
+      hidden BOOLEAN DEFAULT FALSE,
+      PRIMARY KEY (player_id, season)
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS player_stats (
+      player_id VARCHAR(10) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      season VARCHAR(50) NOT NULL,
+      wins INT DEFAULT 0,
+      losses INT DEFAULT 0,
+      total INT DEFAULT 0,
+      money INT DEFAULT 0,
+      last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (player_id, season)
+    )
+  `;
+}
 
 export async function POST(request: Request) {
   try {
@@ -27,29 +104,69 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'File không đúng định dạng JSON.' }, { status: 400 });
     }
 
-    const { players = [], matches = [], logs = [], archives = [], seasons = [] } = data;
+    const {
+      players = [],
+      matches = [],
+      logs = [],
+      archives = [],
+      seasons = [],
+      config = {},
+      playerSeasonSettings = [],
+    } = data;
 
-    await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_url TEXT`;
-    await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_path TEXT`;
-    await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_updated_at TIMESTAMP`;
+    await ensureRestoreColumns();
+
+    const explicitSeasons: BackupSeason[] = Array.isArray(seasons) && seasons.length > 0
+      ? seasons
+      : synthesizeSeasons(matches, config);
+    const sourceSeasons: BackupSeason[] = [...explicitSeasons];
+    const explicitSeasonNames = new Set(explicitSeasons.map((season) => String(season.name || season.id || '').trim()).filter(Boolean));
+    for (const synthesized of synthesizeSeasons(matches, config)) {
+      const name = String(synthesized.name || synthesized.id || '').trim();
+      if (name && !explicitSeasonNames.has(name)) {
+        sourceSeasons.push(synthesized);
+        explicitSeasonNames.add(name);
+      }
+    }
+    const restoredSeasonNames = new Set(
+      sourceSeasons
+        .map((season) => String(season.name || season.id || '').trim())
+        .filter(Boolean)
+    );
+    const configuredActiveSeason = String(config.active_season || '').trim();
+    const rowActiveSeason = sourceSeasons.find((season) => season.active)?.name || sourceSeasons.find((season) => season.active)?.id || '';
+    const resolvedActiveSeason = restoredSeasonNames.has(configuredActiveSeason)
+      ? configuredActiveSeason
+      : restoredSeasonNames.has(String(rowActiveSeason))
+        ? String(rowActiveSeason)
+        : Array.from(restoredSeasonNames)[0] || 'Season 1';
 
     // Delete in reverse dependency order to prevent FK violations
     await sql`DELETE FROM audit_logs`;
     await sql`DELETE FROM archives`;
+    await sql`DELETE FROM player_stats`;
+    await sql`DELETE FROM player_season_settings`;
     await sql`DELETE FROM matches`;
     await sql`DELETE FROM players`;
     await sql`DELETE FROM seasons`;
+    await sql`DELETE FROM config`;
 
     // 1. Restore Seasons
-    for (const s of seasons) {
+    for (const s of sourceSeasons) {
+      const name = String(s.name || s.id || '').trim();
+      if (!name) continue;
+      const id = String(s.id || name);
       await sql`
-        INSERT INTO seasons (id, name, start_date, end_date, active, archived, champion_image_url, champion_image_path, champion_image_updated_at, created_at)
-        VALUES (${s.id}, ${s.name}, ${s.start_date || new Date().toISOString()}, ${s.end_date || null}, ${s.active ? true : false}, ${s.archived ? true : false}, ${s.champion_image_url || null}, ${s.champion_image_path || null}, ${s.champion_image_updated_at || null}, ${s.created_at || new Date().toISOString()})
+        INSERT INTO seasons (id, name, start_date, end_date, active, archived, champion_image_url, champion_image_path, champion_image_updated_at, created_at, lose_money)
+        VALUES (${id}, ${name}, ${s.start_date || new Date().toISOString()}, ${s.end_date || null}, ${name === resolvedActiveSeason}, ${s.archived ? true : false}, ${s.champion_image_url || null}, ${s.champion_image_path || null}, ${s.champion_image_updated_at || null}, ${s.created_at || new Date().toISOString()}, ${Number(s.lose_money || 5000) || 5000})
       `;
     }
 
     // 2. Restore Players
+    const restoredPlayerIds = new Set<string>();
     for (const p of players) {
+      if (!p.id) continue;
+      restoredPlayerIds.add(String(p.id));
       await sql`
         INSERT INTO players (id, name, active, pay_fine, hidden, deleted_at, delete_group_id)
         VALUES (${p.id}, ${p.name}, ${p.active ? true : false}, ${p.pay_fine !== false ? true : false}, ${p.hidden ? true : false}, ${p.deleted_at || null}, ${p.delete_group_id || null})
@@ -64,7 +181,32 @@ export async function POST(request: Request) {
       `;
     }
 
-    // 4. Restore Archives
+    // 4. Restore Config
+    const configEntries = Object.entries(config as Record<string, unknown>)
+      .filter(([key]) => key !== 'data_version' && key !== 'active_season');
+    for (const [key, value] of configEntries) {
+      await sql`
+        INSERT INTO config (key, value)
+        VALUES (${key}, ${value !== undefined && value !== null ? String(value) : ''})
+      `;
+    }
+    await sql`
+      INSERT INTO config (key, value)
+      VALUES ('active_season', ${resolvedActiveSeason})
+    `;
+
+    // 5. Restore player-season settings
+    for (const setting of playerSeasonSettings) {
+      const playerId = String(setting.player_id || '').trim();
+      const season = String(setting.season || '').trim();
+      if (!playerId || !season || !restoredPlayerIds.has(playerId) || !restoredSeasonNames.has(season)) continue;
+      await sql`
+        INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden)
+        VALUES (${playerId}, ${season}, ${setting.active !== false}, ${setting.pay_fine !== false}, ${setting.hidden === true})
+      `;
+    }
+
+    // 6. Restore Archives
     for (const a of archives) {
       await sql`
         INSERT INTO archives (type, original_id, name, data, deleted_at)
@@ -72,7 +214,7 @@ export async function POST(request: Request) {
       `;
     }
 
-    // 5. Restore Logs
+    // 7. Restore Logs
     for (const l of logs) {
       await sql`
         INSERT INTO audit_logs (id, action_type, details, created_at)
@@ -80,12 +222,6 @@ export async function POST(request: Request) {
       `;
     }
 
-    // After restoring raw data, trigger rebuild_stats
-    // To do this server-side, we must call rebuildStatsAction logic.
-    // However, we can just let the frontend call it, or duplicate the rebuild logic here.
-    // Given the risk of desync, it's safer to just tell the frontend to call rebuild after success, 
-    // or import rebuilding logic if possible.
-    // Let's just return success, and the frontend will call rebuildStatsAction.
     await bumpDataVersion();
 
     revalidatePath('/');
@@ -94,9 +230,9 @@ export async function POST(request: Request) {
     revalidatePath('/analysis');
 
     return NextResponse.json({ success: true }, { status: 200 });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error('JSON Restore error:', error);
-    return NextResponse.json({ error: error.message || 'Khôi phục thất bại.' }, { status: 500 });
+    return NextResponse.json({ error: message || 'Khôi phục thất bại.' }, { status: 500 });
   }
 }

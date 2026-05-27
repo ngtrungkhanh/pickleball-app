@@ -96,7 +96,7 @@ first.
 ### Semantic Groups
 
 Use groups to diversify the feed, not to block too broadly. The planned group
-taxonomy should support both the current 72-rule registry and V4 expansion:
+taxonomy should support the current 86-rule registry and future expansion:
 
 - `rank_race`: leaderboard rank, rank takeover, hot-seat threats, top-1 gap or
   time, stuck-rank stories
@@ -693,7 +693,7 @@ Batch 2 adds 10 rule types to production:
 Audit after Batch 2:
 
 - `npm run audit:insights -- pickleball_backup_2026-05-14.json --seeds 1000 --strategy balanced-v1.1`
-- Rule types in current table: 72.
+- Rule types at this Batch 2 stage: 72.
 - Triggered scenario types: 57/72.
 - Scenario types selected at least once: 57/72.
 - Triggered but never selected: 0.
@@ -705,4 +705,10 @@ Audit after Batch 2:
   `friendly_fire`.
 - Batch 2 types not triggered in this backup: `buffet_eater`,
   `moody_player`, `parasite_win`, and `gatekeeper_boss`.
+
+### 86-Scenario Port Note
+
+The approved 86-scenario registry and randomized Vietnamese copy variants have
+since been ported into `src/lib/insights.ts`. Re-run the audit against the
+latest backup before further tuning selection weights or semantic groups.
 

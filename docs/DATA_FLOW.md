@@ -153,6 +153,10 @@ Current delete behavior:
 - Season delete archives the season and matches, soft-deletes season matches,
   marks season archived, and clears `active_season` when needed.
 - Restore from archive can restore archived player and match data.
+- Admin JSON restore replaces the current database state with the backup
+  contents. Seasons, config, and player-season settings are restored from the
+  file when present; missing season rows are synthesized from restored matches.
+  Seasons not present in the backup must not remain visible after restore.
 
 ## localStorage Usage
 
@@ -190,6 +194,7 @@ to repeatedly send between routes:
   - `hall_images`
   - `config`
   - `sync_meta`
+  - `player_season_settings`
 
 Implementation files:
 
@@ -238,9 +243,12 @@ Client sync flow:
 5. The client replaces the optimistic `TMP-*` row in IndexedDB with the
    canonical server match. If the server rejects or errors, the optimistic row
    is removed.
-6. The Analysis page reads local cache by default. It only fetches online when
+6. After Admin JSON restore, the Admin client fetches authoritative app data and
+   replaces the shared IndexedDB route cache so old local seasons/matches do not
+   reappear.
+7. The Analysis page reads local cache by default. It only fetches online when
    the route is loaded/reloaded by the browser.
-7. Future phase: split full refresh into season-priority batches. The current
+8. Future phase: split full refresh into season-priority batches. The current
    implementation keeps full refresh tied to route preload/reload while the
    dataset is still small.
 

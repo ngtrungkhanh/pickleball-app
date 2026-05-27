@@ -11,6 +11,20 @@ repo.
 
 ## Major Completed Work
 
+### Analysis Hub, Restore, and Radar Calibration
+
+- Tightened `/analysis` Hub ELO layout, expanded the weekly ELO block, and
+  moved the ELO explainer below the Hub grid so expanded help content uses full
+  page width and natural scrolling.
+- Updated JSON backup/restore handling so restored seasons replace the current
+  dataset from the backup file and the shared IndexedDB route cache is refreshed
+  after restore.
+- Recalibrated Analysis Attack/Defense radar scoring with a hybrid raw +
+  relative model so scores spread more naturally across the current group and
+  season snapshot.
+- Synced handoff docs around the implemented 86-scenario insight registry and
+  the 1500 ELO starting rating.
+
 ### Sports Ticker & Flash News Cards
 
 - Tích hợp thanh chạy tin tức thể thao chạy ngang (**Sports Ticker** / Marquee) trên Dashboard trang Home để hiển thị nhanh các nhận xét Insights của giải đấu.
@@ -20,7 +34,7 @@ repo.
 - Nâng cấp nhận xét thành các thẻ tin nhanh thể thao (**Flash News Cards**) tại khu vực Tổng quan của Trung tâm phân tích (`/analysis`).
   - Đọc cấp độ độ hiếm `rarity` của từng tin tức (`common`, `uncommon`, `rare`, `epic`) để hiển thị nhãn độ hiếm tương ứng (TIN THƯỜNG, TIN MỚI, ĐẶC BIỆT, KINH ĐIỂN).
   - Tự động thay đổi giao diện thẻ, đổi màu sắc viền/nền và thêm các hiệu ứng gradient động/phát sáng mờ phù hợp với từng cấp độ độ hiếm của tin.
-- Rà soát an toàn dữ liệu thưa thớt (Sparse Data) cho engine 72 quy tắc phân tích và cơ chế lưu trữ IndexedDB cache, đảm bảo hệ thống không bị crash hay trắng trang khi dữ liệu rỗng.
+- Rà soát an toàn dữ liệu thưa thớt (Sparse Data) cho engine 86 quy tắc phân tích và cơ chế lưu trữ IndexedDB cache, đảm bảo hệ thống không bị crash hay trắng trang khi dữ liệu rỗng.
 
 ### Hall of Fame Champion Images
 

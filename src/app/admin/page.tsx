@@ -8,11 +8,8 @@ import {
   Trash2,
   CheckCircle2,
   AlertCircle,
-  Clock,
-  User,
   ArrowLeft,
   Search,
-  RefreshCw,
   Upload,
   Download
 } from 'lucide-react';
@@ -23,9 +20,9 @@ import {
   rebuildStatsAction,
   verifyAdminAction,
   updatePlayerAction,
-  addPlayerAction,
   deletePlayerAction,
   getMatchesAfterAction,
+  getAppDataAction,
   deleteMatchAction,
   getPlayersAction,
   getSeasonsAction,
@@ -34,6 +31,7 @@ import {
 } from '@/app/actions';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { seedAppCache } from '@/lib/db';
 
 const adminTabs = ['Nhật ký & Hệ thống', 'Thành viên', 'Season', 'Trận đấu'];
 const ADMIN_AUTH_DATE_KEY = 'pickleball_admin_auth_date';
@@ -77,7 +75,7 @@ export default function AdminPage() {
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   const loadData = async () => {
     setLoading(true);
@@ -141,20 +139,32 @@ export default function AdminPage() {
       } else {
         setMsg({ type: 'error', text: actionError(res, 'Mật khẩu sai rồi sếp ơi!') });
       }
-    } catch (err) {
+    } catch {
       setMsg({ type: 'error', text: 'Lỗi kết nối server.' });
     }
     setLoading(false);
   };
 
-  const onBackup = () => {
-    const data = { players, matches, logs, archives, seasons, timestamp: new Date().toISOString() };
+  const onBackup = async () => {
+    const appData = await getAppDataAction();
+    const data = {
+      schemaVersion: 2,
+      players: players.length > 0 ? players : appData?.players || [],
+      matches: matches.length > 0 ? matches : appData?.matches || [],
+      logs,
+      archives,
+      seasons: seasons.length > 0 ? seasons : appData?.seasons || [],
+      config: appData?.config || {},
+      playerSeasonSettings: appData?.playerSeasonSettings || [],
+      timestamp: new Date().toISOString(),
+    };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `pickleball_backup_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
+    URL.revokeObjectURL(url);
   };
 
   const deferImportJson = (file: File | null) => {
@@ -222,6 +232,18 @@ export default function AdminPage() {
       } else {
         // Run rebuild stats after a successful restore
         await rebuildStatsAction();
+        const appData = await getAppDataAction();
+        if (appData) {
+          await seedAppCache({
+            players: appData.players,
+            matches: appData.matches,
+            seasons: appData.seasons,
+            config: appData.config,
+            playerSeasonSettings: appData.playerSeasonSettings || [],
+            dataVersion: appData.dataVersion,
+            manifestCheckedAt: Date.now(),
+          });
+        }
         setMsg({ type: 'success', text: `Khôi phục dữ liệu thành công!` });
         await loadData();
       }

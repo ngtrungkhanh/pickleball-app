@@ -189,6 +189,10 @@ Admin page supports:
 - audit log view
 - archive/recycle-bin view and restore
 - JSON backup download of players, matches, logs, archives, seasons
+- JSON restore replaces the current database state with the backup contents,
+  including seasons/config/player-season settings when present. If a backup has
+  only Season 1 and Season 2, older seasons from the current database should not
+  remain visible after restore.
 - rebuild stats action
 - import XLSX and replace full match history from sheet `MATCHES`
 - members tab with inline edit/toggle
@@ -276,11 +280,18 @@ Current analysis rules:
 - `src/lib/analysis-core.ts` normalizes the selected match set once and is the
   source of truth for Hub, Profile, Network, and Hub insights.
 - ELO is calculated client-side from full 2v2 ranking matches in chronological
-  order. Starting rating is `1000`, team rating is average team ELO, dynamic K
+  order. Starting rating is `1500`, team rating is average team ELO, dynamic K
   is based on match count, and score margin affects the delta.
+- Weekly activity decay only applies to players above `1500` ELO who play fewer
+  than 8 matches in the week. It is intended to keep high ratings tied to
+  current activity, not to punish players below the starting rating.
 - Player win/loss, form, streak, attack, defense, brave/performance score,
   activity, points scored, points conceded, and fines are derived directly from
   match rows.
+- Attack and defense radar scores use a hybrid of raw average points and
+  relative standing inside the selected player group, so they can spread across
+  the current season/filter while still being grounded in `avgPointsFor` and
+  `avgConceded`.
 - Defense uses average points conceded per match, not low points scored or low
   activity.
 - Partner and opponent network rows use directed edges keyed by player id, not
