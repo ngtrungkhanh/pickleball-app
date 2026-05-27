@@ -224,6 +224,14 @@ export default function Dashboard({
   ), [analysisSnapshot, insightSeed, insightSelectionState, insightsReady]);
 
   const insights = insightSelectionResult.insights;
+  const tickerContentKey = useMemo(() => (
+    insights.map(insight => [
+      insight.type,
+      insight.title || '',
+      insight.rarity || '',
+      insight.text,
+    ].join('::')).join('||')
+  ), [insights]);
 
   useEffect(() => {
     if (!insightsReady || insightSeed === null || committedInsightSeedRef.current === insightSeed) return;
@@ -235,7 +243,6 @@ export default function Dashboard({
   const tickerContainerRef = useRef<HTMLDivElement>(null);
   const marqueeRef = useRef<HTMLDivElement>(null);
   const isPausedRef = useRef(false);
-  const isStoppingRef = useRef(false);
   const translateXRef = useRef(0);
   const animationFrameIdRef = useRef<number | null>(null);
   const [tickerPaused, setTickerPaused] = useState(false);
@@ -249,13 +256,20 @@ export default function Dashboard({
       return;
     }
 
-    const container = tickerContainerRef.current;
     const marquee = marqueeRef.current;
+    if (animationFrameIdRef.current) {
+      cancelAnimationFrame(animationFrameIdRef.current);
+      animationFrameIdRef.current = null;
+    }
 
     // Tốc độ chạy nhanh hơn thêm 10% (tổng cộng 21% nhanh hơn base)
     const halfWidth = marquee.offsetWidth / 2;
     const baseSpeed = halfWidth > 0 ? (halfWidth / (65 * 60)) : 1.0;
     const speed = baseSpeed * 1.21;
+    if (halfWidth > 0 && Math.abs(translateXRef.current) >= halfWidth) {
+      translateXRef.current = 0;
+    }
+    marquee.style.transform = `translateX(${translateXRef.current}px)`;
 
     const step = () => {
       if (isPausedRef.current) {
@@ -278,9 +292,10 @@ export default function Dashboard({
     return () => {
       if (animationFrameIdRef.current) {
         cancelAnimationFrame(animationFrameIdRef.current);
+        animationFrameIdRef.current = null;
       }
     };
-  }, [tickerOpen, insightsReady, insights]);
+  }, [tickerOpen, insightsReady, insights.length, tickerContentKey]);
 
   const handleTickerClick = () => {
     isPausedRef.current = !isPausedRef.current;

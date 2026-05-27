@@ -15,6 +15,8 @@ repo.
 
 ### Analysis Hub, Restore, and Radar Calibration
 
+- Fixed Dashboard Sports Ticker animation so it does not restart from the first
+  item after routine insight/cache re-renders.
 - Tightened `/analysis` Hub ELO layout, expanded the weekly ELO block, and
   moved the ELO explainer below the Hub grid so expanded help content uses full
   page width and natural scrolling.
