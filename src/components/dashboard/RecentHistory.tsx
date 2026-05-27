@@ -35,7 +35,7 @@ function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCance
   );
 }
 
-function HistoryModal({ matches, players, onClose, canEdit }: { matches: any[]; players: any[]; onClose: () => void; canEdit: boolean }) {
+function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { matches: any[]; players: any[]; onClose: () => void; canEdit: boolean; matchExpected?: any }) {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [member1, setMember1] = useState('');
@@ -143,7 +143,7 @@ function HistoryModal({ matches, players, onClose, canEdit }: { matches: any[]; 
               </div>
               <div className="space-y-2">
                 {list.map((m: any) => (
-                  <MatchCard key={m.id} m={m} players={players} canEdit={canEdit} isDeleting={isDeletingId === m.id} onDelete={() => setDeleteTarget(m.id)} />
+                  <MatchCard key={m.id} m={m} players={players} canEdit={canEdit} isDeleting={isDeletingId === m.id} onDelete={() => setDeleteTarget(m.id)} matchExpected={matchExpected} />
                 ))}
               </div>
             </div>
@@ -155,11 +155,12 @@ function HistoryModal({ matches, players, onClose, canEdit }: { matches: any[]; 
 }
 
 // ─── Shared match card (used in modal) ───────────────────────────────────────
-function MatchCard({ m, players, onDelete, canEdit, isDeleting }: { m: any; players: any[]; onDelete: () => void; canEdit: boolean; isDeleting?: boolean }) {
+function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }: { m: any; players: any[]; onDelete: () => void; canEdit: boolean; isDeleting?: boolean; matchExpected?: any }) {
   const name = (id: string) => players.find(p => p.id === id)?.name ?? id;
   const d = new Date(m.date);
   const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+  const expected = matchExpected?.get(m.id);
   return (
     <div className="group rounded-2xl border border-white/[0.04] bg-white/[0.015] hover:bg-white/[0.03] transition-all overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.03]">
@@ -177,8 +178,15 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting }: { m: any; play
           <div className="text-sm font-black text-white/90 truncate">{name(m.win_1)}</div>
           {m.win_2 && <div className="text-sm font-black text-white/90 truncate">{name(m.win_2)}</div>}
         </div>
-        <div className="shrink-0 px-4 py-2 rounded-2xl bg-primary/10 border border-primary/20 text-primary font-black text-sm tabular-nums shadow-lg shadow-primary/5">
-          {m.win_score}–{m.lose_score}
+        <div className="flex flex-col items-center shrink-0">
+          <div className="px-4 py-2 rounded-2xl bg-primary/10 border border-primary/20 text-primary font-black text-sm tabular-nums shadow-lg shadow-primary/5">
+            {m.win_score}–{m.lose_score}
+          </div>
+          {expected && (
+            <span className="text-[9px] font-bold text-white/30 mt-1 block tracking-tight">
+              Dự đoán trước trận: {Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%
+            </span>
+          )}
         </div>
         <div className="flex-1 min-w-0 text-left space-y-0.5">
           <div className="text-sm font-black text-white/90 truncate">{name(m.lose_1)}</div>
@@ -190,7 +198,7 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting }: { m: any; play
 }
 
 // ─── Main RecentHistory ───────────────────────────────────────────────────────
-export function RecentHistory({ matches, players, canEdit = false }: { matches: any[]; players: any[]; canEdit?: boolean }) {
+export function RecentHistory({ matches, players, canEdit = false, matchExpected }: { matches: any[]; players: any[]; canEdit?: boolean; matchExpected?: any }) {
   const [showAll, setShowAll] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
@@ -207,7 +215,7 @@ export function RecentHistory({ matches, players, canEdit = false }: { matches: 
 
   return (
     <>
-      {showAll && <HistoryModal matches={matches} players={players} canEdit={canEdit} onClose={() => setShowAll(false)} />}
+      {showAll && <HistoryModal matches={matches} players={players} canEdit={canEdit} onClose={() => setShowAll(false)} matchExpected={matchExpected} />}
       {deleteTarget && (
         <ConfirmDelete
           onCancel={() => setDeleteTarget(null)}
@@ -260,10 +268,15 @@ export function RecentHistory({ matches, players, canEdit = false }: { matches: 
                   {isDouble && <span className="text-[14px] font-bold text-white/85 truncate max-w-full">{name(m.win_2)}</span>}
                 </div>
 
-                <div className="shrink-0 flex items-center justify-center px-4">
+                <div className="shrink-0 flex flex-col items-center justify-center px-4">
                   <div className="px-4 py-2 rounded-xl bg-primary/10 border border-primary/20 text-primary font-black text-[17px] tabular-nums tracking-tight whitespace-nowrap">
                     {m.win_score}–{m.lose_score}
                   </div>
+                  {matchExpected?.get(m.id) && (
+                    <span className="text-[10px] font-bold text-white/30 mt-1 block tracking-tight">
+                      Dự đoán trước trận: {Math.round(matchExpected.get(m.id).winProb * 100)}% - {Math.round(matchExpected.get(m.id).loseProb * 100)}%
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex-1 min-w-0 flex flex-col justify-center items-start px-5 gap-0.5">
@@ -303,8 +316,15 @@ export function RecentHistory({ matches, players, canEdit = false }: { matches: 
                     {isDouble && <span className="text-[13px] font-bold text-white/85 truncate leading-snug">{name(m.win_2)}</span>}
                   </div>
 
-                  <div className="shrink-0 min-w-[68px] text-center px-2.5 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-black text-sm tabular-nums whitespace-nowrap">
-                    {m.win_score}–{m.lose_score}
+                  <div className="shrink-0 flex flex-col items-center">
+                    <div className="min-w-[68px] text-center px-2.5 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-black text-sm tabular-nums whitespace-nowrap">
+                      {m.win_score}–{m.lose_score}
+                    </div>
+                    {matchExpected?.get(m.id) && (
+                      <span className="text-[8px] font-bold text-white/30 mt-1 block tracking-tight">
+                        Dự đoán trước trận: {Math.round(matchExpected.get(m.id).winProb * 100)}% - {Math.round(matchExpected.get(m.id).loseProb * 100)}%
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex-1 min-w-0 flex flex-col gap-0.5 text-left">

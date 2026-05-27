@@ -153,7 +153,7 @@ function sideIds(match: AnalysisMatch) {
   };
 }
 
-function isFullDoublesMatch(match: AnalysisMatch) {
+export function isFullDoublesMatch(match: AnalysisMatch) {
   const { winners, losers } = sideIds(match);
   return winners.length === 2 && losers.length === 2;
 }
@@ -277,51 +277,168 @@ export function getAnalysisName(players: AnalysisPlayer[], id?: string | null) {
   return players.find(player => player.id === id)?.name || id || '--';
 }
 
-export function buildAnalysisElo(players: AnalysisPlayer[], matches: AnalysisMatch[]): EloResult {
-  const rating = new Map(players.map(player => [player.id, 1000]));
+function getVietnamWeekMondayStr(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const local = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+  const day = local.getUTCDay() || 7; // Monday is 1, Sunday is 7
+  const monday = new Date(local.getTime() - (day - 1) * 24 * 60 * 60 * 1000);
+  const y = monday.getUTCFullYear();
+  const m = String(monday.getUTCMonth() + 1).padStart(2, '0');
+  const date = String(monday.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${date}`;
+}
+
+function getSundayDecayTime(mondayStr: string): string {
+  const monday = new Date(mondayStr + 'T00:00:00+07:00');
+  const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000);
+  const y = sunday.getFullYear();
+  const m = String(sunday.getMonth() + 1).padStart(2, '0');
+  const d = String(sunday.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}T23:59:59+07:00`;
+}
+
+function getNextWeekMonday(mondayStr: string): string {
+  const d = new Date(mondayStr + 'T00:00:00+07:00');
+  const next = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const y = next.getFullYear();
+  const m = String(next.getMonth() + 1).padStart(2, '0');
+  const date = String(next.getDate()).padStart(2, '0');
+  return `${y}-${m}-${date}`;
+}
+
+export function buildAnalysisElo(players: AnalysisPlayer[], matches: AnalysisMatch[], now = new Date()): EloResult {
+  const rating = new Map(players.map(player => [player.id, 1500]));
   const matchCount = new Map(players.map(player => [player.id, 0]));
   const history: EloResult['history'] = [];
   const matchExpected: MatchExpected = new Map();
 
-  sortChronological(matches).forEach(match => {
+  // Streak tracking
+  const streakType = new Map<string, 'W' | 'L' | ''>();
+  const streakCount = new Map<string, number>();
+  players.forEach(p => {
+    streakType.set(p.id, '');
+    streakCount.set(p.id, 0);
+  });
+
+  // Weekly decay tracking
+  let currentWeekMonday = '';
+  const weeklyMatchCount = new Map<string, number>();
+  const playersPlayed = new Set<string>();
+
+  const getK = (id: string) => {
+    const count = matchCount.get(id) || 0;
+    if (count < 15) return 32;
+    if (count > 40) return 16;
+    return 20;
+  };
+
+  const applyWeeklyDecay = (mondayStr: string) => {
+    const decayTime = getSundayDecayTime(mondayStr);
+    players.forEach(player => {
+      if (!playersPlayed.has(player.id)) return;
+      const count = weeklyMatchCount.get(player.id) || 0;
+      if (count < 10) {
+        const decay = (10 - count) * 5;
+        const currentElo = rating.get(player.id) ?? 1500;
+        rating.set(player.id, Math.round(Math.max(0, currentElo - decay) * 10) / 10);
+      }
+    });
+    history.push({ date: decayTime, ratings: Object.fromEntries(rating) });
+    weeklyMatchCount.clear();
+  };
+
+  const chronologicalMatches = sortChronological(matches);
+
+  chronologicalMatches.forEach(match => {
     const { winners, losers } = sideIds(match);
     if (winners.length !== 2 || losers.length !== 2) return;
 
-    const winAvg = winners.reduce((sum, id) => sum + (rating.get(id) ?? 1000), 0) / winners.length;
-    const loseAvg = losers.reduce((sum, id) => sum + (rating.get(id) ?? 1000), 0) / losers.length;
+    // Handle weekly decay transition
+    const weekMonday = getVietnamWeekMondayStr(match.date || '');
+    if (weekMonday) {
+      if (!currentWeekMonday) {
+        currentWeekMonday = weekMonday;
+      } else if (weekMonday !== currentWeekMonday) {
+        let iterWeek = currentWeekMonday;
+        while (iterWeek && iterWeek !== weekMonday) {
+          applyWeeklyDecay(iterWeek);
+          iterWeek = getNextWeekMonday(iterWeek);
+        }
+        currentWeekMonday = weekMonday;
+      }
+    }
+
+    // Register match in weekly counts and playersPlayed
+    [...winners, ...losers].forEach(id => {
+      weeklyMatchCount.set(id, (weeklyMatchCount.get(id) || 0) + 1);
+      playersPlayed.add(id);
+    });
+
+    const winAvg = winners.reduce((sum, id) => sum + (rating.get(id) ?? 1500), 0) / winners.length;
+    const loseAvg = losers.reduce((sum, id) => sum + (rating.get(id) ?? 1500), 0) / losers.length;
     const expected = 1 / (1 + Math.pow(10, (loseAvg - winAvg) / 400));
 
     if (match.id) {
       matchExpected.set(match.id, { winProb: expected, loseProb: 1 - expected, winRating: winAvg, loseRating: loseAvg });
     }
 
-    const getK = (id: string) => {
-      const count = matchCount.get(id) || 0;
-      if (count < 20) return 40;
-      if (count > 50) return 16;
-      return 24;
-    };
-    const avgK = (
-      winners.reduce((sum, id) => sum + getK(id), 0)
-      + losers.reduce((sum, id) => sum + getK(id), 0)
-    ) / (winners.length + losers.length);
+    const winScore = numberValue(match.win_score);
+    const loseScore = numberValue(match.lose_score);
+    const marginOfVictory = Math.abs(winScore - loseScore) / 11;
 
-    const scoreDiff = Math.abs(numberValue(match.win_score) - numberValue(match.lose_score));
-    const eloDiff = winAvg - loseAvg;
-    const multiplier = Math.log(scoreDiff + 1) * (2.2 / (eloDiff * 0.001 + 2.2));
-    const delta = avgK * (1 - expected) * multiplier;
-
+    // Calculate delta for winners
     winners.forEach(id => {
-      rating.set(id, Math.round((rating.get(id) ?? 1000) + delta));
+      const isBuffed = streakType.get(id) === 'W' && (streakCount.get(id) ?? 0) >= 3;
+      const K = isBuffed ? getK(id) * 2 : getK(id);
+      const delta = K * (1 - expected) * marginOfVictory * 2;
+      rating.set(id, Math.round(((rating.get(id) ?? 1500) + delta) * 10) / 10);
       matchCount.set(id, (matchCount.get(id) || 0) + 1);
+
+      // Update streak
+      if (streakType.get(id) === 'W') {
+        streakCount.set(id, (streakCount.get(id) ?? 0) + 1);
+      } else {
+        streakType.set(id, 'W');
+        streakCount.set(id, 1);
+      }
     });
+
+    // Calculate delta for losers
     losers.forEach(id => {
-      rating.set(id, Math.round((rating.get(id) ?? 1000) - delta));
+      const K = getK(id);
+      let delta = K * (1 - expected) * marginOfVictory * 2;
+      const isPenalized = streakType.get(id) === 'L' && (streakCount.get(id) ?? 0) >= 3;
+      if (isPenalized) {
+        delta = delta * 2;
+      }
+      rating.set(id, Math.round(((rating.get(id) ?? 1500) - delta) * 10) / 10);
       matchCount.set(id, (matchCount.get(id) || 0) + 1);
+
+      // Update streak
+      if (streakType.get(id) === 'L') {
+        streakCount.set(id, (streakCount.get(id) ?? 0) + 1);
+      } else {
+        streakType.set(id, 'L');
+        streakCount.set(id, 1);
+      }
     });
 
     history.push({ date: match.date || '', ratings: Object.fromEntries(rating) });
   });
+
+  // Apply decay for remaining weeks if completed
+  if (currentWeekMonday) {
+    let iterWeek = currentWeekMonday;
+    while (iterWeek) {
+      const sundayTime = new Date(getSundayDecayTime(iterWeek));
+      if (sundayTime.getTime() > now.getTime()) {
+        break; // ongoing week
+      }
+      applyWeeklyDecay(iterWeek);
+      iterWeek = getNextWeekMonday(iterWeek);
+    }
+  }
 
   return { rating, history, matchExpected };
 }
@@ -477,7 +594,7 @@ function buildPlayerMetrics(
     const oldRecentRating = oldRecentMatch && playerMatches.length >= 5
       ? ratingAtOrBefore(elo.history, player.id, matchTime(oldRecentMatch))
       : null;
-    const recentEloDelta = oldRecentRating === null ? 0 : (elo.rating.get(player.id) ?? 1000) - oldRecentRating;
+    const recentEloDelta = oldRecentRating === null ? 0 : (elo.rating.get(player.id) ?? 1500) - oldRecentRating;
     const daysAbsent = lastMatchMs > 0 ? Math.floor((now.getTime() - lastMatchMs) / 86400000) : null;
     const money = visibleMatches.reduce((sum, match) => {
       return sum + ([match.lose_1, match.lose_2].includes(player.id) && !isGuestId(player.id) ? loseMoney : 0);
@@ -490,13 +607,13 @@ function buildPlayerMetrics(
       losses,
       winRate: total > 0 ? (wins / total) * 100 : 0,
       money,
-      rating: elo.rating.get(player.id) ?? 1000,
+      rating: elo.rating.get(player.id) ?? 1500,
       pointsFor,
       pointsConceded,
       avgPointsFor: total > 0 ? pointsFor / total : 0,
       avgConceded: total > 0 ? pointsConceded / total : 0,
-      attackScore: total > 0 ? clamp((pointsFor / (total * 11)) * 100, 0, 100) : 0,
-      defenseScore: total > 0 ? clamp(100 - (pointsConceded / (total * 11)) * 100, 0, 100) : 0,
+      attackScore: total > 0 ? clamp(((pointsFor / total - 7.5) / (10.2 - 7.5)) * 100, 10, 100) : 0,
+      defenseScore: total > 0 ? clamp(((9.5 - pointsConceded / total) / (9.5 - 7.0)) * 100, 10, 100) : 0,
       braveScore: clamp(50 + overallPs * 200, 0, 100),
       synergyScore,
       formScore,
@@ -696,7 +813,7 @@ export function buildAnalysisSnapshot(
   const visiblePlayers = players.filter(player => player.active !== false && !isGuestId(player.id));
   const visibleMatches = matches.filter(match => !match.deleted_at);
   const rankingMatches = sortNewestFirst(visibleMatches.filter(match => isRankingMatch(match) && isFullDoublesMatch(match)));
-  const elo = buildAnalysisElo(visiblePlayers, rankingMatches);
+  const elo = buildAnalysisElo(visiblePlayers, rankingMatches, now);
   const playerMetrics = buildPlayerMetrics(visiblePlayers, visibleMatches, rankingMatches, elo, loseMoney, now);
   const metrics = new Map(playerMetrics.map(metric => [metric.id, metric]));
   const board = [...playerMetrics].sort((a, b) => b.rating - a.rating || b.winRate - a.winRate || b.wins - a.wins || a.name.localeCompare(b.name));

@@ -2849,7 +2849,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
   const eloRankById = new Map(eloBoard.map((metric, index) => [metric.id, index + 1]));
 
   if (topElo && topElo.total >= 8) {
-    const gap = topElo.rating - (secondElo?.rating ?? 1000);
+    const gap = topElo.rating - (secondElo?.rating ?? 1500);
     const text = getRandomVariant(VARIANTS.elo_king({ topElo, gap }), random);
     addCandidate(candidates, snapshot, {
       type: 'elo_king',
@@ -3028,7 +3028,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
       });
     }
 
-    if (metric.total >= 20 && Math.abs(metric.rating - 1000) <= 20) {
+    if (metric.total >= 20 && Math.abs(metric.rating - 1500) <= 20) {
       const text = getRandomVariant(VARIANTS.gatekeeper({ metric }), random);
       addCandidate(candidates, snapshot, {
         type: 'gatekeeper',

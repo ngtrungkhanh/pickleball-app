@@ -5,8 +5,9 @@ import Link from 'next/link';
 import {
   ArrowLeft, RefreshCw, Database,
   LayoutGrid, User, Swords, History,
-  TrendingUp, Flame, Trophy, Target,
+  TrendingUp, TrendingDown, Flame, Trophy, Target,
   Star, Zap, Award, Crown, Medal, CalendarDays,
+  Users, HelpCircle, Shield, Heart,
   type LucideIcon
 } from 'lucide-react';
 import { buildAnalysisSnapshot, edgeRecord, getAnalysisName, type AnalysisEdge, type EloResult, type PlayerMetrics, type PlayerProfile } from '@/lib/analysis-core';
@@ -18,10 +19,33 @@ import { buildHallOfFameEntries, formatHallDate, type HallOfFameEntry } from '@/
 import { getHallImageLocal, removeHallImageLocal, saveHallImageLocal, type StoredPlayerSeasonSetting } from '@/lib/db';
 import { getGlobalSelectedSeason, setGlobalSelectedSeason } from '@/lib/season-state';
 
-// Navigation tabs - 4 zones instead of 6
+// Vietnam week helper functions
+function getVietnamWeekMondayStr(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const local = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+  const day = local.getUTCDay() || 7; // Monday is 1, Sunday is 7
+  const monday = new Date(local.getTime() - (day - 1) * 24 * 60 * 60 * 1000);
+  const y = monday.getUTCFullYear();
+  const m = String(monday.getUTCMonth() + 1).padStart(2, '0');
+  const date = String(monday.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${date}`;
+}
+
+function getSundayDecayTime(mondayStr: string): string {
+  const monday = new Date(mondayStr + 'T00:00:00+07:00');
+  const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000);
+  const y = sunday.getFullYear();
+  const m = String(sunday.getMonth() + 1).padStart(2, '0');
+  const d = String(sunday.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}T23:59:59+07:00`;
+}
+
+// Navigation tabs - 5 zones
 const navItems = [
   { id: 'hub', label: 'Tổng quan', icon: LayoutGrid },
   { id: 'hall', label: 'Vinh danh', icon: Crown },
+  { id: 'pair', label: 'Cặp đôi', icon: Users },
   { id: 'profile', label: 'Cá nhân', icon: User },
   { id: 'matrix', label: 'Mạng lưới', icon: Swords },
 ];
@@ -339,6 +363,14 @@ export function AnalysisCenter({
           <HallOfFame entries={hallOfFameEntries} activeSeason={currentActiveSeason} />
         )}
 
+        {/* ZONE 5: Pairs (Cặp đôi) */}
+        {activeNav === 'pair' && (
+          <PairZone
+            matches={rankingMatches}
+            players={visiblePlayers}
+          />
+        )}
+
         {/* ZONE 3: Profile (Cá nhân) */}
         {activeNav === 'profile' && (
           <ProfileZone
@@ -390,6 +422,41 @@ function HubZone({
   loseMoney: number;
 }) {
   const totalFines = rankingMatches.reduce((sum, match) => sum + loserFineCount(match), 0) * loseMoney;
+  const [isEloExplainerOpen, setIsEloExplainerOpen] = useState(false);
+
+  // Compute Weekly ELO changes
+  const nowTime = new Date().getTime();
+  const weekMondayStr = getVietnamWeekMondayStr(new Date(nowTime).toISOString());
+  const startOfWeekMs = weekMondayStr ? new Date(weekMondayStr + 'T00:00:00+07:00').getTime() : 0;
+
+  const getRatingAtStartOfWeek = (playerId: string): number => {
+    let ratingVal = 1500;
+    if (!elo.history || elo.history.length === 0) return ratingVal;
+    for (let i = elo.history.length - 1; i >= 0; i--) {
+      const h = elo.history[i];
+      const hTime = new Date(h.date).getTime();
+      if (hTime < startOfWeekMs && typeof h.ratings[playerId] === 'number') {
+        ratingVal = h.ratings[playerId];
+        break;
+      }
+    }
+    return ratingVal;
+  };
+
+  const weeklyStats = board
+    .map(player => {
+      const startElo = getRatingAtStartOfWeek(player.id);
+      const currentElo = player.rating;
+      const delta = Math.round((currentElo - startElo) * 10) / 10;
+      return { player, delta, currentElo, startElo };
+    })
+    .sort((a, b) => b.delta - a.delta || b.currentElo - a.currentElo);
+
+  const mvpCandidate = weeklyStats[0];
+  const mvp = mvpCandidate && mvpCandidate.delta > 0 ? mvpCandidate : null;
+
+  const taVangCandidate = [...weeklyStats].sort((a, b) => a.delta - b.delta)[0];
+  const taVang = taVangCandidate && taVangCandidate.delta < 0 ? taVangCandidate : null;
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -402,33 +469,135 @@ function HubZone({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
-        {/* ELO Race (50%) */}
-        <BentoCard title="Bảng xếp hạng ELO" icon={TrendingUp} className="flex flex-col h-full">
-          <div className="space-y-0.5 flex-1">
-            {board.slice(0, 8).map((player, index) => (
-              <div key={player.id} className="flex items-center gap-2 py-2 border-b border-white/5 last:border-0">
-                <div className={cn(
-                  "w-9 h-9 rounded-full flex items-center justify-center text-base font-black shrink-0 shadow-inner",
-                  index === 0 ? "bg-amber-500/20 text-amber-400" :
-                  index === 1 ? "bg-slate-400/20 text-slate-300" :
-                  index === 2 ? "bg-orange-600/20 text-orange-400" :
-                  "bg-slate-800 text-white/50"
-                )}>
-                  {index + 1}
+        {/* Left Column (ELO & Performance) */}
+        <div className="flex flex-col gap-4">
+          <BentoCard title="Bảng xếp hạng ELO" icon={TrendingUp} className="flex flex-col h-full">
+            <div className="space-y-0.5 flex-1">
+              {board.slice(0, 8).map((player, index) => (
+                <div key={player.id} className="flex items-center gap-2 py-2 border-b border-white/5 last:border-0">
+                  <div className={cn(
+                    "w-9 h-9 rounded-full flex items-center justify-center text-base font-black shrink-0 shadow-inner",
+                    index === 0 ? "bg-amber-500/20 text-amber-400" :
+                    index === 1 ? "bg-slate-400/20 text-slate-300" :
+                    index === 2 ? "bg-orange-600/20 text-orange-400" :
+                    "bg-slate-800 text-white/50"
+                  )}>
+                    {index + 1}
+                  </div>
+                  <div className="flex-1 flex items-center justify-between min-w-0 pr-4">
+                    <div className="font-black text-white text-xl truncate">{player.name}</div>
+                    <div className="text-xl font-black text-primary shrink-0 ml-2">{player.rating}</div>
+                  </div>
+                  <div className="w-20 h-6 shrink-0 hidden sm:block">
+                    <EloSparkline history={elo.history} playerId={player.id} />
+                  </div>
                 </div>
-                <div className="flex-1 flex items-center justify-between min-w-0 pr-4">
-                  <div className="font-black text-white text-xl truncate">{player.name}</div>
-                  <div className="text-xl font-black text-primary shrink-0 ml-2">{player.rating}</div>
+              ))}
+            </div>
+          </BentoCard>
+
+          {/* Weekly ELO Performance */}
+          <BentoCard title="Phong độ ELO Tuần này" icon={Flame}>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-2xl p-3 flex flex-col items-center justify-center text-center">
+                <Crown className="w-6 h-6 text-amber-400 mb-1" />
+                <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Vua Cày Elo</span>
+                <span className="text-sm font-black text-white truncate max-w-full mt-0.5">{mvp ? mvp.player.name : '--'}</span>
+                <span className="text-xs font-black text-emerald-400 mt-1">{mvp ? `+${mvp.delta}` : '0'} ELO</span>
+              </div>
+              <div className="bg-red-500/5 border border-red-500/10 rounded-2xl p-3 flex flex-col items-center justify-center text-center">
+                <TrendingDown className="w-6 h-6 text-red-400 mb-1" />
+                <span className="text-[9px] font-black text-red-400 uppercase tracking-widest">Gánh Tạ Tuần</span>
+                <span className="text-sm font-black text-white truncate max-w-full mt-0.5">{taVang ? taVang.player.name : '--'}</span>
+                <span className="text-xs font-black text-red-400 mt-1">{taVang ? `${taVang.delta}` : '0'} ELO</span>
+              </div>
+            </div>
+
+            <div className="space-y-0.5 flex-1 max-h-[180px] overflow-y-auto pr-1 custom-scrollbar">
+              {weeklyStats.map(({ player, delta }) => (
+                <div key={player.id} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0 pr-2">
+                  <div className="font-bold text-sm text-white/90">{player.name}</div>
+                  <div className={cn(
+                    "text-xs font-black tabular-nums",
+                    delta > 0 ? "text-emerald-400" : delta < 0 ? "text-red-400" : "text-white/30"
+                  )}>
+                    {delta > 0 ? `+${delta}` : delta === 0 ? '0' : `${delta}`}
+                  </div>
                 </div>
-                <div className="w-20 h-6 shrink-0 hidden sm:block">
-                  <EloSparkline history={elo.history} playerId={player.id} />
+              ))}
+            </div>
+          </BentoCard>
+
+          {/* ELO Accordion explanation */}
+          <div className="rounded-2xl border border-white/5 bg-slate-900/60 overflow-hidden transition-all">
+            <button
+              onClick={() => setIsEloExplainerOpen(!isEloExplainerOpen)}
+              className="w-full px-5 py-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors text-left"
+            >
+              <div className="flex items-center gap-2">
+                <HelpCircle className="w-4 h-4 text-primary" />
+                <span className="text-xs font-black text-white/70 uppercase tracking-widest">👉 Hướng dẫn tính ELO & Luật Drama tuần</span>
+              </div>
+              <span className={cn("text-xs text-white/30 font-bold transition-transform duration-300", isEloExplainerOpen && "rotate-180")}>
+                ▼
+              </span>
+            </button>
+            
+            {isEloExplainerOpen && (
+              <div className="px-5 pb-5 border-t border-white/[0.03] pt-4 text-xs text-white/60 space-y-4 leading-relaxed animate-in slide-in-from-top-2 duration-200">
+                <div>
+                  <h4 className="font-black text-white/90 text-sm mb-1 uppercase tracking-tight text-primary">📊 ELO HOẠT ĐỘNG NHƯ THẾ NÀO?</h4>
+                  <p>Hệ thống điểm ELO tự động đo lường trình độ của bạn dựa trên kết quả các trận đấu, tự cân bằng theo thực lực thực tế (bắt đầu từ <strong>1500 ELO</strong>).</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <h5 className="font-bold text-white/80">1. Nguyên lý cộng/trừ ELO:</h5>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li><strong className="text-emerald-400">Thắng kèo khó</strong> (đối thủ ELO cao hơn): Cộng rất nhiều ELO.</li>
+                      <li><strong>Thắng kèo dễ</strong> (đối thủ ELO thấp hơn): Cộng rất ít ELO.</li>
+                      <li><strong className="text-red-400">Thua kèo dễ</strong> (thua đối thủ yếu): Bị trừ cực kỳ nặng ELO.</li>
+                      <li><strong>Thua kèo khó</strong> (thua đối thủ mạnh): Bị trừ nhẹ ELO.</li>
+                      <li><strong>Hiệu số bàn thắng</strong>: Thắng cách biệt lớn (ví dụ 11-1) nhận nhiều ELO hơn thắng sít sao (12-10).</li>
+                    </ul>
+                  </div>
+                  <div className="space-y-1.5">
+                    <h5 className="font-bold text-white/80">2. Hệ số K phân cấp động:</h5>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li><strong>Dưới 15 trận</strong>: <strong className="text-primary">K = 32</strong> (Tân binh / Khách - ELO đổi nhanh).</li>
+                      <li><strong>Từ 15 đến 40 trận</strong>: <strong className="text-primary">K = 20</strong> (Hội viên - Thay đổi ổn định).</li>
+                      <li><strong>Trên 40 trận</strong>: <strong className="text-primary">K = 16</strong> (Lão làng - ELO ổn định phong độ).</li>
+                    </ul>
+                  </div>
+                </div>
+                <div className="border-t border-white/5 pt-3">
+                  <h4 className="font-black text-white/90 text-sm mb-2 uppercase tracking-tight text-primary">⚡ LUẬT DRAMA HÀNG TUẦN</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-emerald-400">
+                        <Flame className="w-3.5 h-3.5" /> Lên đồng
+                      </div>
+                      <p className="text-[10px] text-white/50 leading-relaxed">Chuỗi <strong>&ge; 3 trận thắng liên tiếp</strong>. Từ trận thứ 4 trở đi, hệ số K của bạn được <strong>nhân đôi (K x 2)</strong>. Reset khi thua.</p>
+                    </div>
+                    <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-red-400">
+                        <TrendingDown className="w-3.5 h-3.5" /> Vợ mắng
+                      </div>
+                      <p className="text-[10px] text-white/50 leading-relaxed">Chuỗi <strong>&ge; 3 trận thua liên tiếp</strong>. Từ trận thứ 4 trở đi, ELO bị trừ khi thua tiếp theo được <strong>nhân đôi (x2)</strong>. Reset khi thắng.</p>
+                    </div>
+                    <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-amber-400">
+                        <Zap className="w-3.5 h-3.5" /> Phạt trốn đấu
+                      </div>
+                      <p className="text-[10px] text-white/50 leading-relaxed">Quét tự động lúc <strong>23:59 Chủ Nhật</strong>. Nếu đánh <strong>N &lt; 10 trận</strong> trong tuần, bạn bị trừ <strong>(10 - N) x 5</strong> ELO.</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-            ))}
+            )}
           </div>
-        </BentoCard>
+        </div>
 
-        {/* News Feed Insights (50%) */}
+        {/* Right Column: Expert Insights (50%) */}
         <BentoCard title="Nhận xét chuyên gia" icon={Zap} className="border-primary/30 bg-primary/5 flex flex-col h-full">
           <div className="space-y-3 flex-1 overflow-y-auto pr-1 custom-scrollbar">
             {!insightsReady ? (
@@ -518,6 +687,240 @@ function HubZone({
           </div>
         </BentoCard>
       </div>
+    </div>
+  );
+}
+
+function PairZone({ matches, players }: { matches: Match[]; players: Player[] }) {
+  const pairMap = new Map<string, {
+    player1Id: string;
+    player1Name: string;
+    player2Id: string;
+    player2Name: string;
+    wins: number;
+    losses: number;
+    pointsFor: number;
+    pointsConceded: number;
+  }>();
+
+  const getPlayerName = (id: string) => players.find(p => p.id === id)?.name || id;
+
+  matches.forEach(m => {
+    const w1 = m.win_1;
+    const w2 = m.win_2;
+    const l1 = m.lose_1;
+    const l2 = m.lose_2;
+    if (!w1 || !w2 || !l1 || !l2) return;
+    if (isGuestId(w1) || isGuestId(w2) || isGuestId(l1) || isGuestId(l2)) return;
+
+    const winPair = [w1, w2].sort();
+    const winKey = winPair.join('_');
+    const winStat = pairMap.get(winKey) || {
+      player1Id: winPair[0],
+      player1Name: getPlayerName(winPair[0]),
+      player2Id: winPair[1],
+      player2Name: getPlayerName(winPair[1]),
+      wins: 0,
+      losses: 0,
+      pointsFor: 0,
+      pointsConceded: 0,
+    };
+    winStat.wins++;
+    winStat.pointsFor += Number(m.win_score || 0);
+    winStat.pointsConceded += Number(m.lose_score || 0);
+    pairMap.set(winKey, winStat);
+
+    const losePair = [l1, l2].sort();
+    const loseKey = losePair.join('_');
+    const loseStat = pairMap.get(loseKey) || {
+      player1Id: losePair[0],
+      player1Name: getPlayerName(losePair[0]),
+      player2Id: losePair[1],
+      player2Name: getPlayerName(losePair[1]),
+      wins: 0,
+      losses: 0,
+      pointsFor: 0,
+      pointsConceded: 0,
+    };
+    loseStat.losses++;
+    loseStat.pointsFor += Number(m.lose_score || 0);
+    loseStat.pointsConceded += Number(m.win_score || 0);
+    pairMap.set(loseKey, loseStat);
+  });
+
+  const pairs = Array.from(pairMap.values())
+    .map(p => {
+      const total = p.wins + p.losses;
+      const winRate = total > 0 ? (p.wins / total) * 100 : 0;
+      const points = (p.wins - p.losses) * 15 + winRate;
+      const avgPointsFor = total > 0 ? p.pointsFor / total : 0;
+      const avgConceded = total > 0 ? p.pointsConceded / total : 0;
+      return {
+        player1Id: p.player1Id,
+        player1Name: p.player1Name,
+        player2Id: p.player2Id,
+        player2Name: p.player2Name,
+        total,
+        wins: p.wins,
+        losses: p.losses,
+        winRate,
+        points: Math.round(points * 10) / 10,
+        pointsFor: p.pointsFor,
+        pointsConceded: p.pointsConceded,
+        avgPointsFor,
+        avgConceded,
+      };
+    })
+    .filter(p => p.total >= 3);
+
+  const capBaiTrung = [...pairs].sort((a, b) => b.points - a.points || b.total - a.total)[0] || null;
+  const capTriKy = [...pairs].sort((a, b) => b.total - a.total || b.points - a.points)[0] || null;
+  const laChanThep = [...pairs].sort((a, b) => a.avgConceded - b.avgConceded || b.total - a.total)[0] || null;
+
+  const rankedPairs = [...pairs].sort((a, b) => b.points - a.points || b.total - a.total).slice(0, 10);
+
+  if (pairs.length === 0) {
+    return (
+      <div className="glass p-20 rounded-[2.5rem] text-center border border-white/5">
+        <p className="text-white/20 font-black uppercase tracking-[0.4em] text-sm">Chưa có đủ cặp đôi thi đấu từ 3 trận trở lên</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="relative p-[1.5px] rounded-[2.5rem] bg-gradient-to-r from-amber-500/20 via-yellow-500/40 to-amber-500/20 overflow-hidden shadow-2xl">
+          <div className="relative bg-slate-950/95 backdrop-blur-md rounded-[2.4rem] p-6 flex flex-col h-full items-center text-center">
+            <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-3">
+              <Trophy className="w-6 h-6 text-amber-400" />
+            </div>
+            <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest">🏆 Cặp Bài Trùng</span>
+            {capBaiTrung ? (
+              <>
+                <h3 className="mt-2 text-lg font-black text-white">{capBaiTrung.player1Name} & {capBaiTrung.player2Name}</h3>
+                <div className="text-2xl font-black text-primary mt-2 italic">{capBaiTrung.points}đ</div>
+                <div className="text-xs text-white/40 mt-1 font-bold">
+                  Thành tích: {capBaiTrung.wins}W - {capBaiTrung.losses}L ({capBaiTrung.winRate.toFixed(0)}%)
+                </div>
+              </>
+            ) : (
+              <p className="text-white/30 text-sm mt-3 italic">Chưa xác định</p>
+            )}
+            <p className="text-[10px] text-white/30 mt-4 leading-relaxed font-bold uppercase tracking-wide">
+              Cặp song kiếm hợp bích, có điểm tích lũy xếp hạng cao nhất giải.
+            </p>
+          </div>
+        </div>
+
+        <div className="relative p-[1.5px] rounded-[2.5rem] bg-gradient-to-r from-purple-500/20 via-pink-500/40 to-purple-500/20 overflow-hidden shadow-2xl">
+          <div className="relative bg-slate-950/95 backdrop-blur-md rounded-[2.4rem] p-6 flex flex-col h-full items-center text-center">
+            <div className="w-12 h-12 rounded-full bg-pink-500/10 border border-pink-500/20 flex items-center justify-center mb-3">
+              <Heart className="w-6 h-6 text-pink-400" />
+            </div>
+            <span className="text-[10px] font-black text-pink-400 uppercase tracking-widest">🤝 Cặp Tri Kỷ</span>
+            {capTriKy ? (
+              <>
+                <h3 className="mt-2 text-lg font-black text-white">{capTriKy.player1Name} & {capTriKy.player2Name}</h3>
+                <div className="text-2xl font-black text-primary mt-2 italic">{capTriKy.total} trận</div>
+                <div className="text-xs text-white/40 mt-1 font-bold">
+                  Thành tích: {capTriKy.wins}W - {capTriKy.losses}L ({capTriKy.winRate.toFixed(0)}%)
+                </div>
+              </>
+            ) : (
+              <p className="text-white/30 text-sm mt-3 italic">Chưa xác định</p>
+            )}
+            <p className="text-[10px] text-white/30 mt-4 leading-relaxed font-bold uppercase tracking-wide">
+              Cặp đôi kề vai sát cánh, chơi cùng nhau nhiều trận nhất mùa giải.
+            </p>
+          </div>
+        </div>
+
+        <div className="relative p-[1.5px] rounded-[2.5rem] bg-gradient-to-r from-blue-500/20 via-cyan-500/40 to-blue-500/20 overflow-hidden shadow-2xl">
+          <div className="relative bg-slate-950/95 backdrop-blur-md rounded-[2.4rem] p-6 flex flex-col h-full items-center text-center">
+            <div className="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-3">
+              <Shield className="w-6 h-6 text-blue-400" />
+            </div>
+            <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">🛡️ Lá Chắn Thép</span>
+            {laChanThep ? (
+              <>
+                <h3 className="mt-2 text-lg font-black text-white">{laChanThep.player1Name} & {laChanThep.player2Name}</h3>
+                <div className="text-2xl font-black text-primary mt-2 italic">{laChanThep.avgConceded.toFixed(1)}đ/trận</div>
+                <div className="text-xs text-white/40 mt-1 font-bold">
+                  Tổng lọt lưới: {laChanThep.pointsConceded} điểm / {laChanThep.total} trận
+                </div>
+              </>
+            ) : (
+              <p className="text-white/30 text-sm mt-3 italic">Chưa xác định</p>
+            )}
+            <p className="text-[10px] text-white/30 mt-4 leading-relaxed font-bold uppercase tracking-wide">
+              Cặp đôi phòng thủ kiên cường, giữ đối thủ ghi ít điểm trung bình nhất.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <BentoCard title="Bảng xếp hạng Cặp Đôi (Tối thiểu 3 trận chung)" icon={Users}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-white/5 text-[10px] font-black text-white/35 uppercase tracking-widest font-bold">
+                <th className="py-3 px-4 w-12 text-center">Hạng</th>
+                <th className="py-3 px-4">Cặp đôi</th>
+                <th className="py-3 px-4 text-center">Số trận</th>
+                <th className="py-3 px-4 text-center">Hiệu số</th>
+                <th className="py-3 px-4 text-center">Tỷ lệ thắng</th>
+                <th className="py-3 px-4 text-center">Trung bình Công/Thủ</th>
+                <th className="py-3 px-4 text-right">Điểm tích lũy</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rankedPairs.map((pair, index) => {
+                const diff = pair.wins - pair.losses;
+                return (
+                  <tr key={`${pair.player1Id}_${pair.player2Id}`} className="border-b border-white/5 last:border-0 hover:bg-white/[0.01] transition-colors">
+                    <td className="py-4 px-4 text-center">
+                      <span className={cn(
+                        "w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-black",
+                        index === 0 ? "bg-amber-500/20 text-amber-400" :
+                        index === 1 ? "bg-slate-400/20 text-slate-300" :
+                        index === 2 ? "bg-orange-600/20 text-orange-400" :
+                        "text-white/40"
+                      )}>
+                        {index + 1}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 font-bold">
+                      <div className="text-sm font-black text-white leading-snug">{pair.player1Name}</div>
+                      <div className="text-sm font-black text-white leading-snug">{pair.player2Name}</div>
+                    </td>
+                    <td className="py-4 px-4 text-center font-bold text-white/80 tabular-nums">{pair.total}</td>
+                    <td className="py-4 px-4 text-center tabular-nums">
+                      <span className={cn(
+                        "text-xs font-black px-2 py-1 rounded-lg",
+                        diff > 0 ? "bg-emerald-500/10 text-emerald-400" : diff < 0 ? "bg-red-500/10 text-red-400" : "bg-white/5 text-white/45"
+                      )}>
+                        {diff > 0 ? `+${diff}` : diff}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 text-center font-black text-white/80 tabular-nums">{pair.winRate.toFixed(1)}%</td>
+                    <td className="py-4 px-4 text-center text-[10px] font-bold text-white/40 leading-snug">
+                      Công: {pair.avgPointsFor.toFixed(1)}đ <br />
+                      Thủ: {pair.avgConceded.toFixed(1)}đ
+                    </td>
+                    <td className="py-4 px-4 text-right">
+                      <span className="text-sm font-black text-primary italic tabular-nums">{pair.points}đ</span>
+                      <div className="text-[8px] text-white/20 font-bold uppercase tracking-tighter mt-0.5">
+                        ({diff} x 15) + {pair.winRate.toFixed(0)}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </BentoCard>
     </div>
   );
 }
@@ -842,8 +1245,8 @@ function RadarChart({ data }: { data: RadarData }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   const labels: Array<{ name: string; key: keyof RadarData; desc: string }> = [
-    { name: 'Công', key: 'attack', desc: 'Sức mạnh tấn công: Dựa trên tỉ lệ ghi điểm thực tế.' },
-    { name: 'Thủ', key: 'defense', desc: 'Khả năng phòng ngự: Khả năng hạn chế đối thủ ghi điểm.' },
+    { name: 'Công', key: 'attack', desc: 'Đo lường hỏa lực ghi điểm trung bình của đội khi bạn thi đấu. Điểm cao phản ánh khả năng ép sân, tạo các chiến thắng cách biệt lớn hoặc ghi nhiều điểm khi thua.' },
+    { name: 'Thủ', key: 'defense', desc: 'Đo lường độ chắc chắn bảo vệ lưới, hạn chế đối thủ ghi điểm. Điểm cao thể hiện sự bền bỉ bọc lót, giữ đối thủ ghi ít điểm nhất khi thắng và giữ thế trận sát nút khi thua.' },
     { name: 'Bản lĩnh', key: 'brave', desc: 'Vượt kỳ vọng: Thắng kèo khó hoặc gánh đồng đội ELO thấp.' },
     { name: 'Phong độ', key: 'form', desc: 'Chuỗi thành tích: Tỉ lệ thắng trong 5 trận gần nhất.' },
     { name: 'Phối hợp', key: 'synergy', desc: 'Ăn ý: Tỉ lệ thắng trung bình của đồng đội khi chơi cùng.' },
@@ -989,7 +1392,7 @@ function ProfileZone({
   elo: EloResult;
   players: Player[];
 }) {
-  const currentElo = elo.rating.get(playerId) ?? 1000;
+  const currentElo = elo.rating.get(playerId) ?? 1500;
   const rank = analysis?.rank || '--';
   const stats = analysis?.stats;
   const bestPartner = analysis?.bestPartner;

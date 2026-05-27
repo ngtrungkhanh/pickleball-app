@@ -469,7 +469,7 @@ export default function Dashboard({
 
       {/* 4. Recent History */}
       <div className={DESKTOP_PANEL_WIDTH}>
-        <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} />
+        <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} />
       </div>
 
       <SettingsModal

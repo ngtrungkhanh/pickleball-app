@@ -88,7 +88,7 @@ export function buildHallOfFameEntries(
       if (!champion) return null;
 
       const rankingMatches = seasonMatches.filter(match => isRankingMatch(match) && isFullDoublesHallMatch(match));
-      const rating = buildAnalysisElo(eligiblePlayers, rankingMatches).rating.get(champion.id) ?? 1000;
+      const rating = buildAnalysisElo(eligiblePlayers, rankingMatches).rating.get(champion.id) ?? 1500;
       const lastMatch = [...rankingMatches].sort((a, b) => matchTimeValue(b) - matchTimeValue(a))[0];
 
       const imageMeta = seasonMeta.get(seasonName);

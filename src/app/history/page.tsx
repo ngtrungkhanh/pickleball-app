@@ -4,6 +4,9 @@ import { ArrowLeft, Clock, Calendar } from 'lucide-react';
 import { DeleteMatchButton } from '@/components/DeleteMatchButton';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
 
+import { buildAnalysisElo, isFullDoublesMatch } from '@/lib/analysis-core';
+import { isGuestId, isRankingMatch } from '@/lib/guest';
+
 export const revalidate = 0;
 
 export default async function HistoryPage() {
@@ -18,6 +21,12 @@ export default async function HistoryPage() {
 
   const { rows: players } = await sql`SELECT * FROM players WHERE deleted_at IS NULL ORDER BY name ASC`;
   const { rows: matches } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL ORDER BY date DESC`;
+
+  const visiblePlayers = players.filter((p: any) => p.active !== false && !isGuestId(p.id)) as any[];
+  const visibleMatches = matches.filter((m: any) => !m.deleted_at) as any[];
+  const rankingMatches = visibleMatches.filter((m: any) => isRankingMatch(m) && isFullDoublesMatch(m)) as any[];
+  const eloResult = buildAnalysisElo(visiblePlayers, rankingMatches);
+  const matchExpected = eloResult.matchExpected;
 
   const getName = (id: string) => players.find((p: any) => p.id === id)?.name || id;
 
@@ -81,10 +90,15 @@ export default async function HistoryPage() {
                       <span className="text-sm sm:text-base font-black text-white/90 truncate">{getName(m.win_1)}</span>
                       {m.win_2 && <span className="text-sm sm:text-base font-black text-white/90 truncate">{getName(m.win_2)}</span>}
                     </div>
-                    <div className="col-span-2 flex items-center justify-center">
+                    <div className="col-span-2 flex flex-col items-center justify-center">
                       <div className="bg-primary/10 border border-primary/20 text-primary px-3 py-1.5 rounded-xl font-black text-base sm:text-lg tracking-tighter whitespace-nowrap">
                         {m.win_score}–{m.lose_score}
                       </div>
+                      {matchExpected.get(m.id) && (
+                        <span className="text-[9px] sm:text-[10px] font-bold text-white/30 mt-1 block text-center whitespace-nowrap">
+                          Dự đoán trước trận: {Math.round(matchExpected.get(m.id)!.winProb * 100)}% - {Math.round(matchExpected.get(m.id)!.loseProb * 100)}%
+                        </span>
+                      )}
                     </div>
                     <div className="col-span-5 flex flex-col gap-1 text-left">
                       <span className="text-sm sm:text-base font-black text-white/90 truncate">{getName(m.lose_1)}</span>
