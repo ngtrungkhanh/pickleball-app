@@ -2727,8 +2727,8 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
       wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
       A, B, C, count, goldenPickled,
       avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
+      pattern = (results: (string | number)[]) => results.slice(0, 8).join('-'),
+      edgeRate = (ed: { rate?: number } | null | undefined) => Math.round(ed?.rate || 0),
       round = (v: number) => Math.round(v),
       oneDecimal = (v: number) => v.toFixed(1),
       absRound = (v: number) => Math.abs(Math.round(v))
@@ -3174,6 +3174,74 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
         text,
       });
     }
+
+    // Playstyle candidates (Need at least 5 matches to establish playstyle)
+    if (metric.total >= 5) {
+      const attack = Math.round(metric.attackScore);
+      const defense = Math.round(metric.defenseScore);
+
+      if (attack >= 65 && defense < 65) {
+        const texts = [
+          `Với điểm Công vượt trội (${attack}đ) và Thủ trung bình (${defense}đ), ${metric.name} đang định hình rõ lối chơi "Sát Thủ Bắn Lưới" – chủ động ép sân và tấn công dồn dập.`,
+          `Lối chơi tấn công áp đảo: ${metric.name} (Công ${attack}đ - Thủ ${defense}đ) liên tục đẩy cao tốc độ bóng, xứng đáng là Sát Thủ Bắn Lưới của giải.`,
+          `Thích chủ động áp đặt thế trận, ${metric.name} (Công ${attack}đ) luôn là mũi tấn công sắc bén dứt điểm nhanh gọn mỗi khi đứng lưới.`,
+          `Hỏa lực dồi dào nhưng phòng ngự ở mức trung bình, ${metric.name} (Thủ ${defense}đ) chơi đúng phong cách một Sát Thủ Bắn Lưới đích thực.`,
+          `Mỗi khi lên lưới, ${metric.name} (Công ${attack}đ) lập tiếp tục gây sức ép lớn buộc đối phương tự hỏng. Một lối chơi tấn công vô cùng phóng khoáng.`
+        ];
+        addCandidate(candidates, snapshot, {
+          type: 'net_assassin',
+          title: '🏹 SÁT THỦ BẮN LƯỚI',
+          group: 'elo',
+          participantIds: [metric.id],
+          rarity: 'rare',
+          frequency: 'frequent',
+          baseWeight: 45,
+          evidenceStrength: evidence(metric.total),
+          surpriseScore: 10,
+          text: getRandomVariant(texts, random),
+        });
+      } else if (defense >= 65 && attack < 65) {
+        const texts = [
+          `Điểm Thủ ấn tượng (${defense}đ) và Công trung bình (${attack}đ) biến ${metric.name} thành một "Chốt Chặn Bền Bỉ" – hậu phương cực kỳ vững chắc và ít tự hỏng.`,
+          `Lối chơi vô cùng an toàn và kiên nhẫn: ${metric.name} (Thủ ${defense}đ) luôn bọc lót tốt cho đồng đội và hạn chế tối đa sai lầm.`,
+          `Được ví như bức tường thành kiên cố, ${metric.name} (Thủ ${defense}đ - Công ${attack}đ) kiên cường trả bóng bền bỉ buộc đối thủ phải nản lòng.`,
+          `Không quá bùng nổ ở khâu dứt điểm nhưng cực kỳ chắc chắn ở phòng tuyến, ${metric.name} chính là một Chốt Chặn Bền Bỉ đáng tin cậy.`,
+          `Sự điềm tĩnh và bọc lót thông minh giúp ${metric.name} (Thủ ${defense}đ) trở thành điểm tựa vững chãi cho bất kỳ đồng đội nào đá cặp cùng.`
+        ];
+        addCandidate(candidates, snapshot, {
+          type: 'steady_wall',
+          title: '🧱 CHỐT CHẶN BỀN BỈ',
+          group: 'elo',
+          participantIds: [metric.id],
+          rarity: 'rare',
+          frequency: 'frequent',
+          baseWeight: 45,
+          evidenceStrength: evidence(metric.total),
+          surpriseScore: 10,
+          text: getRandomVariant(texts, random),
+        });
+      } else {
+        const texts = [
+          `Sở hữu các thông số cân đối (Công ${attack}đ - Thủ ${defense}đ), ${metric.name} điều phối trận đấu vô cùng nhịp nhàng và thích nghi linh hoạt theo đồng đội.`,
+          `Lối chơi "Nhịp Điệu Cân Bằng" giúp ${metric.name} (Công ${attack}đ - Thủ ${defense}đ) giữ thế trận ổn định và kiểm soát tốt khu trung tuyến.`,
+          `Cân bằng hoàn hảo: ${metric.name} không quá thiên lệch về công hay thủ, chơi điềm tĩnh và giữ nhịp độ trận đấu cực kỳ chuẩn mực.`,
+          `Một cầu thủ toàn diện trong việc điều tiết lối chơi, ${metric.name} (Công ${attack}đ - Thủ ${defense}đ) luôn mang lại sự an tâm bằng sự cân bằng.`,
+          `Khả năng đọc tình huống và thích ứng cao giúp ${metric.name} giữ vững Nhịp Điệu Cân Bằng cho đội trong mọi hoàn cảnh khó khăn.`
+        ];
+        addCandidate(candidates, snapshot, {
+          type: 'balanced_tempo',
+          title: '🔵 NHỊP ĐIỆU CÂN BẰNG',
+          group: 'elo',
+          participantIds: [metric.id],
+          rarity: 'common',
+          frequency: 'frequent',
+          baseWeight: 35,
+          evidenceStrength: evidence(metric.total),
+          surpriseScore: 5,
+          text: getRandomVariant(texts, random),
+        });
+      }
+    }
   });
 }
 
@@ -3253,7 +3321,7 @@ function addStoryCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
     });
   });
 
-  const revengeRows: Array<{ player: any; opponent: any; priorLosses: number; state: number; Y: number; recentWins: number; recentTotal: number }> = [];
+  const revengeRows: Array<{ player: AnalysisPlayer; opponent: AnalysisPlayer; priorLosses: number; state: number; Y: number; recentWins: number; recentTotal: number }> = [];
   snapshot.visiblePlayers.forEach(player => {
     snapshot.visiblePlayers.forEach(opponent => {
       if (player.id === opponent.id) return;

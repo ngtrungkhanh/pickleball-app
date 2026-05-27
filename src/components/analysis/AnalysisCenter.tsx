@@ -1400,6 +1400,35 @@ function ProfileZone({
 
   const winRate = stats && stats.total > 0 ? Math.round(stats.wins / stats.total * 100) : 0;
 
+  // Calculate Playstyle classification
+  const attack = analysis?.radar?.attack || 0;
+  const defense = analysis?.radar?.defense || 0;
+  const totalMatches = stats?.total || 0;
+
+  let playstyle = 'Nhịp Điệu Cân Bằng';
+  let playstyleDesc = 'Lối chơi cân bằng, điều phối nhịp độ tốt và thích nghi linh hoạt theo đồng đội.';
+  let playstyleColor = 'text-blue-400 bg-blue-500/5 border-blue-500/10';
+
+  if (totalMatches >= 5) {
+    if (attack >= 65 && defense < 65) {
+      playstyle = 'Sát Thủ Bắn Lưới 🏹';
+      playstyleDesc = 'Thiên hướng tấn công mạnh mẽ, chủ động ép sân, đẩy nhanh tốc độ bóng và dứt điểm nhanh.';
+      playstyleColor = 'text-orange-400 bg-orange-500/5 border-orange-500/10';
+    } else if (defense >= 65 && attack < 65) {
+      playstyle = 'Chốt Chặn Bền Bỉ 🧱';
+      playstyleDesc = 'Hậu phương vững chắc, lối chơi an toàn, kiên nhẫn bọc lót, kiểm soát bóng và hạn chế tự hỏng.';
+      playstyleColor = 'text-emerald-400 bg-emerald-500/5 border-emerald-500/10';
+    } else {
+      playstyle = 'Nhịp Điệu Cân Bằng 🔵';
+      playstyleDesc = 'Lối chơi cân bằng, điều phối nhịp độ tốt, kiểm soát khu trung tuyến và thích nghi linh hoạt theo đồng đội.';
+      playstyleColor = 'text-blue-400 bg-blue-500/5 border-blue-500/10';
+    }
+  } else {
+    playstyle = 'Tân Binh Đang Thử Nghiệm 🌱';
+    playstyleDesc = 'Chưa thi đấu đủ 5 trận để phân loại lối chơi chính xác.';
+    playstyleColor = 'text-slate-400 bg-slate-500/5 border-slate-500/10';
+  }
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
@@ -1414,7 +1443,7 @@ function ProfileZone({
               {visiblePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
 
-            <div className="flex gap-4 mb-8">
+            <div className="flex gap-4 mb-6">
               <div className="flex-1 bg-slate-800/50 rounded-2xl p-4 border border-primary/20 text-center shadow-lg">
                 <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1">ELO Rating</div>
                 <div className="text-3xl font-black text-white italic">{currentElo}</div>
@@ -1425,6 +1454,13 @@ function ProfileZone({
                 <div className="text-3xl font-black text-white italic">{winRate}%</div>
                 <div className="text-[10px] text-white/40 uppercase font-bold mt-1">{stats?.wins}W - {stats?.losses}L</div>
               </div>
+            </div>
+
+            {/* Playstyle Box */}
+            <div className={cn("rounded-2xl border p-4 text-center mb-6 flex flex-col items-center justify-center shadow-lg", playstyleColor)}>
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] opacity-60">Phong Cách Thi Đấu</span>
+              <span className="text-sm font-black uppercase tracking-wider mt-1">{playstyle}</span>
+              <p className="text-[10px] opacity-80 mt-1.5 leading-relaxed font-bold">{playstyleDesc}</p>
             </div>
 
             <div className="px-4 flex-1 flex items-center">

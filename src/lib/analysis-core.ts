@@ -290,7 +290,9 @@ function getVietnamWeekMondayStr(dateStr: string): string {
 }
 
 function getSundayDecayTime(mondayStr: string): string {
+  if (!mondayStr || mondayStr.includes('NaN')) return '';
   const monday = new Date(mondayStr + 'T00:00:00+07:00');
+  if (isNaN(monday.getTime())) return '';
   const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000);
   const y = sunday.getFullYear();
   const m = String(sunday.getMonth() + 1).padStart(2, '0');
@@ -299,7 +301,9 @@ function getSundayDecayTime(mondayStr: string): string {
 }
 
 function getNextWeekMonday(mondayStr: string): string {
+  if (!mondayStr || mondayStr.includes('NaN')) return '';
   const d = new Date(mondayStr + 'T00:00:00+07:00');
+  if (isNaN(d.getTime())) return '';
   const next = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000);
   const y = next.getFullYear();
   const m = String(next.getMonth() + 1).padStart(2, '0');
@@ -356,14 +360,17 @@ export function buildAnalysisElo(players: AnalysisPlayer[], matches: AnalysisMat
 
     // Handle weekly decay transition
     const weekMonday = getVietnamWeekMondayStr(match.date || '');
-    if (weekMonday) {
+    if (weekMonday && !weekMonday.includes('NaN')) {
       if (!currentWeekMonday) {
         currentWeekMonday = weekMonday;
       } else if (weekMonday !== currentWeekMonday) {
         let iterWeek = currentWeekMonday;
-        while (iterWeek && iterWeek !== weekMonday) {
+        let iterations = 0;
+        // Only progress chronologically forward, up to 100 weeks limit
+        while (iterWeek && iterWeek < weekMonday && !iterWeek.includes('NaN') && iterations < 100) {
           applyWeeklyDecay(iterWeek);
           iterWeek = getNextWeekMonday(iterWeek);
+          iterations++;
         }
         currentWeekMonday = weekMonday;
       }
@@ -428,15 +435,19 @@ export function buildAnalysisElo(players: AnalysisPlayer[], matches: AnalysisMat
   });
 
   // Apply decay for remaining weeks if completed
-  if (currentWeekMonday) {
+  if (currentWeekMonday && !currentWeekMonday.includes('NaN')) {
     let iterWeek = currentWeekMonday;
-    while (iterWeek) {
-      const sundayTime = new Date(getSundayDecayTime(iterWeek));
-      if (sundayTime.getTime() > now.getTime()) {
-        break; // ongoing week
+    let iterations = 0;
+    while (iterWeek && !iterWeek.includes('NaN') && iterations < 100) {
+      const sundayDecayStr = getSundayDecayTime(iterWeek);
+      if (!sundayDecayStr || sundayDecayStr.includes('NaN')) break;
+      const sundayTime = new Date(sundayDecayStr);
+      if (isNaN(sundayTime.getTime()) || sundayTime.getTime() > now.getTime()) {
+        break; // ongoing week or invalid date
       }
       applyWeeklyDecay(iterWeek);
       iterWeek = getNextWeekMonday(iterWeek);
+      iterations++;
     }
   }
 
