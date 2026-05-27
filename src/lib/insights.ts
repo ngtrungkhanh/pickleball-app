@@ -3359,7 +3359,7 @@ function addStoryCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
 
 function addPartnerCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnapshot, random?: () => number) {
   const repeated = snapshot.partnerEdges.filter(edge => edge.total >= 4);
-  const pairEdges = uniquePartnerPairs(repeated);
+  const pairEdges = uniquePartnerPairs(snapshot.partnerEdges);
   const gluedPairs = uniquePartnerPairs(snapshot.partnerEdges).sort((a, b) => b.edge.total - a.edge.total || b.edge.confidence - a.edge.confidence);
   const glued = gluedPairs[0]?.edge || null;
   const secondGlued = gluedPairs[1]?.edge || null;
@@ -3372,7 +3372,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
   pairEdges.forEach(({ edge, maxAbsImpact }) => {
     const otherMetric = snapshot.metrics.get(edge.otherId);
 
-    if (edge.rate >= 75) {
+    if (edge.total >= 4 && edge.rate >= 75) {
       const text = getRandomVariant(VARIANTS.perfect_duo({ edge }), random);
       addCandidate(candidates, snapshot, {
         type: 'perfect_duo',
@@ -3388,7 +3388,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
       });
     }
 
-    if (edge.rate <= 25) {
+    if (edge.total >= 4 && edge.rate <= 25) {
       const text = getRandomVariant(VARIANTS.bad_duo({ edge }), random);
       addCandidate(candidates, snapshot, {
         type: 'bad_duo',
