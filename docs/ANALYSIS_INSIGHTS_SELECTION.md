@@ -709,6 +709,16 @@ Audit after Batch 2:
 ### 86-Scenario Port Note
 
 The approved 86-scenario registry and randomized Vietnamese copy variants have
-since been ported into `src/lib/insights.ts`. Re-run the audit against the
-latest backup before further tuning selection weights or semantic groups.
+since been ported into `src/lib/insights.ts`.
+
+Latest handoff state:
+
+- Dev commit `4c01527` includes the current 86-rule registry, weekly ELO
+  rise/fall copy aligned to the weekly performance board, cleaned
+  `score_bully` markup, and the tightened `unlucky_draw` trigger/copy.
+- `unlucky_draw` now excludes players currently in the bottom 2, requires at
+  least 10 partner matches, and requires a bottom-2 partner share of at least
+  51% across the selected season/snapshot.
+- Re-run the audit against the latest backup before further tuning selection
+  weights or semantic groups.
 

@@ -305,6 +305,10 @@ Current analysis rules:
 - Hub insights are generated from the same snapshot with
   rarity/frequency/appearance metadata so rare events can be prioritized over
   always-available facts.
+- The current Hub insight registry has 86 implemented rule types with
+  Vietnamese copy variants. Rule docs live in
+  `docs/ANALYSIS_INSIGHTS_RULES.md`; selection/audit notes live in
+  `docs/ANALYSIS_INSIGHTS_SELECTION.md`.
 - Hub insight comments read from the shared local cache. Analysis should not
   auto-fetch online after mount; reload/direct route preload is the normal
   online reconciliation path when the user needs fresh data.
@@ -312,9 +316,9 @@ Current analysis rules:
   `wins/total` or `wins-total record`. Strong dominance wording should be
   reserved for players whose overall record/ELO supports that framing; otherwise
   describe dominant wins as isolated score highlights.
-- The first full insight dictionary target is 52 scenarios with one strong
-  evidence-backed sentence each. Expand to 4-5 variants per scenario only after
-  data correctness and tone are verified.
+- Insight copy and trigger changes should be reviewed against real dev data on
+  Vercel Preview before merge to production, especially for teasing scenarios
+  that mention weak partners, bottom ranks, or sharp ELO swings.
 
 Known gaps / good next work:
 

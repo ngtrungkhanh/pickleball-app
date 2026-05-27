@@ -10,6 +10,7 @@ deeper product, data, or UI details in `docs/`.
 - Production branch: `main`
 - Shared working branch: `dev`
 - Latest released feature commit after latest push: `d7d3eba`
+- Latest pushed `dev` commit: `4c01527` (`Refine analysis hub and restore flows`)
 - GitHub remote: `https://github.com/ngtrungkhanh/pickleball-app.git`
 
 Do not edit `main` directly. Work on `dev`, push `dev`, test Vercel Preview,
@@ -66,6 +67,10 @@ Read only when relevant:
   reload/F5 is the intended fresh-data action.
 - Admin dashboard supports both `.xlsx` bulk migration and `.json` full database backup/restore mechanisms.
 - Sports Ticker on Dashboard and Flash News Cards in `/analysis` are implemented.
+- Latest `dev` work includes compact `/analysis` Hub ELO layout, full-width ELO
+  explainer accordion, JSON restore season replacement/cache refresh, hybrid
+  Attack/Defense radar scoring, weekly ELO decay `>1500` and fewer than 8
+  matches, and tightened `unlucky_draw` insight copy/trigger.
 - Local demo routes such as `/ui-demo` and `/picker-demo` may exist on one
   machine for review, but should not be pushed unless explicitly requested.
 
@@ -82,7 +87,8 @@ Read only when relevant:
   canonical score-save replacement, and reload/F5 reconciliation before
   resuming insight-copy expansion work.
 - **Analysis Copy Review**: Review Hub insight comment tone on Vercel Preview
-  after the shared analysis core has real dev data.
+  after the shared analysis core has real dev data, especially weekly ELO
+  rise/fall, `score_bully`, and `unlucky_draw` wording.
 - **Analysis Insights Review**: The insight registry is implemented as 86 rule
   types with 5 Vietnamese copy variants where applicable, type-first weighted
   selection, semantic-group diversity, cooldown/soft pity, and the relative

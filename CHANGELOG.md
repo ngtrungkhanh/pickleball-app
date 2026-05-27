@@ -8,6 +8,8 @@ repo.
 - Production domain: `https://conchimnon.vercel.app/`
 - Latest released feature commit verified from Vercel/GitHub: `d7d3eba`
 - Commit message: `fix: prevent summary card clipping`
+- Latest pushed `dev` commit for preview validation: `4c01527`
+- Dev commit message: `Refine analysis hub and restore flows`
 
 ## Major Completed Work
 
@@ -22,6 +24,14 @@ repo.
 - Recalibrated Analysis Attack/Defense radar scoring with a hybrid raw +
   relative model so scores spread more naturally across the current group and
   season snapshot.
+- Updated weekly ELO activity decay to apply only above `1500` ELO and fewer
+  than 8 matches in the week.
+- Aligned `most_improved` and `free_fall` insight deltas with the weekly ELO
+  performance board, and adjusted copy to say "this week" instead of implying
+  a 10-match window.
+- Tightened `unlucky_draw` so it needs at least 10 partner matches, excludes
+  players currently in the bottom 2, and requires at least 51% of partner
+  matches with bottom-2 teammates across the selected season/snapshot.
 - Synced handoff docs around the implemented 86-scenario insight registry and
   the 1500 ELO starting rating.
 

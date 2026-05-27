@@ -16,6 +16,7 @@ https://pickleball-app-git-dev-ngtrungkhanhs-projects.vercel.app/
 Branch workflow:
 - main is production. Do not edit main directly.
 - dev is the shared working branch for all AI agents and all machines.
+- Latest pushed dev commit at session handoff: 4c01527 (`Refine analysis hub and restore flows`).
 - Always continue work on dev.
 - Before editing code, update dev from GitHub.
 - After finishing a clear unit of work, commit and push to dev so another AI or machine can continue.
@@ -57,6 +58,13 @@ Recent behavior updates to remember:
   Vietnamese copy variants. Read
   `docs/ANALYSIS_INSIGHTS_RULES.md` and `docs/ANALYSIS_INSIGHTS_SELECTION.md`
   before changing triggers, copy, semantic groups, or weights.
+- Latest dev analysis changes: compact Hub ELO layout, weekly ELO top-8 block,
+  full-width ELO explainer below Hub, hybrid Attack/Defense radar scoring,
+  weekly ELO decay only above 1500 when fewer than 8 matches are played, and
+  tightened `unlucky_draw` copy/trigger.
+- Admin JSON restore now replaces the dataset from the backup file, including
+  seasons/config/player-season settings where present, and refreshes the shared
+  IndexedDB route cache after restore.
 
 Working rules:
 - Do not touch main unless the user explicitly asks for a release.

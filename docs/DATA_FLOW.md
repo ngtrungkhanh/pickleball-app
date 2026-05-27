@@ -246,9 +246,12 @@ Client sync flow:
 6. After Admin JSON restore, the Admin client fetches authoritative app data and
    replaces the shared IndexedDB route cache so old local seasons/matches do not
    reappear.
-7. The Analysis page reads local cache by default. It only fetches online when
+7. New JSON backups include `schemaVersion`, `config`, and
+   `playerSeasonSettings`. Restore remains compatible with older backups that
+   do not include those fields.
+8. The Analysis page reads local cache by default. It only fetches online when
    the route is loaded/reloaded by the browser.
-8. Future phase: split full refresh into season-priority batches. The current
+9. Future phase: split full refresh into season-priority batches. The current
    implementation keeps full refresh tied to route preload/reload while the
    dataset is still small.
 
@@ -277,6 +280,9 @@ Client analysis derivation:
 - Player metrics derive wins, losses, win rate, current streak, recent form,
   points scored, points conceded, average conceded, attack, defense, brave,
   synergy, activity, fines, and recent matches directly from match rows.
+- Attack/Defense radar scores use a hybrid raw-score plus relative-percentile
+  model inside the selected season/snapshot. They remain grounded in average
+  points for and average points conceded.
 - Partner and opponent rows are directed edges keyed by player id and only count
   matches where that player actually appears. They include record, rate,
   average score diff, expected-result delta, confidence, and label.
