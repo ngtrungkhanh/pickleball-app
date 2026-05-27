@@ -288,9 +288,9 @@ export default function Dashboard({
       oneCycleWidth = marquee.offsetWidth / (repeatedInsights.length / insights.length);
     }
 
-    // Tốc độ chạy nhanh hơn thêm 10% (tổng cộng 21% nhanh hơn base)
+    // Giảm tốc độ chạy còn 80% tốc độ trước đó
     const baseSpeed = oneCycleWidth > 0 ? (oneCycleWidth / (65 * 60)) : 1.0;
-    const speed = baseSpeed * 1.21;
+    const speed = baseSpeed * 1.21 * 0.8;
 
     if (oneCycleWidth > 0 && Math.abs(translateXRef.current) >= oneCycleWidth) {
       translateXRef.current = translateXRef.current % oneCycleWidth;
