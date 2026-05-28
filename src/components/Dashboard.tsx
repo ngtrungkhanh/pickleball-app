@@ -275,22 +275,33 @@ export default function Dashboard({
       animationFrameIdRef.current = null;
     }
 
-    // Measure oneCycleWidth once at start to avoid layout thrashing
+    // Measure oneCycleWidth as the distance between child 0 and child insights.length to handle item margins/paddings perfectly
     let oneCycleWidth = 0;
-    if (marquee.children && marquee.children.length > insights.length) {
-      const parentLeft = marquee.getBoundingClientRect().left;
-      const childLeft = marquee.children[insights.length].getBoundingClientRect().left;
-      oneCycleWidth = childLeft - parentLeft;
-    }
+
+    const measureWidth = () => {
+      if (marquee.children && marquee.children.length > insights.length) {
+        const firstChild = marquee.children[0];
+        const targetChild = marquee.children[insights.length];
+        const dist = targetChild.getBoundingClientRect().left - firstChild.getBoundingClientRect().left;
+        if (dist > 0) {
+          oneCycleWidth = dist;
+        }
+      }
+    };
+
+    measureWidth();
+
+    // Re-measure after 1 second to ensure fonts/layout are fully loaded and correct
+    const measureTimeout = setTimeout(measureWidth, 1000);
 
     // Fallback if not ready
     if (oneCycleWidth <= 0) {
       oneCycleWidth = marquee.offsetWidth / (repeatedInsights.length / insights.length);
     }
 
-    // Giảm tốc độ chạy còn 80% tốc độ trước đó
+    // Giảm tốc độ chạy chậm lại thêm 20% nữa (nhân với 0.8)
     const baseSpeed = oneCycleWidth > 0 ? (oneCycleWidth / (65 * 60)) : 1.0;
-    const speed = baseSpeed * 1.21 * 0.8;
+    const speed = baseSpeed * 1.21 * 0.8 * 0.8;
 
     if (oneCycleWidth > 0 && Math.abs(translateXRef.current) >= oneCycleWidth) {
       translateXRef.current = translateXRef.current % oneCycleWidth;
@@ -299,14 +310,7 @@ export default function Dashboard({
 
     // Resize handler to update oneCycleWidth if window resizes
     const handleResize = () => {
-      if (marquee.children && marquee.children.length > insights.length) {
-        const parentLeft = marquee.getBoundingClientRect().left;
-        const childLeft = marquee.children[insights.length].getBoundingClientRect().left;
-        const newWidth = childLeft - parentLeft;
-        if (newWidth > 0) {
-          oneCycleWidth = newWidth;
-        }
-      }
+      measureWidth();
     };
     window.addEventListener('resize', handleResize);
 
@@ -336,6 +340,7 @@ export default function Dashboard({
     animationFrameIdRef.current = requestAnimationFrame(step);
 
     return () => {
+      clearTimeout(measureTimeout);
       window.removeEventListener('resize', handleResize);
       if (animationFrameIdRef.current) {
         cancelAnimationFrame(animationFrameIdRef.current);
