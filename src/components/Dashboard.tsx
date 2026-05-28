@@ -213,7 +213,7 @@ export default function Dashboard({
 
   const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(visiblePlayers as Parameters<typeof buildAnalysisSnapshot>[0], viewedMatches as Parameters<typeof buildAnalysisSnapshot>[1], loseMoney), [visiblePlayers, viewedMatches, loseMoney]);
 
-  const insightsReady = sharedData.syncState !== 'syncing' && insightSeed !== null && insightSelectionState !== null;
+  const insightsReady = insightSeed !== null && insightSelectionState !== null;
   const insightSelectionResult = useMemo(() => (
     insightsReady
       ? generateInsightSelectionResultFromSnapshot(analysisSnapshot, {
@@ -294,19 +294,11 @@ export default function Dashboard({
     // Re-measure after 1 second to ensure fonts/layout are fully loaded and correct
     const measureTimeout = setTimeout(measureWidth, 1000);
 
-    // Fallback if not ready
-    if (oneCycleWidth <= 0) {
-      oneCycleWidth = marquee.offsetWidth / (repeatedInsights.length / insights.length);
-    }
-
-    // Giảm tốc độ chạy chậm lại thêm 20% nữa (nhân với 0.8)
-    const baseSpeed = oneCycleWidth > 0 ? (oneCycleWidth / (65 * 60)) : 1.0;
-    const speed = baseSpeed * 1.21 * 0.8 * 0.8;
-
     if (oneCycleWidth > 0 && Math.abs(translateXRef.current) >= oneCycleWidth) {
       translateXRef.current = translateXRef.current % oneCycleWidth;
     }
-    marquee.style.transform = `translateX(${translateXRef.current}px)`;
+    // Use translate3d for better hardware acceleration
+    marquee.style.transform = `translate3d(${translateXRef.current}px, 0, 0)`;
 
     // Resize handler to update oneCycleWidth if window resizes
     const handleResize = () => {
@@ -314,26 +306,44 @@ export default function Dashboard({
     };
     window.addEventListener('resize', handleResize);
 
-    const step = () => {
+    let lastTime: number | null = null;
+    // Tốc độ cố định: 35 pixels mỗi giây (đảm bảo siêu mượt và dễ đọc)
+    const PIXELS_PER_SECOND = 35;
+
+    const step = (timestamp: number) => {
       if (isPausedRef.current) {
+        lastTime = timestamp;
         animationFrameIdRef.current = requestAnimationFrame(step);
         return;
       }
 
-      translateXRef.current -= speed;
+      if (lastTime === null) {
+        lastTime = timestamp;
+      }
+      
+      const deltaTime = timestamp - lastTime;
+      lastTime = timestamp;
+
+      // Giới hạn deltaTime tối đa 50ms (20fps) để tránh giật cục quá lớn nếu tab bị ẩn
+      const safeDeltaTime = Math.min(deltaTime, 50);
+      
+      const moveAmount = (PIXELS_PER_SECOND * safeDeltaTime) / 1000;
+      translateXRef.current -= moveAmount;
       
       if (oneCycleWidth > 0) {
         if (Math.abs(translateXRef.current) >= oneCycleWidth) {
-          translateXRef.current += oneCycleWidth;
+          // Dùng modulo thay vì cộng để giữ chính xác phần thập phân, chống trôi dạt (drift)
+          translateXRef.current = translateXRef.current % oneCycleWidth;
         }
       } else {
-        const marqueeWidth = marquee.offsetWidth;
-        if (Math.abs(translateXRef.current) >= marqueeWidth / 2) {
-          translateXRef.current = 0;
+        // Fallback nếu chưa đo được
+        const fallbackWidth = marquee.offsetWidth / (repeatedInsights.length / insights.length);
+        if (fallbackWidth > 0 && Math.abs(translateXRef.current) >= fallbackWidth) {
+          translateXRef.current = translateXRef.current % fallbackWidth;
         }
       }
 
-      marquee.style.transform = `translateX(${translateXRef.current}px)`;
+      marquee.style.transform = `translate3d(${translateXRef.current}px, 0, 0)`;
       animationFrameIdRef.current = requestAnimationFrame(step);
     };
 
