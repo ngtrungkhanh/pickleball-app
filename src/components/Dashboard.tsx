@@ -307,8 +307,8 @@ export default function Dashboard({
     window.addEventListener('resize', handleResize);
 
     let lastTime: number | null = null;
-    // Tốc độ cố định: 35 pixels mỗi giây (đảm bảo siêu mượt và dễ đọc)
-    const PIXELS_PER_SECOND = 35;
+    // Tốc độ cố định: 38.5 pixels mỗi giây (đã tăng 10% từ 35 để cân bằng độ đọc và tốc độ)
+    const PIXELS_PER_SECOND = 38.5;
 
     const step = (timestamp: number) => {
       if (isPausedRef.current) {
