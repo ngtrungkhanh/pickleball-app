@@ -48,6 +48,7 @@ export type PlayerMetrics = AnalysisPlayer & {
   braveScore: number;
   synergyScore: number;
   formScore: number;
+  radarFormScore: number;
   activityScore: number;
   overallPs: number;
   streakCount: number;
@@ -209,6 +210,27 @@ function hybridScore(rawScore: number, relativeScore: number, total: number) {
   const blended = rawScore * 0.35 + relativeScore * 0.65;
   const confidence = sampleConfidence(total);
   return clamp(50 + (blended - 50) * confidence, 10, 100);
+}
+
+function styleContextWeight(total: number) {
+  return 0.55 + 0.2 * Math.min(1, Math.max(0, total) / 24);
+}
+
+function weightedRecentFormScore(matches: AnalysisMatch[], playerId: string) {
+  const recent = matches.slice(0, 10);
+  if (recent.length <= 0) return 50;
+
+  let weightedWins = 0;
+  let totalWeight = 0;
+  recent.forEach((match, index) => {
+    const weight = recent.length - index;
+    totalWeight += weight;
+    if (resultForPlayer(match, playerId) === 'W') {
+      weightedWins += weight;
+    }
+  });
+
+  return totalWeight > 0 ? (weightedWins / totalWeight) * 100 : 50;
 }
 
 function playerInMatch(match: AnalysisMatch, playerId: string) {
@@ -547,21 +569,44 @@ function buildPlayerMetrics(
     1,
     ...players.map(player => rankingMatches.filter(match => playerInMatch(match, player.id)).length)
   );
+  const scoreContextPrior = average(rankingMatches.map(match => numberValue(match.lose_score)));
+  const loserScorePrior = scoreContextPrior > 0 ? scoreContextPrior : 6.5;
 
   const scoreBaselines = players.map(player => {
     const playerMatches = rankingMatches.filter(match => playerInMatch(match, player.id));
     const total = playerMatches.length;
+    const winMatches = playerMatches.filter(match => resultForPlayer(match, player.id) === 'W');
+    const lossMatches = playerMatches.filter(match => resultForPlayer(match, player.id) === 'L');
     const pointsFor = playerMatches.reduce((sum, match) => sum + pointsForPlayer(match, player.id), 0);
     const pointsConceded = playerMatches.reduce((sum, match) => sum + pointsConcededByPlayer(match, player.id), 0);
+    const avgPointsFor = total > 0 ? pointsFor / total : 0;
+    const avgConceded = total > 0 ? pointsConceded / total : 0;
+    const avgPointsScoredInLosses = average(lossMatches.map(match => numberValue(match.lose_score)));
+    const avgPointsConcededInWins = average(winMatches.map(match => numberValue(match.lose_score)));
+    const lossSampleWeight = lossMatches.length / (lossMatches.length + 3);
+    const winSampleWeight = winMatches.length / (winMatches.length + 3);
+    const adjustedLossScored = lossMatches.length > 0
+      ? avgPointsScoredInLosses * lossSampleWeight + loserScorePrior * (1 - lossSampleWeight)
+      : loserScorePrior;
+    const adjustedWinConceded = winMatches.length > 0
+      ? avgPointsConcededInWins * winSampleWeight + loserScorePrior * (1 - winSampleWeight)
+      : loserScorePrior;
+    const contextWeight = styleContextWeight(total);
+    const overallWeight = 1 - contextWeight;
+    const attackBasis = total > 0 ? avgPointsFor * overallWeight + adjustedLossScored * contextWeight : 0;
+    const defenseBasis = total > 0 ? avgConceded * overallWeight + adjustedWinConceded * contextWeight : 0;
+
     return {
       playerId: player.id,
       total,
-      avgPointsFor: total > 0 ? pointsFor / total : 0,
-      avgConceded: total > 0 ? pointsConceded / total : 0,
+      avgPointsFor,
+      avgConceded,
+      attackBasis,
+      defenseBasis,
     };
   });
-  const attackValues = scoreBaselines.filter(row => row.total > 0).map(row => row.avgPointsFor);
-  const defenseValues = scoreBaselines.filter(row => row.total > 0).map(row => row.avgConceded);
+  const attackValues = scoreBaselines.filter(row => row.total > 0).map(row => row.attackBasis);
+  const defenseValues = scoreBaselines.filter(row => row.total > 0).map(row => row.defenseBasis);
   const scoreBaselineByPlayer = new Map(scoreBaselines.map(row => [row.playerId, row]));
   const weekMondayStr = getVietnamWeekMondayStr(now.toISOString());
   const startOfWeekMs = weekMondayStr ? new Date(`${weekMondayStr}T00:00:00+07:00`).getTime() : 0;
@@ -578,10 +623,12 @@ function buildPlayerMetrics(
     const avgPointsFor = total > 0 ? pointsFor / total : 0;
     const avgConceded = total > 0 ? pointsConceded / total : 0;
     const scoreBaseline = scoreBaselineByPlayer.get(player.id);
-    const rawAttackScore = clamp(((avgPointsFor - 5.5) / (10.0 - 5.5)) * 100, 10, 100);
-    const rawDefenseScore = clamp(((10.5 - avgConceded) / (10.5 - 6.0)) * 100, 10, 100);
-    const relativeAttackScore = percentileScore(scoreBaseline?.avgPointsFor ?? avgPointsFor, attackValues, true);
-    const relativeDefenseScore = percentileScore(scoreBaseline?.avgConceded ?? avgConceded, defenseValues, false);
+    const attackBasis = scoreBaseline?.attackBasis ?? avgPointsFor;
+    const defenseBasis = scoreBaseline?.defenseBasis ?? avgConceded;
+    const rawAttackScore = clamp(((attackBasis - 4.8) / 4.6) * 100, 10, 100);
+    const rawDefenseScore = clamp(((9.2 - defenseBasis) / 4.6) * 100, 10, 100);
+    const relativeAttackScore = percentileScore(attackBasis, attackValues, true);
+    const relativeDefenseScore = percentileScore(defenseBasis, defenseValues, false);
     const diffs = playerMatches.map(match => scoreDiffForPlayer(match, player.id));
     const closeWins = diffs.filter(diff => diff > 0 && diff <= 2).length;
     const closeLosses = diffs.filter(diff => diff < 0 && diff >= -2).length;
@@ -626,6 +673,7 @@ function buildPlayerMetrics(
     const formScore = last5.length > 0
       ? (last5.filter(match => resultForPlayer(match, player.id) === 'W').length / last5.length) * 100
       : 50;
+    const radarFormScore = weightedRecentFormScore(playerMatches, player.id);
     const overallPs = calculatePerformanceScore(player.id, playerMatches, elo.matchExpected);
     const partnerWinRates = new Map<string, { wins: number; total: number }>();
     playerMatches.forEach(match => {
@@ -668,6 +716,7 @@ function buildPlayerMetrics(
       braveScore: clamp(50 + overallPs * 200, 0, 100),
       synergyScore,
       formScore,
+      radarFormScore,
       activityScore: Math.min(100, (total / maxMatches) * 100),
       overallPs,
       streakCount: streak.count,
@@ -845,7 +894,7 @@ function profileForPlayer(
       defense: Math.round(metric?.defenseScore || 0),
       brave: Math.round(metric?.braveScore || 0),
       synergy: Math.round(metric?.synergyScore || 50),
-      form: Math.round(metric?.formScore || 50),
+      form: Math.round(metric?.radarFormScore || 50),
       experience: Math.round(metric?.activityScore || 0),
     },
     overallPS: metric?.overallPs || 0,

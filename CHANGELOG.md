@@ -19,6 +19,12 @@ repo.
 
 ### Analysis Hub, Restore, and Radar Calibration
 
+- Reworked Analysis Attack/Defense radar scoring so Attack emphasizes points
+  scored in losses and Defense emphasizes points conceded in wins, with
+  adaptive early-season weighting and sparse-sample shrinkage toward the
+  selected match set's average losing score.
+- Updated Profile radar Form to use a weighted view of up to 10 newest matches,
+  while preserving the existing 5-match form score for Hub insight rules.
 - Fixed Dashboard Sports Ticker animation so it does not restart from the first
   item after routine insight/cache re-renders.
 - Tightened `/analysis` Hub ELO layout, expanded the weekly ELO block, and
