@@ -288,12 +288,20 @@ Current analysis rules:
 - Player win/loss, form, streak, attack, defense, brave/performance score,
   activity, points scored, points conceded, and fines are derived directly from
   match rows.
-- Attack and defense radar scores use a hybrid of raw average points and
-  relative standing inside the selected player group, so they can spread across
-  the current season/filter while still being grounded in `avgPointsFor` and
-  `avgConceded`.
-- Defense uses average points conceded per match, not low points scored or low
-  activity.
+- Attack and defense radar scores use a hybrid raw-score plus
+  relative-percentile model inside the selected player group. Attack is based
+  primarily on points scored in losses, blended with average points scored.
+  Defense is based primarily on points conceded in wins, blended with average
+  points conceded.
+- Attack/Defense context weight starts near 55% early in a season and rises to
+  75% by 24 player matches. Missing win/loss context is shrunk toward the
+  selected match set's average losing score so sparse records do not create
+  extreme style scores.
+- Defense uses points conceded by opponents in the player's matches, not low
+  points scored or low activity.
+- Profile radar Form uses a weighted win rate across up to 10 newest matches,
+  with newer matches weighted more heavily. Insight rules that explicitly say
+  "5 recent matches" keep using the separate 5-match `formScore`.
 - Partner and opponent network rows use directed edges keyed by player id, not
   display name. Each edge only counts matches where that player actually
   appears and includes sample size, record, win rate, score diff,

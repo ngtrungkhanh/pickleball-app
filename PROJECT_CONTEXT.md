@@ -68,7 +68,7 @@ Read only when relevant:
 - Admin dashboard supports both `.xlsx` bulk migration and `.json` full database backup/restore mechanisms.
 - Sports Ticker on Dashboard and Flash News Cards in `/analysis` are implemented.
 - Latest `dev` work includes compact `/analysis` Hub ELO layout, full-width ELO
-  explainer accordion, JSON restore season replacement/cache refresh, hybrid
+  explainer accordion, JSON restore season replacement/cache refresh, adaptive
   Attack/Defense radar scoring, weekly ELO decay `>1500` and fewer than 8
   matches, and tightened `unlucky_draw` insight copy/trigger.
 - Local demo routes such as `/ui-demo` and `/picker-demo` may exist on one

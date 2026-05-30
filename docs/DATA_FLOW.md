@@ -280,9 +280,17 @@ Client analysis derivation:
 - Player metrics derive wins, losses, win rate, current streak, recent form,
   points scored, points conceded, average conceded, attack, defense, brave,
   synergy, activity, fines, and recent matches directly from match rows.
+- Profile radar Form is derived from a weighted win rate across up to 10 newest
+  player matches, with newer matches weighted more heavily. The existing
+  5-match `formScore` remains available for insight rules that explicitly talk
+  about 5 recent matches.
 - Attack/Defense radar scores use a hybrid raw-score plus relative-percentile
-  model inside the selected season/snapshot. They remain grounded in average
-  points for and average points conceded.
+  model inside the selected season/snapshot. Attack is based primarily on
+  points scored in losses, blended with average points scored; Defense is based
+  primarily on points conceded in wins, blended with average points conceded.
+  The context weight rises from roughly 55% early in a season to 75% by 24
+  player matches, with sparse win/loss context shrunk toward the snapshot's
+  average losing score.
 - Partner and opponent rows are directed edges keyed by player id and only count
   matches where that player actually appears. They include record, rate,
   average score diff, expected-result delta, confidence, and label.

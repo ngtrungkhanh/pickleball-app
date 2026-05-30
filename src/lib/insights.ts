@@ -2260,10 +2260,10 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
     } = ctx;
     return [
       `Cắt chuỗi đen nhờ tay to: Mạch thua ${row.priorStreak} trận của ${player.name} cuối cùng đã dừng lại khi ráp cặp thành công cùng Phao cứu sinh Top ELO ${partner.name}.`,
-      `Phao cứu sinh xuất hiện đúng lúc: ${player.name} cắt chuỗi đỏ ${row.priorStreak} trận nhờ được kẹp chung với tay vợt Top ELO ${partner.name} gánh kèo cực mạnh.`,
+      `Phao cứu sinh xuất hiện đúng lúc: ${player.name} cắt chuỗi thua ${row.priorStreak} trận nhờ được kẹp chung với tay vợt Top ELO ${partner.name} gánh kèo cực mạnh.`,
       `Ca hồi sinh từ cõi chết: Chuỗi ${row.priorStreak} thất bại liên tiếp của ${player.name} được giải hạn ngay khi đứng chung chiến tuyến với ${partner.name}.`,
       `Ráp cặp giải hạn thành công: ${player.name} chấm dứt mạch ${row.priorStreak} trận toàn thua nhờ sự bổ trợ đắc lực từ đồng đội thuộc Top đầu ELO ${partner.name}.`,
-      `Hạ nhiệt chuỗi đỏ: ${player.name} thoát khỏi cơn khủng hoảng ${row.priorStreak} trận gãy kèo liên tục khi bắt cặp cùng điểm tựa uy tín ${partner.name}.`,
+      `Hạ nhiệt chuỗi đen: ${player.name} thoát khỏi cơn khủng hoảng ${row.priorStreak} trận gãy kèo liên tục khi bắt cặp cùng điểm tựa uy tín ${partner.name}.`,
     ];
   },
   anchor_drag: (ctx) => {
@@ -2293,27 +2293,16 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
   },
   parasite_win: (ctx) => {
     const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
+      edge, winShareFromPartner, winRateWithoutPartner, otherRank,
+      winsWithoutPartner, totalWithoutPartner,
+      round = (v: number) => Math.round(v)
     } = ctx;
     return [
-      `Sức mạnh của việc bám càng: Ghi nhận tới ${round(winShareFromPartner * 100)}% số trận thắng của ${edge.playerName} là nhờ bắt cặp cùng Top ${otherRank} ${edge.otherName}, tách lẻ ra là tỷ lệ thắng tụt xuống ${winRateWithoutPartner}%.`,
-      `Bạn cùng tiến hệ phụ thuộc: ${edge.playerName} có ${round(winShareFromPartner * 100)}% số lần cười chiến thắng là khi đứng cạnh ${edge.otherName}, vắng bóng tay to này là tỷ lệ thắng chỉ còn ${winRateWithoutPartner}%.`,
-      `Hội chứng khuyết tay to: Tách khỏi Top ${otherRank} ${edge.otherName} là tỷ lệ thắng của ${edge.playerName} rớt về ${winRateWithoutPartner}%, dù ${round(winShareFromPartner * 100)}% số trận thắng cả mùa là đứng chung sân.`,
-      `Sự phụ thuộc thông số rõ rệt: ${edge.playerName} bỏ túi ${round(winShareFromPartner * 100)}% số trận thắng khi ráp sân với ${edge.otherName}, không có điểm tựa này thì hiệu suất chỉ đạt ${winRateWithoutPartner}%.`,
-      `Kèo thơm đi kèm bảo chứng: ${edge.playerName} thắng tới ${round(winShareFromPartner * 100)}% số trận khi kết hợp với Top ${otherRank} ${edge.otherName}, thiếu vắng đối tác này thì tỷ lệ thắng chỉ ở mức ${winRateWithoutPartner}%.`,
+      `Sức mạnh của việc bám càng: Ghi nhận tới ${round(winShareFromPartner * 100)}% số trận thắng của ${edge.playerName} là nhờ bắt cặp cùng Top ${otherRank} ${edge.otherName} (thắng ${edge.wins}/${edge.total} trận), tách lẻ ra là tỷ lệ thắng tụt xuống ${winRateWithoutPartner}% (thắng ${winsWithoutPartner}/${totalWithoutPartner} trận).`,
+      `Bạn cùng tiến hệ phụ thuộc: ${edge.playerName} có ${round(winShareFromPartner * 100)}% số lần cười chiến thắng là khi đứng cạnh ${edge.otherName} (thắng ${edge.wins}/${edge.total} trận), vắng bóng tay to này là tỷ lệ thắng chỉ còn ${winRateWithoutPartner}% (${winsWithoutPartner}/${totalWithoutPartner} trận).`,
+      `Hội chứng khuyết tay to: Tách khỏi Top ${otherRank} ${edge.otherName} là tỷ lệ thắng của ${edge.playerName} rớt về ${winRateWithoutPartner}% (${winsWithoutPartner}/${totalWithoutPartner} trận), dù ${round(winShareFromPartner * 100)}% số trận thắng cả mùa là đứng chung sân (${edge.wins}/${edge.total} trận).`,
+      `Sự phụ thuộc thông số rõ rệt: ${edge.playerName} bỏ túi ${round(winShareFromPartner * 100)}% số trận thắng khi ráp sân với ${edge.otherName} (thắng ${edge.wins}/${edge.total} trận), không có điểm tựa này thì hiệu suất chỉ đạt ${winRateWithoutPartner}% (${winsWithoutPartner}/${totalWithoutPartner} trận).`,
+      `Kèo thơm đi kèm bảo chứng: ${edge.playerName} thắng tới ${round(winShareFromPartner * 100)}% số trận (${edge.wins}/${edge.total} trận) khi kết hợp với Top ${otherRank} ${edge.otherName}, thiếu vắng đối tác này thì tỷ lệ thắng chỉ ở mức ${winRateWithoutPartner}% (${winsWithoutPartner}/${totalWithoutPartner} trận).`,
     ];
   },
   gatekeeper_boss: (ctx) => {
@@ -3626,7 +3615,14 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
     const winShareFromPartner = edge.wins / playerMetric.wins;
 
     if (edge.wins >= 4 && winShareFromPartner >= 0.6 && matchesWithoutPartner.length >= 3 && winRateWithoutPartner < 30) {
-      const text = getRandomVariant(VARIANTS.parasite_win({ edge, winShareFromPartner, winRateWithoutPartner, otherRank }), random);
+      const text = getRandomVariant(VARIANTS.parasite_win({
+        edge,
+        winShareFromPartner,
+        winRateWithoutPartner,
+        otherRank,
+        winsWithoutPartner,
+        totalWithoutPartner: matchesWithoutPartner.length
+      }), random);
       addCandidate(candidates, snapshot, {
         type: 'parasite_win',
         title: '🧲 BÁM CÀNG KIẾM ĐIỂM',
@@ -4229,15 +4225,19 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
     });
 
   snapshot.playerMetrics.forEach(metric => {
-    if (eloKing && metric.total > 0) {
-      const kingWins = snapshot.rankingMatches.filter(m => playerInMatch(m, metric.id) && resultForPlayer(m, metric.id) === 'W' && playerInMatch(m, eloKing.id)).length;
+    if (eloKing && metric.total > 0 && metric.id !== eloKing.id) {
+      const kingWins = snapshot.rankingMatches.filter(m =>
+        playerInMatch(m, metric.id) &&
+        resultForPlayer(m, metric.id) === 'W' &&
+        opponentIdsForPlayer(m, metric.id).includes(eloKing.id)
+      ).length;
       if (kingWins >= 6) {
         const text = getRandomVariant(VARIANTS.boss_hunter({ metric, kingWins, kingName: eloKing.name }), random);
         addCandidate(candidates, snapshot, {
           type: 'boss_hunter',
           title: '🏹 THỢ SĂN TRÙM',
           group: 'opponent',
-          participantIds: [metric.id],
+          participantIds: [metric.id, eloKing.id],
           rarity: 'rare',
           frequency: 'rare',
           baseWeight: 58,
