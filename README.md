@@ -74,7 +74,8 @@ Before assuming local code is production-current, compare against Vercel
 Deployments:
 
 - Domain: `conchimnon.vercel.app`
-- Latest released feature commit after latest sync: `d7d3eba`
+- Latest production `main` commit after latest sync: `120e7ce`
+- Latest released feature commit after latest sync: `cd2d0f8`
 
 ## Repo Layout
 

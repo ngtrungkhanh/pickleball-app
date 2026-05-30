@@ -6,10 +6,11 @@ repo.
 ## Current Production Snapshot
 
 - Production domain: `https://conchimnon.vercel.app/`
-- Latest released feature commit verified from Vercel/GitHub: `d7d3eba`
-- Commit message: `fix: prevent summary card clipping`
-- Latest pushed `dev` commit for preview validation: `4c01527`
-- Dev commit message: `Refine analysis hub and restore flows`
+- Latest production `main` commit verified from GitHub: `120e7ce`
+- Main commit message: `Merge dev into main`
+- Latest released feature commit: `cd2d0f8`
+- Feature commit message: `Refine analysis radar scoring`
+- Latest pushed `dev` commit: `cd2d0f8`
 
 ## Major Completed Work
 

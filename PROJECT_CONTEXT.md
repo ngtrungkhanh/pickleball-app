@@ -9,8 +9,9 @@ deeper product, data, or UI details in `docs/`.
 - Dev preview: `https://pickleball-app-git-dev-ngtrungkhanhs-projects.vercel.app/`
 - Production branch: `main`
 - Shared working branch: `dev`
-- Latest released feature commit after latest push: `d7d3eba`
-- Latest pushed `dev` commit: `4c01527` (`Refine analysis hub and restore flows`)
+- Latest production `main` commit after latest push: `120e7ce` (`Merge dev into main`)
+- Latest released feature commit: `cd2d0f8` (`Refine analysis radar scoring`)
+- Latest pushed `dev` commit: `cd2d0f8` (`Refine analysis radar scoring`)
 - GitHub remote: `https://github.com/ngtrungkhanh/pickleball-app.git`
 
 Do not edit `main` directly. Work on `dev`, push `dev`, test Vercel Preview,
@@ -67,34 +68,39 @@ Read only when relevant:
   reload/F5 is the intended fresh-data action.
 - Admin dashboard supports both `.xlsx` bulk migration and `.json` full database backup/restore mechanisms.
 - Sports Ticker on Dashboard and Flash News Cards in `/analysis` are implemented.
-- Latest `dev` work includes compact `/analysis` Hub ELO layout, full-width ELO
-  explainer accordion, JSON restore season replacement/cache refresh, adaptive
-  Attack/Defense radar scoring, weekly ELO decay `>1500` and fewer than 8
-  matches, and tightened `unlucky_draw` insight copy/trigger.
+- Latest released work includes compact `/analysis` Hub ELO layout, full-width
+  ELO explainer accordion, JSON restore season replacement/cache refresh,
+  adaptive Attack/Defense radar scoring, weighted 10-match Profile radar Form,
+  weekly ELO decay `>1500` and fewer than 8 matches, and tightened Hub insight
+  copy/triggers.
 - Local demo routes such as `/ui-demo` and `/picker-demo` may exist on one
   machine for review, but should not be pushed unless explicitly requested.
 
 ## Current Pending Tasks (Next Session)
 
-- **Dev Preview Validation**: Review Dashboard ticker, Analysis Flash News
-  Cards, Hall of Fame, Pair analysis, and Hub layout on Vercel Preview.
+- **Production Validation**: Review Dashboard ticker, Analysis Flash News
+  Cards, Hall of Fame, Pair analysis, Hub layout, and Profile radar scores on
+  Production after the latest `main` deployment finishes.
 - **Admin JSON Restore Review**: Validate that JSON restore replaces seasons
   exactly from the backup file and refreshes the shared IndexedDB cache so old
   seasons do not reappear.
 - **Analysis Radar Review**: Validate the calibrated Attack/Defense radar
-  scores with real dev data across multiple seasons/backups.
+  scores and weighted 10-match Form with real production/dev data across
+  multiple seasons/backups.
 - **Shared Data Cache Review**: Validate local-first Dashboard/Analysis cache,
   canonical score-save replacement, and reload/F5 reconciliation before
   resuming insight-copy expansion work.
-- **Analysis Copy Review**: Review Hub insight comment tone on Vercel Preview
-  after the shared analysis core has real dev data, especially weekly ELO
-  rise/fall, `score_bully`, and `unlucky_draw` wording.
+- **Analysis Copy Review**: Review Hub insight comment tone on Production and
+  Preview with real data, especially weekly ELO rise/fall, `score_bully`, and
+  relationship/dependency wording.
 - **Analysis Insights Review**: The insight registry is implemented as 86 rule
   types with 5 Vietnamese copy variants where applicable, type-first weighted
   selection, semantic-group diversity, cooldown/soft pity, and the relative
   `defense_wall` trigger. Next review Vercel Preview with real dev data, then
   tune wording/rule weights if needed.
-- **Merge & Deploy**: Validate `dev` on Vercel preview, then merge to `main`.
+- **Local Environment Cleanup**: Local `npm run build` currently reaches
+  compile/TypeScript successfully but fails prerendering `/analysis` when
+  `.env.local` contains a direct Vercel Postgres URL instead of a pooled URL.
 
 ## Architecture Snapshot
 
