@@ -4229,15 +4229,19 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
     });
 
   snapshot.playerMetrics.forEach(metric => {
-    if (eloKing && metric.total > 0) {
-      const kingWins = snapshot.rankingMatches.filter(m => playerInMatch(m, metric.id) && resultForPlayer(m, metric.id) === 'W' && playerInMatch(m, eloKing.id)).length;
+    if (eloKing && metric.total > 0 && metric.id !== eloKing.id) {
+      const kingWins = snapshot.rankingMatches.filter(m =>
+        playerInMatch(m, metric.id) &&
+        resultForPlayer(m, metric.id) === 'W' &&
+        opponentIdsForPlayer(m, metric.id).includes(eloKing.id)
+      ).length;
       if (kingWins >= 6) {
         const text = getRandomVariant(VARIANTS.boss_hunter({ metric, kingWins, kingName: eloKing.name }), random);
         addCandidate(candidates, snapshot, {
           type: 'boss_hunter',
           title: '🏹 THỢ SĂN TRÙM',
           group: 'opponent',
-          participantIds: [metric.id],
+          participantIds: [metric.id, eloKing.id],
           rarity: 'rare',
           frequency: 'rare',
           baseWeight: 58,

@@ -13,6 +13,10 @@ repo.
 
 ## Major Completed Work
 
+### Bug Fixes
+
+- Fixed `boss_hunter` ("Thợ săn trùm" / "Đối thủ khó chịu của nhà vua") insight trigger: excluded the ELO King from triggering this rule against themselves, and ensured it only counts actual wins *against* the ELO King (excluding matches where the player and ELO King were on the same team).
+
 ### Analysis Hub, Restore, and Radar Calibration
 
 - Fixed Dashboard Sports Ticker animation so it does not restart from the first
