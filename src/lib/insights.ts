@@ -2523,11 +2523,11 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
       absRound = (v: number) => Math.abs(Math.round(v))
     } = ctx;
     return [
-      `Vừa mất thứ hạng vừa hao tài lộc: Đứng ở nhóm chót BXH, ${metric.name} còn kiêm luôn danh hiệu chuyên cần nộp phạt với số tiền ${topFine.money.toLocaleString('vi-VN')}đ.`,
-      `Kèo này nhân đôi nỗi sầu: ${metric.name} vừa ngụp lặn ở nhóm cuối BXH, vừa dẫn đầu danh sách đóng góp quỹ phạt với ${topFine.money.toLocaleString('vi-VN')}đ.`,
-      `Cú đúp không ai mong muốn: ${metric.name} đóng góp tới ${topFine.money.toLocaleString('vi-VN')}đ vào quỹ CLB dù đang đứng ở nhóm dưới bảng xếp hạng.`,
-      `Vừa chưa may mắn về thứ hạng, ${metric.name} còn hào phóng tài trợ ${topFine.money.toLocaleString('vi-VN')}đ tiền phạt cho cả sân.`,
-      `Thử thách bản lĩnh vượt khó: ${metric.name} đang chật vật ở nhóm dưới BXH và tạm dẫn đầu danh sách nộp phạt với tổng số tiền ${topFine.money.toLocaleString('vi-VN')}đ.`,
+      `Vừa hụt hơi trên BXH vừa đau ví: ${metric.name} đang ở nhóm cuối và tạm dẫn đầu danh sách nộp phạt với ${topFine.money.toLocaleString('vi-VN')}đ.`,
+      `Kèo này hơi kép: thứ hạng của ${metric.name} chưa sáng lên, còn quỹ phạt thì đã nhận thêm ${topFine.money.toLocaleString('vi-VN')}đ từ tay vợt này.`,
+      `Cú đúp hơi chát: ${metric.name} vừa đứng ở nhóm dưới BXH, vừa góp nhiều nhất vào quỹ phạt với ${topFine.money.toLocaleString('vi-VN')}đ.`,
+      `BXH chưa chiều lòng, ví tiền cũng chưa tha: ${metric.name} đã nộp ${topFine.money.toLocaleString('vi-VN')}đ tiền phạt, cao nhất trong nhóm hiện tại.`,
+      `Một mặt trận cần gỡ gạc: ${metric.name} đang chật vật ở nhóm dưới BXH và cũng là người nộp phạt nhiều nhất với ${topFine.money.toLocaleString('vi-VN')}đ.`,
     ];
   },
   spring_jump: (ctx) => {
