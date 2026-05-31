@@ -5,6 +5,67 @@ import { History, Clock, X, Trash2, Calendar, AlertTriangle, Loader2 } from 'luc
 import { deleteMatchAction } from '@/app/actions';
 import { isGuestId } from '@/lib/guest';
 
+type PlayerNameMode = 'full' | 'tiny';
+
+function normalizedName(value: unknown) {
+  const fullName = String(value || '').replace(/\s+/g, ' ').trim();
+  return fullName;
+}
+
+function nameParts(value: unknown) {
+  return normalizedName(value).split(' ').filter(Boolean);
+}
+
+function fitLabel(value: string, maxChars: number) {
+  const chars = Array.from(value);
+  if (chars.length <= maxChars) return value;
+  if (maxChars <= 3) return chars.slice(0, maxChars).join('');
+  return `${chars.slice(0, maxChars - 3).join('')}...`;
+}
+
+function givenNameOf(value: unknown) {
+  const parts = nameParts(value);
+  return parts[parts.length - 1] || normalizedName(value);
+}
+
+function tinyPlayerName(players: any[], fullName: string) {
+  if (!fullName) return '--';
+
+  const givenName = givenNameOf(fullName);
+  const normalizedGiven = givenName.toLocaleLowerCase('vi-VN');
+  const hasDuplicateGivenName = players.some(player =>
+    normalizedName(player?.name) !== fullName &&
+    givenNameOf(player?.name).toLocaleLowerCase('vi-VN') === normalizedGiven
+  );
+
+  if (!hasDuplicateGivenName) return fitLabel(givenName, 7);
+
+  const initials = nameParts(fullName)
+    .slice(0, -1)
+    .slice(0, 2)
+    .map(part => Array.from(part)[0]?.toLocaleUpperCase('vi-VN'))
+    .filter(Boolean)
+    .join('.');
+
+  return fitLabel(initials ? `${initials}.${givenName}` : givenName, 9);
+}
+
+function playerName(players: any[], id: string, mode: PlayerNameMode = 'full') {
+  if (isGuestId(id)) return 'Khách';
+  const fullName = players.find(p => p.id === id)?.name ?? id;
+  if (mode === 'tiny') return tinyPlayerName(players, fullName);
+  return fullName;
+}
+
+function MobilePlayerName({ players, id, className }: { players: any[]; id: string; className?: string }) {
+  const fullName = playerName(players, id);
+  return (
+    <span className={cn('sm:hidden', className)} data-mobile-player-name title={fullName}>
+      {playerName(players, id, 'tiny')}
+    </span>
+  );
+}
+
 // ─── Delete confirm modal ─────────────────────────────────────────────────────
 function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
   return (
@@ -156,7 +217,7 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
 
 // ─── Shared match card (used in modal) ───────────────────────────────────────
 function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }: { m: any; players: any[]; onDelete: () => void; canEdit: boolean; isDeleting?: boolean; matchExpected?: any }) {
-  const name = (id: string) => players.find(p => p.id === id)?.name ?? id;
+  const name = (id: string, mode: PlayerNameMode = 'full') => playerName(players, id, mode);
   const d = new Date(m.date);
   const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
@@ -173,24 +234,37 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
           </button>
         )}
       </div>
-      <div className="px-4 py-4 flex items-center gap-3">
+      <div className="px-4 py-4 flex items-center gap-3" data-mobile-match-row>
         <div className="flex-1 min-w-0 text-right space-y-0.5">
-          <div className="text-sm font-black text-white/90 truncate">{name(m.win_1)}</div>
-          {m.win_2 && <div className="text-sm font-black text-white/90 truncate">{name(m.win_2)}</div>}
+          <MobilePlayerName players={players} id={m.win_1} className="text-sm font-black text-white/90 truncate" />
+          <div className="hidden text-sm font-black text-white/90 truncate sm:block">{name(m.win_1)}</div>
+          {m.win_2 && (
+            <>
+              <MobilePlayerName players={players} id={m.win_2} className="text-sm font-black text-white/90 truncate" />
+              <div className="hidden text-sm font-black text-white/90 truncate sm:block">{name(m.win_2)}</div>
+            </>
+          )}
         </div>
         <div className="flex flex-col items-center shrink-0">
           <div className="px-4 py-2 rounded-2xl bg-primary/10 border border-primary/20 text-primary font-black text-sm tabular-nums shadow-lg shadow-primary/5">
-            {m.win_score}–{m.lose_score}
+            <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
           </div>
           {expected && (
-            <span className="text-[9px] font-bold text-white/30 mt-1 block tracking-tight">
-              Dự đoán trước trận: {Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%
+            <span className="text-[9px] font-bold text-white/30 mt-1 block tracking-tight whitespace-nowrap">
+              <span className="sm:hidden">{Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%</span>
+              <span className="hidden sm:inline">Dự đoán trước trận: {Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%</span>
             </span>
           )}
         </div>
         <div className="flex-1 min-w-0 text-left space-y-0.5">
-          <div className="text-sm font-black text-white/90 truncate">{name(m.lose_1)}</div>
-          {m.lose_2 && <div className="text-sm font-black text-white/90 truncate">{name(m.lose_2)}</div>}
+          <MobilePlayerName players={players} id={m.lose_1} className="text-sm font-black text-white/90 truncate" />
+          <div className="hidden text-sm font-black text-white/90 truncate sm:block">{name(m.lose_1)}</div>
+          {m.lose_2 && (
+            <>
+              <MobilePlayerName players={players} id={m.lose_2} className="text-sm font-black text-white/90 truncate" />
+              <div className="hidden text-sm font-black text-white/90 truncate sm:block">{name(m.lose_2)}</div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -203,7 +277,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [, start] = useTransition();
-  const name = (id: string) => players.find(p => p.id === id)?.name ?? id;
+  const name = (id: string, mode: PlayerNameMode = 'full') => playerName(players, id, mode);
 
   if (matches.length === 0) return (
     <div className="rounded-2xl border border-white/[0.06] bg-slate-900/80 py-16 text-center text-white/15 text-[10px] font-black uppercase tracking-[0.3em]">
@@ -295,7 +369,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
               </div>
 
               {/* ── MOBILE ───────────────────────────────────────────────── */}
-              <div className="sm:hidden px-4 py-3">
+              <div className="sm:hidden px-4 py-3" data-mobile-match-row>
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-[10px] font-bold text-white/25 flex items-center gap-1.5">
                     <span className="text-primary/50 font-black">{m.season ?? 'S1'}</span>
@@ -312,24 +386,24 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
 
                 <div className="flex items-center gap-2">
                   <div className="flex-1 min-w-0 flex flex-col gap-0.5 text-right">
-                    <span className="text-[13px] font-bold text-white/85 truncate leading-snug">{name(m.win_1)}</span>
-                    {isDouble && <span className="text-[13px] font-bold text-white/85 truncate leading-snug">{name(m.win_2)}</span>}
+                    <MobilePlayerName players={players} id={m.win_1} className="text-[13px] font-bold text-white/85 truncate leading-snug" />
+                    {isDouble && <MobilePlayerName players={players} id={m.win_2} className="text-[13px] font-bold text-white/85 truncate leading-snug" />}
                   </div>
 
                   <div className="shrink-0 flex flex-col items-center">
                     <div className="min-w-[68px] text-center px-2.5 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-black text-sm tabular-nums whitespace-nowrap">
-                      {m.win_score}–{m.lose_score}
+                      <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
                     </div>
                     {matchExpected?.get(m.id) && (
-                      <span className="text-[8px] font-bold text-white/30 mt-1 block tracking-tight">
-                        Dự đoán trước trận: {Math.round(matchExpected.get(m.id).winProb * 100)}% - {Math.round(matchExpected.get(m.id).loseProb * 100)}%
+                      <span className="text-[8px] font-bold text-white/30 mt-1 block tracking-tight whitespace-nowrap">
+                        {Math.round(matchExpected.get(m.id).winProb * 100)}% - {Math.round(matchExpected.get(m.id).loseProb * 100)}%
                       </span>
                     )}
                   </div>
 
                   <div className="flex-1 min-w-0 flex flex-col gap-0.5 text-left">
-                    <span className="text-[13px] font-bold text-white/85 truncate leading-snug">{name(m.lose_1)}</span>
-                    {isDouble && <span className="text-[13px] font-bold text-white/85 truncate leading-snug">{name(m.lose_2)}</span>}
+                    <MobilePlayerName players={players} id={m.lose_1} className="text-[13px] font-bold text-white/85 truncate leading-snug" />
+                    {isDouble && <MobilePlayerName players={players} id={m.lose_2} className="text-[13px] font-bold text-white/85 truncate leading-snug" />}
                   </div>
                 </div>
               </div>
