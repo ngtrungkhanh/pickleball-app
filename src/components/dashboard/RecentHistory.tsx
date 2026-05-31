@@ -66,7 +66,7 @@ function playerName(players: any[], id: string, mode: PlayerNameMode = 'full') {
 function MobilePlayerName({ players, id, className }: { players: any[]; id: string; className?: string }) {
   const fullName = playerName(players, id);
   return (
-    <span className={cn('sm:hidden', className)} data-mobile-player-name title={fullName}>
+    <span className={cn('block sm:hidden', className)} data-mobile-player-name title={fullName}>
       {playerName(players, id, 'tiny')}
     </span>
   );
@@ -243,26 +243,45 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
                 <div className="h-px flex-1 bg-white/[0.05]" />
                 <span className="text-[10px] text-white/20 font-bold uppercase tracking-widest">{list.length} trận</span>
               </div>
-              <div className="space-y-5">
+              <div className="space-y-6">
                 {groupMatchesByDay(list).map(day => (
-                  <div key={day.key} className="space-y-2.5">
-                    <div className="flex items-center gap-3 px-1">
-                      <div className={cn('h-px flex-1', day.isToday ? 'bg-primary/25' : 'bg-white/[0.05]')} />
+                  <div key={day.key} className="space-y-3">
+                    <div className={cn(
+                      'sticky top-0 z-10 overflow-hidden rounded-xl border px-3 py-2.5 shadow-lg backdrop-blur-md',
+                      day.isToday
+                        ? 'border-primary/25 bg-emerald-950/80 shadow-primary/5'
+                        : 'border-white/[0.07] bg-slate-900/95 shadow-black/10'
+                    )}>
                       <div className={cn(
-                        'shrink-0 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest',
+                        'absolute inset-y-0 left-0 w-1',
+                        day.isToday ? 'bg-primary' : 'bg-white/15'
+                      )} />
+                      <div className="flex items-center justify-between gap-3 pl-1">
+                        <div className="min-w-0 flex items-center gap-2">
+                          <Calendar className={cn('w-3.5 h-3.5 shrink-0', day.isToday ? 'text-primary' : 'text-white/35')} />
+                          <span className={cn(
+                            'truncate text-[11px] font-black uppercase tracking-[0.18em]',
+                            day.isToday ? 'text-primary' : 'text-white/50'
+                          )}>
+                            {day.isToday ? 'Hôm nay' : day.dateLabel}
+                          </span>
+                          {day.isToday && (
+                            <span className="shrink-0 text-[10px] font-black text-primary/45 tabular-nums">
+                              {day.dateLabel}
+                            </span>
+                          )}
+                        </div>
+                        <span className={cn(
+                          'shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest tabular-nums',
                         day.isToday
                           ? 'border-primary/25 bg-primary/10 text-primary'
-                          : 'border-white/[0.06] bg-white/[0.025] text-white/35'
-                      )}>
-                        <Calendar className="w-3 h-3 opacity-70" />
-                        <span>{day.isToday ? 'Hôm nay' : day.dateLabel}</span>
-                        {day.isToday && <span className="text-primary/45">{day.dateLabel}</span>}
-                        <span className="text-white/20">·</span>
-                        <span>{day.matches.length} trận</span>
+                          : 'border-white/[0.08] bg-white/[0.04] text-white/40'
+                        )}>
+                          {day.matches.length} trận
+                        </span>
                       </div>
-                      <div className={cn('h-px flex-1', day.isToday ? 'bg-primary/25' : 'bg-white/[0.05]')} />
                     </div>
-                    <div className={cn('space-y-2 border-l pl-3', day.isToday ? 'border-primary/25' : 'border-white/[0.05]')}>
+                    <div className={cn('space-y-2 border-l-2 pl-3.5', day.isToday ? 'border-primary/35' : 'border-white/[0.07]')}>
                       {day.matches.map((m: any) => (
                         <MatchCard key={m.id} m={m} players={players} canEdit={canEdit} isDeleting={isDeletingId === m.id} onDelete={() => setDeleteTarget(m.id)} matchExpected={matchExpected} />
                       ))}
