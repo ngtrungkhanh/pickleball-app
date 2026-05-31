@@ -6,6 +6,12 @@ import { deleteMatchAction } from '@/app/actions';
 import { isGuestId } from '@/lib/guest';
 
 type PlayerNameMode = 'full' | 'tiny';
+type DayMatchGroup = {
+  key: string;
+  dateLabel: string;
+  isToday: boolean;
+  matches: any[];
+};
 
 function normalizedName(value: unknown) {
   const fullName = String(value || '').replace(/\s+/g, ' ').trim();
@@ -64,6 +70,41 @@ function MobilePlayerName({ players, id, className }: { players: any[]; id: stri
       {playerName(players, id, 'tiny')}
     </span>
   );
+}
+
+function dateKeyOf(value: Date | string) {
+  const date = value instanceof Date ? value : new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatDayDate(value: Date | string) {
+  return new Date(value).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+}
+
+function groupMatchesByDay(matches: any[]): DayMatchGroup[] {
+  const todayKey = dateKeyOf(new Date());
+  const groups = new Map<string, DayMatchGroup>();
+
+  matches.forEach(match => {
+    const key = dateKeyOf(match.date);
+    const current = groups.get(key);
+    if (current) {
+      current.matches.push(match);
+      return;
+    }
+
+    groups.set(key, {
+      key,
+      dateLabel: formatDayDate(match.date),
+      isToday: key === todayKey,
+      matches: [match],
+    });
+  });
+
+  return Array.from(groups.values());
 }
 
 // ─── Delete confirm modal ─────────────────────────────────────────────────────
@@ -202,9 +243,31 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
                 <div className="h-px flex-1 bg-white/[0.05]" />
                 <span className="text-[10px] text-white/20 font-bold uppercase tracking-widest">{list.length} trận</span>
               </div>
-              <div className="space-y-2">
-                {list.map((m: any) => (
-                  <MatchCard key={m.id} m={m} players={players} canEdit={canEdit} isDeleting={isDeletingId === m.id} onDelete={() => setDeleteTarget(m.id)} matchExpected={matchExpected} />
+              <div className="space-y-5">
+                {groupMatchesByDay(list).map(day => (
+                  <div key={day.key} className="space-y-2.5">
+                    <div className="flex items-center gap-3 px-1">
+                      <div className={cn('h-px flex-1', day.isToday ? 'bg-primary/25' : 'bg-white/[0.05]')} />
+                      <div className={cn(
+                        'shrink-0 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest',
+                        day.isToday
+                          ? 'border-primary/25 bg-primary/10 text-primary'
+                          : 'border-white/[0.06] bg-white/[0.025] text-white/35'
+                      )}>
+                        <Calendar className="w-3 h-3 opacity-70" />
+                        <span>{day.isToday ? 'Hôm nay' : day.dateLabel}</span>
+                        {day.isToday && <span className="text-primary/45">{day.dateLabel}</span>}
+                        <span className="text-white/20">·</span>
+                        <span>{day.matches.length} trận</span>
+                      </div>
+                      <div className={cn('h-px flex-1', day.isToday ? 'bg-primary/25' : 'bg-white/[0.05]')} />
+                    </div>
+                    <div className={cn('space-y-2 border-l pl-3', day.isToday ? 'border-primary/25' : 'border-white/[0.05]')}>
+                      {day.matches.map((m: any) => (
+                        <MatchCard key={m.id} m={m} players={players} canEdit={canEdit} isDeleting={isDeletingId === m.id} onDelete={() => setDeleteTarget(m.id)} matchExpected={matchExpected} />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
