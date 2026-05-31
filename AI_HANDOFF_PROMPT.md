@@ -16,7 +16,9 @@ https://pickleball-app-git-dev-ngtrungkhanhs-projects.vercel.app/
 Branch workflow:
 - main is production. Do not edit main directly.
 - dev is the shared working branch for all AI agents and all machines.
-- Latest pushed dev commit at session handoff: 4c01527 (`Refine analysis hub and restore flows`).
+- Latest production main commit at session handoff: 120e7ce (`Merge dev into main`).
+- Latest released feature commit: cd2d0f8 (`Refine analysis radar scoring`).
+- Latest pushed dev commit at session handoff: cd2d0f8 (`Refine analysis radar scoring`).
 - Always continue work on dev.
 - Before editing code, update dev from GitHub.
 - After finishing a clear unit of work, commit and push to dev so another AI or machine can continue.
@@ -58,10 +60,11 @@ Recent behavior updates to remember:
   Vietnamese copy variants. Read
   `docs/ANALYSIS_INSIGHTS_RULES.md` and `docs/ANALYSIS_INSIGHTS_SELECTION.md`
   before changing triggers, copy, semantic groups, or weights.
-- Latest dev analysis changes: compact Hub ELO layout, weekly ELO top-8 block,
-  full-width ELO explainer below Hub, hybrid Attack/Defense radar scoring,
-  weekly ELO decay only above 1500 when fewer than 8 matches are played, and
-  tightened `unlucky_draw` copy/trigger.
+- Latest released analysis changes: compact Hub ELO layout, weekly ELO top-8
+  block, full-width ELO explainer below Hub, adaptive Attack/Defense radar
+  scoring, weighted 10-match Profile radar Form, weekly ELO decay only above
+  1500 when fewer than 8 matches are played, and tightened Hub insight
+  copy/triggers.
 - Admin JSON restore now replaces the dataset from the backup file, including
   seasons/config/player-season settings where present, and refreshes the shared
   IndexedDB route cache after restore.
@@ -82,8 +85,9 @@ When starting:
 3. State what you will check or implement first.
 6. When done, report changed files, verification run, and any remaining risk.
 7. CURRENT PENDING TASKS TO IMPLEMENT:
-   - **Dev Preview Validation**: Test Dashboard ticker, Analysis Flash News Cards, Hall of Fame, Pair analysis, Hub layout, and radar scores on Vercel Preview.
+   - **Production Validation**: Test Dashboard ticker, Analysis Flash News Cards, Hall of Fame, Pair analysis, Hub layout, and radar scores after the latest main deployment.
    - **Admin JSON Restore Validation**: Confirm JSON restore replaces seasons exactly from the backup file and refreshes the shared IndexedDB cache.
    - **Shared Data Cache Validation**: Test local-first Dashboard/Analysis cache.
-   - **Merge & Deploy**: Merge `dev` to `main` when features are validated.
+   - **Radar Follow-up**: Review Synergy and Brave formulas after observing the new Attack/Defense/Form radar with real data.
+   - **Local Build Environment**: Replace the direct Postgres URL in `.env.local` with a pooled URL when local `npm run build` must complete prerendering.
 ```

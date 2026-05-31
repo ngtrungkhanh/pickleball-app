@@ -711,11 +711,13 @@ Audit after Batch 2:
 The approved 86-scenario registry and randomized Vietnamese copy variants have
 since been ported into `src/lib/insights.ts`.
 
-Latest handoff state:
+Latest release state:
 
-- Dev commit `4c01527` includes the current 86-rule registry, weekly ELO
-  rise/fall copy aligned to the weekly performance board, cleaned
-  `score_bully` markup, and the tightened `unlucky_draw` trigger/copy.
+- Released feature commit `cd2d0f8` includes the current 86-rule registry,
+  weekly ELO rise/fall copy aligned to the weekly performance board, cleaned
+  `score_bully` markup, tightened relationship/dependency insight copy, the
+  tightened `unlucky_draw` trigger/copy, adaptive Attack/Defense radar scoring,
+  and weighted 10-match Profile radar Form.
 - `unlucky_draw` now excludes players currently in the bottom 2, requires at
   least 10 partner matches, and requires a bottom-2 partner share of at least
   51% across the selected season/snapshot.
