@@ -72,6 +72,16 @@ function MobilePlayerName({ players, id, className }: { players: any[]; id: stri
   );
 }
 
+function CompactRecentPlayerName({ players, id, className }: { players: any[]; id: string; className?: string }) {
+  const fullName = playerName(players, id);
+  return (
+    <span className={cn('block truncate', className)} data-mobile-player-name title={fullName}>
+      <span className="sm:hidden">{playerName(players, id, 'tiny')}</span>
+      <span className="hidden sm:inline">{fullName}</span>
+    </span>
+  );
+}
+
 function dateKeyOf(value: Date | string) {
   const date = value instanceof Date ? value : new Date(value);
   const year = date.getFullYear();
@@ -412,7 +422,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
               className={cn('border-b border-white/[0.04] last:border-0', idx % 2 === 1 && 'bg-white/[0.015]')}>
 
               {/* ── PC ─────────────────────────────────────────────────── */}
-              <div className="hidden sm:flex items-stretch min-h-[72px]">
+              <div className="hidden lg:flex items-stretch min-h-[72px]">
                 <div className="w-28 shrink-0 border-r border-white/[0.05] flex flex-col items-center justify-center gap-0.5 px-3">
                   <span className="text-[17px] font-black text-white/75 tabular-nums leading-none">{time}</span>
                   <span className="text-[11px] font-semibold text-white/30 tabular-nums">{date}</span>
@@ -450,8 +460,8 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                 </div>
               </div>
 
-              {/* ── MOBILE ───────────────────────────────────────────────── */}
-              <div className="sm:hidden px-4 py-3" data-mobile-match-row>
+              {/* ── COMPACT ─────────────────────────────────────────────── */}
+              <div className="lg:hidden px-4 py-3" data-mobile-match-row>
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-[10px] font-bold text-white/25 flex items-center gap-1.5">
                     <span className="text-primary/50 font-black">{m.season ?? 'S1'}</span>
@@ -468,8 +478,8 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
 
                 <div className="flex items-center gap-2">
                   <div className="flex-1 min-w-0 flex flex-col gap-0.5 text-right">
-                    <MobilePlayerName players={players} id={m.win_1} className="text-[13px] font-bold text-white/85 truncate leading-snug" />
-                    {isDouble && <MobilePlayerName players={players} id={m.win_2} className="text-[13px] font-bold text-white/85 truncate leading-snug" />}
+                    <CompactRecentPlayerName players={players} id={m.win_1} className="text-[13px] sm:text-sm font-bold text-white/85 leading-snug" />
+                    {isDouble && <CompactRecentPlayerName players={players} id={m.win_2} className="text-[13px] sm:text-sm font-bold text-white/85 leading-snug" />}
                   </div>
 
                   <div className="shrink-0 flex flex-col items-center">
@@ -484,8 +494,8 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                   </div>
 
                   <div className="flex-1 min-w-0 flex flex-col gap-0.5 text-left">
-                    <MobilePlayerName players={players} id={m.lose_1} className="text-[13px] font-bold text-white/85 truncate leading-snug" />
-                    {isDouble && <MobilePlayerName players={players} id={m.lose_2} className="text-[13px] font-bold text-white/85 truncate leading-snug" />}
+                    <CompactRecentPlayerName players={players} id={m.lose_1} className="text-[13px] sm:text-sm font-bold text-white/85 leading-snug" />
+                    {isDouble && <CompactRecentPlayerName players={players} id={m.lose_2} className="text-[13px] sm:text-sm font-bold text-white/85 leading-snug" />}
                   </div>
                 </div>
               </div>
