@@ -2,7 +2,7 @@ import { sql } from '@vercel/postgres';
 import { AnalysisCenter } from '@/components/analysis/AnalysisCenter';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
 
-export const revalidate = false; // ISR - Chỉ revalidate khi có action ghi dữ liệu
+export const dynamic = 'force-dynamic'; // Page reads Postgres at request time, not during Vercel build.
 
 type Player = { id: string; name: string; active?: boolean };
 type Match = {

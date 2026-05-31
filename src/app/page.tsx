@@ -5,7 +5,7 @@ import { PreviousChampionTitleLine } from '@/components/PreviousChampionTitleLin
 import { shouldBlockPreviewWrites } from '@/lib/environment';
 import { buildHallOfFameEntries, getLatestHallOfFameEntry } from '@/lib/hall-of-fame';
 
-export const revalidate = false; // Static by default, revalidated on demand via revalidatePath
+export const dynamic = 'force-dynamic'; // Page reads Postgres at request time, not during Vercel build.
 
 type Player = { id: string; name: string; active?: boolean; [key: string]: unknown };
 type Match = { id?: string; date?: string; season?: string; [key: string]: unknown };

@@ -5,6 +5,118 @@ import { History, Clock, X, Trash2, Calendar, AlertTriangle, Loader2 } from 'luc
 import { deleteMatchAction } from '@/app/actions';
 import { isGuestId } from '@/lib/guest';
 
+type PlayerNameMode = 'full' | 'tiny';
+type DayMatchGroup = {
+  key: string;
+  dateLabel: string;
+  isToday: boolean;
+  matches: any[];
+};
+
+function normalizedName(value: unknown) {
+  const fullName = String(value || '').replace(/\s+/g, ' ').trim();
+  return fullName;
+}
+
+function nameParts(value: unknown) {
+  return normalizedName(value).split(' ').filter(Boolean);
+}
+
+function fitLabel(value: string, maxChars: number) {
+  const chars = Array.from(value);
+  if (chars.length <= maxChars) return value;
+  if (maxChars <= 3) return chars.slice(0, maxChars).join('');
+  return `${chars.slice(0, maxChars - 3).join('')}...`;
+}
+
+function givenNameOf(value: unknown) {
+  const parts = nameParts(value);
+  return parts[parts.length - 1] || normalizedName(value);
+}
+
+function tinyPlayerName(players: any[], fullName: string) {
+  if (!fullName) return '--';
+
+  const givenName = givenNameOf(fullName);
+  const normalizedGiven = givenName.toLocaleLowerCase('vi-VN');
+  const hasDuplicateGivenName = players.some(player =>
+    normalizedName(player?.name) !== fullName &&
+    givenNameOf(player?.name).toLocaleLowerCase('vi-VN') === normalizedGiven
+  );
+
+  if (!hasDuplicateGivenName) return fitLabel(givenName, 7);
+
+  const initials = nameParts(fullName)
+    .slice(0, -1)
+    .slice(0, 2)
+    .map(part => Array.from(part)[0]?.toLocaleUpperCase('vi-VN'))
+    .filter(Boolean)
+    .join('.');
+
+  return fitLabel(initials ? `${initials}.${givenName}` : givenName, 9);
+}
+
+function playerName(players: any[], id: string, mode: PlayerNameMode = 'full') {
+  if (isGuestId(id)) return 'Khách';
+  const fullName = players.find(p => p.id === id)?.name ?? id;
+  if (mode === 'tiny') return tinyPlayerName(players, fullName);
+  return fullName;
+}
+
+function MobilePlayerName({ players, id, className }: { players: any[]; id: string; className?: string }) {
+  const fullName = playerName(players, id);
+  return (
+    <span className={cn('block sm:hidden', className)} data-mobile-player-name title={fullName}>
+      {playerName(players, id, 'tiny')}
+    </span>
+  );
+}
+
+function CompactRecentPlayerName({ players, id, className }: { players: any[]; id: string; className?: string }) {
+  const fullName = playerName(players, id);
+  return (
+    <span className={cn('block truncate', className)} data-mobile-player-name title={fullName}>
+      <span className="sm:hidden">{playerName(players, id, 'tiny')}</span>
+      <span className="hidden sm:inline">{fullName}</span>
+    </span>
+  );
+}
+
+function dateKeyOf(value: Date | string) {
+  const date = value instanceof Date ? value : new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatDayDate(value: Date | string) {
+  return new Date(value).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+}
+
+function groupMatchesByDay(matches: any[]): DayMatchGroup[] {
+  const todayKey = dateKeyOf(new Date());
+  const groups = new Map<string, DayMatchGroup>();
+
+  matches.forEach(match => {
+    const key = dateKeyOf(match.date);
+    const current = groups.get(key);
+    if (current) {
+      current.matches.push(match);
+      return;
+    }
+
+    groups.set(key, {
+      key,
+      dateLabel: formatDayDate(match.date),
+      isToday: key === todayKey,
+      matches: [match],
+    });
+  });
+
+  return Array.from(groups.values());
+}
+
 // ─── Delete confirm modal ─────────────────────────────────────────────────────
 function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
   return (
@@ -141,9 +253,50 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
                 <div className="h-px flex-1 bg-white/[0.05]" />
                 <span className="text-[10px] text-white/20 font-bold uppercase tracking-widest">{list.length} trận</span>
               </div>
-              <div className="space-y-2">
-                {list.map((m: any) => (
-                  <MatchCard key={m.id} m={m} players={players} canEdit={canEdit} isDeleting={isDeletingId === m.id} onDelete={() => setDeleteTarget(m.id)} matchExpected={matchExpected} />
+              <div className="space-y-6">
+                {groupMatchesByDay(list).map(day => (
+                  <div key={day.key} className="space-y-3">
+                    <div className={cn(
+                      'overflow-hidden rounded-xl border px-3 py-2.5 shadow-sm',
+                      day.isToday
+                        ? 'border-primary/25 bg-emerald-950/70 shadow-primary/5'
+                        : 'border-white/[0.07] bg-slate-900/95 shadow-black/10'
+                    )}>
+                      <div className={cn(
+                        'absolute inset-y-0 left-0 w-1',
+                        day.isToday ? 'bg-primary' : 'bg-white/15'
+                      )} />
+                      <div className="flex items-center justify-between gap-3 pl-1">
+                        <div className="min-w-0 flex items-center gap-2">
+                          <Calendar className={cn('w-3.5 h-3.5 shrink-0', day.isToday ? 'text-primary' : 'text-white/35')} />
+                          <span className={cn(
+                            'truncate text-[11px] font-black uppercase tracking-[0.18em]',
+                            day.isToday ? 'text-primary' : 'text-white/50'
+                          )}>
+                            {day.isToday ? 'Hôm nay' : day.dateLabel}
+                          </span>
+                          {day.isToday && (
+                            <span className="shrink-0 text-[10px] font-black text-primary/45 tabular-nums">
+                              {day.dateLabel}
+                            </span>
+                          )}
+                        </div>
+                        <span className={cn(
+                          'shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest tabular-nums',
+                        day.isToday
+                          ? 'border-primary/25 bg-primary/10 text-primary'
+                          : 'border-white/[0.08] bg-white/[0.04] text-white/40'
+                        )}>
+                          {day.matches.length} trận
+                        </span>
+                      </div>
+                    </div>
+                    <div className={cn('space-y-2 border-l-2 pl-3.5', day.isToday ? 'border-primary/35' : 'border-white/[0.07]')}>
+                      {day.matches.map((m: any) => (
+                        <MatchCard key={m.id} m={m} players={players} canEdit={canEdit} isDeleting={isDeletingId === m.id} onDelete={() => setDeleteTarget(m.id)} matchExpected={matchExpected} />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -156,7 +309,7 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
 
 // ─── Shared match card (used in modal) ───────────────────────────────────────
 function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }: { m: any; players: any[]; onDelete: () => void; canEdit: boolean; isDeleting?: boolean; matchExpected?: any }) {
-  const name = (id: string) => players.find(p => p.id === id)?.name ?? id;
+  const name = (id: string, mode: PlayerNameMode = 'full') => playerName(players, id, mode);
   const d = new Date(m.date);
   const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
@@ -173,24 +326,37 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
           </button>
         )}
       </div>
-      <div className="px-4 py-4 flex items-center gap-3">
+      <div className="px-4 py-4 flex items-center gap-3" data-mobile-match-row>
         <div className="flex-1 min-w-0 text-right space-y-0.5">
-          <div className="text-sm font-black text-white/90 truncate">{name(m.win_1)}</div>
-          {m.win_2 && <div className="text-sm font-black text-white/90 truncate">{name(m.win_2)}</div>}
+          <MobilePlayerName players={players} id={m.win_1} className="text-sm font-black text-white/90 truncate" />
+          <div className="hidden text-sm font-black text-white/90 truncate sm:block">{name(m.win_1)}</div>
+          {m.win_2 && (
+            <>
+              <MobilePlayerName players={players} id={m.win_2} className="text-sm font-black text-white/90 truncate" />
+              <div className="hidden text-sm font-black text-white/90 truncate sm:block">{name(m.win_2)}</div>
+            </>
+          )}
         </div>
         <div className="flex flex-col items-center shrink-0">
           <div className="px-4 py-2 rounded-2xl bg-primary/10 border border-primary/20 text-primary font-black text-sm tabular-nums shadow-lg shadow-primary/5">
-            {m.win_score}–{m.lose_score}
+            <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
           </div>
           {expected && (
-            <span className="text-[9px] font-bold text-white/30 mt-1 block tracking-tight">
-              Dự đoán trước trận: {Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%
+            <span className="text-[9px] font-bold text-white/30 mt-1 block tracking-tight whitespace-nowrap">
+              <span className="sm:hidden">{Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%</span>
+              <span className="hidden sm:inline">Dự đoán trước trận: {Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%</span>
             </span>
           )}
         </div>
         <div className="flex-1 min-w-0 text-left space-y-0.5">
-          <div className="text-sm font-black text-white/90 truncate">{name(m.lose_1)}</div>
-          {m.lose_2 && <div className="text-sm font-black text-white/90 truncate">{name(m.lose_2)}</div>}
+          <MobilePlayerName players={players} id={m.lose_1} className="text-sm font-black text-white/90 truncate" />
+          <div className="hidden text-sm font-black text-white/90 truncate sm:block">{name(m.lose_1)}</div>
+          {m.lose_2 && (
+            <>
+              <MobilePlayerName players={players} id={m.lose_2} className="text-sm font-black text-white/90 truncate" />
+              <div className="hidden text-sm font-black text-white/90 truncate sm:block">{name(m.lose_2)}</div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -203,7 +369,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [, start] = useTransition();
-  const name = (id: string) => players.find(p => p.id === id)?.name ?? id;
+  const name = (id: string, mode: PlayerNameMode = 'full') => playerName(players, id, mode);
 
   if (matches.length === 0) return (
     <div className="rounded-2xl border border-white/[0.06] bg-slate-900/80 py-16 text-center text-white/15 text-[10px] font-black uppercase tracking-[0.3em]">
@@ -231,7 +397,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
         />
       )}
 
-      <div className="w-full rounded-2xl border border-white/[0.06] bg-slate-900/80 overflow-hidden">
+      <div className="recent-history-container w-full rounded-2xl border border-white/[0.06] bg-slate-900/80 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
           <div className="flex items-center gap-2.5">
@@ -256,7 +422,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
               className={cn('border-b border-white/[0.04] last:border-0', idx % 2 === 1 && 'bg-white/[0.015]')}>
 
               {/* ── PC ─────────────────────────────────────────────────── */}
-              <div className="hidden sm:flex items-stretch min-h-[72px]">
+              <div className="recent-history-desktop-row items-stretch min-h-[72px]">
                 <div className="w-28 shrink-0 border-r border-white/[0.05] flex flex-col items-center justify-center gap-0.5 px-3">
                   <span className="text-[17px] font-black text-white/75 tabular-nums leading-none">{time}</span>
                   <span className="text-[11px] font-semibold text-white/30 tabular-nums">{date}</span>
@@ -294,8 +460,8 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                 </div>
               </div>
 
-              {/* ── MOBILE ───────────────────────────────────────────────── */}
-              <div className="sm:hidden px-4 py-3">
+              {/* ── COMPACT ─────────────────────────────────────────────── */}
+              <div className="recent-history-compact-row px-4 py-3" data-mobile-match-row>
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-[10px] font-bold text-white/25 flex items-center gap-1.5">
                     <span className="text-primary/50 font-black">{m.season ?? 'S1'}</span>
@@ -312,24 +478,24 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
 
                 <div className="flex items-center gap-2">
                   <div className="flex-1 min-w-0 flex flex-col gap-0.5 text-right">
-                    <span className="text-[13px] font-bold text-white/85 truncate leading-snug">{name(m.win_1)}</span>
-                    {isDouble && <span className="text-[13px] font-bold text-white/85 truncate leading-snug">{name(m.win_2)}</span>}
+                    <CompactRecentPlayerName players={players} id={m.win_1} className="text-[13px] sm:text-sm font-bold text-white/85 leading-snug" />
+                    {isDouble && <CompactRecentPlayerName players={players} id={m.win_2} className="text-[13px] sm:text-sm font-bold text-white/85 leading-snug" />}
                   </div>
 
                   <div className="shrink-0 flex flex-col items-center">
                     <div className="min-w-[68px] text-center px-2.5 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-black text-sm tabular-nums whitespace-nowrap">
-                      {m.win_score}–{m.lose_score}
+                      <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
                     </div>
                     {matchExpected?.get(m.id) && (
-                      <span className="text-[8px] font-bold text-white/30 mt-1 block tracking-tight">
-                        Dự đoán trước trận: {Math.round(matchExpected.get(m.id).winProb * 100)}% - {Math.round(matchExpected.get(m.id).loseProb * 100)}%
+                      <span className="text-[8px] font-bold text-white/30 mt-1 block tracking-tight whitespace-nowrap">
+                        {Math.round(matchExpected.get(m.id).winProb * 100)}% - {Math.round(matchExpected.get(m.id).loseProb * 100)}%
                       </span>
                     )}
                   </div>
 
                   <div className="flex-1 min-w-0 flex flex-col gap-0.5 text-left">
-                    <span className="text-[13px] font-bold text-white/85 truncate leading-snug">{name(m.lose_1)}</span>
-                    {isDouble && <span className="text-[13px] font-bold text-white/85 truncate leading-snug">{name(m.lose_2)}</span>}
+                    <CompactRecentPlayerName players={players} id={m.lose_1} className="text-[13px] sm:text-sm font-bold text-white/85 leading-snug" />
+                    {isDouble && <CompactRecentPlayerName players={players} id={m.lose_2} className="text-[13px] sm:text-sm font-bold text-white/85 leading-snug" />}
                   </div>
                 </div>
               </div>
