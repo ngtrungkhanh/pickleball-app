@@ -247,9 +247,9 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
                 {groupMatchesByDay(list).map(day => (
                   <div key={day.key} className="space-y-3">
                     <div className={cn(
-                      'sticky top-0 z-10 overflow-hidden rounded-xl border px-3 py-2.5 shadow-lg backdrop-blur-md',
+                      'overflow-hidden rounded-xl border px-3 py-2.5 shadow-sm',
                       day.isToday
-                        ? 'border-primary/25 bg-emerald-950/80 shadow-primary/5'
+                        ? 'border-primary/25 bg-emerald-950/70 shadow-primary/5'
                         : 'border-white/[0.07] bg-slate-900/95 shadow-black/10'
                     )}>
                       <div className={cn(
