@@ -71,3 +71,26 @@ select option {
 /* Hide scrollbar */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Recent history switches by its own available width, not the viewport width. */
+.recent-history-container {
+  container-type: inline-size;
+}
+
+.recent-history-desktop-row {
+  display: none;
+}
+
+.recent-history-compact-row {
+  display: block;
+}
+
+@container (min-width: 680px) {
+  .recent-history-desktop-row {
+    display: flex;
+  }
+
+  .recent-history-compact-row {
+    display: none;
+  }
+}

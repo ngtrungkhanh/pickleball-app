@@ -397,7 +397,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
         />
       )}
 
-      <div className="w-full rounded-2xl border border-white/[0.06] bg-slate-900/80 overflow-hidden">
+      <div className="recent-history-container w-full rounded-2xl border border-white/[0.06] bg-slate-900/80 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
           <div className="flex items-center gap-2.5">
@@ -422,7 +422,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
               className={cn('border-b border-white/[0.04] last:border-0', idx % 2 === 1 && 'bg-white/[0.015]')}>
 
               {/* ── PC ─────────────────────────────────────────────────── */}
-              <div className="hidden lg:flex items-stretch min-h-[72px]">
+              <div className="recent-history-desktop-row items-stretch min-h-[72px]">
                 <div className="w-28 shrink-0 border-r border-white/[0.05] flex flex-col items-center justify-center gap-0.5 px-3">
                   <span className="text-[17px] font-black text-white/75 tabular-nums leading-none">{time}</span>
                   <span className="text-[11px] font-semibold text-white/30 tabular-nums">{date}</span>
@@ -461,7 +461,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
               </div>
 
               {/* ── COMPACT ─────────────────────────────────────────────── */}
-              <div className="lg:hidden px-4 py-3" data-mobile-match-row>
+              <div className="recent-history-compact-row px-4 py-3" data-mobile-match-row>
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-[10px] font-bold text-white/25 flex items-center gap-1.5">
                     <span className="text-primary/50 font-black">{m.season ?? 'S1'}</span>
