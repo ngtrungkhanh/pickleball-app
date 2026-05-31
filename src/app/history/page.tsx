@@ -7,7 +7,7 @@ import { shouldBlockPreviewWrites } from '@/lib/environment';
 import { buildAnalysisElo, isFullDoublesMatch } from '@/lib/analysis-core';
 import { isGuestId, isRankingMatch } from '@/lib/guest';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function HistoryPage() {
   const previewWritesBlocked = shouldBlockPreviewWrites();
