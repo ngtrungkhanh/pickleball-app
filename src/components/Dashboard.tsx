@@ -307,8 +307,8 @@ export default function Dashboard({
     window.addEventListener('resize', handleResize);
 
     let lastTime: number | null = null;
-    // Tốc độ cố định: 50 pixels mỗi giây (đảm bảo độ mượt và tốc độ chạy vừa phải trên cả PC & Mobile)
-    const PIXELS_PER_SECOND = 50;
+    // Tốc độ cố định: 60 pixels mỗi giây (đảm bảo độ mượt và tốc độ chạy vừa phải trên cả PC & Mobile)
+    const PIXELS_PER_SECOND = 60;
 
     const step = (timestamp: number) => {
       if (isPausedRef.current) {
