@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useCallback } from 'react';
 import {
   ShieldCheck,
   History,
@@ -21,17 +21,22 @@ import {
   verifyAdminAction,
   updatePlayerAction,
   deletePlayerAction,
-  getMatchesAfterAction,
   getAppDataAction,
+  getAppDataManifestAction,
+  getAppDataPartsAction,
   deleteMatchAction,
-  getPlayersAction,
-  getSeasonsAction,
   togglePlayerActiveAction,
   updateMatchAction
 } from '@/app/actions';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { seedAppCache } from '@/lib/db';
+import {
+  getAppCacheSnapshot,
+  hasUsableAppCache,
+  replaceAppCacheParts,
+  seedAppCache,
+  type AppCachePart,
+} from '@/lib/db';
 
 const adminTabs = ['Nhật ký & Hệ thống', 'Thành viên', 'Season', 'Trận đấu'];
 const ADMIN_AUTH_DATE_KEY = 'pickleball_admin_auth_date';
@@ -52,6 +57,26 @@ function actionSucceeded(res: { success?: boolean } | { error?: string } | undef
 
 function actionError(res: { success?: boolean } | { error?: string } | undefined, fallback: string) {
   return res && 'error' in res && res.error ? res.error : fallback;
+}
+
+const CORE_PARTS: AppCachePart[] = ['players', 'matches', 'seasons', 'config', 'playerSeasonSettings'];
+
+function getStaleParts(
+  snapshot: Awaited<ReturnType<typeof getAppCacheSnapshot>>,
+  manifest: NonNullable<Awaited<ReturnType<typeof getAppDataManifestAction>>>,
+) {
+  const stale = new Set<AppCachePart>();
+  CORE_PARTS.forEach((part) => {
+    if ((manifest.parts[part] || 0) > (snapshot.partVersions[part] || 0)) {
+      stale.add(part);
+    }
+  });
+  if (manifest.counts.players > 0 && snapshot.players.length === 0) stale.add('players');
+  if (manifest.counts.matches > 0 && snapshot.matches.length === 0) stale.add('matches');
+  if (manifest.counts.seasons > 0 && snapshot.seasons.length === 0) stale.add('seasons');
+  if (manifest.counts.playerSeasonSettings > 0 && snapshot.playerSeasonSettings.length === 0) stale.add('playerSeasonSettings');
+  if (Object.keys(snapshot.config).length === 0) stale.add('config');
+  return Array.from(stale);
 }
 
 export default function AdminPage() {
@@ -77,29 +102,68 @@ export default function AdminPage() {
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [, startTransition] = useTransition();
 
-  const loadData = async () => {
-    setLoading(true);
-    console.log('Admin: Loading all data...');
+  const applySnapshot = useCallback((snapshot: Awaited<ReturnType<typeof getAppCacheSnapshot>>) => {
+    setPlayers(snapshot.players || []);
+    setSeasons(snapshot.seasons || []);
+    setMatches(snapshot.matches || []);
+  }, []);
+
+  const loadSystemData = useCallback(async () => {
     try {
-      const [l, a, p, s, m] = await Promise.all([
+      const [l, a] = await Promise.all([
         getAuditLogs(),
         getArchives(),
-        getPlayersAction(),
-        getSeasonsAction(),
-        getMatchesAfterAction('')
       ]);
-      console.log('Admin Data Loaded:', { logs: l?.length, players: p?.length, matches: m?.length });
       setLogs(l || []);
       setArchives(a || []);
-      setPlayers(p || []);
-      setSeasons(s || []);
-      setMatches(m || []);
+    } catch (err) {
+      console.error('Admin system data load failed:', err);
+      setMsg({ type: 'error', text: 'Không thể tải nhật ký từ server.' });
+    }
+  }, []);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      let snapshot = await getAppCacheSnapshot();
+      if (hasUsableAppCache(snapshot)) {
+        applySnapshot(snapshot);
+      }
+
+      const manifest = await getAppDataManifestAction();
+      if (!manifest) throw new Error('manifest unavailable');
+      const staleParts = getStaleParts(snapshot, manifest);
+
+      if (staleParts.length > 0) {
+        const appData = await getAppDataPartsAction(staleParts);
+        if (!appData) throw new Error('app data unavailable');
+        await replaceAppCacheParts({
+          players: appData.players,
+          matches: appData.matches,
+          seasons: appData.seasons,
+          config: appData.config,
+          playerSeasonSettings: appData.playerSeasonSettings || undefined,
+        }, {
+          dataVersion: appData.dataVersion,
+          partVersions: appData.partVersions,
+          manifestCheckedAt: Date.now(),
+        });
+        snapshot = await getAppCacheSnapshot();
+      } else {
+        await seedAppCache({
+          dataVersion: manifest.globalVersion,
+          partVersions: manifest.parts,
+          manifestCheckedAt: manifest.checkedAt,
+        });
+      }
+
+      applySnapshot(snapshot);
     } catch (err) {
       console.error('Admin Load Failed:', err);
       setMsg({ type: 'error', text: 'Không thể tải dữ liệu từ server.' });
     }
     setLoading(false);
-  };
+  }, [applySnapshot]);
 
   useEffect(() => {
     try {
@@ -118,7 +182,16 @@ export default function AdminPage() {
       }, 0);
       return () => clearTimeout(timer);
     }
-  }, [isAuth]);
+  }, [isAuth, loadData]);
+
+  useEffect(() => {
+    if (isAuth && activeTab === adminTabs[0] && logs.length === 0 && archives.length === 0) {
+      const timer = setTimeout(() => {
+        void loadSystemData();
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab, archives.length, isAuth, loadSystemData, logs.length]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -232,7 +305,7 @@ export default function AdminPage() {
       } else {
         // Run rebuild stats after a successful restore
         await rebuildStatsAction();
-        const appData = await getAppDataAction();
+        const appData = await getAppDataPartsAction(CORE_PARTS);
         if (appData) {
           await seedAppCache({
             players: appData.players,
@@ -241,6 +314,7 @@ export default function AdminPage() {
             config: appData.config,
             playerSeasonSettings: appData.playerSeasonSettings || [],
             dataVersion: appData.dataVersion,
+            partVersions: appData.partVersions,
             manifestCheckedAt: Date.now(),
           });
         }

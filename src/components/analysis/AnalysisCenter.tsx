@@ -113,6 +113,7 @@ export function AnalysisCenter({
   activeSeason = 'Season 1',
   loseMoney = 5000,
   config: initialConfig = {},
+  localOnly = false,
 }: {
   players: Player[];
   matches: Match[];
@@ -121,6 +122,7 @@ export function AnalysisCenter({
   activeSeason?: string;
   loseMoney?: number;
   config?: Record<string, string>;
+  localOnly?: boolean;
 }) {
   const resolvedConfig = useMemo(() => ({
     ...initialConfig,
@@ -135,6 +137,8 @@ export function AnalysisCenter({
     initialSeasons: seasons,
     initialPlayerSeasonSettings,
     routeKey: 'analysis',
+    localOnly,
+    fetchIfEmpty: localOnly,
   });
   const players = sharedData.players.length > 0 ? sharedData.players as Player[] : initialPlayers;
   const allMatches = (sharedData.matches.length > 0 ? sharedData.matches : initialMatches) as Match[];
@@ -336,8 +340,23 @@ export function AnalysisCenter({
 
       {/* Main Content */}
       <div className="max-w-[1500px] mx-auto px-4 py-4 pb-8">
+        {!sharedData.hasLocalCache && (
+          <div className="rounded-2xl border border-white/[0.08] bg-slate-950/60 px-5 py-6 text-center">
+            <p className="text-sm font-black uppercase tracking-widest text-white/70">
+              {sharedData.syncState === 'error' ? 'Không tải được dữ liệu' : 'Chưa có dữ liệu local'}
+            </p>
+            <p className="mt-2 text-sm font-semibold text-white/40">
+              {sharedData.syncState === 'error'
+                ? 'Mở Dashboard để tải lại dữ liệu mới nhất.'
+                : 'Đang tải dữ liệu mới nhất lần đầu để lưu vào máy này...'}
+            </p>
+            <Link href="/" className="mt-4 inline-flex rounded-xl border border-primary/30 bg-primary/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-primary hover:bg-primary/20">
+              Về Dashboard
+            </Link>
+          </div>
+        )}
         {/* ZONE 1: Hub (Tổng quan) */}
-        {activeNav === 'hub' && (
+        {sharedData.hasLocalCache && activeNav === 'hub' && (
           <HubZone 
             board={board}
             rankingMatches={rankingMatches}
@@ -350,12 +369,12 @@ export function AnalysisCenter({
         )}
 
         {/* ZONE 2: Hall of Fame (Vinh danh) */}
-        {activeNav === 'hall' && (
+        {sharedData.hasLocalCache && activeNav === 'hall' && (
           <HallOfFame entries={hallOfFameEntries} activeSeason={currentActiveSeason} />
         )}
 
         {/* ZONE 5: Pairs (Cặp đôi) */}
-        {activeNav === 'pair' && (
+        {sharedData.hasLocalCache && activeNav === 'pair' && (
           <PairZone
             matches={rankingMatches}
             players={visiblePlayers}
@@ -363,7 +382,7 @@ export function AnalysisCenter({
         )}
 
         {/* ZONE 3: Profile (Cá nhân) */}
-        {activeNav === 'profile' && (
+        {sharedData.hasLocalCache && activeNav === 'profile' && (
           <ProfileZone
             playerId={playerId}
             setPlayerId={setPlayerId}
@@ -375,7 +394,7 @@ export function AnalysisCenter({
         )}
 
         {/* ZONE 4: Matrix (Đối đầu) */}
-        {activeNav === 'matrix' && (
+        {sharedData.hasLocalCache && activeNav === 'matrix' && (
           <MatrixZone
             matrixTab={matrixTab}
             setMatrixTab={setMatrixTab}

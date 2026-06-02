@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
 import { isGuestId, matchHasGuest } from '@/lib/guest';
-import { bumpDataVersion } from '@/lib/data-version';
+import { bumpDataVersions } from '@/lib/data-version';
 
 const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
 type SheetRow = Record<string, unknown>;
@@ -168,7 +168,7 @@ export async function GET(request: Request) {
       `;
     }
 
-    await bumpDataVersion();
+    await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'admin']);
 
     return NextResponse.json({ message: 'Migration completed successfully!' }, { status: 200 });
 
@@ -320,7 +320,7 @@ export async function POST(request: Request) {
       `;
     }
 
-    await bumpDataVersion();
+    await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'admin']);
 
     revalidatePath('/');
     revalidatePath('/analysis');
@@ -328,7 +328,6 @@ export async function POST(request: Request) {
     revalidatePath('/add-match');
 
     return NextResponse.json({ success: true, inserted, playersUpserted }, { status: 200 });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     console.error('XLSX import error:', error);
     return NextResponse.json({ error: error.message || 'Import thất bại.' }, { status: 500 });

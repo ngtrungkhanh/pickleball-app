@@ -16,6 +16,21 @@ repo.
 
 ### Bug Fixes
 
+- Added multi-part data manifest syncing for Dashboard/Admin and converted the
+  Dashboard route into a static IndexedDB-first shell. Dashboard now checks
+  lightweight part versions, downloads only stale app data parts, and Analysis
+  only fetches server data on first direct entry when no usable local cache
+  exists.
+- Removed schema ensure/setup work from manifest and app-data read actions, and
+  skipped Dashboard manifest checks when the local cache was checked within the
+  last 60 seconds to keep Analysis -> Dashboard navigation local-only.
+
+- Changed `/analysis` into a static local-cache shell so opening Analysis from
+  Dashboard no longer waits on Postgres queries. The Dashboard Analysis link now
+  writes the current Dashboard snapshot into IndexedDB before navigation;
+  Dashboard remains the normal user-facing online sync point and Admin remains
+  the always-online management path.
+
 - Fixed `boss_hunter` ("Thợ săn trùm" / "Đối thủ khó chịu của nhà vua") insight trigger: excluded the ELO King from triggering this rule against themselves, and ensured it only counts actual wins *against* the ELO King (excluding matches where the player and ELO King were on the same team).
 
 ### Analysis Hub, Restore, and Radar Calibration

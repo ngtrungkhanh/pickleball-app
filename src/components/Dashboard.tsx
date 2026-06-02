@@ -1,6 +1,7 @@
 'use client';
-import { useState, useEffect, useSyncExternalStore, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useSyncExternalStore, useMemo, useRef, useCallback, type MouseEvent } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { BarChart3, RefreshCw, Settings, X } from 'lucide-react';
 import { SummaryGrid } from './dashboard/SummaryGrid';
 import { Leaderboard } from './dashboard/Leaderboard';
@@ -8,11 +9,13 @@ import { RecentHistory } from './dashboard/RecentHistory';
 import { ScoreForm } from './ScoreForm';
 import { SettingsModal } from './SettingsModal';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
-import { type StoredPlayerSeasonSetting } from '@/lib/db';
+import { seedAppCache, type StoredPlayerSeasonSetting } from '@/lib/db';
 import { isGuestId } from '@/lib/guest';
 import { buildAnalysisSnapshot } from '@/lib/analysis-core';
 import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
 import { getGlobalSelectedSeason, setGlobalSelectedSeason } from '@/lib/season-state';
+import { PreviousChampionTitleLine } from '@/components/PreviousChampionTitleLine';
+import { buildHallOfFameEntries, getLatestHallOfFameEntry } from '@/lib/hall-of-fame';
 
 const INSIGHT_SELECTION_STATE_KEY = 'pickleball.analysis.insightSelection.v1';
 
@@ -80,6 +83,7 @@ export default function Dashboard({
   initialPlayerSeasonSettings?: StoredPlayerSeasonSetting[],
   previewWritesBlocked?: boolean,
 }) {
+  const router = useRouter();
   const sharedData = useSharedAppData({
     initialPlayers,
     initialMatches,
@@ -212,6 +216,9 @@ export default function Dashboard({
   }, [players, getPlayerSetting, selectedSeason, activeSeason]);
 
   const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(visiblePlayers as Parameters<typeof buildAnalysisSnapshot>[0], viewedMatches as Parameters<typeof buildAnalysisSnapshot>[1], loseMoney), [visiblePlayers, viewedMatches, loseMoney]);
+  const previousChampion = useMemo(() => getLatestHallOfFameEntry(
+    buildHallOfFameEntries(players, matches, seasons, activeSeason, loseMoney)
+  ), [players, matches, seasons, activeSeason, loseMoney]);
 
   const insightsReady = insightSeed !== null && insightSelectionState !== null;
   const insightSelectionResult = useMemo(() => (
@@ -386,8 +393,33 @@ export default function Dashboard({
     window.dispatchEvent(new Event(EDIT_EVENT));
   };
 
+  const openAnalysisFromLocalCache = async (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+
+    try {
+      await seedAppCache({
+        players,
+        matches,
+        seasons,
+        config,
+        playerSeasonSettings: sharedData.playerSeasonSettings,
+        dataVersion: Number(config.data_version || 0) || 0,
+        manifestCheckedAt: Date.now(),
+      });
+    } catch (error) {
+      console.error('Failed to prepare analysis cache:', error);
+    }
+
+    router.push('/analysis');
+  };
+
   return (
     <div className="space-y-5 transition-all duration-500 w-full">
+      {previousChampion && (
+        <PreviousChampionTitleLine champion={previousChampion} />
+      )}
+
       <div className={`${DESKTOP_PANEL_WIDTH} flex items-center gap-2`}>
         {sharedData.syncMessage ? (
           <div className="hidden sm:flex items-center gap-2 rounded-xl border border-slate-500/20 bg-[#142034]/80 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300/60">
@@ -396,7 +428,7 @@ export default function Dashboard({
           </div>
         ) : null}
         <div className="ml-auto flex items-center justify-end gap-2">
-          <Link href="/analysis" className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
+          <Link href="/analysis" onClick={openAnalysisFromLocalCache} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
             <BarChart3 className="w-4 h-4" />
             Trung tâm phân tích
           </Link>
@@ -420,6 +452,12 @@ export default function Dashboard({
           )}
         </div>
       </div>
+
+      {!sharedData.hasLocalCache && sharedData.syncState !== 'idle' && (
+        <div className={`${DESKTOP_PANEL_WIDTH} rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-left text-xs font-black uppercase tracking-widest text-primary`}>
+          Đang tải dữ liệu...
+        </div>
+      )}
 
       {previewWritesBlocked && (
         <div className={`${DESKTOP_PANEL_WIDTH} rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-left text-xs font-bold text-amber-200`}>

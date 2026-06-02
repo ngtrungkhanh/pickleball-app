@@ -2,7 +2,7 @@ import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
-import { bumpDataVersion, ensureConfigTable } from '@/lib/data-version';
+import { bumpDataVersions, ensureConfigTable } from '@/lib/data-version';
 
 type BackupMatch = {
   id?: string;
@@ -222,7 +222,7 @@ export async function POST(request: Request) {
       `;
     }
 
-    await bumpDataVersion();
+    await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
 
     revalidatePath('/');
     revalidatePath('/admin');

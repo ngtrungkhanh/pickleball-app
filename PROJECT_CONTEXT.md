@@ -58,10 +58,12 @@ Read only when relevant:
   `src/lib/analysis-core.ts` as the shared source for ELO, player metrics,
   partner/opponent impact edges, profile cards, Network cards, and Hub insight
   comments.
-- Dashboard and Analysis are moving toward a shared IndexedDB route cache:
-  Postgres remains authoritative, Dashboard/F5/direct route preload seeds local
-  cache, score-save responses replace optimistic local rows with canonical
-  server matches, and Analysis reads local cache unless the user reloads.
+- Dashboard is the normal user-facing manifest sync point for the shared
+  IndexedDB route cache. Postgres remains authoritative, Dashboard/F5 checks
+  per-part versions and downloads only stale data parts, score-save responses
+  replace optimistic local rows with canonical server matches, and Analysis
+  reads local cache unless the cache is empty on first direct entry. Admin
+  remains the always-online data-management path.
 - Hall of Fame champion portraits are stored in Vercel Blob and cached locally
   in IndexedDB by season image path/update timestamp.
 - Dashboard and Analysis no longer show manual `Làm mới` buttons; browser
@@ -87,8 +89,9 @@ Read only when relevant:
 - **Analysis Radar Review**: Validate the calibrated Attack/Defense radar
   scores and weighted 10-match Form with real production/dev data across
   multiple seasons/backups.
-- **Shared Data Cache Review**: Validate local-first Dashboard/Analysis cache,
-  canonical score-save replacement, and reload/F5 reconciliation before
+- **Shared Data Cache Review**: Validate Dashboard manifest/partial refresh,
+  Dashboard-to-Analysis local cache handoff, direct-empty Analysis bootstrap,
+  canonical score-save replacement, and Admin online reconciliation before
   resuming insight-copy expansion work.
 - **Analysis Copy Review**: Review Hub insight comment tone on Production and
   Preview with real data, especially weekly ELO rise/fall, `score_bully`, and

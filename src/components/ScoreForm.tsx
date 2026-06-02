@@ -35,6 +35,7 @@ type ServerResult = {
   skippedDuplicate?: boolean;
   error?: string;
   dataVersion?: number;
+  partVersions?: Record<string, number>;
   match?: Record<string, unknown>;
 };
 
@@ -368,7 +369,7 @@ export function ScoreForm({
       clearPending();
       if (r.match) {
         onConfirmMatch?.(tempId, r.match);
-        await replaceOptimisticMatchLocal(tempId, r.match, r.dataVersion);
+        await replaceOptimisticMatchLocal(tempId, r.match, r.dataVersion, r.partVersions);
       } else if (tempId) {
         onRejectMatch?.(tempId);
         await removeMatchesLocal([tempId]);

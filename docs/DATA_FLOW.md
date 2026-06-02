@@ -51,20 +51,23 @@ Critical constraints:
 
 Normal viewing should be cheap:
 
-1. `/` uses `revalidate = false` and is intended to be static/ISR-style.
-2. Server-side data fetches preload enough bounded data for smooth client-side
-   interaction.
-3. Dashboard fetches players, non-deleted matches, config, and
-   non-archived seasons.
+1. `/` is a static client shell.
+2. Dashboard reads IndexedDB first and renders immediately when cache exists.
+3. Dashboard checks a lightweight multi-part manifest and only downloads stale
+   parts.
 4. Client-side filtering/sorting handles common UI changes without extra DB
    calls where practical.
 
-Expected match volume is only a few hundred records, so bounded full-preload is
-acceptable and improves history UX.
+Expected match volume is only a few hundred records, so v1 still refreshes full
+matches when `matches` is stale. It does not re-download matches when only
+config, seasons, or player metadata changed.
 
 Route cache notes:
 
-- `/` and `/analysis` use `revalidate = false`.
+- `/` is a static client shell and uses manifest/parts server actions after
+  first paint.
+- `/analysis` is a static client shell and reads only the shared IndexedDB
+  route cache.
 - `/history` and `/add-match` currently use `revalidate = 0` and hit the server
   on request.
 - Server actions revalidate `/`, `/history`, and/or `/analysis` after writes.
@@ -211,29 +214,35 @@ Shared cache policy:
 - Postgres remains the source of truth.
 - IndexedDB is only a replaceable local copy used to avoid refetching full match
   history when moving between dashboard, analysis, and history-oriented views.
-- Dashboard/F5/direct route preload is the normal online sync point. Analysis
-  reads local cache first and does not auto-fetch online after the route has
-  mounted.
+- Dashboard/F5 is the normal user-facing manifest check point. Analysis reads
+  the local cache only and does not auto-fetch online when cache exists. If
+  Analysis is opened on a device with no usable local cache, it fetches the full
+  app parts once, seeds IndexedDB, then stays local-only. Admin remains the
+  always-online data-management path.
 - Do not poll in the background. Route preload/reload or explicit data writes
   are the normal sync triggers.
+- Dashboard skips the manifest request when IndexedDB says the manifest was
+  checked within the last 60 seconds. This keeps Dashboard -> Analysis ->
+  Dashboard navigation local-only in normal use.
 - If the current view needs data that is missing or stale, sync that data before
   rendering analysis-derived facts. Background sync can continue for other
   seasons after the current view is usable.
 
-Server preload remains the first-render fallback:
+Dashboard client sync is the first-render sync source:
 
-1. `/analysis` uses `revalidate = false`.
-2. The server route loads non-deleted players, non-deleted matches, config, and
-   non-archived seasons.
-3. The route passes `players`, `matches`, `seasons`, `loseMoney`, and
-   `activeSeason` into `AnalysisCenter`.
-4. The route currently attempts lightweight schema/guest normalization, but
-   skips it in Preview when preview writes are blocked.
+1. `/` mounts with empty server props.
+2. Dashboard reads IndexedDB through `useSharedAppData`.
+3. Dashboard calls `getAppDataManifestAction`.
+4. Dashboard calls `getAppDataPartsAction(staleParts)` only when local part
+   versions are missing or older than the manifest.
+5. The Dashboard Analysis link writes the current in-memory Dashboard snapshot
+   into IndexedDB before navigating to `/analysis`.
+6. `/analysis` mounts with empty server props and reads IndexedDB through
+   `useSharedAppData({ localOnly: true, fetchIfEmpty: true })`.
 
 Client sync flow:
 
-1. Seed/update IndexedDB from the server-provided route preload, unless the
-   existing local cache has a newer `dataVersion`.
+1. Dashboard seeds/updates IndexedDB from manifest-driven part downloads.
 2. Dashboard, Analysis, and other client views read from the shared cache state
    exposed by `useSharedAppData`.
 3. When a score is submitted, the client writes an optimistic `TMP-*` match to
@@ -249,8 +258,9 @@ Client sync flow:
 7. New JSON backups include `schemaVersion`, `config`, and
    `playerSeasonSettings`. Restore remains compatible with older backups that
    do not include those fields.
-8. The Analysis page reads local cache by default. It only fetches online when
-   the route is loaded/reloaded by the browser.
+8. The Analysis page reads local cache only when cache exists. On first direct
+   entry with empty cache, it fetches all app parts once and seeds the local
+   cache.
 9. Future phase: split full refresh into season-priority batches. The current
    implementation keeps full refresh tied to route preload/reload while the
    dataset is still small.
@@ -262,9 +272,9 @@ Important caveat:
   and explicit full refresh path.
 - The analysis cache is a replaceable local copy. Full imports, deletes, edits,
   and new match batches should converge on the next analysis page sync.
-- All writes that change user-visible data should bump `config.data_version`.
-  This catches edits, deletes, imports, restores, season changes, player changes,
-  and fine/config changes even when match count does not change.
+- All writes that change user-visible data should call `bumpDataVersions()` for
+  the affected parts. `data_version` remains as a backward-compatible global
+  version, while new sync logic reads `version_global` and per-part versions.
 
 Client analysis derivation:
 
@@ -300,9 +310,12 @@ Client analysis derivation:
 
 Cache and revalidation:
 
-- Match writes revalidate `/analysis` together with `/` and `/history`.
-- Shared route sync uses IndexedDB for a fast local copy. Route preload/reload
-  and canonical write responses are the points that reconcile it with Postgres.
+- Match writes revalidate `/analysis` together with `/` and `/history`, but the
+  Analysis route itself is a static shell and receives fresh data through the
+  shared IndexedDB cache.
+- Shared route sync uses IndexedDB for a fast local copy. Dashboard
+  manifest checks, Admin refresh/restore, and canonical write responses are the
+  points that reconcile it with Postgres.
 - Do not use IndexedDB as source of truth. Postgres remains authoritative.
 
 ## Vercel and Cache
@@ -317,6 +330,8 @@ Rules:
 - Do not add polling or background DB reads without a clear need.
 - Be careful with schema changes inside page render. They are convenient but can
   spend compute and should not grow uncontrolled.
+- Manifest and app-data read actions must not run schema `ALTER TABLE`/setup
+  guards. Schema ensure belongs in setup, admin migration, and write actions.
 - Page-render schema/guest normalization is skipped in Preview when preview
   writes are blocked. It can run on branch `dev` while `ALLOW_PREVIEW_WRITES`
   is true and the branch points to the separate dev database.
