@@ -17,7 +17,7 @@ import { useSharedAppData } from '@/lib/use-shared-app-data';
 import { isGuestId, loserFineCount } from '@/lib/guest';
 import { buildHallOfFameEntries, formatHallDate, type HallOfFameEntry } from '@/lib/hall-of-fame';
 import { getHallImageLocal, removeHallImageLocal, saveHallImageLocal, type StoredPlayerSeasonSetting } from '@/lib/db';
-import { getGlobalSelectedSeason, setGlobalSelectedSeason } from '@/lib/season-state';
+import { getGlobalSelectedSeason, setGlobalSelectedSeason, isGlobalSeasonSet } from '@/lib/season-state';
 
 // Vietnam week helper functions
 function getVietnamWeekMondayStr(dateStr: string): string {
@@ -151,6 +151,12 @@ export function AnalysisCenter({
   const [insightSelectionState, setInsightSelectionState] = useState<InsightSelectionState | null>(null);
   const committedInsightSeedRef = useRef<number | null>(null);
   const [selectedSeason, setSelectedSeason] = useState<string | null>(getGlobalSelectedSeason(currentActiveSeason));
+
+  useEffect(() => {
+    if (!isGlobalSeasonSet()) {
+      setSelectedSeason(currentActiveSeason);
+    }
+  }, [currentActiveSeason]);
 
   const handleSeasonChange = (season: string | null) => {
     setSelectedSeason(season);

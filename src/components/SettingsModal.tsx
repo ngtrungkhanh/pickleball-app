@@ -34,7 +34,7 @@ import { cn } from '@/lib/utils';
 import { type StoredPlayerSeasonSetting } from '@/lib/db';
 import { GUEST_NAME, isGuestId } from '@/lib/guest';
 import { buildHallOfFameEntries, type HallOfFameEntry } from '@/lib/hall-of-fame';
-import { getGlobalSelectedSeason, setGlobalSelectedSeason } from '@/lib/season-state';
+import { getGlobalSelectedSeason, setGlobalSelectedSeason, isGlobalSeasonSet } from '@/lib/season-state';
 
 type Player = { id: string; name: string; active?: boolean; pay_fine?: boolean; hidden?: boolean; deleted_at?: unknown };
 type Match = { id?: string; date?: string; season?: string; deleted_at?: unknown; [key: string]: unknown };
@@ -185,6 +185,14 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
   const [selectedConfigSeason, setSelectedConfigSeason] = useState<string>(
     getGlobalSelectedSeason(config.active_season || '') || config.active_season || ''
   );
+
+  const activeSeasonVal = config.active_season || '';
+
+  useEffect(() => {
+    if (!isGlobalSeasonSet() && activeSeasonVal) {
+      setSelectedConfigSeason(activeSeasonVal);
+    }
+  }, [activeSeasonVal]);
 
   const handleConfigSeasonChange = (season: string) => {
     setSelectedConfigSeason(season);
