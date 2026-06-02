@@ -62,7 +62,6 @@ function normalizeParts(parts: AppDataPart[]) {
 }
 
 export async function getDataVersion() {
-  await ensureConfigTable();
   const { rows } = await sql`
     SELECT key, value FROM config
     WHERE key IN (${DATA_VERSION_KEY}, ${GLOBAL_VERSION_KEY})
@@ -75,7 +74,6 @@ export async function getDataVersion() {
 }
 
 export async function getPartVersions(): Promise<AppPartVersions> {
-  await ensureConfigTable();
   const { rows } = await sql`SELECT key, value FROM config`;
   const config: Record<string, string> = {};
   rows.forEach((row) => {
@@ -116,7 +114,6 @@ export async function bumpDataVersion() {
 }
 
 export async function getAppManifest(): Promise<AppDataManifest> {
-  await ensureConfigTable();
   const [versions, matchCount, playerCount, seasonCount, playerSeasonSettingCount] = await Promise.all([
     getPartVersions(),
     sql`SELECT COUNT(*)::int AS count FROM matches WHERE deleted_at IS NULL`,
@@ -125,12 +122,6 @@ export async function getAppManifest(): Promise<AppDataManifest> {
     sql`SELECT COUNT(*)::int AS count FROM player_season_settings`,
   ]);
   const globalVersion = Math.max(...Object.values(versions), await getDataVersion());
-
-  await sql`
-    INSERT INTO config (key, value)
-    VALUES (${GLOBAL_VERSION_KEY}, ${String(globalVersion)})
-    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-  `;
 
   return {
     globalVersion,

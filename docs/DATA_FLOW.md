@@ -221,6 +221,9 @@ Shared cache policy:
   always-online data-management path.
 - Do not poll in the background. Route preload/reload or explicit data writes
   are the normal sync triggers.
+- Dashboard skips the manifest request when IndexedDB says the manifest was
+  checked within the last 60 seconds. This keeps Dashboard -> Analysis ->
+  Dashboard navigation local-only in normal use.
 - If the current view needs data that is missing or stale, sync that data before
   rendering analysis-derived facts. Background sync can continue for other
   seasons after the current view is usable.
@@ -327,6 +330,8 @@ Rules:
 - Do not add polling or background DB reads without a clear need.
 - Be careful with schema changes inside page render. They are convenient but can
   spend compute and should not grow uncontrolled.
+- Manifest and app-data read actions must not run schema `ALTER TABLE`/setup
+  guards. Schema ensure belongs in setup, admin migration, and write actions.
 - Page-render schema/guest normalization is skipped in Preview when preview
   writes are blocked. It can run on branch `dev` while `ALLOW_PREVIEW_WRITES`
   is true and the branch points to the separate dev database.

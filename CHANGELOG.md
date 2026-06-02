@@ -21,6 +21,9 @@ repo.
   lightweight part versions, downloads only stale app data parts, and Analysis
   only fetches server data on first direct entry when no usable local cache
   exists.
+- Removed schema ensure/setup work from manifest and app-data read actions, and
+  skipped Dashboard manifest checks when the local cache was checked within the
+  last 60 seconds to keep Analysis -> Dashboard navigation local-only.
 
 - Changed `/analysis` into a static local-cache shell so opening Analysis from
   Dashboard no longer waits on Postgres queries. The Dashboard Analysis link now

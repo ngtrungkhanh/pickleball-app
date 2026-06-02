@@ -847,8 +847,6 @@ export async function verifyAdminAction(pass: string) {
 
 export async function getAppDataManifestAction() {
   try {
-    await ensureSoftDeleteColumns();
-    await ensureChampionImageColumns();
     return await getAppManifest();
   } catch (error) {
     console.error('Fetch app data manifest failed:', error);
@@ -917,9 +915,6 @@ function normalizePlayerSeasonSettingRows(rows: any[]) {
 
 export async function getAppDataPartsAction(parts?: string[]) {
   try {
-    await ensureSoftDeleteColumns();
-    await ensureChampionImageColumns();
-
     const requestedParts = normalizeRequestedParts(parts);
     const response: {
       players?: ReturnType<typeof normalizePlayerRows>;

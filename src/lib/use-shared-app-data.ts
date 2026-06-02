@@ -52,6 +52,11 @@ function routePreloadHasData(data: SharedData) {
     || data.playerSeasonSettings.length > 0;
 }
 
+function recentlyChecked(snapshot: AppCacheSnapshot) {
+  return snapshot.lastManifestCheck > 0
+    && Date.now() - snapshot.lastManifestCheck < MANIFEST_CHECK_THROTTLE_MS;
+}
+
 function stalePartsFromManifest(
   snapshot: AppCacheSnapshot,
   manifest: NonNullable<Awaited<ReturnType<typeof getAppDataManifestAction>>>,
@@ -227,6 +232,7 @@ export function useSharedAppData({
           }
           return;
         }
+        if (hasUsableAppCache(snapshot) && recentlyChecked(snapshot)) return;
         await checkManifestAndRefresh({ force: true });
       })();
     }, 0);
