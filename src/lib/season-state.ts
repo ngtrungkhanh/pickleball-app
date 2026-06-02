@@ -10,3 +10,8 @@ export function getGlobalSelectedSeason(defaultSeason: string): string | null {
   }
   return globalSelectedSeason;
 }
+
+export function isGlobalSeasonSet(): boolean {
+  return globalSelectedSeason !== undefined;
+}
+

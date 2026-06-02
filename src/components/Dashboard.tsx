@@ -13,7 +13,7 @@ import { seedAppCache, type StoredPlayerSeasonSetting } from '@/lib/db';
 import { isGuestId } from '@/lib/guest';
 import { buildAnalysisSnapshot } from '@/lib/analysis-core';
 import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
-import { getGlobalSelectedSeason, setGlobalSelectedSeason } from '@/lib/season-state';
+import { getGlobalSelectedSeason, setGlobalSelectedSeason, isGlobalSeasonSet } from '@/lib/season-state';
 import { PreviousChampionTitleLine } from '@/components/PreviousChampionTitleLine';
 import { buildHallOfFameEntries, getLatestHallOfFameEntry } from '@/lib/hall-of-fame';
 
@@ -150,6 +150,12 @@ export default function Dashboard({
   const canWrite = canEdit && !previewWritesBlocked;
   const activeSeason = config.active_season || 'Season 1';
   const [selectedSeason, setSelectedSeason] = useState<string | null>(getGlobalSelectedSeason(activeSeason));
+
+  useEffect(() => {
+    if (!isGlobalSeasonSet()) {
+      setSelectedSeason(activeSeason);
+    }
+  }, [activeSeason]);
 
   const handleSeasonChange = (season: string | null) => {
     setSelectedSeason(season);
