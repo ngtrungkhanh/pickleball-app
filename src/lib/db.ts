@@ -16,6 +16,18 @@ const STORES = {
   playerSeasonSettings: 'player_season_settings',
 } as const;
 
+export const APP_CACHE_PARTS = [
+  'matches',
+  'players',
+  'seasons',
+  'config',
+  'playerSeasonSettings',
+  'admin',
+] as const;
+
+export type AppCachePart = typeof APP_CACHE_PARTS[number];
+export type AppCachePartVersions = Record<AppCachePart, number>;
+
 export type StoredMatch = {
   id?: string;
   date?: string | Date | null;
@@ -74,6 +86,7 @@ export type AppCacheInput = {
   config?: Record<string, string>;
   playerSeasonSettings?: StoredPlayerSeasonSetting[];
   dataVersion?: number;
+  partVersions?: Partial<AppCachePartVersions>;
   manifestCheckedAt?: number;
 };
 
@@ -84,8 +97,11 @@ export type AppCacheSnapshot = {
   config: Record<string, string>;
   playerSeasonSettings: StoredPlayerSeasonSetting[];
   dataVersion: number;
+  partVersions: AppCachePartVersions;
   lastManifestCheck: number;
 };
+
+export type AppCachePartsInput = Pick<AppCacheInput, 'players' | 'matches' | 'seasons' | 'config' | 'playerSeasonSettings'>;
 
 function sortMatchesNewestFirst(matches: StoredMatch[]) {
   return [...matches].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
@@ -115,6 +131,28 @@ function emitCacheChange() {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('pickleball-cache-change'));
   }
+}
+
+function emptyPartVersions(): AppCachePartVersions {
+  return {
+    matches: 0,
+    players: 0,
+    seasons: 0,
+    config: 0,
+    playerSeasonSettings: 0,
+    admin: 0,
+  };
+}
+
+function normalizePartVersions(input: unknown, fallbackVersion = 0): AppCachePartVersions {
+  const versions = emptyPartVersions();
+  APP_CACHE_PARTS.forEach((part) => {
+    const value = typeof input === 'object' && input !== null
+      ? Number((input as Record<string, unknown>)[part] || 0)
+      : 0;
+    versions[part] = value || fallbackVersion || 0;
+  });
+  return versions;
 }
 
 export async function openDB(): Promise<IDBDatabase> {
@@ -224,7 +262,7 @@ export async function removeMatchesLocal(matchIds: string[]) {
   emitCacheChange();
 }
 
-export async function replaceOptimisticMatchLocal(tempId: string, match: StoredMatch, dataVersion?: number) {
+export async function replaceOptimisticMatchLocal(tempId: string, match: StoredMatch, dataVersion?: number, partVersions?: Partial<AppCachePartVersions>) {
   const db = await openDB();
   const tx = db.transaction([STORES.matches, STORES.syncMeta], 'readwrite');
   const matchStore = tx.objectStore(STORES.matches);
@@ -232,6 +270,7 @@ export async function replaceOptimisticMatchLocal(tempId: string, match: StoredM
   matchStore.put(match);
   if (typeof dataVersion === 'number') {
     tx.objectStore(STORES.syncMeta).put({ key: 'dataVersion', value: dataVersion });
+    tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: normalizePartVersions(partVersions || { matches: dataVersion }, 0) });
   }
   await new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve(true);
@@ -260,6 +299,11 @@ export async function seedAppCache(input: AppCacheInput) {
   if (typeof input.dataVersion === 'number') {
     writes.push(setMetaValue('dataVersion', input.dataVersion));
   }
+  if (input.partVersions) {
+    writes.push(setMetaValue('partVersions', normalizePartVersions(input.partVersions, input.dataVersion || 0)));
+  } else if (typeof input.dataVersion === 'number') {
+    writes.push(setMetaValue('partVersions', normalizePartVersions(null, input.dataVersion)));
+  }
   if (typeof input.manifestCheckedAt === 'number') {
     writes.push(setMetaValue('lastManifestCheck', input.manifestCheckedAt));
   }
@@ -267,16 +311,32 @@ export async function seedAppCache(input: AppCacheInput) {
   emitCacheChange();
 }
 
+export async function replaceAppCacheParts(input: AppCachePartsInput, meta?: {
+  dataVersion?: number;
+  partVersions?: Partial<AppCachePartVersions>;
+  manifestCheckedAt?: number;
+}) {
+  await seedAppCache({
+    ...input,
+    dataVersion: meta?.dataVersion,
+    partVersions: meta?.partVersions,
+    manifestCheckedAt: meta?.manifestCheckedAt,
+  });
+}
+
 export async function getAppCacheSnapshot(): Promise<AppCacheSnapshot> {
-  const [players, matches, seasons, configEntries, playerSeasonSettings, dataVersion, lastManifestCheck] = await Promise.all([
+  const [players, matches, seasons, configEntries, playerSeasonSettings, dataVersion, rawPartVersions, lastManifestCheck] = await Promise.all([
     getAllFromStore<StoredPlayer>(STORES.players),
     getLocalMatches(),
     getAllFromStore<StoredSeason>(STORES.seasons),
     getAllFromStore<ConfigEntry>(STORES.config),
     getAllFromStore<StoredPlayerSeasonSetting>(STORES.playerSeasonSettings),
     getMetaValue<number>('dataVersion', 0),
+    getMetaValue<unknown>('partVersions', null),
     getMetaValue<number>('lastManifestCheck', 0),
   ]);
+
+  const partVersions = normalizePartVersions(rawPartVersions, dataVersion);
 
   return {
     players,
@@ -285,8 +345,16 @@ export async function getAppCacheSnapshot(): Promise<AppCacheSnapshot> {
     config: entriesToConfig(configEntries),
     playerSeasonSettings,
     dataVersion,
+    partVersions,
     lastManifestCheck,
   };
+}
+
+export function hasUsableAppCache(snapshot: AppCacheSnapshot) {
+  return snapshot.players.length > 0
+    && snapshot.matches.length > 0
+    && Object.keys(snapshot.config).length > 0
+    && snapshot.seasons.length > 0;
 }
 
 export async function getLocalMatchSummary() {

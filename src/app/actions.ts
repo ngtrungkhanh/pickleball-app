@@ -4,7 +4,12 @@ import { del, put } from '@vercel/blob';
 import { revalidatePath } from 'next/cache';
 import { GUEST_ID, GUEST_NAME, isGuestId, matchHasGuest } from '@/lib/guest';
 import { previewWriteBlockedResult, shouldBlockPreviewWrites } from '@/lib/environment';
-import { bumpDataVersion, ensureConfigTable as ensureSharedConfigTable, getDataVersion } from '@/lib/data-version';
+import {
+  APP_DATA_PARTS,
+  bumpDataVersions,
+  ensureConfigTable as ensureSharedConfigTable,
+  getAppManifest,
+} from '@/lib/data-version';
 
 async function ensureSeasonTable() {
   await sql`
@@ -193,7 +198,8 @@ export async function addMatchAction(formData: FormData) {
     if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 0, lose_money);
 
     await logAudit('ADD_MATCH', `Match ${id} by ${created_by}: ${win_1}${win_2 ? '/' + win_2 : ''} beat ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
-    const dataVersion = await bumpDataVersion();
+    const dataVersion = await bumpDataVersions(['matches', 'admin']);
+    const manifest = await getAppManifest();
 
     revalidatePath('/');
     revalidatePath('/history');
@@ -201,6 +207,7 @@ export async function addMatchAction(formData: FormData) {
     return {
       success: true,
       dataVersion,
+      partVersions: manifest.parts,
       match: {
         id: String(inserted.id),
         date: inserted.date ? String(inserted.date) : new Date().toISOString(),
@@ -245,7 +252,7 @@ export async function deleteMatchAction(matchId: string) {
     await sql`UPDATE matches SET deleted_at = NOW(), delete_group_id = ${groupId} WHERE id = ${matchId}`;
 
     await logAudit('DELETE_MATCH', `Deleted Match ${matchId}`);
-    await bumpDataVersion();
+    await bumpDataVersions(['matches', 'admin']);
 
     revalidatePath('/');
     revalidatePath('/history');
@@ -268,7 +275,7 @@ export async function addPlayerAction(formData: FormData) {
     await sql`INSERT INTO players (id, name, active) VALUES (${id}, ${name}, true)`;
     
     await logAudit('ADD_PLAYER', `Added player ${name} (${id})`);
-    await bumpDataVersion();
+    await bumpDataVersions(['players', 'admin']);
 
     revalidatePath('/');
     revalidatePath('/analysis');
@@ -295,7 +302,7 @@ export async function updatePlayerAction(formData: FormData) {
     } else {
       await sql`UPDATE players SET name = ${name}, active = ${active}, pay_fine = ${pay_fine}, hidden = ${hidden} WHERE id = ${id}`;
     }
-    await bumpDataVersion();
+    await bumpDataVersions(['players', 'playerSeasonSettings', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
     return { success: true };
@@ -321,7 +328,7 @@ export async function updatePlayersAction(formData: FormData) {
       await sql`UPDATE players SET name = ${nextName}, active = ${activeIds.has(ids[i])} WHERE id = ${ids[i]}`;
     }
 
-    await bumpDataVersion();
+    await bumpDataVersions(['players', 'playerSeasonSettings', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
     return { success: true };
@@ -388,7 +395,7 @@ export async function deletePlayerAction(formData: FormData) {
 
     await rebuildStatsAction();
     await logAudit('DELETE_PLAYER', `Soft deleted player ${players[0].name} (${id}) and ${matches.length} related matches.`);
-    await bumpDataVersion();
+    await bumpDataVersions(['players', 'matches', 'playerSeasonSettings', 'admin']);
 
     revalidatePath('/');
     revalidatePath('/analysis');
@@ -433,7 +440,7 @@ export async function deleteSeasonAction(formData: FormData) {
     }
 
     await rebuildStatsAction();
-    await bumpDataVersion();
+    await bumpDataVersions(['seasons', 'matches', 'config', 'playerSeasonSettings', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
     revalidatePath('/history');
@@ -476,7 +483,7 @@ export async function endSeasonAction() {
     `;
     
     await setConfigValue('active_season', nextName);
-    await bumpDataVersion();
+    await bumpDataVersions(['seasons', 'config', 'admin']);
     
     revalidatePath('/');
     revalidatePath('/analysis');
@@ -503,7 +510,7 @@ export async function createSeasonAction(formData: FormData) {
       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, active = true, archived = false
     `;
     await setConfigValue('active_season', name);
-    await bumpDataVersion();
+    await bumpDataVersions(['seasons', 'config', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
     revalidatePath('/history');
@@ -529,7 +536,7 @@ export async function setActiveSeasonAction(formData: FormData) {
       ON CONFLICT (id) DO UPDATE SET active = true, archived = false
     `;
     await setConfigValue('active_season', name);
-    await bumpDataVersion();
+    await bumpDataVersions(['seasons', 'config', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
     revalidatePath('/history');
@@ -549,7 +556,7 @@ export async function updateFineAction(formData: FormData) {
     if (!Number.isFinite(amount) || amount < 0) return { error: 'Mức phạt không hợp lệ' };
 
     await setConfigValue('lose_money', String(Math.round(amount)));
-    await bumpDataVersion();
+    await bumpDataVersions(['config', 'seasons', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
     return { success: true };
@@ -621,7 +628,7 @@ export async function uploadChampionImageAction(formData: FormData) {
     `;
 
     await logAudit('UPLOAD_CHAMPION_IMAGE', `Uploaded Hall of Fame image for ${seasonName}`);
-    await bumpDataVersion();
+    await bumpDataVersions(['seasons', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
     return { success: true, url: uploaded.url };
@@ -671,7 +678,7 @@ export async function deleteChampionImageAction(formData: FormData) {
     `;
 
     await logAudit('DELETE_CHAMPION_IMAGE', `Deleted Hall of Fame image for ${seasonName}`);
-    await bumpDataVersion();
+    await bumpDataVersions(['seasons', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
     return { success: true };
@@ -820,7 +827,7 @@ export async function restoreFromArchive(archiveId: number) {
     
     await sql`DELETE FROM archives WHERE id = ${archiveId}`;
     await logAudit('RESTORE', `Restored ${item.type} ${item.name}`);
-    await bumpDataVersion();
+    await bumpDataVersions(['players', 'matches', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
     
     revalidatePath('/');
     return { success: true };
@@ -840,139 +847,146 @@ export async function verifyAdminAction(pass: string) {
 
 export async function getAppDataManifestAction() {
   try {
-    await ensureConfigTable();
+    await ensureSoftDeleteColumns();
     await ensureChampionImageColumns();
-
-    const [configResult, matchSummary, seasonSummary, seasonsResult] = await Promise.all([
-      sql`SELECT key, value FROM config`,
-      sql`
-        SELECT
-          COUNT(*)::int AS count,
-          MAX(date) AS latest_date,
-          MIN(date) AS oldest_date
-        FROM matches
-        WHERE deleted_at IS NULL
-      `,
-      sql`
-        SELECT
-          COALESCE(season, 'Season 1') AS season,
-          COUNT(*)::int AS count,
-          MAX(date) AS latest_date,
-          MIN(date) AS oldest_date
-        FROM matches
-        WHERE deleted_at IS NULL
-        GROUP BY COALESCE(season, 'Season 1')
-        ORDER BY latest_date DESC NULLS LAST
-      `,
-      sql`SELECT id, name, active, start_date, champion_image_url, champion_image_path, champion_image_updated_at FROM seasons WHERE archived = false ORDER BY start_date DESC`,
-    ]);
-
-    const config: Record<string, string> = {};
-    configResult.rows.forEach((row) => {
-      config[String(row.key)] = String(row.value);
-    });
-
-    const configVersion = Number(config.data_version || 0) || 0;
-
-    return {
-      dataVersion: configVersion || await getDataVersion(),
-      checkedAt: Date.now(),
-      matchSummary: {
-        count: Number(matchSummary.rows[0]?.count || 0),
-        latestDate: matchSummary.rows[0]?.latest_date ? String(matchSummary.rows[0].latest_date) : null,
-        oldestDate: matchSummary.rows[0]?.oldest_date ? String(matchSummary.rows[0].oldest_date) : null,
-      },
-      seasonSummary: seasonSummary.rows.map((row) => ({
-        season: String(row.season || 'Season 1'),
-        count: Number(row.count || 0),
-        latestDate: row.latest_date ? String(row.latest_date) : null,
-        oldestDate: row.oldest_date ? String(row.oldest_date) : null,
-      })),
-      seasons: seasonsResult.rows.map((row) => ({
-        id: String(row.id),
-        name: String(row.name),
-        active: Boolean(row.active),
-        start_date: row.start_date ? String(row.start_date) : undefined,
-        champion_image_url: row.champion_image_url ? String(row.champion_image_url) : null,
-        champion_image_path: row.champion_image_path ? String(row.champion_image_path) : null,
-        champion_image_updated_at: row.champion_image_updated_at ? String(row.champion_image_updated_at) : null,
-      })),
-      config,
-    };
+    return await getAppManifest();
   } catch (error) {
     console.error('Fetch app data manifest failed:', error);
     return null;
   }
 }
 
+function normalizeRequestedParts(parts?: string[]) {
+  const requested = Array.isArray(parts) ? parts : [];
+  const valid = APP_DATA_PARTS.filter((part) => requested.includes(part));
+  return valid.length > 0 ? valid : [...APP_DATA_PARTS.filter((part) => part !== 'admin')];
+}
+
+function normalizePlayerRows(rows: any[]) {
+  return rows.map((row) => ({
+    id: String(row.id || ''),
+    name: String(row.name || ''),
+    active: row.active === null ? undefined : Boolean(row.active),
+    pay_fine: row.pay_fine === null ? undefined : Boolean(row.pay_fine),
+    hidden: row.hidden === null ? undefined : Boolean(row.hidden),
+    deleted_at: row.deleted_at ? String(row.deleted_at) : null,
+    delete_group_id: row.delete_group_id ? String(row.delete_group_id) : null,
+  }));
+}
+
+function normalizeMatchRows(rows: any[]) {
+  return rows.map((row) => ({
+    id: String(row.id || ''),
+    date: row.date ? String(row.date) : new Date().toISOString(),
+    win_1: String(row.win_1 || ''),
+    win_2: row.win_2 ? String(row.win_2) : null,
+    lose_1: String(row.lose_1 || ''),
+    lose_2: row.lose_2 ? String(row.lose_2) : null,
+    win_score: Number(row.win_score || 0),
+    lose_score: Number(row.lose_score || 0),
+    season: String(row.season || 'Season 1'),
+    created_by: String(row.created_by || 'SYSTEM'),
+    deleted_at: row.deleted_at ? String(row.deleted_at) : null,
+    delete_group_id: row.delete_group_id ? String(row.delete_group_id) : null,
+  }));
+}
+
+function normalizeSeasonRows(rows: any[]) {
+  return rows.map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    active: Boolean(row.active),
+    start_date: row.start_date ? String(row.start_date) : undefined,
+    champion_image_url: row.champion_image_url ? String(row.champion_image_url) : null,
+    champion_image_path: row.champion_image_path ? String(row.champion_image_path) : null,
+    champion_image_updated_at: row.champion_image_updated_at ? String(row.champion_image_updated_at) : null,
+    lose_money: row.lose_money !== null && row.lose_money !== undefined ? Number(row.lose_money) : 5000,
+  }));
+}
+
+function normalizePlayerSeasonSettingRows(rows: any[]) {
+  return rows.map((row) => ({
+    id: `${row.player_id}_${row.season}`,
+    player_id: String(row.player_id),
+    season: String(row.season),
+    active: Boolean(row.active),
+    pay_fine: Boolean(row.pay_fine),
+    hidden: Boolean(row.hidden),
+  }));
+}
+
+export async function getAppDataPartsAction(parts?: string[]) {
+  try {
+    await ensureSoftDeleteColumns();
+    await ensureChampionImageColumns();
+
+    const requestedParts = normalizeRequestedParts(parts);
+    const response: {
+      players?: ReturnType<typeof normalizePlayerRows>;
+      matches?: ReturnType<typeof normalizeMatchRows>;
+      config?: Record<string, string>;
+      seasons?: ReturnType<typeof normalizeSeasonRows>;
+      playerSeasonSettings?: ReturnType<typeof normalizePlayerSeasonSettingRows>;
+      manifest: Awaited<ReturnType<typeof getAppManifest>>;
+      dataVersion: number;
+      partVersions: Awaited<ReturnType<typeof getAppManifest>>['parts'];
+    } = {
+      manifest: await getAppManifest(),
+      dataVersion: 0,
+      partVersions: {
+        matches: 0,
+        players: 0,
+        seasons: 0,
+        config: 0,
+        playerSeasonSettings: 0,
+        admin: 0,
+      },
+    };
+
+    const queries: Array<Promise<void>> = [];
+
+    if (requestedParts.includes('players')) {
+      queries.push(sql`SELECT * FROM players WHERE deleted_at IS NULL ORDER BY active DESC, name ASC`
+        .then((result) => { response.players = normalizePlayerRows(result.rows); }));
+    }
+    if (requestedParts.includes('matches')) {
+      queries.push(sql`SELECT * FROM matches WHERE deleted_at IS NULL ORDER BY date DESC`
+        .then((result) => { response.matches = normalizeMatchRows(result.rows); }));
+    }
+    if (requestedParts.includes('config')) {
+      queries.push(sql`SELECT key, value FROM config`
+        .then((result) => {
+          const config: Record<string, string> = {};
+          result.rows.forEach((row) => {
+            config[String(row.key)] = String(row.value);
+          });
+          response.config = config;
+        }));
+    }
+    if (requestedParts.includes('seasons')) {
+      queries.push(sql`SELECT id, name, active, start_date, champion_image_url, champion_image_path, champion_image_updated_at, lose_money FROM seasons WHERE archived = false ORDER BY start_date DESC`
+        .then((result) => { response.seasons = normalizeSeasonRows(result.rows); }));
+    }
+    if (requestedParts.includes('playerSeasonSettings')) {
+      queries.push(sql`SELECT * FROM player_season_settings`
+        .then((result) => { response.playerSeasonSettings = normalizePlayerSeasonSettingRows(result.rows); }));
+    }
+
+    await Promise.all(queries);
+    response.manifest = await getAppManifest();
+    response.dataVersion = response.manifest.globalVersion;
+    response.partVersions = response.manifest.parts;
+
+    return response;
+  } catch (error) {
+    console.error('Fetch app data parts failed:', error);
+    return null;
+  }
+}
+
 export async function getAppDataAction() {
   try {
-    await ensureConfigTable();
-    await ensureChampionImageColumns();
-    const [playersResult, matchesResult, configResult, seasonsResult, playerSeasonSettingsResult] = await Promise.all([
-      sql`SELECT * FROM players WHERE deleted_at IS NULL ORDER BY active DESC, name ASC`,
-      sql`SELECT * FROM matches WHERE deleted_at IS NULL ORDER BY date DESC`,
-      sql`SELECT key, value FROM config`,
-      sql`SELECT id, name, active, start_date, champion_image_url, champion_image_path, champion_image_updated_at, lose_money FROM seasons WHERE archived = false ORDER BY start_date DESC`,
-      sql`SELECT * FROM player_season_settings`,
-    ]);
-
-    const config: Record<string, string> = {};
-    configResult.rows.forEach((row) => {
-      config[String(row.key)] = String(row.value);
-    });
-
-    const configVersion = Number(config.data_version || 0) || 0;
-
-    const players = playersResult.rows.map((row) => ({
-      id: String(row.id || ''),
-      name: String(row.name || ''),
-      active: row.active === null ? undefined : Boolean(row.active),
-      deleted_at: row.deleted_at ? String(row.deleted_at) : null,
-      delete_group_id: row.delete_group_id ? String(row.delete_group_id) : null,
-    }));
-
-    const matches = matchesResult.rows.map((row) => ({
-      id: String(row.id || ''),
-      date: row.date ? String(row.date) : new Date().toISOString(),
-      win_1: String(row.win_1 || ''),
-      win_2: row.win_2 ? String(row.win_2) : null,
-      lose_1: String(row.lose_1 || ''),
-      lose_2: row.lose_2 ? String(row.lose_2) : null,
-      win_score: Number(row.win_score || 0),
-      lose_score: Number(row.lose_score || 0),
-      season: String(row.season || 'Season 1'),
-      created_by: String(row.created_by || 'SYSTEM'),
-      deleted_at: row.deleted_at ? String(row.deleted_at) : null,
-      delete_group_id: row.delete_group_id ? String(row.delete_group_id) : null,
-    }));
-
-    const playerSeasonSettings = playerSeasonSettingsResult.rows.map((row) => ({
-      id: `${row.player_id}_${row.season}`,
-      player_id: String(row.player_id),
-      season: String(row.season),
-      active: Boolean(row.active),
-      pay_fine: Boolean(row.pay_fine),
-      hidden: Boolean(row.hidden),
-    }));
-
-    return {
-      players,
-      matches,
-      config,
-      seasons: seasonsResult.rows.map((row) => ({
-        id: String(row.id),
-        name: String(row.name),
-        active: Boolean(row.active),
-        start_date: row.start_date ? String(row.start_date) : undefined,
-        champion_image_url: row.champion_image_url ? String(row.champion_image_url) : null,
-        champion_image_path: row.champion_image_path ? String(row.champion_image_path) : null,
-        champion_image_updated_at: row.champion_image_updated_at ? String(row.champion_image_updated_at) : null,
-        lose_money: row.lose_money !== null && row.lose_money !== undefined ? Number(row.lose_money) : 5000,
-      })),
-      playerSeasonSettings,
-      dataVersion: configVersion || await getDataVersion(),
-    };
+    return await getAppDataPartsAction(['players', 'matches', 'config', 'seasons', 'playerSeasonSettings']);
   } catch (error) {
     console.error('Fetch app data failed:', error);
     return null;
@@ -1030,7 +1044,7 @@ export async function togglePlayerActiveAction(playerId: string, active: boolean
   try {
     await sql`UPDATE players SET active = ${active} WHERE id = ${playerId}`;
     await logAudit('UPDATE_PLAYER', `Changed player ${playerId} active status to ${active}`);
-    await bumpDataVersion();
+    await bumpDataVersions(['players', 'playerSeasonSettings', 'admin']);
     revalidatePath('/');
     return { success: true };
   } catch {
@@ -1103,7 +1117,7 @@ export async function updateMatchAction(formData: FormData) {
     if (lose_2) await updatePlayerStatsIncremental(lose_2, old.season, 0, 0, lose_money);
 
     await logAudit('UPDATE_MATCH', `Updated Match ${id}: ${win_1}${win_2 ? '/' + win_2 : ''} vs ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
-    await bumpDataVersion();
+    await bumpDataVersions(['matches', 'admin']);
 
     revalidatePath('/');
     revalidatePath('/history');
@@ -1133,7 +1147,7 @@ export async function updatePlayerSeasonSettingsAction(
       DO UPDATE SET active = EXCLUDED.active, pay_fine = EXCLUDED.pay_fine, hidden = EXCLUDED.hidden
     `;
     await logAudit('UPDATE_PLAYER_SEASON_SETTINGS', `Updated settings for player ${playerId} in ${season}: active=${active}, pay_fine=${pay_fine}, hidden=${hidden}`);
-    await bumpDataVersion();
+    await bumpDataVersions(['playerSeasonSettings', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
     return { success: true };
@@ -1153,7 +1167,7 @@ export async function updateSeasonFineAction(seasonId: string, loseMoney: number
       WHERE id = ${seasonId}
     `;
     await logAudit('UPDATE_SEASON_FINE', `Updated fine amount for season ${seasonId} to ${loseMoney}`);
-    await bumpDataVersion();
+    await bumpDataVersions(['seasons', 'config', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
     return { success: true };

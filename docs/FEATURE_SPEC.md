@@ -13,9 +13,10 @@ This spec reflects the current Next.js production app, not the old `legacy/`
 Apps Script app.
 
 Expected data size is modest: a few hundred to a few thousand matches, not
-millions. The app can preload full non-deleted match history and stores a shared
-IndexedDB route cache so dashboard, history, and analysis do not repeatedly
-download the same raw data during normal route changes.
+millions. Dashboard and Analysis are static shells backed by a shared IndexedDB
+route cache. Dashboard checks a lightweight manifest and only downloads stale
+data parts; Analysis reads local data and only fetches once when opened with an
+empty cache.
 
 ## User Modes
 
@@ -219,7 +220,9 @@ Standalone `/history`:
 
 ## Analysis Center
 
-`/analysis` is read-only and uses IndexedDB as a local cache for match history.
+`/analysis` is read-only and uses IndexedDB as its data source. It does not
+query Postgres on route entry when local cache exists; first direct entry on a
+new browser fetches the full app data once, seeds local cache, and then renders.
 The `Vinh danh` zone is independent of the selected analysis season. It only
 shows completed-season champions as an equal gallery. The latest completed
 season gets a small `Mới nhất` badge, the active season is marked as in
@@ -231,8 +234,8 @@ only on very wide desktop viewports.
 
 Current implementation files:
 
-- `src/app/analysis/page.tsx` - server route that loads players, matches,
-  config, and seasons.
+- `src/app/analysis/page.tsx` - static shell route that mounts the local-cache
+  analysis UI without reading Postgres.
 - `src/components/analysis/AnalysisCenter.tsx` - client UI, zones, season
   filtering, IndexedDB sync, and local analysis display.
 - `src/lib/analysis-core.ts` - shared derived-data core for ELO, player
@@ -318,8 +321,9 @@ Current analysis rules:
   `docs/ANALYSIS_INSIGHTS_RULES.md`; selection/audit notes live in
   `docs/ANALYSIS_INSIGHTS_SELECTION.md`.
 - Hub insight comments read from the shared local cache. Analysis should not
-  auto-fetch online after mount; reload/direct route preload is the normal
-  online reconciliation path when the user needs fresh data.
+  auto-fetch online when local cache exists. Dashboard manifest checks are the
+  normal user-facing reconciliation path when the user needs fresh data; Admin
+  remains always-online for data management.
 - Hub insight copy that mentions win rate should include record context such as
   `wins/total` or `wins-total record`. Strong dominance wording should be
   reserved for players whose overall record/ELO supports that framing; otherwise

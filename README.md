@@ -50,8 +50,9 @@ Notes:
 
 - `npm run lint` currently reports older repo-wide lint debt. Prefer targeted
   lint for changed files until that debt is cleaned up.
-- Local `npm run build` needs a valid pooled Vercel Postgres connection in
-  `.env.local`; a direct connection string can fail during prerender.
+- Dashboard and Analysis are static shells, so `npm run build` should not need
+  to prerender database-backed user pages. Dynamic/admin/API routes still need a
+  valid pooled Vercel Postgres connection when exercised locally.
 
 ## Deployment
 
