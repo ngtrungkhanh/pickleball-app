@@ -1,10 +1,13 @@
 import { Banknote, Calendar, Hash, Zap } from 'lucide-react';
 import { getSeasonSummaryStats } from '@/lib/stats';
+import type { FinePlayer, FinePlayerSeasonSetting, FineSeason } from '@/lib/fines';
 
 type SummaryGridProps = {
-  players: unknown[];
+  players: FinePlayer[];
   matches: Array<Record<string, unknown>>;
   loseMoney?: number;
+  seasons?: FineSeason[];
+  playerSeasonSettings?: FinePlayerSeasonSetting[];
 };
 
 function formatCompactMoney(value: number) {
@@ -12,8 +15,19 @@ function formatCompactMoney(value: number) {
   return value.toLocaleString('vi-VN');
 }
 
-export function SummaryGrid({ matches, loseMoney = 5000 }: SummaryGridProps) {
-  const s = getSeasonSummaryStats(matches, loseMoney);
+export function SummaryGrid({
+  players,
+  matches,
+  loseMoney = 5000,
+  seasons = [],
+  playerSeasonSettings = [],
+}: SummaryGridProps) {
+  const s = getSeasonSummaryStats(matches, loseMoney, {
+    players,
+    seasons,
+    playerSeasonSettings,
+    fallbackLoseMoney: loseMoney,
+  });
 
   const cards = [
     { Icon: Calendar, color: '#60a5fa', label: 'Thời gian', big: `${s.seasonDays}`, unit: 'ngày' },

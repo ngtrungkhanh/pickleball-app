@@ -5,8 +5,8 @@ import * as xlsx from 'xlsx';
 import path from 'path';
 import fs from 'fs';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
-import { isGuestId, matchHasGuest } from '@/lib/guest';
 import { bumpDataVersions } from '@/lib/data-version';
+import { rebuildPlayerStatsFromMatches } from '@/lib/player-stats-rebuild';
 
 const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
 type SheetRow = Record<string, unknown>;
@@ -168,7 +168,8 @@ export async function GET(request: Request) {
       `;
     }
 
-    await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'admin']);
+    await rebuildPlayerStatsFromMatches();
+    await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
 
     return NextResponse.json({ message: 'Migration completed successfully!' }, { status: 200 });
 
@@ -275,52 +276,9 @@ export async function POST(request: Request) {
       inserted++;
     }
 
-    const loseMoneyConfig = await sql`SELECT value FROM config WHERE key = 'lose_money' LIMIT 1`;
-    const loseMoney = Number(loseMoneyConfig.rows[0]?.value || 5000) || 5000;
-    const players = await sql`SELECT id FROM players WHERE deleted_at IS NULL`;
-    const validPlayerIds = new Set(players.rows.map((p) => String(p.id)).filter((id) => !isGuestId(id)));
-    const allMatches = await sql`SELECT * FROM matches WHERE deleted_at IS NULL`;
+    await rebuildPlayerStatsFromMatches();
 
-    const statsMap = new Map<string, { wins: number; losses: number; money: number }>();
-    for (const m of allMatches.rows) {
-      const season = String(m.season || 'Season 1');
-      const winners = [m.win_1, m.win_2].filter((pid) => pid && validPlayerIds.has(String(pid))).map(String);
-      const losers = [m.lose_1, m.lose_2].filter((pid) => pid && validPlayerIds.has(String(pid))).map(String);
-      const hasGuest = matchHasGuest(m);
-
-      if (!hasGuest) {
-        winners.forEach((pid) => {
-          const key = `${pid}:${season}`;
-          const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-          s.wins += 1;
-          statsMap.set(key, s);
-        });
-        losers.forEach((pid) => {
-          const key = `${pid}:${season}`;
-          const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-          s.losses += 1;
-          statsMap.set(key, s);
-        });
-      }
-
-      losers.forEach((pid) => {
-        const key = `${pid}:${season}`;
-        const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-        s.money += loseMoney;
-        statsMap.set(key, s);
-      });
-    }
-
-    await sql`DELETE FROM player_stats`;
-    for (const [key, s] of statsMap.entries()) {
-      const [playerId, season] = key.split(':');
-      await sql`
-        INSERT INTO player_stats (player_id, season, wins, losses, total, money)
-        VALUES (${playerId}, ${season}, ${s.wins}, ${s.losses}, ${s.wins + s.losses}, ${s.money})
-      `;
-    }
-
-    await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'admin']);
+    await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
 
     revalidatePath('/');
     revalidatePath('/analysis');

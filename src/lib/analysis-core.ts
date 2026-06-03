@@ -1,4 +1,5 @@
 import { isGuestId, isRankingMatch } from './guest';
+import { buildFineLookup, type FineRules } from './fines';
 
 export type AnalysisPlayer = {
   id: string;
@@ -563,6 +564,7 @@ function buildPlayerMetrics(
   rankingMatches: AnalysisMatch[],
   elo: EloResult,
   loseMoney: number,
+  fineRules: FineRules = {},
   now = new Date()
 ) {
   const maxMatches = Math.max(
@@ -610,6 +612,8 @@ function buildPlayerMetrics(
   const scoreBaselineByPlayer = new Map(scoreBaselines.map(row => [row.playerId, row]));
   const weekMondayStr = getVietnamWeekMondayStr(now.toISOString());
   const startOfWeekMs = weekMondayStr ? new Date(`${weekMondayStr}T00:00:00+07:00`).getTime() : 0;
+
+  const fineLookup = buildFineLookup({ fallbackLoseMoney: loseMoney, ...fineRules });
 
   return players.map(player => {
     const playerMatches = rankingMatches.filter(match => playerInMatch(match, player.id));
@@ -696,7 +700,7 @@ function buildPlayerMetrics(
     const recentEloDelta = (elo.rating.get(player.id) ?? 1500) - weekStartRating;
     const daysAbsent = lastMatchMs > 0 ? Math.floor((now.getTime() - lastMatchMs) / 86400000) : null;
     const money = visibleMatches.reduce((sum, match) => {
-      return sum + ([match.lose_1, match.lose_2].includes(player.id) && !isGuestId(player.id) ? loseMoney : 0);
+      return sum + ([match.lose_1, match.lose_2].includes(player.id) && !isGuestId(player.id) && fineLookup.shouldPayFine(player.id, match) ? fineLookup.getLoseMoney(match) : 0);
     }, 0);
 
     return {
@@ -908,13 +912,14 @@ export function buildAnalysisSnapshot(
   players: AnalysisPlayer[],
   matches: AnalysisMatch[],
   loseMoney = 5000,
+  fineRules: FineRules = {},
   now = new Date()
 ): AnalysisSnapshot {
   const visiblePlayers = players.filter(player => player.active !== false && !isGuestId(player.id));
   const visibleMatches = matches.filter(match => !match.deleted_at);
   const rankingMatches = sortNewestFirst(visibleMatches.filter(match => isRankingMatch(match) && isFullDoublesMatch(match)));
   const elo = buildAnalysisElo(visiblePlayers, rankingMatches, now);
-  const playerMetrics = buildPlayerMetrics(visiblePlayers, visibleMatches, rankingMatches, elo, loseMoney, now);
+  const playerMetrics = buildPlayerMetrics(visiblePlayers, visibleMatches, rankingMatches, elo, loseMoney, fineRules, now);
   const metrics = new Map(playerMetrics.map(metric => [metric.id, metric]));
   const board = [...playerMetrics].sort((a, b) => b.rating - a.rating || b.winRate - a.winRate || b.wins - a.wins || a.name.localeCompare(b.name));
   const partnerEdges = buildPartnerEdges(visiblePlayers, rankingMatches, metrics, elo);

@@ -223,8 +223,9 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
       seasons,
       config.active_season || 'Season 1',
       Number(config.lose_money || 5000),
+      playerSeasonSettings || [],
     ),
-    [players, matches, seasons, config.active_season, config.lose_money],
+    [players, matches, seasons, config.active_season, config.lose_money, playerSeasonSettings],
   );
 
   // Reset tab when modal opens

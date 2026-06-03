@@ -210,21 +210,48 @@ export default function Dashboard({
 
   const leaderboardPlayers = useMemo(() => {
     const seasonForSettings = selectedSeason || activeSeason;
-    return players.filter(p => !getPlayerSetting(p.id, seasonForSettings).hidden);
+    return players
+      .map(p => {
+        const settings = getPlayerSetting(p.id, seasonForSettings);
+        return {
+          ...p,
+          active: settings.active,
+          pay_fine: settings.pay_fine,
+          hidden: settings.hidden,
+        };
+      })
+      .filter(p => !p.hidden);
   }, [players, getPlayerSetting, selectedSeason, activeSeason]);
 
   const visiblePlayers = useMemo(() => {
     const seasonForSettings = selectedSeason || activeSeason;
-    return players.filter(p => {
-      const settings = getPlayerSetting(p.id, seasonForSettings);
-      return settings.active && !settings.hidden && !isGuestId(p.id);
-    });
+    return players
+      .map(p => {
+        const settings = getPlayerSetting(p.id, seasonForSettings);
+        return {
+          ...p,
+          active: settings.active,
+          pay_fine: settings.pay_fine,
+          hidden: settings.hidden,
+        };
+      })
+      .filter(p => p.active && !p.hidden && !isGuestId(p.id));
   }, [players, getPlayerSetting, selectedSeason, activeSeason]);
 
-  const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(visiblePlayers as Parameters<typeof buildAnalysisSnapshot>[0], viewedMatches as Parameters<typeof buildAnalysisSnapshot>[1], loseMoney), [visiblePlayers, viewedMatches, loseMoney]);
+  const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(
+    visiblePlayers as Parameters<typeof buildAnalysisSnapshot>[0],
+    viewedMatches as Parameters<typeof buildAnalysisSnapshot>[1],
+    loseMoney,
+    {
+      players,
+      seasons,
+      playerSeasonSettings: sharedData.playerSeasonSettings,
+      fallbackLoseMoney: loseMoney,
+    },
+  ), [visiblePlayers, viewedMatches, loseMoney, players, seasons, sharedData.playerSeasonSettings]);
   const previousChampion = useMemo(() => getLatestHallOfFameEntry(
-    buildHallOfFameEntries(players, matches, seasons, activeSeason, loseMoney)
-  ), [players, matches, seasons, activeSeason, loseMoney]);
+    buildHallOfFameEntries(players, matches, seasons, activeSeason, loseMoney, sharedData.playerSeasonSettings)
+  ), [players, matches, seasons, activeSeason, loseMoney, sharedData.playerSeasonSettings]);
 
   const insightsReady = insightSeed !== null && insightSelectionState !== null;
   const insightSelectionResult = useMemo(() => (
@@ -550,7 +577,13 @@ export default function Dashboard({
 
       {/* 1. Summary */}
       <div className={DESKTOP_PANEL_WIDTH}>
-        <SummaryGrid players={players} matches={viewedMatches} loseMoney={loseMoney} />
+        <SummaryGrid
+          players={players}
+          matches={viewedMatches}
+          loseMoney={loseMoney}
+          seasons={seasons}
+          playerSeasonSettings={sharedData.playerSeasonSettings}
+        />
       </div>
 
       {/* 2. Leaderboard */}

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
 import { bumpDataVersions, ensureConfigTable } from '@/lib/data-version';
+import { rebuildPlayerStatsFromMatches } from '@/lib/player-stats-rebuild';
 
 type BackupMatch = {
   id?: string;
@@ -222,6 +223,7 @@ export async function POST(request: Request) {
       `;
     }
 
+    await rebuildPlayerStatsFromMatches();
     await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
 
     revalidatePath('/');
