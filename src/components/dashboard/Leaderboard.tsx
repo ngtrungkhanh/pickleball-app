@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Handshake, ShieldCheck, Skull, Sparkles, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { calculateLeaderboard, getPlayerAdvancedStats } from '@/lib/stats';
@@ -23,6 +23,13 @@ type Season = {
   name: string;
   active?: boolean;
   start_date?: string;
+  lose_money?: number;
+};
+
+type PlayerSeasonSetting = {
+  player_id: string;
+  season: string;
+  pay_fine: boolean;
 };
 
 type AdvancedStats = {
@@ -277,6 +284,7 @@ export function Leaderboard({
   selectedSeason,
   onSeasonChange,
   loseMoney = 5000,
+  playerSeasonSettings = [],
 }: {
   players: Player[];
   matches: Match[];
@@ -285,6 +293,7 @@ export function Leaderboard({
   selectedSeason?: string | null;
   onSeasonChange?: (season: string | null) => void;
   loseMoney?: number;
+  playerSeasonSettings?: PlayerSeasonSetting[];
 }) {
   const currentSeason = selectedSeason === undefined ? activeSeason : selectedSeason;
   const [seasonOpen, setSeasonOpen] = useState(false);
@@ -313,6 +322,18 @@ export function Leaderboard({
 
   const setCurrentSeason = (season: string | null) => onSeasonChange?.(season);
   const filtered = currentSeason === null ? matches : matches.filter(m => (m.season || 'Season 1') === currentSeason);
+
+  const seasonFineByName = useMemo(() => new Map(
+    seasonList.map(s => [s.name, typeof s.lose_money === 'number' ? s.lose_money : loseMoney])
+  ), [seasonList, loseMoney]);
+
+  const playerFineBySeason = useMemo(() => new Map(
+    playerSeasonSettings.map(s => [`${s.player_id}:${s.season}`, s.pay_fine !== false])
+  ), [playerSeasonSettings]);
+
+  const playerFineById = useMemo(() => new Map(
+    players.map(p => [p.id, p.pay_fine !== false])
+  ), [players]);
   
   const seasonStartText = filtered.length
     ? formatShortDate(
@@ -323,7 +344,13 @@ export function Leaderboard({
     : null;
 
   // Task 18: Use pre-calculated stats for active season, calculate from raw matches for history
-  const board = calculateLeaderboard(players, filtered, loseMoney)
+  const board = calculateLeaderboard(players, filtered, loseMoney, undefined, {
+    getLoseMoney: (match) => seasonFineByName.get(String(match.season || 'Season 1')) ?? loseMoney,
+    shouldPayFine: (playerId, match) => {
+      const season = String(match.season || 'Season 1');
+      return playerFineBySeason.get(`${playerId}:${season}`) ?? playerFineById.get(playerId) ?? true;
+    },
+  })
     .filter(p => p.active !== false && p.id !== '__GUEST__')
     .slice(0, 20);
 
