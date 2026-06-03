@@ -10,6 +10,7 @@ import {
   ensureConfigTable as ensureSharedConfigTable,
   getAppManifest,
 } from '@/lib/data-version';
+import { rebuildPlayerStatsFromMatches } from '@/lib/player-stats-rebuild';
 
 async function ensureSeasonTable() {
   await sql`
@@ -320,6 +321,7 @@ export async function updatePlayerAction(formData: FormData) {
       await sql`UPDATE players SET name = ${GUEST_NAME}, active = ${active}, deleted_at = NULL WHERE id = ${GUEST_ID}`;
     } else {
       await sql`UPDATE players SET name = ${name}, active = ${active}, pay_fine = ${pay_fine}, hidden = ${hidden} WHERE id = ${id}`;
+      await rebuildPlayerStatsFromMatches();
     }
     await bumpDataVersions(['players', 'playerSeasonSettings', 'admin']);
     revalidatePath('/');
@@ -575,6 +577,7 @@ export async function updateFineAction(formData: FormData) {
     if (!Number.isFinite(amount) || amount < 0) return { error: 'Mức phạt không hợp lệ' };
 
     await setConfigValue('lose_money', String(Math.round(amount)));
+    await rebuildPlayerStatsFromMatches();
     await bumpDataVersions(['config', 'seasons', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
@@ -711,78 +714,9 @@ export async function rebuildStatsAction() {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
 
   try {
-    // Ensure table exists just in case
-    await sql`
-      CREATE TABLE IF NOT EXISTS player_stats (
-        player_id VARCHAR(10) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-        season VARCHAR(50) NOT NULL,
-        wins INT DEFAULT 0,
-        losses INT DEFAULT 0,
-        total INT DEFAULT 0,
-        money INT DEFAULT 0,
-        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (player_id, season)
-      )
-    `;
-    await ensurePlayerSeasonSettingsTable();
-
-    const { rows: players } = await sql`SELECT id, pay_fine FROM players WHERE deleted_at IS NULL`;
-    const validPlayerIds = new Set(players.map(p => p.id).filter(id => !isGuestId(id)));
-    const playerDefaultPayFine = new Map(players.map(p => [String(p.id), p.pay_fine !== false]));
-    const { rows: playerSeasonSettings } = await sql`SELECT player_id, season, pay_fine FROM player_season_settings`;
-    const playerSeasonPayFine = new Map(playerSeasonSettings.map(s => [`${s.player_id}:${s.season}`, s.pay_fine !== false]));
-    const fallbackLoseMoney = parseInt(await getConfigValue('lose_money', '5000')) || 5000;
-    const { rows: seasons } = await sql`SELECT name, lose_money FROM seasons WHERE archived = false`;
-    const seasonLoseMoney = new Map(seasons.map(s => [String(s.name), Number(s.lose_money ?? fallbackLoseMoney)]));
+    const result = await rebuildPlayerStatsFromMatches();
     
-    const { rows: matches } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL`;
-    
-    const statsMap = new Map<string, { wins: number; losses: number; money: number }>();
-    
-    for (const m of matches) {
-      const season = m.season || 'Season 1';
-      const hasGuest = matchHasGuest(m);
-      const winners = [m.win_1, m.win_2].filter(pid => pid && validPlayerIds.has(pid));
-      const losers = [m.lose_1, m.lose_2].filter(pid => pid && validPlayerIds.has(pid));
-
-      if (!hasGuest) {
-        winners.forEach(pid => {
-          const key = `${pid}:${season}`;
-          const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-          s.wins++;
-          statsMap.set(key, s);
-        });
-
-        losers.forEach(pid => {
-          const key = `${pid}:${season}`;
-          const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-          s.losses++;
-          statsMap.set(key, s);
-        });
-      }
-
-      losers.forEach(pid => {
-        const key = `${pid}:${season}`;
-        const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-        const shouldPayFine = playerSeasonPayFine.get(key) ?? playerDefaultPayFine.get(String(pid)) ?? true;
-        if (shouldPayFine) {
-          s.money += seasonLoseMoney.get(String(season)) ?? fallbackLoseMoney;
-        }
-        statsMap.set(key, s);
-      });
-    }
-
-    await sql`DELETE FROM player_stats`;
-    
-    for (const [key, s] of statsMap.entries()) {
-      const [playerId, season] = key.split(':');
-      await sql`
-        INSERT INTO player_stats (player_id, season, wins, losses, total, money)
-        VALUES (${playerId}, ${season}, ${s.wins}, ${s.losses}, ${s.wins + s.losses}, ${s.money})
-      `;
-    }
-    
-    await logAudit('REBUILD_STATS', `Rebuilt player_stats from ${matches.length} matches`);
+    await logAudit('REBUILD_STATS', `Rebuilt player_stats from ${result.matches} matches`);
     
     revalidatePath('/');
     return { success: true };
@@ -1165,6 +1099,7 @@ export async function updatePlayerSeasonSettingsAction(
       ON CONFLICT (player_id, season) 
       DO UPDATE SET active = EXCLUDED.active, pay_fine = EXCLUDED.pay_fine, hidden = EXCLUDED.hidden
     `;
+    await rebuildPlayerStatsFromMatches();
     await logAudit('UPDATE_PLAYER_SEASON_SETTINGS', `Updated settings for player ${playerId} in ${season}: active=${active}, pay_fine=${pay_fine}, hidden=${hidden}`);
     await bumpDataVersions(['playerSeasonSettings', 'admin']);
     revalidatePath('/');
@@ -1185,6 +1120,7 @@ export async function updateSeasonFineAction(seasonId: string, loseMoney: number
       SET lose_money = ${loseMoney}
       WHERE id = ${seasonId}
     `;
+    await rebuildPlayerStatsFromMatches();
     await logAudit('UPDATE_SEASON_FINE', `Updated fine amount for season ${seasonId} to ${loseMoney}`);
     await bumpDataVersions(['seasons', 'config', 'admin']);
     revalidatePath('/');

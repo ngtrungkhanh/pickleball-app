@@ -1,4 +1,5 @@
 import { GUEST_ID, isGuestId, isRankingMatch, loserFineCount } from './guest';
+import { calculateFineTotal, type FineRules } from './fines';
 
 type StatPlayer = {
   id: string;
@@ -204,12 +205,14 @@ export function calculateLeaderboard(
   );
 }
 
-export function getSeasonSummaryStats(matches: StatMatch[], loseMoney: number = 5000) {
+export function getSeasonSummaryStats(matches: StatMatch[], loseMoney: number = 5000, fineRules: FineRules = {}) {
   const visibleMatches = matches.filter(m => !m.deleted_at);
   const rankingMatches = visibleMatches.filter(isRankingMatch);
   const totalMatches = rankingMatches.length;
   const totalLoseCount = visibleMatches.reduce((sum, m) => sum + loserFineCount(m), 0);
-  const totalMoney = totalLoseCount * loseMoney;
+  const totalMoney = Object.keys(fineRules).length > 0
+    ? calculateFineTotal(visibleMatches, { fallbackLoseMoney: loseMoney, ...fineRules })
+    : totalLoseCount * loseMoney;
 
   const matchDates = rankingMatches.map(m => new Date(String(m.date || '')).getTime()).sort((a, b) => a - b);
   const startDate = matchDates.length > 0 ? new Date(matchDates[0]) : null;

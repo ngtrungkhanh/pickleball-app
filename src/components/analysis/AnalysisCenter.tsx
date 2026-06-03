@@ -14,7 +14,8 @@ import { buildAnalysisSnapshot, edgeRecord, getAnalysisName, type AnalysisEdge, 
 import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
 import { cn, getAvatarLetter } from '@/lib/utils';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
-import { isGuestId, loserFineCount } from '@/lib/guest';
+import { isGuestId } from '@/lib/guest';
+import { calculateFineTotal, type FinePlayerSeasonSetting } from '@/lib/fines';
 import { buildHallOfFameEntries, formatHallDate, type HallOfFameEntry } from '@/lib/hall-of-fame';
 import { getHallImageLocal, removeHallImageLocal, saveHallImageLocal, type StoredPlayerSeasonSetting } from '@/lib/db';
 import { getGlobalSelectedSeason, setGlobalSelectedSeason, isGlobalSeasonSet } from '@/lib/season-state';
@@ -196,10 +197,17 @@ export function AnalysisCenter({
 
   const visiblePlayers = useMemo(() => {
     const seasonForSettings = selectedSeason || currentActiveSeason;
-    return players.filter(p => {
-      const settings = getPlayerSetting(p.id, seasonForSettings);
-      return settings.active && !settings.hidden && !isGuestId(p.id);
-    });
+    return players
+      .map(p => {
+        const settings = getPlayerSetting(p.id, seasonForSettings);
+        return {
+          ...p,
+          active: settings.active,
+          pay_fine: settings.pay_fine,
+          hidden: settings.hidden,
+        };
+      })
+      .filter(p => p.active && !p.hidden && !isGuestId(p.id));
   }, [players, getPlayerSetting, selectedSeason, currentActiveSeason]);
 
   const [playerId, setPlayerId] = useState(visiblePlayers[0]?.id || '');
@@ -220,10 +228,20 @@ export function AnalysisCenter({
   const activeMatches = selectedSeason === null ? filteredAllMatches : filteredAllMatches.filter(m => (m.season || 'Season 1') === selectedSeason);
   const seasonOptions = Array.from(new Set([currentActiveSeason, ...currentSeasons.map(s => s.name), ...allMatches.map(m => m.season || 'Season 1')].filter(Boolean)));
 
-  const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(visiblePlayers, activeMatches, currentLoseMoney), [visiblePlayers, activeMatches, currentLoseMoney]);
+  const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(
+    visiblePlayers,
+    activeMatches,
+    currentLoseMoney,
+    {
+      players,
+      seasons: currentSeasons,
+      playerSeasonSettings: sharedData.playerSeasonSettings,
+      fallbackLoseMoney: currentLoseMoney,
+    },
+  ), [visiblePlayers, activeMatches, currentLoseMoney, players, currentSeasons, sharedData.playerSeasonSettings]);
   const hallOfFameEntries = useMemo(
-    () => buildHallOfFameEntries(players, allMatches, currentSeasons, currentActiveSeason, currentLoseMoney),
-    [players, allMatches, currentSeasons, currentActiveSeason, currentLoseMoney]
+    () => buildHallOfFameEntries(players, allMatches, currentSeasons, currentActiveSeason, currentLoseMoney, sharedData.playerSeasonSettings),
+    [players, allMatches, currentSeasons, currentActiveSeason, currentLoseMoney, sharedData.playerSeasonSettings]
   );
   const rankingMatches = analysisSnapshot.rankingMatches;
   const elo = analysisSnapshot.elo;
@@ -366,11 +384,15 @@ export function AnalysisCenter({
           <HubZone 
             board={board}
             rankingMatches={rankingMatches}
+            fineMatches={activeMatches}
             visiblePlayers={visiblePlayers}
             elo={elo}
             insights={insights}
             insightsReady={insightsReady}
             loseMoney={currentLoseMoney}
+            players={players}
+            seasons={currentSeasons}
+            playerSeasonSettings={sharedData.playerSeasonSettings}
           />
         )}
 
@@ -423,21 +445,34 @@ export function AnalysisCenter({
 function HubZone({
   board,
   rankingMatches,
+  fineMatches,
   visiblePlayers,
   elo,
   insights,
   insightsReady,
   loseMoney,
+  players,
+  seasons,
+  playerSeasonSettings,
 }: {
   board: PlayerMetrics[];
   rankingMatches: Match[];
+  fineMatches: Match[];
   visiblePlayers: Player[];
   elo: EloResult;
   insights: Insight[];
   insightsReady: boolean;
   loseMoney: number;
+  players: Player[];
+  seasons: Season[];
+  playerSeasonSettings: FinePlayerSeasonSetting[];
 }) {
-  const totalFines = rankingMatches.reduce((sum, match) => sum + loserFineCount(match), 0) * loseMoney;
+  const totalFines = calculateFineTotal(fineMatches, {
+    players,
+    seasons,
+    playerSeasonSettings,
+    fallbackLoseMoney: loseMoney,
+  });
   const [isEloExplainerOpen, setIsEloExplainerOpen] = useState(false);
 
   // Compute Weekly ELO changes

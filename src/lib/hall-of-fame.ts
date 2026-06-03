@@ -1,4 +1,5 @@
 import { buildAnalysisElo } from './analysis-core';
+import { buildFineLookup, type FinePlayerSeasonSetting } from './fines';
 import { isGuestId, isRankingMatch } from './guest';
 import { calculateLeaderboard } from './stats';
 
@@ -31,6 +32,7 @@ export type HallOfFameSeason = {
   champion_image_url?: string | null;
   champion_image_path?: string | null;
   champion_image_updated_at?: string | null;
+  lose_money?: number;
 };
 
 export type HallOfFameEntry = {
@@ -67,22 +69,32 @@ export function buildHallOfFameEntries(
   matches: HallOfFameMatch[],
   seasons: HallOfFameSeason[],
   activeSeason: string,
-  loseMoney: number
+  loseMoney: number,
+  playerSeasonSettings: FinePlayerSeasonSetting[] = []
 ): HallOfFameEntry[] {
   const seasonMeta = new Map(seasons.filter(season => season.name).map(season => [season.name, season]));
+  const eligiblePlayers = players.filter(player => !isGuestId(player.id));
+  const fineLookup = buildFineLookup({
+    players: eligiblePlayers,
+    seasons,
+    playerSeasonSettings,
+    fallbackLoseMoney: loseMoney,
+  });
   const completedSeasonNames = Array.from(new Set(
     seasons
       .filter(season => season.name && season.name !== activeSeason && season.active !== true)
       .map(season => season.name)
   ));
-  const eligiblePlayers = players.filter(player => !isGuestId(player.id));
 
   return completedSeasonNames
     .map(seasonName => {
       const seasonMatches = matches.filter(match => !match.deleted_at && (match.season || 'Season 1') === seasonName);
       if (seasonMatches.length === 0) return null;
 
-      const board = calculateLeaderboard(eligiblePlayers, seasonMatches, loseMoney)
+      const board = calculateLeaderboard(eligiblePlayers, seasonMatches, loseMoney, undefined, {
+        getLoseMoney: fineLookup.getLoseMoney,
+        shouldPayFine: fineLookup.shouldPayFine,
+      })
         .filter(player => !isGuestId(player.id) && player.total > 0);
       const champion = board[0];
       if (!champion) return null;
