@@ -4,6 +4,7 @@ type StatPlayer = {
   id: string;
   name: string;
   active?: boolean;
+  pay_fine?: boolean;
   [key: string]: unknown;
 };
 
@@ -26,6 +27,11 @@ type PrecalculatedStat = {
   losses: number | string;
   total: number | string;
   money: number | string;
+};
+
+type LeaderboardOptions = {
+  getLoseMoney?: (match: StatMatch) => number;
+  shouldPayFine?: (playerId: string, match: StatMatch) => boolean;
 };
 
 const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000;
@@ -119,7 +125,13 @@ function pickSeeded(options: string[], seed: string) {
   return options[seededIndex(seed, options.length)] || options[0] || '';
 }
 
-export function calculateLeaderboard(players: StatPlayer[], matches: StatMatch[], loseMoney: number = 5000, precalculatedStats?: PrecalculatedStat[]) {
+export function calculateLeaderboard(
+  players: StatPlayer[],
+  matches: StatMatch[],
+  loseMoney: number = 5000,
+  precalculatedStats?: PrecalculatedStat[],
+  options: LeaderboardOptions = {},
+) {
   const stats = players.map(p => ({
     ...p,
     wins: 0,
@@ -166,11 +178,15 @@ export function calculateLeaderboard(players: StatPlayer[], matches: StatMatch[]
     });
 
     fineMatches.forEach(m => {
+      const matchLoseMoney = options.getLoseMoney?.(m) ?? loseMoney;
       [m.lose_1, m.lose_2].forEach(id => {
         const playerId = typeof id === 'string' ? id : '';
         if (playerId && statsMap.has(playerId) && !isGuestId(playerId)) {
+          const player = statsMap.get(playerId)!;
+          const shouldPayFine = options.shouldPayFine?.(playerId, m) ?? player.pay_fine !== false;
+          if (!shouldPayFine) return;
           const s = statsMap.get(playerId)!;
-          s.money += loseMoney;
+          s.money += matchLoseMoney;
         }
       });
     });

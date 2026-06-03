@@ -106,13 +106,32 @@ async function setConfigValue(key: string, value: string) {
   `;
 }
 
+async function getSeasonLoseMoney(season: string) {
+  await ensurePlayerSeasonSettingsTable();
+  const fallback = parseInt(await getConfigValue('lose_money', '5000')) || 5000;
+  const { rows } = await sql`
+    SELECT lose_money FROM seasons
+    WHERE id = ${season} OR name = ${season}
+    LIMIT 1
+  `;
+  const amount = Number(rows[0]?.lose_money);
+  return Number.isFinite(amount) ? amount : fallback;
+}
+
 
 async function updatePlayerStatsIncremental(playerId: string, season: string, deltaWins: number, deltaLosses: number, deltaMoney: number) {
   if (!playerId || isGuestId(playerId)) return;
   
   let moneyToChange = deltaMoney;
   if (deltaMoney !== 0) {
-    const { rows } = await sql`SELECT pay_fine FROM players WHERE id = ${playerId} LIMIT 1`;
+    const { rows } = await sql`
+      SELECT COALESCE(pss.pay_fine, p.pay_fine, TRUE) AS pay_fine
+      FROM players p
+      LEFT JOIN player_season_settings pss
+        ON pss.player_id = p.id AND pss.season = ${season}
+      WHERE p.id = ${playerId}
+      LIMIT 1
+    `;
     if (rows[0] && rows[0].pay_fine === false) {
       moneyToChange = 0;
     }
@@ -184,7 +203,7 @@ export async function addMatchAction(formData: FormData) {
     `;
     const inserted = insertedRows[0];
 
-    const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
+    const lose_money = await getSeasonLoseMoney(season);
     const hasGuest = matchHasGuest({ win_1, win_2, lose_1, lose_2 });
 
     if (!hasGuest) {
@@ -235,7 +254,7 @@ export async function deleteMatchAction(matchId: string) {
     if (rows.length === 0) return { error: 'Không tìm thấy trận đấu' };
     const m = rows[0];
 
-    const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
+    const lose_money = await getSeasonLoseMoney(String(m.season || 'Season 1'));
     const hasGuest = matchHasGuest(m);
 
     // Reverse stats
@@ -705,12 +724,16 @@ export async function rebuildStatsAction() {
         PRIMARY KEY (player_id, season)
       )
     `;
+    await ensurePlayerSeasonSettingsTable();
 
-    const lose_money = parseInt(await getConfigValue('lose_money', '5000')) || 5000;
-    
     const { rows: players } = await sql`SELECT id, pay_fine FROM players WHERE deleted_at IS NULL`;
     const validPlayerIds = new Set(players.map(p => p.id).filter(id => !isGuestId(id)));
-    const noFinePlayerIds = new Set(players.filter(p => p.pay_fine === false).map(p => p.id));
+    const playerDefaultPayFine = new Map(players.map(p => [String(p.id), p.pay_fine !== false]));
+    const { rows: playerSeasonSettings } = await sql`SELECT player_id, season, pay_fine FROM player_season_settings`;
+    const playerSeasonPayFine = new Map(playerSeasonSettings.map(s => [`${s.player_id}:${s.season}`, s.pay_fine !== false]));
+    const fallbackLoseMoney = parseInt(await getConfigValue('lose_money', '5000')) || 5000;
+    const { rows: seasons } = await sql`SELECT name, lose_money FROM seasons WHERE archived = false`;
+    const seasonLoseMoney = new Map(seasons.map(s => [String(s.name), Number(s.lose_money ?? fallbackLoseMoney)]));
     
     const { rows: matches } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL`;
     
@@ -741,8 +764,9 @@ export async function rebuildStatsAction() {
       losers.forEach(pid => {
         const key = `${pid}:${season}`;
         const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-        if (!noFinePlayerIds.has(pid)) {
-          s.money += lose_money;
+        const shouldPayFine = playerSeasonPayFine.get(key) ?? playerDefaultPayFine.get(String(pid)) ?? true;
+        if (shouldPayFine) {
+          s.money += seasonLoseMoney.get(String(season)) ?? fallbackLoseMoney;
         }
         statsMap.set(key, s);
       });
@@ -1067,7 +1091,7 @@ export async function updateMatchAction(formData: FormData) {
     if (rows.length === 0) return { error: 'Không tìm thấy trận đấu cũ' };
     const old = rows[0];
 
-    const lose_money = parseInt(await getConfigValue('lose_money', '5000'));
+    const lose_money = await getSeasonLoseMoney(String(old.season || 'Season 1'));
     const oldHasGuest = matchHasGuest(old);
     const newHasGuest = matchHasGuest({ win_1, win_2, lose_1, lose_2 });
 

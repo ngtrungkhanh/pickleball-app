@@ -563,6 +563,7 @@ export default function Dashboard({
           selectedSeason={selectedSeason}
           onSeasonChange={handleSeasonChange}
           loseMoney={loseMoney}
+          playerSeasonSettings={sharedData.playerSeasonSettings}
         />
       </div>
 
