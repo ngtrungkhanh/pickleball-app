@@ -56,7 +56,7 @@ Recent behavior updates to remember:
   goes online through route preload/reload.
 - Dashboard and Analysis should not show manual `Làm mới` buttons; use browser
   reload/F5 when fresh server data is needed.
-- `/analysis` Hub insight rules are now 86 current rule types with randomized
+- `/analysis` Hub insight rules are now 87 current rule types with randomized
   Vietnamese copy variants. Read
   `docs/ANALYSIS_INSIGHTS_RULES.md` and `docs/ANALYSIS_INSIGHTS_SELECTION.md`
   before changing triggers, copy, semantic groups, or weights.

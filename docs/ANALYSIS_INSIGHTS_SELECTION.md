@@ -96,7 +96,7 @@ first.
 ### Semantic Groups
 
 Use groups to diversify the feed, not to block too broadly. The planned group
-taxonomy should support the current 86-rule registry and future expansion:
+taxonomy should support the current 87-rule registry and future expansion:
 
 - `rank_race`: leaderboard rank, rank takeover, hot-seat threats, top-1 gap or
   time, stuck-rank stories
@@ -706,14 +706,14 @@ Audit after Batch 2:
 - Batch 2 types not triggered in this backup: `buffet_eater`,
   `moody_player`, `parasite_win`, and `gatekeeper_boss`.
 
-### 86-Scenario Port Note
+### 87-Scenario Registry Note
 
-The approved 86-scenario registry and randomized Vietnamese copy variants have
-since been ported into `src/lib/insights.ts`.
+The approved registry and randomized Vietnamese copy variants now cover 87
+scenarios in `src/lib/insights.ts`.
 
 Latest release state:
 
-- Released feature commit `cd2d0f8` includes the current 86-rule registry,
+- Released feature commit `cd2d0f8` includes the current 87-rule registry,
   weekly ELO rise/fall copy aligned to the weekly performance board, cleaned
   `score_bully` markup, tightened relationship/dependency insight copy, the
   tightened `unlucky_draw` trigger/copy, adaptive Attack/Defense radar scoring,

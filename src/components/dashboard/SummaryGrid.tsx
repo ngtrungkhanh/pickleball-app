@@ -39,7 +39,7 @@ export function SummaryGrid({
       big: formatCompactMoney(s.totalMoney),
       unit: '',
     },
-    { Icon: Zap, color: '#a78bfa', label: 'Tuần này', big: `${s.matchesThisWeek}`, unit: 'trận' },
+    { Icon: Zap, color: '#a78bfa', label: 'Buổi trước', big: `${s.latestSessionMatches}`, unit: 'trận' },
   ];
 
   return (

@@ -96,7 +96,7 @@ Read only when relevant:
 - **Analysis Copy Review**: Review Hub insight comment tone on Production and
   Preview with real data, especially weekly ELO rise/fall, `score_bully`, and
   relationship/dependency wording.
-- **Analysis Insights Review**: The insight registry is implemented as 86 rule
+- **Analysis Insights Review**: The insight registry is implemented as 87 rule
   types with 5 Vietnamese copy variants where applicable, type-first weighted
   selection, semantic-group diversity, cooldown/soft pity, and the relative
   `defense_wall` trigger. Next review Vercel Preview with real dev data, then

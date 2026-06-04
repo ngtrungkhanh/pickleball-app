@@ -53,11 +53,9 @@ function getVietnamStartOfDayUtcMs(date: Date) {
   return Date.UTC(parts.year, parts.month, parts.date) - VIETNAM_OFFSET_MS;
 }
 
-function getVietnamWeekBoundsUtc(now = new Date()) {
-  const parts = getVietnamDateParts(now);
-  const startOfToday = getVietnamStartOfDayUtcMs(now);
-  const start = startOfToday - (parts.day - 1) * DAY_MS;
-  return { start, end: start + 7 * DAY_MS };
+function getVietnamDateKey(date: Date) {
+  const parts = getVietnamDateParts(date);
+  return `${parts.year}-${String(parts.month + 1).padStart(2, '0')}-${String(parts.date).padStart(2, '0')}`;
 }
 
 function numberValue(value: unknown, fallback = 0) {
@@ -220,14 +218,13 @@ export function getSeasonSummaryStats(matches: StatMatch[], loseMoney: number = 
 
   const now = new Date();
   const startOfDay = getVietnamStartOfDayUtcMs(now);
-  const { start: startOfWeek, end: endOfWeek } = getVietnamWeekBoundsUtc(now);
+  const latestMatchTime = Math.max(0, ...rankingMatches.map(matchTime));
+  const latestSessionKey = latestMatchTime > 0 ? getVietnamDateKey(new Date(latestMatchTime)) : '';
+  const latestSessionMatches = latestSessionKey
+    ? rankingMatches.filter(m => getVietnamDateKey(new Date(matchTime(m))) === latestSessionKey).length
+    : 0;
 
-  const matchesThisWeek = rankingMatches.filter(m => {
-    const t = new Date(String(m.date || '')).getTime();
-    return t >= startOfWeek && t < endOfWeek;
-  }).length;
-
-  const latestMatch = rankingMatches.length > 0 ? new Date(String(rankingMatches[0].date || '')) : null;
+  const latestMatch = latestMatchTime > 0 ? new Date(latestMatchTime) : null;
   let lastText = "Chưa có";
   if (latestMatch) {
     const mDate = new Date(latestMatch.getFullYear(), latestMatch.getMonth(), latestMatch.getDate()).getTime();
@@ -242,7 +239,7 @@ export function getSeasonSummaryStats(matches: StatMatch[], loseMoney: number = 
     totalMatches,
     totalMoney,
     seasonDays,
-    matchesThisWeek,
+    latestSessionMatches,
     lastText,
     totalLoseCount
   };
