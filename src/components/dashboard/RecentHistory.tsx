@@ -159,7 +159,7 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
   const playerOptions = players.filter(p => p.active !== false && !p.deleted_at);
   const ids = (m: any) => [m.win_1, m.win_2, m.lose_1, m.lose_2].filter(Boolean);
   const team = (m: any, id: string) => ([m.win_1, m.win_2].includes(id) ? 'win' : [m.lose_1, m.lose_2].includes(id) ? 'loss' : null);
-  const filteredMatches = matches.filter(m => {
+  const matchesBaseFilters = (m: any) => {
     if (member1 && !ids(m).includes(member1)) return false;
     if (member2 && !ids(m).includes(member2)) return false;
     if (member1 && member2 && relation !== '-') {
@@ -169,12 +169,16 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
       if (relation === 'partner' && t1 !== t2) return false;
       if (relation === 'opponent' && t1 === t2) return false;
     }
+    return true;
+  };
+  const matchesWithoutResultFilter = matches.filter(matchesBaseFilters);
+  const filteredMatches = matchesWithoutResultFilter.filter(m => {
     if (member1 && result !== '-' && team(m, member1) !== result) return false;
     return true;
   });
 
   const memberSummary = member1 && !isGuestId(member1)
-    ? filteredMatches.reduce((acc, m) => {
+    ? matchesWithoutResultFilter.reduce((acc, m) => {
       const t = team(m, member1);
       if (t === 'win') acc.wins++;
       if (t === 'loss') acc.losses++;
@@ -183,13 +187,22 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
     : null;
   const summaryTotal = memberSummary ? memberSummary.wins + memberSummary.losses : 0;
   const wr = summaryTotal ? ((memberSummary!.wins / summaryTotal) * 100).toFixed(1) : '0.0';
+  const summarizeForMember1 = (list: any[]) => {
+    if (!member1 || isGuestId(member1)) return null;
+    return list.reduce((acc, m) => {
+      const t = team(m, member1);
+      if (t === 'win') acc.wins++;
+      if (t === 'loss') acc.losses++;
+      return acc;
+    }, { wins: 0, losses: 0 });
+  };
 
   const grouped: Record<string, any[]> = {};
   filteredMatches.forEach(m => { (grouped[m.season ?? 'Season 1'] ??= []).push(m); });
 
   return (
     <div className="fixed inset-0 z-[500] flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-300" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/65 backdrop-blur-md animate-in fade-in duration-300" onClick={onClose} />
       {deleteTarget && (
         <ConfirmDelete
           onCancel={() => setDeleteTarget(null)}
@@ -204,48 +217,48 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
           }}
         />
       )}
-      <div className="relative flex flex-col w-full sm:max-w-2xl h-[92vh] sm:h-auto sm:max-h-[85vh] bg-slate-950 sm:rounded-3xl rounded-t-[2.5rem] border border-white/[0.08] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 duration-300">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.06] shrink-0">
+      <div className="relative flex flex-col w-full sm:max-w-[1100px] xl:max-w-[1180px] h-[92vh] sm:h-auto sm:max-h-[88vh] bg-[#192844]/98 sm:rounded-[2rem] rounded-t-[2.5rem] border border-slate-400/25 shadow-[0_28px_90px_rgba(0,0,0,0.42)] overflow-hidden backdrop-blur-2xl animate-in slide-in-from-bottom-10 duration-300">
+        <div className="flex items-center justify-between px-6 py-5 sm:px-8 sm:py-6 border-b border-slate-400/20 bg-[#1c2d4b]/80 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
               <History className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h2 className="font-black text-lg text-white tracking-tight">Lịch sử trận đấu</h2>
-              <p className="text-[10px] text-white/20 font-bold uppercase tracking-widest mt-0.5">{matches.length} trận đấu được ghi lại</p>
+              <h2 className="font-black text-xl sm:text-2xl text-white tracking-tight">Lịch sử trận đấu</h2>
+              <p className="text-[10px] sm:text-[11px] text-slate-300/55 font-bold uppercase tracking-widest mt-0.5">{matches.length} trận đấu được ghi lại</p>
             </div>
           </div>
-          <button onClick={onClose} className="w-10 h-10 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all active:scale-90">
-            <X className="w-5 h-5 text-white/50" />
+          <button onClick={onClose} className="w-11 h-11 rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center transition-all active:scale-90">
+            <X className="w-5 h-5 text-slate-200/70" />
           </button>
         </div>
-        <div className="border-b border-white/[0.06] px-4 sm:px-6 py-4 space-y-3">
+        <div className="border-b border-slate-400/20 bg-[#17243a]/70 px-4 sm:px-8 py-4 space-y-3">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <select value={member1} onChange={e => { const v = e.target.value; setMember1(v); if (!v) setResult('-'); if (v && v === member2) setMember2(''); }} className="rounded-xl bg-slate-900 border border-white/[0.08] px-3 py-2 text-xs font-bold text-white/80">
+            <select value={member1} onChange={e => { const v = e.target.value; setMember1(v); if (!v) setResult('-'); if (v && v === member2) setMember2(''); }} className="rounded-xl !bg-[#223047] border border-slate-300/20 px-3 py-2.5 text-xs sm:text-sm font-bold text-white/85">
               <option value="">Thành viên 1</option>
               {playerOptions.map(p => <option key={p.id} value={p.id}>{isGuestId(p.id) ? 'Khách' : p.name}</option>)}
             </select>
-            <select value={member2} onChange={e => { const v = e.target.value; setMember2(v === member1 ? '' : v); if (!member1 || !v || v === member1) setRelation('-'); }} className="rounded-xl bg-slate-900 border border-white/[0.08] px-3 py-2 text-xs font-bold text-white/80">
+            <select value={member2} onChange={e => { const v = e.target.value; setMember2(v === member1 ? '' : v); if (!member1 || !v || v === member1) setRelation('-'); }} className="rounded-xl !bg-[#223047] border border-slate-300/20 px-3 py-2.5 text-xs sm:text-sm font-bold text-white/85">
               <option value="">Thành viên 2</option>
               {playerOptions.filter(p => p.id !== member1).map(p => <option key={p.id} value={p.id}>{isGuestId(p.id) ? 'Khách' : p.name}</option>)}
             </select>
-            <select value={relation} disabled={!member1 || !member2} onChange={e => setRelation(e.target.value as typeof relation)} className="rounded-xl bg-slate-900 border border-white/[0.08] px-3 py-2 text-xs font-bold text-white/80 disabled:opacity-35">
+            <select value={relation} disabled={!member1 || !member2} onChange={e => setRelation(e.target.value as typeof relation)} className="rounded-xl !bg-[#223047] border border-slate-300/20 px-3 py-2.5 text-xs sm:text-sm font-bold text-white/85 disabled:opacity-35">
               <option value="-">Quan hệ</option>
               <option value="partner">Hợp tác</option>
               <option value="opponent">Đối đầu</option>
             </select>
-            <select value={result} disabled={!member1} onChange={e => setResult(e.target.value as typeof result)} className="rounded-xl bg-slate-900 border border-white/[0.08] px-3 py-2 text-xs font-bold text-white/80 disabled:opacity-35">
+            <select value={result} disabled={!member1} onChange={e => setResult(e.target.value as typeof result)} className="rounded-xl !bg-[#223047] border border-slate-300/20 px-3 py-2.5 text-xs sm:text-sm font-bold text-white/85 disabled:opacity-35">
               <option value="-">Kết quả</option>
               <option value="win">Thắng</option>
               <option value="loss">Thua</option>
             </select>
           </div>
-          <div className="text-[11px] font-black text-white/35 uppercase tracking-widest">
+          <div className="text-[11px] sm:text-xs font-black text-slate-300/55 uppercase tracking-widest">
             Đang hiện {filteredMatches.length}/{matches.length} trận
             {memberSummary && ` · ${memberSummary.wins}W / ${memberSummary.losses}L · WR ${wr}%`}
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
+        <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-8 sm:py-7 space-y-8 bg-[#192844]/60">
           {Object.entries(grouped).map(([season, list]) => (
             <div key={season} className="space-y-4">
               <div className="flex items-center gap-3 px-1">
@@ -254,24 +267,32 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
                 <span className="text-[10px] text-white/20 font-bold uppercase tracking-widest">{list.length} trận</span>
               </div>
               <div className="space-y-6">
-                {groupMatchesByDay(list).map(day => (
+                {groupMatchesByDay(list).map(day => {
+                  const daySummaryMatches = matchesWithoutResultFilter.filter(m =>
+                    (m.season ?? 'Season 1') === season && dateKeyOf(m.date) === day.key
+                  );
+                  const daySummary = summarizeForMember1(daySummaryMatches);
+                  const daySummaryTotal = daySummary ? daySummary.wins + daySummary.losses : 0;
+                  const dayWr = daySummaryTotal ? ((daySummary!.wins / daySummaryTotal) * 100).toFixed(1) : '0.0';
+
+                  return (
                   <div key={day.key} className="space-y-3">
                     <div className={cn(
-                      'overflow-hidden rounded-xl border px-3 py-2.5 shadow-sm',
+                      'relative overflow-hidden rounded-xl border px-3.5 py-3 shadow-sm',
                       day.isToday
-                        ? 'border-primary/25 bg-emerald-950/70 shadow-primary/5'
-                        : 'border-white/[0.07] bg-slate-900/95 shadow-black/10'
+                        ? 'border-primary/30 bg-primary/[0.10] shadow-primary/5'
+                        : 'border-slate-400/20 bg-[#223047]/85 shadow-black/10'
                     )}>
                       <div className={cn(
                         'absolute inset-y-0 left-0 w-1',
                         day.isToday ? 'bg-primary' : 'bg-white/15'
                       )} />
-                      <div className="flex items-center justify-between gap-3 pl-1">
+                      <div className="flex flex-wrap items-center justify-between gap-3 pl-1">
                         <div className="min-w-0 flex items-center gap-2">
                           <Calendar className={cn('w-3.5 h-3.5 shrink-0', day.isToday ? 'text-primary' : 'text-white/35')} />
                           <span className={cn(
-                            'truncate text-[11px] font-black uppercase tracking-[0.18em]',
-                            day.isToday ? 'text-primary' : 'text-white/50'
+                            'truncate text-[11px] sm:text-xs font-black uppercase tracking-[0.18em]',
+                            day.isToday ? 'text-primary' : 'text-slate-200/70'
                           )}>
                             {day.isToday ? 'Hôm nay' : day.dateLabel}
                           </span>
@@ -281,14 +302,26 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
                             </span>
                           )}
                         </div>
-                        <span className={cn(
+                        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+                          {daySummary && (
+                            <span className={cn(
+                              'rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest tabular-nums',
+                              day.isToday
+                                  ? 'border-primary/25 bg-primary/10 text-primary'
+                                  : 'border-slate-300/20 bg-white/[0.055] text-slate-200/65'
+                            )}>
+                              {daySummary.wins}W / {daySummary.losses}L - WR {dayWr}%
+                            </span>
+                          )}
+                          <span className={cn(
                           'shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest tabular-nums',
                         day.isToday
                           ? 'border-primary/25 bg-primary/10 text-primary'
-                          : 'border-white/[0.08] bg-white/[0.04] text-white/40'
+                          : 'border-slate-300/20 bg-white/[0.055] text-slate-200/60'
                         )}>
                           {day.matches.length} trận
-                        </span>
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <div className={cn('space-y-2 border-l-2 pl-3.5', day.isToday ? 'border-primary/35' : 'border-white/[0.07]')}>
@@ -297,7 +330,8 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
                       ))}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -315,9 +349,9 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
   const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
   const expected = matchExpected?.get(m.id);
   return (
-    <div className="group rounded-2xl border border-white/[0.04] bg-white/[0.015] hover:bg-white/[0.03] transition-all overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.03]">
-        <span className="text-[10px] font-bold text-white/25 flex items-center gap-1.5 uppercase tracking-widest">
+    <div className="group rounded-2xl border border-slate-300/[0.16] bg-[#17243a]/[0.82] hover:bg-[#1d2d4b]/90 transition-all overflow-hidden shadow-[0_10px_28px_rgba(0,0,0,0.12)]">
+      <div className="flex items-center justify-between px-4 sm:px-5 py-2.5 border-b border-slate-300/10 bg-white/[0.025]">
+        <span className="text-[10px] sm:text-[11px] font-bold text-slate-300/45 flex items-center gap-1.5 uppercase tracking-widest">
           <Calendar className="w-3 h-3 opacity-40" />{date}<span className="mx-1 opacity-20">·</span><Clock className="w-3 h-3 opacity-40" />{time}
         </span>
         {canEdit && (
@@ -326,19 +360,19 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
           </button>
         )}
       </div>
-      <div className="px-4 py-4 flex items-center gap-3" data-mobile-match-row>
+      <div className="px-4 sm:px-5 py-4 sm:py-5 flex items-center gap-3 sm:gap-5" data-mobile-match-row>
         <div className="flex-1 min-w-0 text-right space-y-0.5">
           <MobilePlayerName players={players} id={m.win_1} className="text-sm font-black text-white/90 truncate" />
-          <div className="hidden text-sm font-black text-white/90 truncate sm:block">{name(m.win_1)}</div>
+          <div className="hidden text-base font-black text-white/90 truncate sm:block">{name(m.win_1)}</div>
           {m.win_2 && (
             <>
               <MobilePlayerName players={players} id={m.win_2} className="text-sm font-black text-white/90 truncate" />
-              <div className="hidden text-sm font-black text-white/90 truncate sm:block">{name(m.win_2)}</div>
+              <div className="hidden text-base font-black text-white/90 truncate sm:block">{name(m.win_2)}</div>
             </>
           )}
         </div>
         <div className="flex flex-col items-center shrink-0">
-          <div className="px-4 py-2 rounded-2xl bg-primary/10 border border-primary/20 text-primary font-black text-sm tabular-nums shadow-lg shadow-primary/5">
+          <div className="px-4 sm:px-5 py-2 rounded-2xl bg-primary/[0.12] border border-primary/25 text-primary font-black text-sm sm:text-base tabular-nums shadow-lg shadow-primary/5">
             <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
           </div>
           {expected && (
@@ -350,11 +384,11 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
         </div>
         <div className="flex-1 min-w-0 text-left space-y-0.5">
           <MobilePlayerName players={players} id={m.lose_1} className="text-sm font-black text-white/90 truncate" />
-          <div className="hidden text-sm font-black text-white/90 truncate sm:block">{name(m.lose_1)}</div>
+          <div className="hidden text-base font-black text-white/90 truncate sm:block">{name(m.lose_1)}</div>
           {m.lose_2 && (
             <>
               <MobilePlayerName players={players} id={m.lose_2} className="text-sm font-black text-white/90 truncate" />
-              <div className="hidden text-sm font-black text-white/90 truncate sm:block">{name(m.lose_2)}</div>
+              <div className="hidden text-base font-black text-white/90 truncate sm:block">{name(m.lose_2)}</div>
             </>
           )}
         </div>
