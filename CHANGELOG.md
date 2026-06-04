@@ -6,11 +6,11 @@ repo.
 ## Current Production Snapshot
 
 - Production domain: `https://conchimnon.vercel.app/`
-- Latest production `main` commit verified from GitHub: `120e7ce`
-- Main commit message: `Merge dev into main`
-- Latest released feature commit: `cd2d0f8`
-- Feature commit message: `Refine analysis radar scoring`
-- Latest pushed `dev` commit: `cd2d0f8`
+- Latest production `main` commit verified from GitHub: `7271df3`
+- Main commit message: `Merge branch 'dev'`
+- Latest released feature commit: `f942bed`
+- Feature commit message: `Refine match history UI colors and increase text contrast for dark mode`
+- Latest pushed `dev` commit: `f942bed`
 
 ## Major Completed Work
 
@@ -212,6 +212,7 @@ repo.
   numeric format such as `35.000`.
 - Brightened the main dashboard surfaces, borders, and hover states for better
   contrast on dark backgrounds.
+- Darkened match history modal backgrounds, day group headers, and dropdown selects, and increased text color contrast for dates, times, and expected win probabilities on both the dashboard modal and the standalone history page to improve legibility.
 - Kept the leaderboard season selector as a two-line header and kept the desktop
   table header sticky inside a bounded scroll area.
 - Reworked expanded leaderboard detail into four compact blocks, adding `Kèo dễ`
