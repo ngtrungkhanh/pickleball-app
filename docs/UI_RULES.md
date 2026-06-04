@@ -40,6 +40,7 @@ targets.
   layout.
 - Source strings should render as UTF-8 Vietnamese or intentional ASCII. Avoid
   adding mojibake; use ASCII docs if shell encoding is uncertain.
+- All code, markdown, and config files must be saved with **UTF-8 encoding without BOM** to avoid mojibake or compiler issues. Do not use UTF-8 with BOM or UTF-16.
 
 ## Responsive Rules
 

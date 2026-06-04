@@ -137,6 +137,7 @@ Read only when relevant:
   now auto-creates missing player IDs before match inserts.
 - Full `npm run lint` has existing debt; use targeted lint for changed files.
 - UI review order: mobile, Desktop Full HD, 2K, 4K.
+- All source code, markdown, and config files must be saved using **UTF-8 encoding without BOM** to prevent mojibake. Vietnamese text must render as valid UTF-8.
 
 ## Documentation Maintenance
 
