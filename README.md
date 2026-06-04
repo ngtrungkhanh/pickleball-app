@@ -53,15 +53,17 @@ Notes:
 - Dashboard and Analysis are static shells, so `npm run build` should not need
   to prerender database-backed user pages. Dynamic/admin/API routes still need a
   valid pooled Vercel Postgres connection when exercised locally.
-- For local UI checks that need match data, first use the normal Dashboard/local
-  IndexedDB cache. If local server data is unavailable because `.env.local` uses
-  a direct Postgres URL or the browser cache is empty, use the newest
-  `pickleball_backup_YYYY-MM-DD.json` file as the test-data source instead of
-  repeatedly trying the failing server path.
-- Next dev allows one dev server per repo. If a temporary visual-test route is
-  added after `npm run dev` is already running and returns 404, stop the existing
-  Next dev PID and restart it; do not start another port and expect the new route
-  to load.
+- For history UI checks, use the deterministic backup-based visual test instead
+  of trying server/cache data first:
+  `npm run visual:test:history`. The script uses the newest
+  `pickleball_backup_YYYY-MM-DD.json`, creates a temporary route, runs
+  `next build` + `next start` on a free port starting at `3100`, captures mobile
+  and desktop screenshots to `.next/visual-tests/`, and deletes the temporary
+  route afterwards. This avoids the known local failure path where `.env.local`
+  has a direct Vercel Postgres URL or the browser cache is empty.
+- If a manual temporary route is still needed, remember Next dev allows one dev
+  server per repo. Stop the existing Next dev PID before expecting newly added
+  routes to appear.
 
 ## Deployment
 

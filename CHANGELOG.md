@@ -19,6 +19,10 @@ repo.
 - Compacted full match history rows by moving match date/time into a left rail
   and keeping player/team content to a two-line match layout on mobile and
   desktop.
+- Added a backup-based `npm run visual:test:history` workflow that creates a
+  temporary route from the newest JSON backup, runs production build/start, and
+  captures mobile/desktop history screenshots without depending on local
+  Postgres or browser cache state.
 - Reduced overlap between form insights by reserving `hot_streak` for 6+ win
   streaks, renamed `perfect_form5` to avoid color wording, and lifted
   `undefeated_session` when the clean session is the latest play day.
