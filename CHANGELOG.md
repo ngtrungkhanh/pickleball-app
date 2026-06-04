@@ -22,6 +22,9 @@ repo.
 - Removed repeated season text from each full-history match row because the
   surrounding season/day grouping already identifies the season and the repeated
   row text clipped on narrow modal widths.
+- Replaced the full-history modal's generic entrance classes with explicit
+  backdrop/panel open and close keyframes for a smoother mobile sheet and
+  desktop dialog transition.
 - Added a backup-based `npm run visual:test:history` workflow that creates a
   temporary route from the newest JSON backup, runs production build/start, and
   captures mobile/desktop full-history modal and standalone history screenshots

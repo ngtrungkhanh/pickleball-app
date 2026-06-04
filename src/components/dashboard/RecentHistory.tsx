@@ -148,6 +148,7 @@ function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCance
 }
 
 function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { matches: any[]; players: any[]; onClose: () => void; canEdit: boolean; matchExpected?: any }) {
+  const [isClosing, setIsClosing] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [member1, setMember1] = useState('');
@@ -199,10 +200,15 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
 
   const grouped: Record<string, any[]> = {};
   filteredMatches.forEach(m => { (grouped[m.season ?? 'Season 1'] ??= []).push(m); });
+  const requestClose = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    window.setTimeout(onClose, 190);
+  };
 
   return (
-    <div className="fixed inset-0 z-[500] flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="absolute inset-0 bg-black/65 backdrop-blur-md animate-in fade-in duration-300" onClick={onClose} />
+    <div className={cn("fixed inset-0 z-[500] flex items-end justify-center p-0 sm:items-center sm:p-4", isClosing && "pointer-events-none")}>
+      <div className={cn("history-modal-backdrop absolute inset-0 bg-black/65 backdrop-blur-md", isClosing && "history-modal-backdrop-out")} onClick={requestClose} />
       {deleteTarget && (
         <ConfirmDelete
           onCancel={() => setDeleteTarget(null)}
@@ -217,7 +223,7 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
           }}
         />
       )}
-      <div className="relative flex flex-col w-full sm:max-w-[1100px] xl:max-w-[1180px] h-[92vh] sm:h-auto sm:max-h-[88vh] bg-[#0b1329]/98 sm:rounded-[2rem] rounded-t-[2.5rem] border border-slate-800/80 shadow-[0_28px_90px_rgba(0,0,0,0.42)] overflow-hidden backdrop-blur-2xl animate-in slide-in-from-bottom-10 duration-300">
+      <div className={cn("history-modal-panel relative flex h-[92vh] w-full flex-col overflow-hidden rounded-t-[2.5rem] border border-slate-800/80 bg-[#0b1329]/98 shadow-[0_28px_90px_rgba(0,0,0,0.42)] backdrop-blur-2xl sm:h-auto sm:max-h-[88vh] sm:max-w-[1100px] sm:rounded-[2rem] xl:max-w-[1180px]", isClosing && "history-modal-panel-out")}>
         <div className="flex items-center justify-between px-6 py-5 sm:px-8 sm:py-6 border-b border-slate-800/80 bg-[#0f1b32]/90 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
@@ -228,7 +234,7 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
               <p className="text-[10px] sm:text-[11px] text-slate-400/80 font-bold uppercase tracking-widest mt-0.5">{matches.length} trận đấu được ghi lại</p>
             </div>
           </div>
-          <button onClick={onClose} className="w-11 h-11 rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center transition-all active:scale-90">
+          <button onClick={requestClose} className="w-11 h-11 rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center transition-all active:scale-90">
             <X className="w-5 h-5 text-slate-200/70" />
           </button>
         </div>

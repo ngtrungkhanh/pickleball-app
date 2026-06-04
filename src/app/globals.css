@@ -72,6 +72,101 @@ select option {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* Full-history modal uses explicit keyframes so open/close feels consistent. */
+.history-modal-backdrop {
+  animation: history-backdrop-in 180ms ease-out both;
+}
+
+.history-modal-backdrop-out {
+  animation: history-backdrop-out 170ms ease-in both;
+}
+
+.history-modal-panel {
+  transform-origin: bottom center;
+  will-change: opacity, transform;
+  animation: history-panel-mobile-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.history-modal-panel-out {
+  animation: history-panel-mobile-out 180ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@media (min-width: 640px) {
+  .history-modal-panel {
+    transform-origin: center;
+    animation-name: history-panel-desktop-in;
+    animation-duration: 260ms;
+  }
+
+  .history-modal-panel-out {
+    animation-name: history-panel-desktop-out;
+    animation-duration: 170ms;
+  }
+}
+
+@keyframes history-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes history-backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes history-panel-mobile-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 36px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes history-panel-mobile-out {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 28px, 0) scale(0.99);
+  }
+}
+
+@keyframes history-panel-desktop-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale(0.975);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes history-panel-desktop-out {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.985);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .history-modal-backdrop,
+  .history-modal-backdrop-out,
+  .history-modal-panel,
+  .history-modal-panel-out {
+    animation-duration: 1ms;
+  }
+}
+
 /* Recent history switches by its own available width, not the viewport width. */
 .recent-history-container {
   container-type: inline-size;
