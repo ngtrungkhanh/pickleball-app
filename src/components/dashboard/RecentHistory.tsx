@@ -1,7 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { cn } from '@/lib/utils';
-import { History, Clock, X, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
+import { History, X, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import { deleteMatchAction } from '@/app/actions';
 import { isGuestId } from '@/lib/guest';
 
@@ -349,48 +349,50 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
   const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
   const expected = matchExpected?.get(m.id);
   return (
-    <div className="group rounded-2xl border border-slate-800/80 bg-[#0f172a]/90 hover:bg-[#15233c]/90 transition-all overflow-hidden shadow-[0_10px_28px_rgba(0,0,0,0.12)]">
-      <div className="flex items-center justify-between px-4 sm:px-5 py-2.5 border-b border-slate-800/80 bg-white/[0.015]">
-        <span className="text-[10px] sm:text-[11px] font-bold text-slate-400/80 flex items-center gap-1.5 uppercase tracking-widest">
-          <Calendar className="w-3 h-3 opacity-65" />{date}<span className="mx-1 opacity-20">·</span><Clock className="w-3 h-3 opacity-65" />{time}
-        </span>
+    <div className="group relative flex overflow-hidden rounded-2xl border border-slate-800/80 bg-[#0f172a]/90 shadow-[0_10px_28px_rgba(0,0,0,0.12)] transition-all hover:bg-[#15233c]/90">
+      <div className="flex w-[64px] shrink-0 flex-col items-center justify-center gap-0.5 border-r border-slate-800/80 bg-white/[0.015] px-2 py-3 sm:w-24">
+        <span className="text-[15px] font-black leading-none text-slate-200/85 tabular-nums sm:text-[17px]">{time}</span>
+        <span className="text-[10px] font-bold text-slate-400/75 tabular-nums sm:text-[11px]">{date}</span>
+        <span className="mt-0.5 max-w-full truncate text-[8px] font-black uppercase tracking-widest text-primary/45 sm:text-[9px]">{m.season ?? 'S1'}</span>
+      </div>
+      <div className={cn("min-w-0 flex-1 px-3 py-3 sm:px-5 sm:py-4", canEdit && "pr-9 sm:pr-11")}>
         {canEdit && (
-          <button disabled={isDeleting} onClick={onDelete} className={cn("text-white/30 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-all active:scale-90", isDeleting && "opacity-50 pointer-events-none")}>
-            {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+          <button disabled={isDeleting} onClick={onDelete} className={cn("absolute right-2 top-2 rounded-lg p-1.5 text-white/25 transition-all hover:bg-red-500/10 hover:text-red-400 active:scale-90", isDeleting && "pointer-events-none opacity-50")}>
+            {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
           </button>
         )}
-      </div>
-      <div className="px-4 sm:px-5 py-4 sm:py-5 flex items-center gap-3 sm:gap-5" data-mobile-match-row>
-        <div className="flex-1 min-w-0 text-right space-y-0.5">
-          <MobilePlayerName players={players} id={m.win_1} className="text-sm font-black text-white/90 truncate" />
-          <div className="hidden text-base font-black text-white/90 truncate sm:block">{name(m.win_1)}</div>
-          {m.win_2 && (
-            <>
-              <MobilePlayerName players={players} id={m.win_2} className="text-sm font-black text-white/90 truncate" />
-              <div className="hidden text-base font-black text-white/90 truncate sm:block">{name(m.win_2)}</div>
-            </>
-          )}
-        </div>
-        <div className="flex flex-col items-center shrink-0">
-          <div className="px-4 sm:px-5 py-2 rounded-2xl bg-primary/[0.12] border border-primary/25 text-primary font-black text-sm sm:text-base tabular-nums shadow-lg shadow-primary/5">
-            <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-5" data-mobile-match-row>
+          <div className="min-w-0 space-y-0.5 text-right">
+            <MobilePlayerName players={players} id={m.win_1} className="truncate text-sm font-black text-white/90" />
+            <div className="hidden truncate text-base font-black text-white/90 sm:block">{name(m.win_1)}</div>
+            {m.win_2 && (
+              <>
+                <MobilePlayerName players={players} id={m.win_2} className="truncate text-sm font-black text-white/90" />
+                <div className="hidden truncate text-base font-black text-white/90 sm:block">{name(m.win_2)}</div>
+              </>
+            )}
           </div>
-          {expected && (
-            <span className="text-[9px] font-bold text-slate-400 mt-1 block tracking-tight whitespace-nowrap">
-              <span className="sm:hidden">{Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%</span>
-              <span className="hidden sm:inline">Dự đoán trước trận: {Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%</span>
-            </span>
-          )}
-        </div>
-        <div className="flex-1 min-w-0 text-left space-y-0.5">
-          <MobilePlayerName players={players} id={m.lose_1} className="text-sm font-black text-white/90 truncate" />
-          <div className="hidden text-base font-black text-white/90 truncate sm:block">{name(m.lose_1)}</div>
-          {m.lose_2 && (
-            <>
-              <MobilePlayerName players={players} id={m.lose_2} className="text-sm font-black text-white/90 truncate" />
-              <div className="hidden text-base font-black text-white/90 truncate sm:block">{name(m.lose_2)}</div>
-            </>
-          )}
+          <div className="flex shrink-0 flex-col items-center">
+            <div className="rounded-xl border border-primary/25 bg-primary/[0.12] px-3 py-1.5 text-sm font-black text-primary shadow-lg shadow-primary/5 tabular-nums sm:px-4 sm:text-base">
+              <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
+            </div>
+            {expected && (
+              <span className="mt-1 block whitespace-nowrap text-[8px] font-bold tracking-tight text-slate-400 sm:text-[9px]">
+                <span className="sm:hidden">{Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%</span>
+                <span className="hidden sm:inline">Dự đoán trước trận: {Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%</span>
+              </span>
+            )}
+          </div>
+          <div className="min-w-0 space-y-0.5 text-left">
+            <MobilePlayerName players={players} id={m.lose_1} className="truncate text-sm font-black text-white/90" />
+            <div className="hidden truncate text-base font-black text-white/90 sm:block">{name(m.lose_1)}</div>
+            {m.lose_2 && (
+              <>
+                <MobilePlayerName players={players} id={m.lose_2} className="truncate text-sm font-black text-white/90" />
+                <div className="hidden truncate text-base font-black text-white/90 sm:block">{name(m.lose_2)}</div>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

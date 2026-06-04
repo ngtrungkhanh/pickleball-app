@@ -77,6 +77,13 @@ Read only when relevant:
   copy/triggers.
 - Local demo routes such as `/ui-demo` and `/picker-demo` may exist on one
   machine for review, but should not be pushed unless explicitly requested.
+- Local UI testing note: if Dashboard/history data cannot be fetched because
+  local `.env.local` has the direct Vercel Postgres URL or the browser cache is
+  empty, use the newest `pickleball_backup_YYYY-MM-DD.json` file as the data
+  source for temporary mock routes or local restore testing. If a temporary route
+  is added while `npm run dev` is already running, restart the existing Next dev
+  process; Next allows only one dev server per repo and stale servers can return
+  404 for newly added routes.
 
 ## Current Pending Tasks (Next Session)
 

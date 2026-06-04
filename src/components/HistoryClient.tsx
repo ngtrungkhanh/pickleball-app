@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState, useSyncExternalStore, useTransition } from 'react';
-import { ArrowLeft, Calendar, Clock, Loader2, RefreshCw, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { deleteMatchAction } from '@/app/actions';
 import { buildAnalysisElo, isFullDoublesMatch, type AnalysisMatch } from '@/lib/analysis-core';
 import { removeMatchesLocal, type StoredMatch, type StoredPlayer, type StoredPlayerSeasonSetting, type StoredSeason } from '@/lib/db';
@@ -108,6 +108,58 @@ function playerName(players: Player[], id?: string | null) {
   if (!id) return '--';
   if (isGuestId(id)) return 'Khách';
   return players.find(player => player.id === id)?.name || id;
+}
+
+function normalizedName(value: unknown) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function nameParts(value: unknown) {
+  return normalizedName(value).split(' ').filter(Boolean);
+}
+
+function fitLabel(value: string, maxChars: number) {
+  const chars = Array.from(value);
+  if (chars.length <= maxChars) return value;
+  if (maxChars <= 3) return chars.slice(0, maxChars).join('');
+  return `${chars.slice(0, maxChars - 3).join('')}...`;
+}
+
+function givenNameOf(value: unknown) {
+  const parts = nameParts(value);
+  return parts[parts.length - 1] || normalizedName(value);
+}
+
+function tinyPlayerName(players: Player[], fullName: string) {
+  if (!fullName) return '--';
+
+  const givenName = givenNameOf(fullName);
+  const normalizedGiven = givenName.toLocaleLowerCase('vi-VN');
+  const hasDuplicateGivenName = players.some(player =>
+    normalizedName(player?.name) !== fullName &&
+    givenNameOf(player?.name).toLocaleLowerCase('vi-VN') === normalizedGiven
+  );
+
+  if (!hasDuplicateGivenName) return fitLabel(givenName, 7);
+
+  const initials = nameParts(fullName)
+    .slice(0, -1)
+    .slice(0, 2)
+    .map(part => Array.from(part)[0]?.toLocaleUpperCase('vi-VN'))
+    .filter(Boolean)
+    .join('.');
+
+  return fitLabel(initials ? `${initials}.${givenName}` : givenName, 9);
+}
+
+function CompactHistoryPlayerName({ players, id }: { players: Player[]; id?: string | null }) {
+  const fullName = playerName(players, id);
+  return (
+    <span className="block truncate text-[13px] font-black leading-snug text-white/90 sm:text-base" title={fullName}>
+      <span className="sm:hidden">{tinyPlayerName(players, fullName)}</span>
+      <span className="hidden sm:inline">{fullName}</span>
+    </span>
+  );
 }
 
 function DeleteButton({
@@ -275,34 +327,38 @@ export default function HistoryClient({
               const expected = matchExpected.get(match.id);
 
               return (
-                <div key={match.id} className="glass overflow-hidden rounded-2xl border border-white/5 transition-all hover:border-white/10">
-                  <div className="flex items-center justify-between border-b border-white/[0.04] bg-white/[0.02] px-5 py-2.5">
-                    <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400/80">
-                      <Calendar className="h-3.5 w-3.5" /> {dateText}
-                      <span className="mx-1 text-white/10">•</span>
-                      <Clock className="h-3.5 w-3.5" /> {timeText}
-                    </span>
-                    {canWrite && <DeleteButton matchId={match.id} onDeleted={sharedData.refresh} />}
+                <div key={match.id} className="glass relative flex overflow-hidden rounded-2xl border border-white/5 transition-all hover:border-white/10">
+                  <div className="flex w-[68px] shrink-0 flex-col items-center justify-center gap-0.5 border-r border-white/[0.05] bg-white/[0.02] px-2 py-3 sm:w-24">
+                    <span className="text-[15px] font-black leading-none text-slate-200/85 tabular-nums sm:text-[17px]">{timeText}</span>
+                    <span className="text-[10px] font-bold text-slate-400/75 tabular-nums sm:text-[11px]">{dateText}</span>
                   </div>
 
-                  <div className="grid grid-cols-12 items-center gap-3 px-5 py-4">
-                    <div className="col-span-5 flex flex-col gap-1 text-right">
-                      <span className="truncate text-sm font-black text-white/90 sm:text-base">{playerName(players, match.win_1)}</span>
-                      {match.win_2 && <span className="truncate text-sm font-black text-white/90 sm:text-base">{playerName(players, match.win_2)}</span>}
-                    </div>
-                    <div className="col-span-2 flex flex-col items-center justify-center">
-                      <div className="whitespace-nowrap rounded-xl border border-primary/20 bg-primary/10 px-3 py-1.5 text-base font-black tracking-tighter text-primary sm:text-lg">
-                        {match.win_score}–{match.lose_score}
+                  <div className={cn('min-w-0 flex-1 px-3 py-3 sm:px-5 sm:py-4', canWrite && 'pr-9 sm:pr-11')}>
+                    {canWrite && (
+                      <div className="absolute right-2 top-2">
+                        <DeleteButton matchId={match.id} onDeleted={sharedData.refresh} />
                       </div>
-                      {expected && (
-                        <span className="mt-1 block whitespace-nowrap text-center text-[9px] font-bold text-slate-400 sm:text-[10px]">
-                          Dự đoán trước trận: {Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%
-                        </span>
-                      )}
-                    </div>
-                    <div className="col-span-5 flex flex-col gap-1 text-left">
-                      <span className="truncate text-sm font-black text-white/90 sm:text-base">{playerName(players, match.lose_1)}</span>
-                      {match.lose_2 && <span className="truncate text-sm font-black text-white/90 sm:text-base">{playerName(players, match.lose_2)}</span>}
+                    )}
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-4">
+                      <div className="min-w-0 space-y-0.5 text-right">
+                        <CompactHistoryPlayerName players={players} id={match.win_1} />
+                        {match.win_2 && <CompactHistoryPlayerName players={players} id={match.win_2} />}
+                      </div>
+                      <div className="flex shrink-0 flex-col items-center justify-center">
+                        <div className="whitespace-nowrap rounded-xl border border-primary/20 bg-primary/10 px-3 py-1.5 text-base font-black tracking-tighter text-primary sm:text-lg">
+                          {match.win_score}–{match.lose_score}
+                        </div>
+                        {expected && (
+                          <span className="mt-1 block whitespace-nowrap text-center text-[8px] font-bold text-slate-400 sm:text-[10px]">
+                            <span className="sm:hidden">{Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%</span>
+                            <span className="hidden sm:inline">Dự đoán trước trận: {Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%</span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="min-w-0 space-y-0.5 text-left">
+                        <CompactHistoryPlayerName players={players} id={match.lose_1} />
+                        {match.lose_2 && <CompactHistoryPlayerName players={players} id={match.lose_2} />}
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -16,6 +16,9 @@ repo.
 
 ### Bug Fixes
 
+- Compacted full match history rows by moving match date/time into a left rail
+  and keeping player/team content to a two-line match layout on mobile and
+  desktop.
 - Reduced overlap between form insights by reserving `hot_streak` for 6+ win
   streaks, renamed `perfect_form5` to avoid color wording, and lifted
   `undefeated_session` when the clean session is the latest play day.
