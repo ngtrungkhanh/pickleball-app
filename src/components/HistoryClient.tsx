@@ -277,7 +277,7 @@ export default function HistoryClient({
               return (
                 <div key={match.id} className="glass overflow-hidden rounded-2xl border border-white/5 transition-all hover:border-white/10">
                   <div className="flex items-center justify-between border-b border-white/[0.04] bg-white/[0.02] px-5 py-2.5">
-                    <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-white/30">
+                    <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400/80">
                       <Calendar className="h-3.5 w-3.5" /> {dateText}
                       <span className="mx-1 text-white/10">•</span>
                       <Clock className="h-3.5 w-3.5" /> {timeText}
@@ -295,7 +295,7 @@ export default function HistoryClient({
                         {match.win_score}–{match.lose_score}
                       </div>
                       {expected && (
-                        <span className="mt-1 block whitespace-nowrap text-center text-[9px] font-bold text-white/30 sm:text-[10px]">
+                        <span className="mt-1 block whitespace-nowrap text-center text-[9px] font-bold text-slate-400 sm:text-[10px]">
                           Dự đoán trước trận: {Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%
                         </span>
                       )}
