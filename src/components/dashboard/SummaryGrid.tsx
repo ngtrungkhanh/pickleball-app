@@ -8,6 +8,7 @@ type SummaryGridProps = {
   loseMoney?: number;
   seasons?: FineSeason[];
   playerSeasonSettings?: FinePlayerSeasonSetting[];
+  compact?: boolean;
 };
 
 function formatCompactMoney(value: number) {
@@ -21,6 +22,7 @@ export function SummaryGrid({
   loseMoney = 5000,
   seasons = [],
   playerSeasonSettings = [],
+  compact = false,
 }: SummaryGridProps) {
   const s = getSeasonSummaryStats(matches, loseMoney, {
     players,
@@ -43,33 +45,33 @@ export function SummaryGrid({
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 w-full">
+    <div className={`grid grid-cols-2 ${compact ? '' : 'lg:grid-cols-4'} gap-2 sm:gap-3 w-full`}>
       {cards.map(({ Icon, color, label, big, unit }, i) => (
         <div
           key={i}
-          className="relative group overflow-hidden rounded-xl bg-[#192844]/95 border border-slate-400/25 px-3 py-3 sm:px-4 sm:py-3 shadow-[0_10px_28px_rgba(0,0,0,0.20)] transition-all hover:-translate-y-0.5 hover:bg-[#1d2d4b] hover:border-slate-300/35 hover:shadow-xl"
+          className={`relative group overflow-hidden rounded-xl bg-[#192844]/95 border border-slate-400/25 px-3 py-3 ${compact ? '' : 'sm:px-4 sm:py-3'} shadow-[0_10px_28px_rgba(0,0,0,0.20)] transition-all hover:-translate-y-0.5 hover:bg-[#1d2d4b] hover:border-slate-300/35 hover:shadow-xl`}
         >
           <div
             className="absolute inset-0 opacity-[0.12] pointer-events-none transition-opacity group-hover:opacity-[0.18]"
             style={{ background: `radial-gradient(circle at 50% 0%, ${color}, transparent 80%)` }}
           />
 
-          <div className="relative z-10 min-h-[76px] sm:min-h-[68px] flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto">
+          <div className={`relative z-10 flex flex-col items-start justify-between gap-3 ${compact ? 'min-h-[72px]' : 'min-h-[76px] sm:min-h-[68px] sm:flex-row sm:items-center'}`}>
+            <div className={`flex items-center gap-2 min-w-0 w-full ${compact ? '' : 'sm:w-auto'}`}>
               <div className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.08] border border-white/[0.12]">
                 <Icon className="w-3.5 h-3.5" style={{ color }} />
               </div>
-              <span className="min-w-0 truncate text-[10px] min-[380px]:text-xs sm:text-sm font-black text-slate-300 uppercase tracking-wide sm:tracking-widest">
+              <span className={`min-w-0 truncate text-[10px] ${compact ? 'tracking-wide' : 'min-[380px]:text-xs sm:text-sm tracking-wide sm:tracking-widest'} font-black text-slate-300 uppercase`}>
                 {label}
               </span>
             </div>
 
-            <div className="flex items-baseline justify-start sm:justify-end gap-1.5 shrink-0 min-w-0 w-full sm:w-auto">
-              <span className="min-w-0 break-words text-xl min-[380px]:text-2xl sm:text-3xl lg:text-2xl xl:text-3xl 2xl:text-4xl font-black text-white leading-none">
+            <div className={`flex items-baseline justify-start gap-1.5 shrink-0 min-w-0 w-full ${compact ? '' : 'sm:justify-end sm:w-auto'}`}>
+              <span className={`min-w-0 break-words ${compact ? 'text-2xl' : 'text-xl min-[380px]:text-2xl sm:text-3xl lg:text-2xl xl:text-3xl 2xl:text-4xl'} font-black text-white leading-none`}>
                 {big}
               </span>
               {unit && (
-                <span className="text-sm sm:text-base lg:text-sm xl:text-base 2xl:text-lg font-extrabold text-slate-300 lowercase">
+                <span className={`${compact ? 'text-sm' : 'text-sm sm:text-base lg:text-sm xl:text-base 2xl:text-lg'} font-extrabold text-slate-300 lowercase`}>
                   {unit}
                 </span>
               )}

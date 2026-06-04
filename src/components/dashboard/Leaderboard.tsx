@@ -285,6 +285,7 @@ export function Leaderboard({
   onSeasonChange,
   loseMoney = 5000,
   playerSeasonSettings = [],
+  showSeasonHeader = true,
 }: {
   players: Player[];
   matches: Match[];
@@ -294,6 +295,7 @@ export function Leaderboard({
   onSeasonChange?: (season: string | null) => void;
   loseMoney?: number;
   playerSeasonSettings?: PlayerSeasonSetting[];
+  showSeasonHeader?: boolean;
 }) {
   const currentSeason = selectedSeason === undefined ? activeSeason : selectedSeason;
   const [seasonOpen, setSeasonOpen] = useState(false);
@@ -358,6 +360,7 @@ export function Leaderboard({
 
   return (
     <div className="w-full rounded-2xl sm:rounded-[2rem] border border-slate-400/25 bg-[#192844]/95 shadow-[0_24px_70px_rgba(0,0,0,0.30)] overflow-visible backdrop-blur-2xl">
+      {showSeasonHeader && (
       <div className="flex items-center justify-center px-4 sm:px-6 py-5 sm:py-6 border-b border-slate-400/25">
         <div className="relative flex flex-col items-center" ref={dropRef}>
           <button
@@ -403,6 +406,7 @@ export function Leaderboard({
           )}
         </div>
       </div>
+      )}
 
       <div className="hidden sm:block">
         <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>

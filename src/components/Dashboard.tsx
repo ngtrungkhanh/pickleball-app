@@ -2,7 +2,7 @@
 import { useState, useEffect, useSyncExternalStore, useMemo, useRef, useCallback, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BarChart3, RefreshCw, Settings, X } from 'lucide-react';
+import { BarChart3, CalendarDays, Crown, History, RefreshCw, Settings, Sparkles, Trophy, X } from 'lucide-react';
 import { SummaryGrid } from './dashboard/SummaryGrid';
 import { Leaderboard } from './dashboard/Leaderboard';
 import { RecentHistory } from './dashboard/RecentHistory';
@@ -153,7 +153,7 @@ export default function Dashboard({
 
   useEffect(() => {
     if (!isGlobalSeasonSet()) {
-      setSelectedSeason(activeSeason);
+      queueMicrotask(() => setSelectedSeason(activeSeason));
     }
   }, [activeSeason]);
 
@@ -447,8 +447,235 @@ export default function Dashboard({
     router.push('/analysis');
   };
 
+  const seasonOptions = useMemo(() => Array.from(new Set([
+    activeSeason,
+    ...seasons.map(s => s.name),
+    ...matches.map(m => String(m.season || 'Season 1')),
+  ].filter(Boolean))), [activeSeason, seasons, matches]);
+  const seasonLabel = selectedSeason ?? 'Tổng hợp';
+  const leaderName = analysisSnapshot.board[0]?.name || 'Chưa có';
+
   return (
-    <div className="space-y-5 transition-all duration-500 w-full">
+    <div className="w-full">
+      <div className="hidden lg:block">
+        <header className="sticky top-0 z-40 -mx-4 border-b border-white/10 bg-[#07101d]/88 backdrop-blur-2xl shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
+          <style>{`
+            .desktop-news-marquee {
+              display: inline-flex;
+              min-width: max-content;
+              gap: 1.75rem;
+              animation: desktop-news-scroll 54s linear infinite;
+              will-change: transform;
+            }
+            @keyframes desktop-news-scroll {
+              from { transform: translate3d(0, 0, 0); }
+              to { transform: translate3d(-50%, 0, 0); }
+            }
+          `}</style>
+          <div className="mx-auto grid max-w-[1680px] grid-cols-[minmax(210px,auto)_minmax(0,1fr)_auto] items-center gap-4 px-4 py-2.5">
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-2">
+                <h1 className="truncate !text-xl xl:!text-2xl !leading-none font-black tracking-tight text-white drop-shadow-[0_0_18px_rgba(34,197,94,0.20)]">
+                  Pickleball <span className="text-primary">Ranking</span>
+                </h1>
+                <span className="hidden rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-primary xl:inline-block">
+                  live
+                </span>
+              </div>
+              <div className="mt-1 truncate text-[10px] font-bold uppercase tracking-[0.24em] text-white/35">
+                {seasonLabel} · {viewedMatches.length} trận
+              </div>
+            </div>
+
+            <div className="min-w-0 overflow-hidden rounded-lg border border-primary/20 bg-slate-950/45 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.06)]">
+              {tickerOpen && insightsReady && insights.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={handleTickerClick}
+                  className="group flex h-9 w-full min-w-0 items-center overflow-hidden text-left"
+                  title={tickerPaused ? 'Click để tiếp tục chạy' : 'Click để tạm dừng'}
+                >
+                  <span className="flex h-full shrink-0 items-center gap-1.5 border-r border-primary/20 bg-primary px-3 text-[9px] font-black uppercase tracking-[0.18em] text-slate-950">
+                    <span className="h-1.5 w-1.5 rounded-full bg-slate-950 shadow-[0_0_8px_rgba(2,6,23,0.7)]" />
+                    Tin nhanh
+                  </span>
+                  <span className="min-w-0 flex-1 overflow-hidden px-3">
+                    <span
+                      className="desktop-news-marquee text-[11px] font-bold text-slate-200/85"
+                      style={{ animationPlayState: tickerPaused ? 'paused' : 'running' }}
+                    >
+                      {repeatedInsights.map((insight, idx) => (
+                        <span key={idx} className="inline-flex items-center gap-2 whitespace-nowrap">
+                          <span className="rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-primary">
+                            {insight.title || 'Điểm nhấn'}
+                          </span>
+                          <span>{insight.text}</span>
+                        </span>
+                      ))}
+                    </span>
+                  </span>
+                </button>
+              ) : (
+                <div className="flex h-9 items-center px-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/25">
+                  Đang tải tin nhanh...
+                </div>
+              )}
+            </div>
+
+            <div className="flex min-w-0 items-center justify-end gap-2">
+              <Link href="/analysis" onClick={openAnalysisFromLocalCache} className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary">
+                <BarChart3 className="h-4 w-4" />
+                <span className="hidden xl:inline">Phân tích</span>
+              </Link>
+              <Link href="/history" className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary">
+                <History className="h-4 w-4" />
+                <span className="hidden xl:inline">Lịch sử</span>
+              </Link>
+              <button onClick={() => setSettingsOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary">
+                <Settings className="h-4 w-4" />
+                <span className="hidden xl:inline">Cài đặt</span>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <div className="mx-auto grid max-w-[1680px] grid-cols-[300px_minmax(0,1fr)] gap-4 py-4 3xl:grid-cols-[300px_minmax(780px,1fr)_340px]">
+          <aside className="min-w-0 space-y-3 self-start lg:sticky lg:top-[74px] lg:max-h-[calc(100vh-88px)] lg:overflow-y-auto lg:overflow-x-hidden">
+            <section className="rounded-2xl border border-white/10 bg-[#111d31]/86 p-3 shadow-[0_14px_40px_rgba(0,0,0,0.24)] backdrop-blur-xl">
+              <div className="mb-2 flex items-center gap-2 px-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/45">
+                <CalendarDays className="h-3.5 w-3.5 text-primary/70" />
+                Mùa giải
+              </div>
+              <select
+                value={selectedSeason ?? 'all'}
+                onChange={e => handleSeasonChange(e.target.value === 'all' ? null : e.target.value)}
+                className="h-10 w-full rounded-xl border border-primary/20 !bg-slate-950/70 px-3 text-sm font-black text-white/85 outline-none transition focus:border-primary/60"
+              >
+                <option value="all">Tổng hợp</option>
+                {seasonOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2">
+                  <div className="text-[9px] font-black uppercase tracking-[0.16em] text-white/35">Trận</div>
+                  <div className="mt-1 truncate text-xl font-black tabular-nums text-white">{viewedMatches.length}</div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2">
+                  <div className="text-[9px] font-black uppercase tracking-[0.16em] text-white/35">Dẫn đầu</div>
+                  <div className="mt-1 min-h-5 break-words text-sm font-black leading-tight text-primary" title={leaderName}>{leaderName}</div>
+                </div>
+              </div>
+            </section>
+
+            {canWrite && (
+              <section className="hidden rounded-2xl border border-white/10 bg-[#111d31]/86 shadow-[0_14px_40px_rgba(0,0,0,0.24)] backdrop-blur-xl 3xl:block">
+                <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+                  <Sparkles className="h-3.5 w-3.5 text-primary/80" />
+                  <h2 className="min-w-0 truncate text-[10px] font-black uppercase tracking-[0.2em] text-white/55">Nhập trận nhanh</h2>
+                </div>
+                <ScoreForm
+                  compact
+                  players={players}
+                  onAddMatch={addLocalMatch}
+                  onConfirmMatch={confirmLocalMatch}
+                  onRejectMatch={rejectLocalMatch}
+                  activeSeason={activeSeason}
+                />
+              </section>
+            )}
+
+            <div className="space-y-3 3xl:hidden">
+              {previousChampion && (
+                <section className="rounded-2xl border border-amber-300/15 bg-amber-300/[0.06] p-4">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/55">
+                    <Crown className="h-4 w-4 text-amber-200/80" />
+                    Vô địch mùa trước
+                  </div>
+                  <div className="mt-2 truncate text-lg font-black text-amber-100" title={previousChampion.playerName}>{previousChampion.playerName}</div>
+                  <div className="text-xs font-bold text-amber-100/45">{previousChampion.season}</div>
+                </section>
+              )}
+              <SummaryGrid
+                compact
+                players={players}
+                matches={viewedMatches}
+                loseMoney={loseMoney}
+                seasons={seasons}
+                playerSeasonSettings={sharedData.playerSeasonSettings}
+              />
+              <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} />
+            </div>
+          </aside>
+
+          <section className="min-w-0 space-y-4">
+            {sharedData.syncMessage ? (
+              <div className="flex items-center gap-2 rounded-xl border border-slate-500/20 bg-[#142034]/80 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300/60">
+                <RefreshCw className={`h-3.5 w-3.5 ${sharedData.syncState === 'syncing' ? 'animate-spin' : ''}`} />
+                <span className="min-w-0 truncate">{sharedData.syncMessage}</span>
+              </div>
+            ) : null}
+            {!sharedData.hasLocalCache && sharedData.syncState !== 'idle' && (
+              <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-left text-xs font-black uppercase tracking-widest text-primary">
+                Đang tải dữ liệu...
+              </div>
+            )}
+            {previewWritesBlocked && (
+              <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-left text-xs font-bold text-amber-200">
+                Dev preview đang dùng chung database với production nên các thao tác ghi/sửa/xóa đã bị khóa để bảo vệ data thật.
+              </div>
+            )}
+            <Leaderboard
+              players={leaderboardPlayers}
+              matches={activeMatches}
+              seasons={seasons}
+              activeSeason={activeSeason}
+              selectedSeason={selectedSeason}
+              onSeasonChange={handleSeasonChange}
+              loseMoney={loseMoney}
+              playerSeasonSettings={sharedData.playerSeasonSettings}
+              showSeasonHeader={false}
+            />
+            {canWrite && (
+              <section className="rounded-2xl border border-white/10 bg-[#111d31]/86 shadow-[0_14px_40px_rgba(0,0,0,0.24)] backdrop-blur-xl 3xl:hidden">
+                <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+                  <Sparkles className="h-3.5 w-3.5 text-primary/80" />
+                  <h2 className="min-w-0 truncate text-[10px] font-black uppercase tracking-[0.2em] text-white/55">Nhập trận nhanh</h2>
+                </div>
+                <ScoreForm
+                  players={players}
+                  onAddMatch={addLocalMatch}
+                  onConfirmMatch={confirmLocalMatch}
+                  onRejectMatch={rejectLocalMatch}
+                  activeSeason={activeSeason}
+                />
+              </section>
+            )}
+          </section>
+
+          <aside className="hidden min-w-0 space-y-3 self-start 3xl:block 3xl:sticky 3xl:top-[74px] 3xl:max-h-[calc(100vh-88px)] 3xl:overflow-y-auto 3xl:overflow-x-hidden">
+            {previousChampion && (
+              <section className="rounded-2xl border border-amber-300/15 bg-amber-300/[0.06] p-4">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/55">
+                  <Trophy className="h-4 w-4 text-amber-200/80" />
+                  Vô địch mùa trước
+                </div>
+                <div className="mt-2 truncate text-xl font-black text-amber-100" title={previousChampion.playerName}>{previousChampion.playerName}</div>
+                <div className="text-xs font-bold text-amber-100/45">{previousChampion.season}</div>
+              </section>
+            )}
+            <SummaryGrid
+              compact
+              players={players}
+              matches={viewedMatches}
+              loseMoney={loseMoney}
+              seasons={seasons}
+              playerSeasonSettings={sharedData.playerSeasonSettings}
+            />
+            <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} />
+          </aside>
+        </div>
+      </div>
+
+      <div className="space-y-5 transition-all duration-500 w-full lg:hidden">
       {previousChampion && (
         <PreviousChampionTitleLine champion={previousChampion} />
       )}
@@ -640,6 +867,7 @@ export default function Dashboard({
         playerSeasonSettings={sharedData.playerSeasonSettings}
       />
 
+    </div>
     </div>
   );
 }

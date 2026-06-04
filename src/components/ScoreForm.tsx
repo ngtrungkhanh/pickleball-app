@@ -95,15 +95,15 @@ function SyncBadge({ state, onRetry }: { state: 'idle' | 'syncing' | 'error' | '
   );
 }
 
-function ScoreStepper({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function ScoreStepper({ label, value, onChange, compact = false }: { label: string; value: number; onChange: (v: number) => void; compact?: boolean }) {
   const ref = useRef<HTMLInputElement>(null);
   return (
-    <div className="flex flex-col items-center gap-2">
-      <span className="text-[10px] sm:text-xs font-black text-slate-300/75 uppercase tracking-[0.22em]">{label}</span>
-      <div className="flex items-center gap-2 sm:gap-4">
+    <div className={cn("flex flex-col items-center", compact ? "gap-1" : "gap-2")}>
+      <span className={cn("font-black text-slate-300/75 uppercase", compact ? "text-[9px] tracking-[0.18em]" : "text-[10px] sm:text-xs tracking-[0.22em]")}>{label}</span>
+      <div className={cn("flex items-center", compact ? "gap-1.5" : "gap-2 sm:gap-4")}>
         <button type="button"
           onClick={() => onChange(Math.max(0, value - 1))}
-          className="sm:hidden w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-300/70 active:scale-90 transition-all shrink-0">
+          className={cn(compact ? "flex h-8 w-8" : "sm:hidden w-9 h-9", "rounded-xl bg-white/5 border border-white/10 items-center justify-center text-slate-300/70 active:scale-90 transition-all shrink-0")}>
           <Minus className="w-4 h-4" />
         </button>
 
@@ -113,13 +113,13 @@ function ScoreStepper({ label, value, onChange }: { label: string; value: number
           value={value}
           onChange={e => { const n = parseInt(e.target.value, 10); if (!isNaN(n) && n >= 0) onChange(n); else if (e.target.value === '') onChange(0); }}
           onFocus={() => setTimeout(() => ref.current?.select(), 0)}
-          className="w-14 sm:w-20 text-center bg-transparent border-0 border-b-4 border-white/10 focus:border-primary/50 outline-none font-black text-white text-4xl sm:text-5xl md:text-6xl transition-all py-1 tabular-nums"
+          className={cn("text-center bg-transparent border-0 border-b-4 border-white/10 focus:border-primary/50 outline-none font-black text-white transition-all py-1 tabular-nums", compact ? "w-12 text-3xl" : "w-14 sm:w-20 text-4xl sm:text-5xl md:text-6xl")}
           style={{ lineHeight: 1 }}
         />
 
         <button type="button"
           onClick={() => onChange(value + 1)}
-          className="sm:hidden w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary active:scale-90 transition-all shrink-0">
+          className={cn(compact ? "flex h-8 w-8" : "sm:hidden w-9 h-9", "rounded-xl bg-primary/10 border border-primary/20 items-center justify-center text-primary active:scale-90 transition-all shrink-0")}>
           <Plus className="w-4 h-4" />
         </button>
       </div>
@@ -267,12 +267,14 @@ export function ScoreForm({
   onConfirmMatch,
   onRejectMatch,
   activeSeason = 'Season 1',
+  compact = false,
 }: {
   players: Array<Record<string, unknown>>;
   onAddMatch?: (m: Record<string, unknown>) => void;
   onConfirmMatch?: (tempId: string, match: Record<string, unknown>) => void;
   onRejectMatch?: (tempId: string) => void;
   activeSeason?: string;
+  compact?: boolean;
 }) {
   const [, start] = useTransition();
   const router = useRouter();
@@ -468,10 +470,10 @@ export function ScoreForm({
   return (
     <>
       <SyncBadge state={sync} onRetry={() => { if (pendingFd) { doSync(pendingFd); setPendingFd(null); } }} />
-      <form onSubmit={handleSubmit} className="p-3 sm:p-4 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,0.78fr)_18rem_minmax(0,0.78fr)] gap-3 md:gap-4 items-stretch">
+      <form onSubmit={handleSubmit} className={cn("space-y-4", compact ? "p-3" : "p-3 sm:p-4")}>
+        <div className={cn("grid grid-cols-1 items-stretch", compact ? "gap-2.5" : "md:grid-cols-[minmax(0,0.78fr)_18rem_minmax(0,0.78fr)] gap-3 md:gap-4")}>
 
-          <div className="min-w-0 rounded-2xl border border-green-500/35 bg-green-500/5 p-3 space-y-2">
+          <div className={cn("min-w-0 rounded-2xl border border-green-500/35 bg-green-500/5 space-y-2", compact ? "p-2.5" : "p-3")}>
             <div className="flex items-center gap-2">
               <Trophy className="w-4 h-4 text-primary opacity-60" />
               <span className="text-[10px] font-black text-green-300 uppercase tracking-[0.2em]">Đội thắng</span>
@@ -483,16 +485,16 @@ export function ScoreForm({
           </div>
 
           <div className="flex min-w-0 flex-col items-center">
-            <div className="flex min-h-[122px] w-full items-center justify-center gap-3 rounded-2xl border border-slate-600/60 bg-black/45 p-3 shadow-inner md:min-h-full sm:gap-4">
-              <ScoreStepper label="Thắng" value={ws} onChange={setWs} />
+            <div className={cn("flex w-full items-center justify-center rounded-2xl border border-slate-600/60 bg-black/45 p-3 shadow-inner", compact ? "min-h-[96px] gap-2" : "min-h-[122px] gap-3 md:min-h-full sm:gap-4")}>
+              <ScoreStepper label="Thắng" value={ws} onChange={setWs} compact={compact} />
               <div className="pt-4">
-                <span className="text-slate-400/80 font-black text-3xl sm:text-4xl select-none leading-none">-</span>
+                <span className={cn("text-slate-400/80 font-black select-none leading-none", compact ? "text-2xl" : "text-3xl sm:text-4xl")}>-</span>
               </div>
-              <ScoreStepper label="Thua" value={ls} onChange={setLs} />
+              <ScoreStepper label="Thua" value={ls} onChange={setLs} compact={compact} />
             </div>
           </div>
 
-          <div className="min-w-0 rounded-2xl border border-red-500/35 bg-red-500/5 p-3 space-y-2">
+          <div className={cn("min-w-0 rounded-2xl border border-red-500/35 bg-red-500/5 space-y-2", compact ? "p-2.5" : "p-3")}>
             <div className="flex items-center justify-center md:justify-end gap-2">
               <span className="text-[10px] font-black text-red-300 uppercase tracking-[0.2em]">Đội thua</span>
               <Ghost className="w-4 h-4 text-red-400 opacity-60" />
@@ -510,7 +512,8 @@ export function ScoreForm({
             type="submit"
             disabled={ui === 'saved' || sync === 'syncing'}
             className={cn(
-              'w-full min-h-12 py-3 rounded-2xl font-black text-xs sm:text-sm uppercase tracking-[0.24em] transition-all duration-300 flex items-center justify-center gap-3',
+              'w-full min-h-12 py-3 rounded-2xl font-black uppercase transition-all duration-300 flex items-center justify-center gap-3',
+              compact ? 'text-[11px] tracking-[0.18em]' : 'text-xs sm:text-sm tracking-[0.24em]',
               (ui === 'saved' || sync === 'syncing')
                 ? 'bg-primary/20 text-primary/60 cursor-default'
                 : 'bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20 active:scale-95'
