@@ -350,10 +350,9 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
   const expected = matchExpected?.get(m.id);
   return (
     <div className="group relative flex overflow-hidden rounded-2xl border border-slate-800/80 bg-[#0f172a]/90 shadow-[0_10px_28px_rgba(0,0,0,0.12)] transition-all hover:bg-[#15233c]/90">
-      <div className="flex w-[64px] shrink-0 flex-col items-center justify-center gap-0.5 border-r border-slate-800/80 bg-white/[0.015] px-2 py-3 sm:w-24">
+      <div className="flex w-[64px] shrink-0 flex-col items-center justify-center gap-1 border-r border-slate-800/80 bg-white/[0.015] px-2 py-3 sm:w-24">
         <span className="text-[15px] font-black leading-none text-slate-200/85 tabular-nums sm:text-[17px]">{time}</span>
         <span className="text-[10px] font-bold text-slate-400/75 tabular-nums sm:text-[11px]">{date}</span>
-        <span className="mt-0.5 max-w-full truncate text-[8px] font-black uppercase tracking-widest text-primary/45 sm:text-[9px]">{m.season ?? 'S1'}</span>
       </div>
       <div className={cn("min-w-0 flex-1 px-3 py-3 sm:px-5 sm:py-4", canEdit && "pr-9 sm:pr-11")}>
         {canEdit && (
@@ -400,8 +399,8 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
 }
 
 // ─── Main RecentHistory ───────────────────────────────────────────────────────
-export function RecentHistory({ matches, players, canEdit = false, matchExpected }: { matches: any[]; players: any[]; canEdit?: boolean; matchExpected?: any }) {
-  const [showAll, setShowAll] = useState(false);
+export function RecentHistory({ matches, players, canEdit = false, matchExpected, defaultShowAll = false }: { matches: any[]; players: any[]; canEdit?: boolean; matchExpected?: any; defaultShowAll?: boolean }) {
+  const [showAll, setShowAll] = useState(defaultShowAll);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [, start] = useTransition();

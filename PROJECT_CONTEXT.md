@@ -81,11 +81,12 @@ Read only when relevant:
   `npm run visual:test:history`. It uses the newest
   `pickleball_backup_YYYY-MM-DD.json`, creates a temporary route, runs
   `next build` + `next start` on a free port from `3100`, captures mobile and
-  desktop screenshots in `.next/visual-tests/`, and removes the temporary route.
-  Use this instead of trying Dashboard/server cache first when `.env.local` has
-  a direct Postgres URL or the browser cache is empty. If a manual temporary
-  route is needed, restart the existing Next dev process; Next allows only one
-  dev server per repo.
+  desktop screenshots for both the full-history modal and standalone history
+  page in `.next/visual-tests/`, and removes the temporary routes. Use this
+  instead of trying Dashboard/server cache first when `.env.local` has a direct
+  Postgres URL or the browser cache is empty. If a manual temporary route is
+  needed, restart the existing Next dev process; Next allows only one dev server
+  per repo.
 
 ## Current Pending Tasks (Next Session)
 

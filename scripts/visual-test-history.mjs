@@ -7,9 +7,8 @@ import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 const repoRoot = process.cwd();
-const routeName = 'history-layout-visual-test';
-const routeDir = path.join(repoRoot, 'src', 'app', routeName);
-const routeFile = path.join(routeDir, 'page.tsx');
+const modalRouteName = 'history-modal-visual-test';
+const pageRouteName = 'history-page-visual-test';
 const outputDir = path.join(repoRoot, '.next', 'visual-tests');
 
 function log(message) {
@@ -67,18 +66,53 @@ function jsLiteral(value) {
   return JSON.stringify(value, null, 2).replace(/</g, '\\u003c');
 }
 
-async function writeRoute(data, backupName) {
-  await fs.mkdir(routeDir, { recursive: true });
-  await fs.writeFile(routeFile, `import HistoryClient from '@/components/HistoryClient';
-import { RecentHistory } from '@/components/dashboard/RecentHistory';
+function routeDir(routeName) {
+  return path.join(repoRoot, 'src', 'app', routeName);
+}
 
-const players: any[] = ${jsLiteral(data.players)};
+function routeFile(routeName) {
+  return path.join(routeDir(routeName), 'page.tsx');
+}
+
+function sharedRouteData(data) {
+  return `const players: any[] = ${jsLiteral(data.players)};
 const matches: any[] = ${jsLiteral(data.matches)};
 const seasons: any[] = ${jsLiteral(data.seasons)};
 const config: Record<string, string> = ${jsLiteral(data.config)};
 const playerSeasonSettings: any[] = ${jsLiteral(data.playerSeasonSettings)};
+`;
+}
 
-export default function HistoryLayoutVisualTestPage() {
+async function writeRoute(routeName, content) {
+  await fs.mkdir(routeDir(routeName), { recursive: true });
+  await fs.writeFile(routeFile(routeName), content, 'utf8');
+}
+
+async function writeRoutes(data, backupName) {
+  const sharedData = sharedRouteData(data);
+
+  await writeRoute(modalRouteName, `import { RecentHistory } from '@/components/dashboard/RecentHistory';
+
+${sharedData}
+
+export default function HistoryModalVisualTestPage() {
+  return (
+    <div className="mx-auto max-w-[1200px] space-y-10 px-4 py-8">
+      <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-xs font-black uppercase tracking-widest text-primary">
+        Local visual test data: ${backupName}
+      </div>
+      <RecentHistory matches={matches} players={players} defaultShowAll />
+    </div>
+  );
+}
+`);
+
+  await writeRoute(pageRouteName, `import HistoryClient from '@/components/HistoryClient';
+import { RecentHistory } from '@/components/dashboard/RecentHistory';
+
+${sharedData}
+
+export default function HistoryPageVisualTestPage() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-10 px-4 py-8">
       <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-xs font-black uppercase tracking-widest text-primary">
@@ -95,7 +129,7 @@ export default function HistoryLayoutVisualTestPage() {
     </div>
   );
 }
-`, 'utf8');
+`);
 }
 
 function run(command, args, options = {}) {
@@ -210,7 +244,7 @@ async function main() {
   }
 
   log(`using backup ${backupName} (${data.matches.length} newest matches)`);
-  await writeRoute(data, backupName);
+  await writeRoutes(data, backupName);
 
   let server;
   try {
@@ -228,16 +262,21 @@ async function main() {
     server.stdout.on('data', chunk => process.stdout.write(chunk));
     server.stderr.on('data', chunk => process.stderr.write(chunk));
 
-    const url = `http://127.0.0.1:${port}/${routeName}`;
-    await waitForServer(url);
+    const modalUrl = `http://127.0.0.1:${port}/${modalRouteName}`;
+    const pageUrl = `http://127.0.0.1:${port}/${pageRouteName}`;
+    await waitForServer(modalUrl);
+    await waitForServer(pageUrl);
 
-    const mobile = await screenshot(browserPath, url, 'history-mobile', '390,1200');
-    const desktop = await screenshot(browserPath, url, 'history-desktop', '1366,1100');
-    log(`screenshots written:\n  ${mobile}\n  ${desktop}`);
+    const modalMobile = await screenshot(browserPath, modalUrl, 'history-modal-mobile', '390,1200');
+    const modalDesktop = await screenshot(browserPath, modalUrl, 'history-modal-desktop', '1366,1100');
+    const pageMobile = await screenshot(browserPath, pageUrl, 'history-page-mobile', '390,1200');
+    const pageDesktop = await screenshot(browserPath, pageUrl, 'history-page-desktop', '1366,1100');
+    log(`screenshots written:\n  ${modalMobile}\n  ${modalDesktop}\n  ${pageMobile}\n  ${pageDesktop}`);
   } finally {
     if (server && !server.killed) server.kill();
-    await fs.rm(routeDir, { recursive: true, force: true });
-    if (await exists(path.join(repoRoot, 'src', 'app', routeName))) {
+    await fs.rm(routeDir(modalRouteName), { recursive: true, force: true });
+    await fs.rm(routeDir(pageRouteName), { recursive: true, force: true });
+    if (await exists(routeDir(modalRouteName)) || await exists(routeDir(pageRouteName))) {
       throw new Error('Temporary route cleanup failed.');
     }
   }
