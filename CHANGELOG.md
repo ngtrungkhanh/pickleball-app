@@ -16,6 +16,12 @@ repo.
 
 ### Bug Fixes
 
+- Reduced overlap between form insights by reserving `hot_streak` for 6+ win
+  streaks, renamed `perfect_form5` to avoid color wording, and lifted
+  `undefeated_session` when the clean session is the latest play day.
+- Changed `unlucky_draw` to count pairings with only the bottom-ranked player,
+  requiring at least 4 such matches and a 40% share across at least 10 partner
+  matches.
 - Tightened Analysis insight triggers so top-leaderboard scenarios use at most
   Top 2 players and bottom-leaderboard scenarios use at most the last 2 ranks,
   added the full-history `undefeated_session` scenario for no-loss play days,

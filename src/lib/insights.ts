@@ -287,7 +287,13 @@ function matchTime(match: AnalysisMatch) {
 }
 
 function matchDayKey(match: AnalysisMatch) {
-  return String(match.date || '').slice(0, 10);
+  const time = matchTime(match);
+  if (!time) return String(match.date || '').slice(0, 10);
+  const date = new Date(time);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function formatDayKey(dayKey: string) {
@@ -618,7 +624,7 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
     return [
       `${metric.name} đang thua liền ${metric.streakCount} trận, phong độ sa sút khiến bất kỳ ai đứng chung cặp cũng cảm thấy phần nào áp lực.`,
       `${metric.name} đang gánh chuỗi thua liền ${metric.streakCount} trận, nhịp thi đấu hụt hơi buộc đồng đội trên sân phải đặc biệt nỗ lực.`,
-      `${metric.name} đang thua liền ${metric.streakCount} trận, chuỗi đỏ kéo dài này chắc chắn sẽ khiến các trận đấu tiếp theo vô cùng căng thẳng.`,
+      `${metric.name} đang thua liền ${metric.streakCount} trận, chuỗi thua kéo dài này chắc chắn sẽ khiến các trận đấu tiếp theo vô cùng căng thẳng.`,
       `${metric.name} đang chìm sâu với chuỗi thua ${metric.streakCount} trận, muốn giải hạn lúc này đòi hỏi sự tập trung cực kỳ lớn.`,
       `${metric.name} đang nhận ${metric.streakCount} trận thua liên tục, phong độ sụt giảm này đang là bài toán khó cho bất kỳ ai muốn ráp cặp.`,
     ];
@@ -2066,7 +2072,7 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
     } = ctx;
     return [
       `Ghế nóng lung lay: Đang chễm chệ Top ${leaderboardRank} BXH nhưng ${metric.name} lại bất ngờ để thua tới ${recentLosses} trận trong 5 lần ra sân gần nhất.`,
-      `Dấu hiệu hụt hơi chặng cuối: Vị trí Top ${leaderboardRank} của ${metric.name} đang báo động đỏ sau chuỗi 5 trận gãy kèo tới ${recentLosses} lần.`,
+      `Dấu hiệu hụt hơi chặng cuối: Vị trí Top ${leaderboardRank} của ${metric.name} đang báo động rõ rệt sau chuỗi 5 trận gãy kèo tới ${recentLosses} lần.`,
       `Top đầu có vẻ hết xăng: ${metric.name} đang trải qua chuỗi ngày u ám khi để rơi ${recentLosses}/5 chiến thắng gần nhất dù đang đứng hạng ${leaderboardRank}.`,
       `Cảnh báo tụt hạng: Sơ sẩy chặng cuối khiến ${metric.name} (Top ${leaderboardRank} BXH) phải nhận tới ${recentLosses} trận thua trong 5 trận đấu gần đây.`,
       `Phong độ chạm đáy lúc nhạy cảm: Thành tích thua ${recentLosses}/5 trận vừa qua đang là hồi chuông cảnh báo cho vị trí Top ${leaderboardRank} của ${metric.name}.`,
@@ -2354,11 +2360,11 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
       absRound = (v: number) => Math.abs(Math.round(v))
     } = ctx;
     return [
-      `Bốc thăm hơi xui: ${metric.name} có ${bottomPartnerMatches.length}/${partnerMatches.length} trận đứng cùng đồng đội thuộc nhóm cuối bảng mùa này, lịch ghép cặp đúng là hơi thử thách.`,
-      `Nhân phẩm ghép cặp hơi rén: hơn nửa số trận của ${metric.name} rơi vào kèo đứng cùng đồng đội đang chật vật ở nhóm cuối bảng.`,
-      `Đường bốc cặp không mấy bằng phẳng: ${metric.name} thường xuyên phải ráp đội với những đồng đội đang ở nhóm dưới mùa này.`,
-      `Lịch ghép đôi hơi khó thở: ${metric.name} có ${bottomPartnerMatches.length}/${partnerMatches.length} trận bắt cặp với đồng đội đang trong giai đoạn khó khăn.`,
-      `Vận may chia đội chưa mỉm cười: ${metric.name} nhiều lần rơi vào kèo phối hợp với đồng đội nhóm dưới, cà khịa nhẹ lịch bốc cặp thôi chứ không trách ai.`,
+      `Bốc thăm hơi xui: ${metric.name} có ${bottomPartnerMatches.length}/${partnerMatches.length} trận đứng cùng ${bottom1.name}, người đang cuối bảng xếp hạng.`,
+      `Lịch ghép cặp của ${metric.name} hơi nặng: ${bottomPartnerMatches.length}/${partnerMatches.length} trận phải sát cánh cùng tay vợt cuối bảng ${bottom1.name}.`,
+      `${metric.name} thường xuyên rơi vào kèo khó khi có ${bottomPartnerMatches.length} trận đứng cùng ${bottom1.name}, người đang chật vật nhất trên BXH.`,
+      `Đường bốc cặp không mấy bằng phẳng: ${metric.name} đã có ${bottomPartnerMatches.length}/${partnerMatches.length} trận bắt cặp với người cuối bảng ${bottom1.name}.`,
+      `Vận may chia đội chưa mỉm cười với ${metric.name}: tỷ lệ đứng cùng ${bottom1.name} lên tới ${round((bottomPartnerMatches.length / partnerMatches.length) * 100)}% trong các trận có đồng đội.`,
     ];
   },
   friendly_fire: (ctx) => {
@@ -2949,7 +2955,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
     const recentTotal = metric.recentResults.slice(0, 5).length;
     const recentLosses = recentTotal - recentWins;
 
-    if (metric.streakType === 'W' && metric.streakCount >= 4) {
+    if (metric.streakType === 'W' && metric.streakCount >= 6) {
       const text = getRandomVariant(VARIANTS.hot_streak({ metric }), random);
       addCandidate(candidates, snapshot, {
         type: 'hot_streak',
@@ -2985,7 +2991,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
       const text = getRandomVariant(VARIANTS.perfect_form5({ metric }), random);
       addCandidate(candidates, snapshot, {
         type: 'perfect_form5',
-        title: '🚀 5 TRẬN TOÀN XANH',
+        title: '🚀 5 TRẬN TOÀN THẮNG',
         group: 'form',
         participantIds: [metric.id],
         rarity: 'epic',
@@ -3001,7 +3007,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
       const text = getRandomVariant(VARIANTS.zero_form5({ metric }), random);
       addCandidate(candidates, snapshot, {
         type: 'zero_form5',
-        title: '🫠 5 TRẬN TOÀN ĐỎ',
+        title: '🫠 5 TRẬN TOÀN THUA',
         group: 'form',
         participantIds: [metric.id],
         rarity: 'epic',
@@ -3450,7 +3456,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
   const secondGlued = gluedPairs[1]?.edge || null;
   const ranks = rankBoard(snapshot);
   const rankById = new Map(ranks.map((metric, index) => [metric.id, index + 1]));
-  const bottomRankIds = new Set(ranks.slice(-2).map(metric => metric.id));
+  const bottom1 = ranks[ranks.length - 1];
   const active = snapshot.playerMetrics.filter(metric => metric.total > 0);
   const avgPairTotal = snapshot.partnerEdges.length > 0 ? average(snapshot.partnerEdges.map(e => e.total)) : 0;
 
@@ -3688,20 +3694,21 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
     const partnerMatches = snapshot.rankingMatches.filter(match => playerInMatch(match, metric.id) && partnerIdForPlayer(match, metric.id));
     const bottomPartnerMatches = partnerMatches.filter(match => {
       const partnerId = partnerForPlayer(match, metric.id);
-      return Boolean(partnerId && bottomRankIds.has(partnerId));
+      return Boolean(partnerId && bottom1 && partnerId === bottom1.id);
     });
-    if (!bottomRankIds.has(metric.id) && partnerMatches.length >= 10 && bottomPartnerMatches.length / partnerMatches.length >= 0.51) {
-      const text = getRandomVariant(VARIANTS.unlucky_draw({ metric, bottomPartnerMatches, partnerMatches }), random);
+    const bottomPartnerShare = partnerMatches.length > 0 ? bottomPartnerMatches.length / partnerMatches.length : 0;
+    if (bottom1 && metric.id !== bottom1.id && partnerMatches.length >= 10 && bottomPartnerMatches.length >= 4 && bottomPartnerShare >= 0.4) {
+      const text = getRandomVariant(VARIANTS.unlucky_draw({ metric, bottom1, bottomPartnerMatches, partnerMatches }), random);
       addCandidate(candidates, snapshot, {
         type: 'unlucky_draw',
         title: '🎲 BỐC THĂM HƠI XUI',
         group: 'partner',
-        participantIds: [metric.id],
-        rarity: bottomPartnerMatches.length / partnerMatches.length >= 0.65 ? 'rare' : 'uncommon',
+        participantIds: [metric.id, bottom1.id],
+        rarity: bottomPartnerShare >= 0.5 || bottomPartnerMatches.length >= 6 ? 'rare' : 'uncommon',
         frequency: 'occasional',
         baseWeight: 42,
         evidenceStrength: evidence(partnerMatches.length),
-        surpriseScore: (bottomPartnerMatches.length / partnerMatches.length) * 16,
+        surpriseScore: bottomPartnerShare * 18 + bottomPartnerMatches.length,
         text,
       });
     }
@@ -4093,6 +4100,8 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
         const bestPerfectSession = [...perfectSessions]
           .sort((a, b) => b.total - a.total || b.dayKey.localeCompare(a.dayKey))[0];
         const perfectSessionCount = perfectSessions.length;
+        const latestSessionDayKey = snapshot.rankingMatches[0] ? matchDayKey(snapshot.rankingMatches[0]) : '';
+        const isLatestPerfectSession = latestPerfectSession.dayKey === latestSessionDayKey;
         const latestPerfectSessionDate = formatDayKey(latestPerfectSession.dayKey);
         const bestPerfectSessionDate = formatDayKey(bestPerfectSession.dayKey);
         const text = getRandomVariant(VARIANTS.undefeated_session({
@@ -4105,7 +4114,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
         }), random);
         addCandidate(candidates, snapshot, {
           type: 'undefeated_session',
-          title: '🟢 NGÀY SẠCH THUA',
+          title: '🏅 NGÀY KHÔNG THUA',
           group: 'score',
           participantIds: [metric.id],
           rarity: perfectSessionCount >= 3 || bestPerfectSession.total >= 7
@@ -4114,9 +4123,9 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
               ? 'rare'
               : 'uncommon',
           frequency: 'occasional',
-          baseWeight: 52,
+          baseWeight: 62,
           evidenceStrength: evidence(bestPerfectSession.total),
-          surpriseScore: perfectSessionCount * 5 + bestPerfectSession.total * 2,
+          surpriseScore: perfectSessionCount * 5 + bestPerfectSession.total * 2 + (isLatestPerfectSession ? 8 : 0),
           text,
         });
       }

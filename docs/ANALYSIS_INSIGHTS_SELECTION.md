@@ -718,9 +718,9 @@ Latest release state:
   `score_bully` markup, tightened relationship/dependency insight copy, the
   tightened `unlucky_draw` trigger/copy, adaptive Attack/Defense radar scoring,
   and weighted 10-match Profile radar Form.
-- `unlucky_draw` now excludes players currently in the bottom 2, requires at
-  least 10 partner matches, and requires a bottom-2 partner share of at least
-  51% across the selected season/snapshot.
+- `unlucky_draw` now excludes the current bottom-ranked player, requires at
+  least 10 partner matches, and requires at least 4 matches plus a 40% share
+  paired with that bottom-ranked player across the selected season/snapshot.
 - Re-run the audit against the latest backup before further tuning selection
   weights or semantic groups.
 
