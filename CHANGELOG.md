@@ -25,6 +25,8 @@ repo.
 - Replaced the full-history modal's generic entrance classes with explicit
   backdrop/panel open and close keyframes for a smoother mobile sheet and
   desktop dialog transition.
+- Matched the mobile 5-match recent history rows to the full-history row layout
+  with a left date/time rail instead of a separate metadata line.
 - Added a backup-based `npm run visual:test:history` workflow that creates a
   temporary route from the newest JSON backup, runs production build/start, and
   captures mobile/desktop full-history modal and standalone history screenshots

@@ -502,41 +502,43 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
               </div>
 
               {/* ── COMPACT ─────────────────────────────────────────────── */}
-              <div className="recent-history-compact-row px-4 py-3" data-mobile-match-row>
-                <div className="flex items-center justify-between mb-2.5">
-                  <span className="text-[10px] font-bold text-white/25 flex items-center gap-1.5">
-                    <span className="text-primary/50 font-black">{m.season ?? 'S1'}</span>
-                    <span className="text-white/10">·</span>
-                    {date} <span className="text-white/10">·</span> {time}
-                  </span>
-                  {canEdit && (
-                    <button disabled={isDeletingId === m.id} onClick={() => setDeleteTarget(m.id)}
-                      className={cn("text-white/15 hover:text-red-400 p-1 rounded-lg transition-colors", isDeletingId === m.id && "opacity-50 pointer-events-none")}>
-                      {isDeletingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 min-w-0 flex flex-col gap-0.5 text-right">
-                    <CompactRecentPlayerName players={players} id={m.win_1} className="text-[13px] sm:text-sm font-bold text-white/85 leading-snug" />
-                    {isDouble && <CompactRecentPlayerName players={players} id={m.win_2} className="text-[13px] sm:text-sm font-bold text-white/85 leading-snug" />}
+              <div className="recent-history-compact-row relative min-h-[72px]" data-mobile-match-row>
+                <div className="flex">
+                  <div className="flex w-[64px] shrink-0 flex-col items-center justify-center gap-1 border-r border-white/[0.05] bg-white/[0.015] px-2 py-3">
+                    <span className="text-[15px] font-black leading-none text-white/75 tabular-nums">{time}</span>
+                    <span className="text-[10px] font-bold text-white/30 tabular-nums">{date}</span>
                   </div>
 
-                  <div className="shrink-0 flex flex-col items-center">
-                    <div className="min-w-[68px] text-center px-2.5 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-black text-sm tabular-nums whitespace-nowrap">
-                      <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
-                    </div>
-                    {matchExpected?.get(m.id) && (
-                      <span className="text-[8px] font-bold text-white/30 mt-1 block tracking-tight whitespace-nowrap">
-                        {Math.round(matchExpected.get(m.id).winProb * 100)}% - {Math.round(matchExpected.get(m.id).loseProb * 100)}%
-                      </span>
+                  <div className={cn("min-w-0 flex-1 px-3 py-3", canEdit && "pr-9")}>
+                    {canEdit && (
+                      <button disabled={isDeletingId === m.id} onClick={() => setDeleteTarget(m.id)}
+                        className={cn("absolute right-2 top-2 rounded-lg p-1.5 text-white/15 transition-colors hover:bg-red-500/10 hover:text-red-400", isDeletingId === m.id && "pointer-events-none opacity-50")}>
+                        {isDeletingId === m.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      </button>
                     )}
-                  </div>
 
-                  <div className="flex-1 min-w-0 flex flex-col gap-0.5 text-left">
-                    <CompactRecentPlayerName players={players} id={m.lose_1} className="text-[13px] sm:text-sm font-bold text-white/85 leading-snug" />
-                    {isDouble && <CompactRecentPlayerName players={players} id={m.lose_2} className="text-[13px] sm:text-sm font-bold text-white/85 leading-snug" />}
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+                      <div className="min-w-0 space-y-0.5 text-right">
+                        <CompactRecentPlayerName players={players} id={m.win_1} className="text-[13px] font-bold leading-snug text-white/85" />
+                        {isDouble && <CompactRecentPlayerName players={players} id={m.win_2} className="text-[13px] font-bold leading-snug text-white/85" />}
+                      </div>
+
+                      <div className="flex shrink-0 flex-col items-center">
+                        <div className="min-w-[62px] rounded-xl border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-center text-sm font-black text-primary tabular-nums whitespace-nowrap">
+                          <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
+                        </div>
+                        {matchExpected?.get(m.id) && (
+                          <span className="mt-1 block whitespace-nowrap text-[8px] font-bold tracking-tight text-white/30">
+                            {Math.round(matchExpected.get(m.id).winProb * 100)}% - {Math.round(matchExpected.get(m.id).loseProb * 100)}%
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 space-y-0.5 text-left">
+                        <CompactRecentPlayerName players={players} id={m.lose_1} className="text-[13px] font-bold leading-snug text-white/85" />
+                        {isDouble && <CompactRecentPlayerName players={players} id={m.lose_2} className="text-[13px] font-bold leading-snug text-white/85" />}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
