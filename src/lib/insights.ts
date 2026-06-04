@@ -169,6 +169,7 @@ const SEMANTIC_GROUP_BY_TYPE: Record<string, string> = {
   attendance_king: 'activity_attendance',
   charity_top_rank: 'elo_matchup',
   golden_victim: 'meta_weird',
+  undefeated_session: 'form_streak',
 };
 
 const SEMANTIC_GROUP_PRIORITY: Record<string, number> = {
@@ -287,6 +288,11 @@ function matchTime(match: AnalysisMatch) {
 
 function matchDayKey(match: AnalysisMatch) {
   return String(match.date || '').slice(0, 10);
+}
+
+function formatDayKey(dayKey: string) {
+  const parts = dayKey.split('-');
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dayKey;
 }
 
 function sortNewest(matches: AnalysisMatch[]) {
@@ -2498,10 +2504,10 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
       absRound = (v: number) => Math.abs(Math.round(v))
     } = ctx;
     return [
-      `Dù ngự trị ở Top đầu, phân tích ra mới thấy có tới ${percent}% số trận thắng của ${metric.name} là từ việc chạm trán tay vợt bét bảng ${bottom1.name}.`,
-      `Đứng trong nhóm dẫn đầu nhưng ${metric.name} lại có tới ${percent}% số trận thắng cả mùa là trước đối thủ cuối bảng ${bottom1.name}.`,
-      `Hiệu suất khai thác điểm số: ${percent}% số trận thắng của tay vợt Top đầu ${metric.name} là trước đối thủ đang đứng cuối bảng xếp hạng ${bottom1.name}.`,
-      `Vị trí Top đầu của ${metric.name} ghi nhận tới ${percent}% số trận thắng là từ các cuộc đối đầu tay vợt bét bảng ${bottom1.name}, cần thêm liều thuốc thử mạnh hơn để chứng tỏ bản lĩnh.`,
+      `Dù ngự trị ở Top ${leaderboardRank}, phân tích ra mới thấy có tới ${percent}% số trận thắng của ${metric.name} là từ việc chạm trán tay vợt bét bảng ${bottom1.name}.`,
+      `Đứng trong Top ${leaderboardRank} nhưng ${metric.name} lại có tới ${percent}% số trận thắng cả mùa là trước đối thủ cuối bảng ${bottom1.name}.`,
+      `Hiệu suất khai thác điểm số: ${percent}% số trận thắng của tay vợt Top ${leaderboardRank} ${metric.name} là trước đối thủ đang đứng cuối bảng xếp hạng ${bottom1.name}.`,
+      `Vị trí Top ${leaderboardRank} của ${metric.name} ghi nhận tới ${percent}% số trận thắng là từ các cuộc đối đầu tay vợt bét bảng ${bottom1.name}, cần thêm liều thuốc thử mạnh hơn để chứng tỏ bản lĩnh.`,
       `Có tới ${percent}% số chiến thắng của ${metric.name} là từ các cuộc đụng độ đối thủ cuối bảng ${bottom1.name}. Vị thế dẫn đầu sẽ thuyết phục hơn nếu thắng các kèo đấu đỉnh cao.`,
     ];
   },
@@ -2578,6 +2584,28 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
       `Giải hạn đúng thời điểm quyết định: Trong buổi chơi ngày ${sessionDate}, sau ${sessionTotal - 1} thất bại liên tiếp, ${metric.name} đã có chiến thắng chốt hạ đầy cảm xúc để khép lại ngày đấu.`,
       `Cú chốt hạ ngọt ngào: ${metric.name} trải qua ngày thi đấu ${sessionDate} đầy thử thách với ${sessionTotal - 1} trận thua, nhưng kịp thời tỏa sáng ở game cuối cùng.`,
       `Thua cả buổi không bằng thắng trận cuối: ${metric.name} gỡ gạc lại cả buổi chơi ngày ${sessionDate} bằng một thắng lợi vô cùng quan trọng ở trận đấu cuối cùng.`,
+    ];
+  },
+  undefeated_session: (ctx) => {
+    const {
+      metric, perfectSessionCount, latestPerfectSessionDate, latestPerfectSessionTotal,
+      bestPerfectSessionDate, bestPerfectSessionTotal,
+    } = ctx;
+    if (perfectSessionCount >= 2) {
+      return [
+        `${metric.name} đã có ${perfectSessionCount} buổi sạch thua trong lịch sử, lần gần nhất là ngày ${latestPerfectSessionDate} với ${latestPerfectSessionTotal} trận toàn thắng.`,
+        `Không chỉ một lần: ${metric.name} đã gom được ${perfectSessionCount} ngày không thua trận nào, buổi gần nhất diễn ra vào ${latestPerfectSessionDate}.`,
+        `${metric.name} có duyên với những ngày sạch thua: ${perfectSessionCount} buổi đánh từ 3 trận trở lên mà không nhận thất bại.`,
+        `Thành tích sạch thua của ${metric.name} đã lặp lại ${perfectSessionCount} lần, nổi bật nhất là ngày ${bestPerfectSessionDate} với ${bestPerfectSessionTotal} trận toàn thắng.`,
+        `${metric.name} từng ${perfectSessionCount} lần khép lại một buổi chơi mà không có trận thua nào, đỉnh nhất là ${bestPerfectSessionTotal} trận thắng trong ngày ${bestPerfectSessionDate}.`,
+      ];
+    }
+    return [
+      `Ngày ${latestPerfectSessionDate}, ${metric.name} đánh ${latestPerfectSessionTotal} trận và không thua trận nào, một buổi đấu rất gọn gàng.`,
+      `${metric.name} từng có một ngày sạch thua vào ${latestPerfectSessionDate}: ${latestPerfectSessionTotal} trận, toàn bộ đều khép lại bằng chiến thắng.`,
+      `Bảng kết quả ngày ${latestPerfectSessionDate} của ${metric.name} rất đẹp: ${latestPerfectSessionTotal}/${latestPerfectSessionTotal} trận thắng.`,
+      `Một buổi không tì vết: ${metric.name} ra sân ${latestPerfectSessionTotal} trận trong ngày ${latestPerfectSessionDate} và không để rơi trận nào.`,
+      `Ngày ${latestPerfectSessionDate} là điểm sáng của ${metric.name}: đánh đủ ${latestPerfectSessionTotal} trận mà vẫn giữ sạch cột thua.`,
     ];
   },
   triangle_paradox: (ctx) => {
@@ -2690,7 +2718,7 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
       partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
       wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
       A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
+      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottom1, mostRepeated, closeLosses,
       pattern = (results: any[]) => results.slice(0, 8).join('-'),
       edgeRate = (ed: any) => Math.round(ed?.rate || 0),
       round = (v: number) => Math.round(v),
@@ -2698,11 +2726,11 @@ const VARIANTS: Record<string, (ctx: any) => string[]> = {
       absRound = (v: number) => Math.abs(Math.round(v))
     } = ctx;
     return [
-      `Chễm chệ ngôi đầu bảng nhưng dạo này ${metric.name} lại rất chăm ban phát điểm số cho nhóm cuối bảng khi sẩy chân ${recentLossesVsBottomGroup} trận gần nhất.`,
-      `Nhà tài trợ điểm số của nhóm cuối: Nhà vua của giải đấu ${metric.name} bất ngờ để thua liền ${recentLossesVsBottomGroup} trận trước các đối thủ nhóm dưới gần đây.`,
-      `Tình thương chéo sân của nhà vua: Đang thống trị ở vị trí số 1 BXH nhưng ${metric.name} lại nhường liền ${recentLossesVsBottomGroup} trận thắng cho nhóm bét bảng.`,
-      `Cú sẩy chân khó tin của nhà vô địch: ${metric.name} (Top 1 BXH) gieo hy vọng cho nhóm bét bảng khi để rơi ${recentLossesVsBottomGroup} chiến thắng gần đây vào tay họ.`,
-      `Đại sứ thiện chí trên đỉnh vinh quang: Đang vững vàng ở ngôi đầu nhưng ${metric.name} lại khá hào phóng khi nhường ${recentLossesVsBottomGroup} trận thắng cho các đối thủ ở đáy bảng.`,
+      `Chễm chệ ngôi đầu bảng nhưng dạo này ${metric.name} lại để rơi ${recentLossesVsBottom1} trận trước tay vợt cuối bảng ${bottom1.name}.`,
+      `Nhà vua bất ngờ ban điểm: ${metric.name} đang Top 1 BXH nhưng đã thua ${recentLossesVsBottom1} trận gần đây trước ${bottom1.name}, người đứng cuối bảng.`,
+      `Cú sẩy chân khó tin của ngôi đầu: ${metric.name} để đối thủ bét bảng ${bottom1.name} lấy điểm tới ${recentLossesVsBottom1} lần trong nhóm trận gần nhất.`,
+      `Đỉnh bảng gặp đáy bảng mà không hề dễ thở: ${metric.name} đã gãy ${recentLossesVsBottom1} trận trước ${bottom1.name} trong 10 trận gần đây.`,
+      `Top 1 đang hơi hào phóng: ${metric.name} để ${bottom1.name}, người cuối BXH, bỏ túi ${recentLossesVsBottom1} chiến thắng gần đây.`,
     ];
   },
   golden_victim: (ctx) => {
@@ -3065,7 +3093,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
       });
     }
 
-    if (leaderboardRank > 0 && leaderboardRank <= 3 && metric.total >= 5 && metric.total < avgMatches * 0.7) {
+    if (leaderboardRank > 0 && leaderboardRank <= 2 && metric.total >= 5 && metric.total < avgMatches * 0.7) {
       const text = getRandomVariant(VARIANTS.rank_camper({ metric, leaderboardRank, avgMatches }), random);
       addCandidate(candidates, snapshot, {
         type: 'rank_camper',
@@ -3129,7 +3157,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
       });
     }
 
-    if (leaderboardRank > 0 && leaderboardRank <= 3 && metric.total >= 8 && metric.formScore <= 20 && recentTotal >= 5) {
+    if (leaderboardRank > 0 && leaderboardRank <= 2 && metric.total >= 8 && metric.formScore <= 20 && recentTotal >= 5) {
       const text = getRandomVariant(VARIANTS.late_choker({ metric, leaderboardRank, recentLosses }), random);
       addCandidate(candidates, snapshot, {
         type: 'late_choker',
@@ -3680,11 +3708,11 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
 
     const playerEdges = snapshot.partnerEdges.filter(edge => edge.playerId === metric.id && edge.total >= 4);
     const synergySorted = [...active].sort((a, b) => b.synergyScore - a.synergyScore);
-    const top3Synergy = new Set(synergySorted.slice(0, 3).map(m => m.id));
+    const top2Synergy = new Set(synergySorted.slice(0, 2).map(m => m.id));
     const pointsSorted = [...active].sort((a, b) => b.avgPointsFor - a.avgPointsFor);
-    const top3Points = new Set(pointsSorted.slice(0, 3).map(m => m.id));
+    const top2Points = new Set(pointsSorted.slice(0, 2).map(m => m.id));
 
-    if (metric.total >= 8 && metric.synergyScore >= 58 && playerEdges.length >= 2 && top3Synergy.has(metric.id) && !top3Points.has(metric.id)) {
+    if (metric.total >= 8 && metric.synergyScore >= 58 && playerEdges.length >= 2 && top2Synergy.has(metric.id) && !top2Points.has(metric.id)) {
       const text = getRandomVariant(VARIANTS.cover_master({ metric }), random);
       addCandidate(candidates, snapshot, {
         type: 'cover_master',
@@ -3736,6 +3764,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
   const active = snapshot.playerMetrics.filter(metric => metric.total > 0);
   const ranks = rankBoard(snapshot);
   const rankById = new Map(ranks.map((metric, index) => [metric.id, index + 1]));
+  const bottomRankIds = new Set(ranks.slice(-2).map(metric => metric.id));
   const topAttack = [...active].filter(metric => metric.total >= 8).sort((a, b) => b.avgPointsFor - a.avgPointsFor)[0];
   const avgConceded = active.reduce((sum, metric) => sum + metric.avgConceded, 0) / Math.max(1, active.length);
   const defenseLeaders = new Set([...active]
@@ -3799,7 +3828,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
       });
     }
 
-    if (leaderboardRank > 0 && leaderboardRank <= 3 && metric.losses >= 3 && metric.avgLossDiff >= 4) {
+    if (leaderboardRank > 0 && leaderboardRank <= 2 && metric.losses >= 3 && metric.avgLossDiff >= 4) {
       const text = getRandomVariant(VARIANTS.glass_cannon({ metric, leaderboardRank }), random);
       addCandidate(candidates, snapshot, {
         type: 'glass_cannon',
@@ -3815,7 +3844,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
       });
     }
 
-    if (leaderboardRank >= 5 && metric.losses >= 3 && metric.avgLossDiff <= 3.5) {
+    if (bottomRankIds.has(metric.id) && metric.losses >= 3 && metric.avgLossDiff <= 3.5) {
       const text = getRandomVariant(VARIANTS.stubborn_loser({ metric }), random);
       addCandidate(candidates, snapshot, {
         type: 'stubborn_loser',
@@ -4027,8 +4056,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
         const priorMatches = sessionMatches.slice(0, sessionTotal - 1);
         const allPriorL = priorMatches.every(m => resultForPlayer(m, metric.id) === 'L');
         if (lastResult === 'W' && allPriorL) {
-          const parts = latestDayKey.split('-');
-          const sessionDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : latestDayKey;
+          const sessionDate = formatDayKey(latestDayKey);
           const text = getRandomVariant(VARIANTS.last_laugh({ metric, sessionDate, sessionTotal }), random);
           addCandidate(candidates, snapshot, {
             type: 'last_laugh',
@@ -4043,6 +4071,54 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
             text,
           });
         }
+      }
+
+      const sessionsByDay = new Map<string, AnalysisMatch[]>();
+      playerMatches.forEach(match => {
+        const key = matchDayKey(match);
+        if (!key) return;
+        sessionsByDay.set(key, [...(sessionsByDay.get(key) || []), match]);
+      });
+      const perfectSessions = Array.from(sessionsByDay.entries())
+        .map(([dayKey, matches]) => ({
+          dayKey,
+          total: matches.length,
+          losses: matches.filter(match => resultForPlayer(match, metric.id) === 'L').length,
+        }))
+        .filter(row => row.total >= 3 && row.losses === 0)
+        .sort((a, b) => a.dayKey.localeCompare(b.dayKey));
+
+      if (perfectSessions.length > 0) {
+        const latestPerfectSession = perfectSessions[perfectSessions.length - 1];
+        const bestPerfectSession = [...perfectSessions]
+          .sort((a, b) => b.total - a.total || b.dayKey.localeCompare(a.dayKey))[0];
+        const perfectSessionCount = perfectSessions.length;
+        const latestPerfectSessionDate = formatDayKey(latestPerfectSession.dayKey);
+        const bestPerfectSessionDate = formatDayKey(bestPerfectSession.dayKey);
+        const text = getRandomVariant(VARIANTS.undefeated_session({
+          metric,
+          perfectSessionCount,
+          latestPerfectSessionDate,
+          latestPerfectSessionTotal: latestPerfectSession.total,
+          bestPerfectSessionDate,
+          bestPerfectSessionTotal: bestPerfectSession.total,
+        }), random);
+        addCandidate(candidates, snapshot, {
+          type: 'undefeated_session',
+          title: '🟢 NGÀY SẠCH THUA',
+          group: 'score',
+          participantIds: [metric.id],
+          rarity: perfectSessionCount >= 3 || bestPerfectSession.total >= 7
+            ? 'epic'
+            : perfectSessionCount >= 2 || bestPerfectSession.total >= 5
+              ? 'rare'
+              : 'uncommon',
+          frequency: 'occasional',
+          baseWeight: 52,
+          evidenceStrength: evidence(bestPerfectSession.total),
+          surpriseScore: perfectSessionCount * 5 + bestPerfectSession.total * 2,
+          text,
+        });
       }
     }
 
@@ -4284,7 +4360,7 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
 
     // rank_launchpad (63)
     const leaderboardRank = rankById.get(metric.id) || 0;
-    if (leaderboardRank > 0 && leaderboardRank <= 3) {
+    if (leaderboardRank > 0 && leaderboardRank <= 2) {
       const launchpadEdge = snapshot.opponentEdges
         .filter(edge => edge.playerId === metric.id && edge.wins >= 4)
         .sort((a, b) => b.wins - a.wins || b.total - a.total)[0];
@@ -4516,7 +4592,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
     }
 
     // vulture_win (77)
-    if (leaderboardRank > 0 && leaderboardRank <= 3 && metric.wins >= 5 && ranks.length > 0) {
+    if (leaderboardRank > 0 && leaderboardRank <= 2 && metric.wins >= 5 && ranks.length > 0) {
       const bottom1 = ranks[ranks.length - 1];
       if (bottom1) {
         const winsVsBottom1 = snapshot.rankingMatches.filter(m =>
@@ -4526,7 +4602,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
         ).length;
         const percent = Math.round((winsVsBottom1 / metric.wins) * 100);
         if (percent >= 50) {
-          const text = getRandomVariant(VARIANTS.vulture_win({ metric, bottom1, percent }), random);
+          const text = getRandomVariant(VARIANTS.vulture_win({ metric, bottom1, percent, leaderboardRank }), random);
           addCandidate(candidates, snapshot, {
             type: 'vulture_win',
             title: '🦅 KỀN KỀN ĂN ĐIỂM',
@@ -4545,7 +4621,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
 
     // money_blackhole (78)
     const activePlayersCount = active.length;
-    if (leaderboardRank >= Math.max(5, activePlayersCount - 1) && metric.money === topFine?.money && metric.money > 0) {
+    if (leaderboardRank >= Math.max(1, activePlayersCount - 1) && metric.money === topFine?.money && metric.money > 0) {
       const text = getRandomVariant(VARIANTS.money_blackhole({ metric, topFine }), random);
       addCandidate(candidates, snapshot, {
         type: 'money_blackhole',
@@ -4562,7 +4638,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
     }
 
     // spring_jump (79)
-    if (previousRank && previousRank >= Math.max(5, Math.round(activePlayersCount * 0.70)) && leaderboardRank <= 3) {
+    if (previousRank && previousRank >= Math.max(1, prevBoard.length - 1) && leaderboardRank > 0 && leaderboardRank <= 2) {
       const text = getRandomVariant(VARIANTS.spring_jump({ metric, Rank: leaderboardRank }), random);
       addCandidate(candidates, snapshot, {
         type: 'spring_jump',
@@ -4580,27 +4656,26 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
 
     // charity_top_rank (85)
     if (leaderboardRank === 1 && activePlayersCount > 0) {
-      const bottomRankThreshold = Math.max(5, Math.round(activePlayersCount * 0.70));
-      const bottomGroupIds = new Set(ranks.filter((_, idx) => (idx + 1) >= bottomRankThreshold).map(p => p.id));
+      const bottom1 = ranks[ranks.length - 1];
       const playerMatches = sortNewest(snapshot.rankingMatches.filter(m => playerInMatch(m, metric.id)));
       const recent10 = playerMatches.slice(0, 10);
-      const recentLossesVsBottomGroup = recent10.filter(m => {
+      const recentLossesVsBottom1 = bottom1 ? recent10.filter(m => {
         if (resultForPlayer(m, metric.id) !== 'L') return false;
         const opponents = opponentIdsForPlayer(m, metric.id);
-        return opponents.some(opId => bottomGroupIds.has(opId));
-      }).length;
-      if (recentLossesVsBottomGroup >= 2) {
-        const text = getRandomVariant(VARIANTS.charity_top_rank({ metric, recentLossesVsBottomGroup }), random);
+        return opponents.includes(bottom1.id);
+      }).length : 0;
+      if (bottom1 && recentLossesVsBottom1 >= 2) {
+        const text = getRandomVariant(VARIANTS.charity_top_rank({ metric, bottom1, recentLossesVsBottom1 }), random);
         addCandidate(candidates, snapshot, {
           type: 'charity_top_rank',
           title: '🤝 ĐẠI SỨ THIỆN CHÍ',
           group: 'fun',
-          participantIds: [metric.id],
+          participantIds: [metric.id, bottom1.id],
           rarity: 'uncommon',
           frequency: 'occasional',
           baseWeight: 46,
-          evidenceStrength: evidence(recentLossesVsBottomGroup),
-          surpriseScore: recentLossesVsBottomGroup * 4,
+          evidenceStrength: evidence(recentLossesVsBottom1),
+          surpriseScore: recentLossesVsBottom1 * 4,
           text,
         });
       }

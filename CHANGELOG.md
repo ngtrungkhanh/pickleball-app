@@ -16,6 +16,12 @@ repo.
 
 ### Bug Fixes
 
+- Tightened Analysis insight triggers so top-leaderboard scenarios use at most
+  Top 2 players and bottom-leaderboard scenarios use at most the last 2 ranks,
+  added the full-history `undefeated_session` scenario for no-loss play days,
+  changed `charity_top_rank` to target losses against the bottom-1 player, and
+  changed the Dashboard summary from current-week matches to latest-session
+  matches.
 - Added multi-part data manifest syncing for Dashboard/Admin and converted the
   Dashboard route into a static IndexedDB-first shell. Dashboard now checks
   lightweight part versions, downloads only stale app data parts, and Analysis
