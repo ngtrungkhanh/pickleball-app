@@ -92,8 +92,14 @@ async function writeRoutes(data, backupName) {
   const sharedData = sharedRouteData(data);
 
   await writeRoute(modalRouteName, `import { RecentHistory } from '@/components/dashboard/RecentHistory';
+import { buildAnalysisElo, isFullDoublesMatch, type AnalysisMatch } from '@/lib/analysis-core';
+import { isGuestId, isRankingMatch } from '@/lib/guest';
 
 ${sharedData}
+
+const eloPlayers = players.filter(player => !isGuestId(player.id) && player.active !== false && player.hidden !== true);
+const rankingMatches = matches.filter(match => isRankingMatch(match) && isFullDoublesMatch(match as AnalysisMatch));
+const matchExpected = buildAnalysisElo(eloPlayers, rankingMatches as AnalysisMatch[]).matchExpected;
 
 export default function HistoryModalVisualTestPage() {
   return (
@@ -101,7 +107,7 @@ export default function HistoryModalVisualTestPage() {
       <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-xs font-black uppercase tracking-widest text-primary">
         Local visual test data: ${backupName}
       </div>
-      <RecentHistory matches={matches} players={players} defaultShowAll />
+      <RecentHistory matches={matches} players={players} matchExpected={matchExpected} defaultShowAll />
     </div>
   );
 }
@@ -109,8 +115,14 @@ export default function HistoryModalVisualTestPage() {
 
   await writeRoute(pageRouteName, `import HistoryClient from '@/components/HistoryClient';
 import { RecentHistory } from '@/components/dashboard/RecentHistory';
+import { buildAnalysisElo, isFullDoublesMatch, type AnalysisMatch } from '@/lib/analysis-core';
+import { isGuestId, isRankingMatch } from '@/lib/guest';
 
 ${sharedData}
+
+const eloPlayers = players.filter(player => !isGuestId(player.id) && player.active !== false && player.hidden !== true);
+const rankingMatches = matches.filter(match => isRankingMatch(match) && isFullDoublesMatch(match as AnalysisMatch));
+const matchExpected = buildAnalysisElo(eloPlayers, rankingMatches as AnalysisMatch[]).matchExpected;
 
 export default function HistoryPageVisualTestPage() {
   return (
@@ -118,7 +130,7 @@ export default function HistoryPageVisualTestPage() {
       <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-xs font-black uppercase tracking-widest text-primary">
         Local visual test data: ${backupName}
       </div>
-      <RecentHistory matches={matches} players={players} />
+      <RecentHistory matches={matches} players={players} matchExpected={matchExpected} />
       <HistoryClient
         initialPlayers={players}
         initialMatches={matches}
