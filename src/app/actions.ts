@@ -222,7 +222,6 @@ export async function addMatchAction(formData: FormData) {
     const manifest = await getAppManifest();
 
     revalidatePath('/');
-    revalidatePath('/history');
     revalidatePath('/analysis');
     return {
       success: true,
@@ -275,7 +274,6 @@ export async function deleteMatchAction(matchId: string) {
     await bumpDataVersions(['matches', 'admin']);
 
     revalidatePath('/');
-    revalidatePath('/history');
     revalidatePath('/analysis');
     return { success: true };
   } catch (error) {
@@ -420,7 +418,6 @@ export async function deletePlayerAction(formData: FormData) {
 
     revalidatePath('/');
     revalidatePath('/analysis');
-    revalidatePath('/history');
     return { success: true };
   } catch (error) {
     console.error('Failed to destructive delete player:', error);
@@ -464,7 +461,6 @@ export async function deleteSeasonAction(formData: FormData) {
     await bumpDataVersions(['seasons', 'matches', 'config', 'playerSeasonSettings', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
-    revalidatePath('/history');
     return { success: true };
   } catch (error) {
     console.error('Failed to delete season:', error);
@@ -508,7 +504,6 @@ export async function endSeasonAction() {
     
     revalidatePath('/');
     revalidatePath('/analysis');
-    revalidatePath('/history');
     return { success: true };
   } catch (error) {
     console.error('Failed to end season:', error);
@@ -534,7 +529,6 @@ export async function createSeasonAction(formData: FormData) {
     await bumpDataVersions(['seasons', 'config', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
-    revalidatePath('/history');
     return { success: true };
   } catch (error) {
     console.error('Failed to create season:', error);
@@ -560,7 +554,6 @@ export async function setActiveSeasonAction(formData: FormData) {
     await bumpDataVersions(['seasons', 'config', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
-    revalidatePath('/history');
     return { success: true };
   } catch (error) {
     console.error('Failed to set active season:', error);
@@ -1073,7 +1066,6 @@ export async function updateMatchAction(formData: FormData) {
     await bumpDataVersions(['matches', 'admin']);
 
     revalidatePath('/');
-    revalidatePath('/history');
     revalidatePath('/analysis');
     return { success: true };
   } catch (error: unknown) {

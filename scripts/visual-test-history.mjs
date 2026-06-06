@@ -8,7 +8,6 @@ import path from 'node:path';
 const require = createRequire(import.meta.url);
 const repoRoot = process.cwd();
 const modalRouteName = 'history-modal-visual-test';
-const pageRouteName = 'history-page-visual-test';
 const outputDir = path.join(repoRoot, '.next', 'visual-tests');
 
 function log(message) {
@@ -113,35 +112,6 @@ export default function HistoryModalVisualTestPage() {
 }
 `);
 
-  await writeRoute(pageRouteName, `import HistoryClient from '@/components/HistoryClient';
-import { RecentHistory } from '@/components/dashboard/RecentHistory';
-import { buildAnalysisElo, isFullDoublesMatch, type AnalysisMatch } from '@/lib/analysis-core';
-import { isGuestId, isRankingMatch } from '@/lib/guest';
-
-${sharedData}
-
-const eloPlayers = players.filter(player => !isGuestId(player.id) && player.active !== false && player.hidden !== true);
-const rankingMatches = matches.filter(match => isRankingMatch(match) && isFullDoublesMatch(match as AnalysisMatch));
-const matchExpected = buildAnalysisElo(eloPlayers, rankingMatches as AnalysisMatch[]).matchExpected;
-
-export default function HistoryPageVisualTestPage() {
-  return (
-    <div className="mx-auto max-w-[1200px] space-y-10 px-4 py-8">
-      <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-xs font-black uppercase tracking-widest text-primary">
-        Local visual test data: ${backupName}
-      </div>
-      <RecentHistory matches={matches} players={players} matchExpected={matchExpected} />
-      <HistoryClient
-        initialPlayers={players}
-        initialMatches={matches}
-        initialConfig={config}
-        initialSeasons={seasons}
-        initialPlayerSeasonSettings={playerSeasonSettings}
-      />
-    </div>
-  );
-}
-`);
 }
 
 function run(command, args, options = {}) {
@@ -275,20 +245,15 @@ async function main() {
     server.stderr.on('data', chunk => process.stderr.write(chunk));
 
     const modalUrl = `http://127.0.0.1:${port}/${modalRouteName}`;
-    const pageUrl = `http://127.0.0.1:${port}/${pageRouteName}`;
     await waitForServer(modalUrl);
-    await waitForServer(pageUrl);
 
     const modalMobile = await screenshot(browserPath, modalUrl, 'history-modal-mobile', '390,1200');
     const modalDesktop = await screenshot(browserPath, modalUrl, 'history-modal-desktop', '1366,1100');
-    const pageMobile = await screenshot(browserPath, pageUrl, 'history-page-mobile', '390,1200');
-    const pageDesktop = await screenshot(browserPath, pageUrl, 'history-page-desktop', '1366,1100');
-    log(`screenshots written:\n  ${modalMobile}\n  ${modalDesktop}\n  ${pageMobile}\n  ${pageDesktop}`);
+    log(`screenshots written:\n  ${modalMobile}\n  ${modalDesktop}`);
   } finally {
     if (server && !server.killed) server.kill();
     await fs.rm(routeDir(modalRouteName), { recursive: true, force: true });
-    await fs.rm(routeDir(pageRouteName), { recursive: true, force: true });
-    if (await exists(routeDir(modalRouteName)) || await exists(routeDir(pageRouteName))) {
+    if (await exists(routeDir(modalRouteName))) {
       throw new Error('Temporary route cleanup failed.');
     }
   }

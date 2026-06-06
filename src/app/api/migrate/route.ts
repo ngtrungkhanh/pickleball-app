@@ -282,8 +282,6 @@ export async function POST(request: Request) {
 
     revalidatePath('/');
     revalidatePath('/analysis');
-    revalidatePath('/history');
-    revalidatePath('/add-match');
 
     return NextResponse.json({ success: true, inserted, playersUpserted }, { status: 200 });
   } catch (error: any) {

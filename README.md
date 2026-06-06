@@ -58,10 +58,10 @@ Notes:
   `npm run visual:test:history`. The script uses the newest
   `pickleball_backup_YYYY-MM-DD.json`, creates a temporary route, runs
   `next build` + `next start` on a free port starting at `3100`, captures mobile
-  and desktop screenshots for both the full-history modal and the standalone
-  history page to `.next/visual-tests/`, and deletes the temporary routes
-  afterwards. This avoids the known local failure path where `.env.local` has a
-  direct Vercel Postgres URL or the browser cache is empty.
+  and desktop screenshots for the full-history modal to `.next/visual-tests/`,
+  and deletes the temporary routes afterwards. This avoids the known local
+  failure path where `.env.local` has a direct Vercel Postgres URL or the
+  browser cache is empty.
 - If a manual temporary route is still needed, remember Next dev allows one dev
   server per repo. Stop the existing Next dev PID before expecting newly added
   routes to appear.

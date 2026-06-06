@@ -26,6 +26,7 @@ type SharedData = {
 };
 
 type SyncState = 'idle' | 'checking' | 'syncing' | 'error';
+type SyncOnMountPolicy = 'always' | 'throttled' | 'empty-only';
 
 const APP_DATA_PARTS: AppCachePart[] = ['players', 'matches', 'seasons', 'config', 'playerSeasonSettings'];
 const MANIFEST_CHECK_THROTTLE_MS = 60_000;
@@ -87,6 +88,7 @@ export function useSharedAppData({
   routeKey,
   localOnly = false,
   fetchIfEmpty = false,
+  syncOnMount = 'throttled',
 }: {
   initialPlayers: StoredPlayer[];
   initialMatches: StoredMatch[];
@@ -96,6 +98,7 @@ export function useSharedAppData({
   routeKey: string;
   localOnly?: boolean;
   fetchIfEmpty?: boolean;
+  syncOnMount?: SyncOnMountPolicy;
 }) {
   const initialData = useMemo<SharedData>(() => ({
     players: initialPlayers,
@@ -227,9 +230,22 @@ export function useSharedAppData({
       void (async () => {
         const snapshot = await loadLocalSnapshot();
         if (localOnly) {
-          if (fetchIfEmpty && !hasUsableAppCache(snapshot)) {
-            await checkManifestAndRefresh({ force: true, allowWhenLocalOnly: true });
+          if (!hasUsableAppCache(snapshot)) {
+            if (fetchIfEmpty) {
+              await checkManifestAndRefresh({ force: true, allowWhenLocalOnly: true });
+            }
+            return;
           }
+          if (syncOnMount === 'always') {
+            await checkManifestAndRefresh({ force: true, allowWhenLocalOnly: true });
+          } else if (syncOnMount === 'throttled' && !recentlyChecked(snapshot)) {
+            await checkManifestAndRefresh({ allowWhenLocalOnly: true });
+          }
+          return;
+        }
+        if (syncOnMount === 'empty-only' && hasUsableAppCache(snapshot)) return;
+        if (syncOnMount === 'always') {
+          await checkManifestAndRefresh({ force: true });
           return;
         }
         if (hasUsableAppCache(snapshot) && recentlyChecked(snapshot)) return;
@@ -237,7 +253,7 @@ export function useSharedAppData({
       })();
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [checkManifestAndRefresh, fetchIfEmpty, loadLocalSnapshot, localOnly, routeKey]);
+  }, [checkManifestAndRefresh, fetchIfEmpty, loadLocalSnapshot, localOnly, routeKey, syncOnMount]);
 
   useEffect(() => {
     if (localOnly) return;

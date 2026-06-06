@@ -140,6 +140,7 @@ export function AnalysisCenter({
     routeKey: 'analysis',
     localOnly,
     fetchIfEmpty: localOnly,
+    syncOnMount: 'throttled',
   });
   const players = sharedData.players.length > 0 ? sharedData.players as Player[] : initialPlayers;
   const allMatches = (sharedData.matches.length > 0 ? sharedData.matches : initialMatches) as Match[];
@@ -155,7 +156,8 @@ export function AnalysisCenter({
 
   useEffect(() => {
     if (!isGlobalSeasonSet()) {
-      setSelectedSeason(currentActiveSeason);
+      const id = window.setTimeout(() => setSelectedSeason(currentActiveSeason), 0);
+      return () => window.clearTimeout(id);
     }
   }, [currentActiveSeason]);
 
@@ -248,7 +250,18 @@ export function AnalysisCenter({
   const board = analysisSnapshot.board;
   const partnerRows = analysisSnapshot.partnerEdges;
   const opponentRows = analysisSnapshot.opponentEdges;
-  const analysis = analysisSnapshot.profiles.get(playerId) || analysisSnapshot.profiles.get(visiblePlayers[0]?.id || '');
+  const effectivePlayerId = useMemo(() => {
+    if (playerId && analysisSnapshot.profiles.has(playerId)) return playerId;
+    return board[0]?.id || visiblePlayers[0]?.id || '';
+  }, [analysisSnapshot.profiles, board, playerId, visiblePlayers]);
+  const analysis = effectivePlayerId ? analysisSnapshot.profiles.get(effectivePlayerId) : undefined;
+
+  useEffect(() => {
+    if (!effectivePlayerId || playerId === effectivePlayerId) return;
+    const id = window.setTimeout(() => setPlayerId(effectivePlayerId), 0);
+    return () => window.clearTimeout(id);
+  }, [effectivePlayerId, playerId]);
+
   useEffect(() => {
     const id = window.setTimeout(() => {
       const zone = new URLSearchParams(window.location.search).get('zone');
@@ -412,7 +425,7 @@ export function AnalysisCenter({
         {/* ZONE 3: Profile (Cá nhân) */}
         {sharedData.hasLocalCache && activeNav === 'profile' && (
           <ProfileZone
-            playerId={playerId}
+            playerId={effectivePlayerId}
             setPlayerId={setPlayerId}
             visiblePlayers={visiblePlayers}
             analysis={analysis}
@@ -429,7 +442,7 @@ export function AnalysisCenter({
             partnerRows={partnerRows}
             opponentRows={opponentRows}
             visiblePlayers={visiblePlayers}
-            playerId={playerId}
+            playerId={effectivePlayerId}
             setPlayerId={setPlayerId}
           />
         )}

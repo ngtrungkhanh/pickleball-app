@@ -143,8 +143,7 @@ Fine amounts should use grouped full numbers such as `35.000`, not `35k`.
 - Full history should be scannable and filterable.
 - Guest and season labels should remain understandable without bloating each row.
 - Full-history modal filters by member, partner/opponent relation, and result.
-- Standalone `/history` is separate from the dashboard modal and currently uses a
-  server-rendered request path.
+- Standalone `/history` is removed. Full history is the Dashboard modal.
 
 ## Admin Import
 

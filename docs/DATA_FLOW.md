@@ -68,9 +68,9 @@ Route cache notes:
   first paint.
 - `/analysis` is a static client shell and reads only the shared IndexedDB
   route cache.
-- `/history` and `/add-match` currently use `revalidate = 0` and hit the server
-  on request.
-- Server actions revalidate `/`, `/history`, and/or `/analysis` after writes.
+- `/history` and `/add-match` are removed. Full history and match entry live on
+  the Dashboard.
+- Server actions revalidate `/` and/or `/analysis` after writes.
 
 ## Hall of Fame Image Flow
 
@@ -123,7 +123,7 @@ Expected save flow:
    - guest matches do not count wins/losses
    - loser fines still count for non-guest losers
 11. `addMatchAction` writes an audit log.
-12. `addMatchAction` revalidates `/`, `/history`, and `/analysis`.
+12. `addMatchAction` revalidates `/` and `/analysis`.
 13. Client clears pending state after confirmed success, refreshes on
     `skippedDuplicate`, or keeps retry state on error.
 
@@ -139,7 +139,7 @@ Editing a match must keep stats balanced:
 3. Update the match row.
 4. Apply new match contribution.
 5. Write audit log.
-6. Revalidate `/`, `/history`, and `/analysis`.
+6. Revalidate `/` and `/analysis`.
 
 Never update match rows in a way that leaves leaderboard/fines inconsistent.
 
@@ -221,9 +221,13 @@ Shared cache policy:
   always-online data-management path.
 - Do not poll in the background. Route preload/reload or explicit data writes
   are the normal sync triggers.
-- Dashboard skips the manifest request when IndexedDB says the manifest was
-  checked within the last 60 seconds. This keeps Dashboard -> Analysis ->
-  Dashboard navigation local-only in normal use.
+- Dashboard always checks the manifest on mount/F5 after local render. The
+  60-second manifest cooldown applies to local-first secondary routes such as
+  Analysis.
+- Current mount/F5 policy: Dashboard (`/`) always checks the server manifest
+  after local render; Admin always checks the server on auth/mount; Analysis
+  renders local cache first and only checks the server when the last manifest
+  check is older than 60 seconds, unless the local cache is empty.
 - If the current view needs data that is missing or stale, sync that data before
   rendering analysis-derived facts. Background sync can continue for other
   seasons after the current view is usable.
@@ -238,7 +242,8 @@ Dashboard client sync is the first-render sync source:
 5. The Dashboard Analysis link writes the current in-memory Dashboard snapshot
    into IndexedDB before navigating to `/analysis`.
 6. `/analysis` mounts with empty server props and reads IndexedDB through
-   `useSharedAppData({ localOnly: true, fetchIfEmpty: true })`.
+   `useSharedAppData({ localOnly: true, fetchIfEmpty: true, syncOnMount:
+   'throttled' })`.
 
 Client sync flow:
 
@@ -310,7 +315,7 @@ Client analysis derivation:
 
 Cache and revalidation:
 
-- Match writes revalidate `/analysis` together with `/` and `/history`, but the
+- Match writes revalidate `/analysis` together with `/`, but the
   Analysis route itself is a static shell and receives fresh data through the
   shared IndexedDB cache.
 - Shared route sync uses IndexedDB for a fast local copy. Dashboard

@@ -228,7 +228,6 @@ export async function POST(request: Request) {
 
     revalidatePath('/');
     revalidatePath('/admin');
-    revalidatePath('/history');
     revalidatePath('/analysis');
 
     return NextResponse.json({ success: true }, { status: 200 });
