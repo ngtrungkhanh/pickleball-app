@@ -2,7 +2,7 @@
 import { useState, useEffect, useSyncExternalStore, useMemo, useRef, useCallback, type MouseEvent, type MutableRefObject } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BarChart3, CalendarDays, Crown, RefreshCw, Settings, Sparkles, Trophy, X } from 'lucide-react';
+import { BarChart3, CalendarDays, Crown, RefreshCw, Settings, Sparkles, X } from 'lucide-react';
 import { SummaryGrid } from './dashboard/SummaryGrid';
 import { Leaderboard } from './dashboard/Leaderboard';
 import { RecentHistory } from './dashboard/RecentHistory';
@@ -16,8 +16,6 @@ import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState 
 import { getGlobalSelectedSeason, setGlobalSelectedSeason, isGlobalSeasonSet } from '@/lib/season-state';
 import { PreviousChampionTitleLine } from '@/components/PreviousChampionTitleLine';
 import { buildHallOfFameEntries, formatHallDate, getLatestHallOfFameEntry } from '@/lib/hall-of-fame';
-import { buildFineLookup } from '@/lib/fines';
-import { calculateLeaderboard } from '@/lib/stats';
 
 const INSIGHT_SELECTION_STATE_KEY = 'pickleball.analysis.insightSelection.v1';
 
@@ -67,6 +65,10 @@ function formatShortDate(value?: string | null) {
 
 function formatCurrency(value: number) {
   return `${value.toLocaleString('vi-VN')}d`;
+}
+
+function avatarLetter(value: unknown) {
+  return Array.from(String(value || '').trim())[0]?.toLocaleUpperCase('vi-VN') || '?';
 }
 
 function matchTime(match: Match) {
@@ -584,24 +586,6 @@ export default function Dashboard({
     ...matches.map(m => String(m.season || 'Season 1')),
   ].filter(Boolean))), [activeSeason, seasons, matches]);
   const seasonLabel = selectedSeason ?? 'Tổng hợp';
-
-  const dashboardBoard = useMemo(() => {
-    const fineLookup = buildFineLookup({
-      players: leaderboardPlayers,
-      seasons,
-      playerSeasonSettings: sharedData.playerSeasonSettings,
-      fallbackLoseMoney: loseMoney,
-    });
-
-    return calculateLeaderboard(leaderboardPlayers, viewedMatches, loseMoney, undefined, {
-      getLoseMoney: fineLookup.getLoseMoney,
-      shouldPayFine: fineLookup.shouldPayFine,
-    })
-      .filter(p => p.active !== false && !isGuestId(p.id) && p.total > 0)
-      .slice(0, 20);
-  }, [leaderboardPlayers, viewedMatches, loseMoney, seasons, sharedData.playerSeasonSettings]);
-  const sidebarLeader = dashboardBoard[0];
-  const sidebarLeaderName = sidebarLeader?.name || 'Chưa có';
   const selectedSeasonInfo = selectedSeason ? seasons.find(s => s.name === selectedSeason) : null;
   const seasonStatus = selectedSeason === null
     ? `${seasonOptions.length} mùa`
@@ -684,13 +668,15 @@ export default function Dashboard({
             </div>
 
             <div className="flex min-w-0 items-center justify-end gap-2">
+              {sharedData.syncMessage ? (
+                <div className="hidden h-9 max-w-[220px] items-center gap-2 rounded-lg border border-slate-500/20 bg-white/[0.035] px-3 text-[10px] font-black uppercase tracking-widest text-slate-300/55 2xl:flex">
+                  <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${sharedData.syncState === 'syncing' ? 'animate-spin' : ''}`} />
+                  <span className="min-w-0 truncate">{sharedData.syncMessage}</span>
+                </div>
+              ) : null}
               <Link href="/analysis" onClick={openAnalysisFromLocalCache} className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary">
                 <BarChart3 className="h-4 w-4" />
                 <span className="hidden xl:inline">Phân tích</span>
-              </Link>
-              <Link href="#recent-history" className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary">
-                <CalendarDays className="h-4 w-4" />
-                <span className="hidden xl:inline">Lịch sử</span>
               </Link>
               <button onClick={() => setSettingsOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary">
                 <Settings className="h-4 w-4" />
@@ -699,6 +685,13 @@ export default function Dashboard({
             </div>
           </div>
         </header>
+
+        {sharedData.syncMessage ? (
+          <div className="pointer-events-none fixed right-4 top-[70px] z-50 hidden max-w-[300px] items-center gap-2 rounded-xl border border-slate-500/20 bg-[#07101d]/92 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300/60 shadow-[0_14px_42px_rgba(0,0,0,0.24)] backdrop-blur-xl lg:flex 2xl:hidden">
+            <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${sharedData.syncState === 'syncing' ? 'animate-spin' : ''}`} />
+            <span className="min-w-0 truncate">{sharedData.syncMessage}</span>
+          </div>
+        ) : null}
 
         <div className="mx-auto grid max-w-[1680px] grid-cols-[300px_minmax(0,1fr)] gap-4 py-4 3xl:grid-cols-[300px_minmax(780px,1fr)_340px]">
           <aside className="min-w-0 space-y-3 self-start lg:sticky lg:top-[74px] lg:max-h-[calc(100vh-88px)] lg:overflow-y-auto lg:overflow-x-hidden">
@@ -716,14 +709,9 @@ export default function Dashboard({
                 {seasonOptions.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
               <div className="mt-3 rounded-xl border border-primary/15 bg-primary/[0.055] px-3 py-2.5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-[9px] font-black uppercase tracking-[0.16em] text-white/35">Đang xem</div>
-                    <div className="mt-1 truncate text-base font-black text-white" title={seasonLabel}>{seasonLabel}</div>
-                  </div>
-                  <div className="shrink-0 rounded-lg border border-primary/20 bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-primary">
-                    {seasonStatus}
-                  </div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-[9px] font-black uppercase tracking-[0.16em] text-white/35">Trạng thái</div>
+                  <div className="shrink-0 rounded-lg border border-primary/20 bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-primary">{seasonStatus}</div>
                 </div>
                 <div className="mt-2 text-xs font-bold leading-snug text-white/45">{seasonTimeText}</div>
                 <div className="mt-2 flex items-center justify-between gap-2 border-t border-white/10 pt-2 text-[10px] font-black uppercase tracking-[0.14em] text-white/35">
@@ -731,34 +719,48 @@ export default function Dashboard({
                   <span className="text-white/70">{formatCurrency(loseMoney)}</span>
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2">
-                  <div className="text-[9px] font-black uppercase tracking-[0.16em] text-white/35">Trận</div>
-                  <div className="mt-1 truncate text-xl font-black tabular-nums text-white">{viewedMatches.length}</div>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2">
-                  <div className="text-[9px] font-black uppercase tracking-[0.16em] text-white/35">Dẫn đầu</div>
-                  <div className="mt-1 min-h-5 break-words text-sm font-black leading-tight text-primary" title={sidebarLeaderName}>{sidebarLeaderName}</div>
-                </div>
-              </div>
             </section>
 
             {previousChampion && (
               <Link
                 href="/analysis?zone=hall"
-                className="block rounded-2xl border border-amber-300/20 bg-amber-300/[0.07] p-4 shadow-[0_14px_38px_rgba(0,0,0,0.20)] transition hover:border-amber-200/35 hover:bg-amber-300/[0.10]"
+                className="group block overflow-hidden rounded-2xl border border-amber-300/24 bg-slate-950/35 p-3 shadow-[0_14px_38px_rgba(0,0,0,0.20)] transition hover:border-amber-200/45 hover:bg-amber-300/[0.07]"
               >
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/55">
-                  <Crown className="h-4 w-4 text-amber-200/85" />
-                  Vô địch mùa trước
-                </div>
-                <div className="mt-3 flex items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-200/25 bg-amber-300/10 text-amber-100">
-                    <Trophy className="h-5 w-5" />
+                <div className="grid grid-cols-[82px_minmax(0,1fr)] gap-3">
+                  <div className="relative aspect-[3/4] overflow-hidden rounded-xl border border-amber-200/35 bg-slate-950/85 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+                    {previousChampion.imageUrl ? (
+                      <div
+                        role="img"
+                        aria-label={`Ảnh vinh danh ${previousChampion.playerName}`}
+                        className="absolute inset-0 bg-cover bg-center transition duration-300 group-hover:brightness-110"
+                        style={{ backgroundImage: `url("${previousChampion.imageUrl}")` }}
+                      />
+                    ) : (
+                      <>
+                        <div className="absolute inset-2 rounded-lg border border-amber-100/15" />
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(251,191,36,0.24),transparent_42%),linear-gradient(145deg,rgba(251,191,36,0.16),rgba(15,23,42,0.18)_45%,rgba(15,23,42,0.62))]" />
+                        <div className="relative flex h-full items-center justify-center text-3xl font-black text-amber-100">
+                          {avatarLetter(previousChampion.playerName)}
+                        </div>
+                      </>
+                    )}
                   </div>
-                  <div className="min-w-0">
-                    <div className="truncate text-xl font-black leading-tight text-amber-100" title={previousChampion.playerName}>{previousChampion.playerName}</div>
-                    <div className="mt-1 text-xs font-bold text-amber-100/45">{previousChampion.season}</div>
+                  <div className="min-w-0 self-center">
+                    <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-amber-200/70">
+                      <Crown className="h-3.5 w-3.5" />
+                      Champion
+                    </div>
+                    <div className="mt-1 rounded-full border border-amber-200/20 bg-amber-200/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-amber-100/75">
+                      {previousChampion.season}
+                    </div>
+                    <div className="mt-2 line-clamp-2 text-lg font-black uppercase leading-tight text-white" title={previousChampion.playerName}>
+                      {previousChampion.playerName}
+                    </div>
+                    {previousChampion.lastMatchDate ? (
+                      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-100/38">
+                        Chốt {formatHallDate(previousChampion.lastMatchDate)}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2">
@@ -775,42 +777,10 @@ export default function Dashboard({
                     <div className="mt-0.5 text-sm font-black text-amber-50">{previousChampion.total}</div>
                   </div>
                 </div>
-                {previousChampion.lastMatchDate ? (
-                  <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-100/38">
-                    Chốt {formatHallDate(previousChampion.lastMatchDate)}
-                  </div>
-                ) : null}
               </Link>
             )}
 
-            {canWrite && (
-              <section className="hidden">
-                <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
-                  <Sparkles className="h-3.5 w-3.5 text-primary/80" />
-                  <h2 className="min-w-0 truncate text-[10px] font-black uppercase tracking-[0.2em] text-white/55">Nhập trận nhanh</h2>
-                </div>
-                <ScoreForm
-                  compact
-                  players={players}
-                  onAddMatch={addLocalMatch}
-                  onConfirmMatch={confirmLocalMatch}
-                  onRejectMatch={rejectLocalMatch}
-                  activeSeason={activeSeason}
-                />
-              </section>
-            )}
-
             <div className="space-y-3 3xl:hidden">
-              {previousChampion && (
-                <section className="hidden">
-                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/55">
-                    <Crown className="h-4 w-4 text-amber-200/80" />
-                    Vô địch mùa trước
-                  </div>
-                  <div className="mt-2 truncate text-lg font-black text-amber-100" title={previousChampion.playerName}>{previousChampion.playerName}</div>
-                  <div className="text-xs font-bold text-amber-100/45">{previousChampion.season}</div>
-                </section>
-              )}
               <SummaryGrid
                 compact
                 players={players}
@@ -824,12 +794,6 @@ export default function Dashboard({
           </aside>
 
           <section className="min-w-0 space-y-4">
-            {sharedData.syncMessage ? (
-              <div className="flex items-center gap-2 rounded-xl border border-slate-500/20 bg-[#142034]/80 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300/60">
-                <RefreshCw className={`h-3.5 w-3.5 ${sharedData.syncState === 'syncing' ? 'animate-spin' : ''}`} />
-                <span className="min-w-0 truncate">{sharedData.syncMessage}</span>
-              </div>
-            ) : null}
             {!sharedData.hasLocalCache && sharedData.syncState !== 'idle' && (
               <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-left text-xs font-black uppercase tracking-widest text-primary">
                 Đang tải dữ liệu...
@@ -869,16 +833,6 @@ export default function Dashboard({
           </section>
 
           <aside className="hidden min-w-0 space-y-3 self-start 3xl:block 3xl:sticky 3xl:top-[74px] 3xl:max-h-[calc(100vh-88px)] 3xl:overflow-y-auto 3xl:overflow-x-hidden">
-            {previousChampion && (
-              <section className="hidden">
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/55">
-                  <Trophy className="h-4 w-4 text-amber-200/80" />
-                  Vô địch mùa trước
-                </div>
-                <div className="mt-2 truncate text-xl font-black text-amber-100" title={previousChampion.playerName}>{previousChampion.playerName}</div>
-                <div className="text-xs font-bold text-amber-100/45">{previousChampion.season}</div>
-              </section>
-            )}
             <SummaryGrid
               compact
               players={players}
@@ -1070,6 +1024,7 @@ export default function Dashboard({
         <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} />
       </div>
 
+    </div>
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -1082,8 +1037,6 @@ export default function Dashboard({
         config={config}
         playerSeasonSettings={sharedData.playerSeasonSettings}
       />
-
-    </div>
     </div>
   );
 }

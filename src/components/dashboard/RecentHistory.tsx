@@ -1,5 +1,6 @@
 'use client';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { History, X, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import { deleteMatchAction } from '@/app/actions';
@@ -76,10 +77,14 @@ function CompactRecentPlayerName({ players, id, className }: { players: any[]; i
   const fullName = playerName(players, id);
   return (
     <span className={cn('block truncate', className)} data-mobile-player-name title={fullName}>
-      <span className="sm:hidden">{playerName(players, id, 'tiny')}</span>
-      <span className="hidden sm:inline">{fullName}</span>
+      {playerName(players, id, 'tiny')}
     </span>
   );
+}
+
+function PortalLayer({ children }: { children: ReactNode }) {
+  if (typeof document === 'undefined') return null;
+  return createPortal(children, document.body);
 }
 
 function dateKeyOf(value: Date | string) {
@@ -120,7 +125,7 @@ function groupMatchesByDay(matches: any[]): DayMatchGroup[] {
 // ─── Delete confirm modal ─────────────────────────────────────────────────────
 function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
   return (
-    <div className="fixed inset-0 z-[600] flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-[1200] flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-300" onClick={onCancel} />
       <div className="relative rounded-[2.5rem] border border-red-500/20 bg-slate-950 shadow-2xl p-8 max-w-sm w-full animate-in zoom-in-95 duration-200">
         <div className="flex flex-col items-center gap-6 text-center">
@@ -207,7 +212,7 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
   };
 
   return (
-    <div className={cn("fixed inset-0 z-[500] flex items-end justify-center p-0 sm:items-center sm:p-4", isClosing && "pointer-events-none")}>
+    <div className={cn("fixed inset-0 z-[1100] flex items-end justify-center p-0 sm:items-center sm:p-4", isClosing && "pointer-events-none")}>
       <div className={cn("history-modal-backdrop absolute inset-0 bg-black/65 backdrop-blur-md", isClosing && "history-modal-backdrop-out")} onClick={requestClose} />
       {deleteTarget && (
         <ConfirmDelete
@@ -422,20 +427,26 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
 
   return (
     <>
-      {showAll && <HistoryModal matches={matches} players={players} canEdit={canEdit} onClose={() => setShowAll(false)} matchExpected={matchExpected} />}
+      {showAll && (
+        <PortalLayer>
+          <HistoryModal matches={matches} players={players} canEdit={canEdit} onClose={() => setShowAll(false)} matchExpected={matchExpected} />
+        </PortalLayer>
+      )}
       {deleteTarget && (
-        <ConfirmDelete
-          onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => {
-            const id = deleteTarget;
-            setDeleteTarget(null);
-            setIsDeletingId(id);
-            start(async () => {
-              await deleteMatchAction(id);
-              setIsDeletingId(null);
-            });
-          }}
-        />
+        <PortalLayer>
+          <ConfirmDelete
+            onCancel={() => setDeleteTarget(null)}
+            onConfirm={() => {
+              const id = deleteTarget;
+              setDeleteTarget(null);
+              setIsDeletingId(id);
+              start(async () => {
+                await deleteMatchAction(id);
+                setIsDeletingId(null);
+              });
+            }}
+          />
+        </PortalLayer>
       )}
 
       <div className="recent-history-container w-full rounded-2xl border border-white/[0.06] bg-slate-900/80 overflow-hidden">

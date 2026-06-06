@@ -359,7 +359,10 @@ export function Leaderboard({
   const toggle = (id: string) => setExpandedId(prev => prev === id ? null : id);
 
   return (
-    <div className="w-full rounded-2xl sm:rounded-[2rem] border border-slate-400/25 bg-[#192844]/95 shadow-[0_24px_70px_rgba(0,0,0,0.30)] overflow-visible backdrop-blur-2xl">
+    <div className={cn(
+      "w-full rounded-2xl sm:rounded-[2rem] border border-slate-400/25 bg-[#192844]/95 shadow-[0_24px_70px_rgba(0,0,0,0.30)] backdrop-blur-2xl",
+      showSeasonHeader ? "overflow-visible" : "overflow-hidden",
+    )}>
       {showSeasonHeader && (
       <div className="flex items-center justify-center px-4 sm:px-6 py-5 sm:py-6 border-b border-slate-400/25">
         <div className="relative flex flex-col items-center" ref={dropRef}>
@@ -409,7 +412,7 @@ export function Leaderboard({
       )}
 
       <div className="hidden sm:block">
-        <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
+        <table className="w-full border-separate border-spacing-0" style={{ tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: '8%' }} />
             <col style={{ width: '32%' }} />
