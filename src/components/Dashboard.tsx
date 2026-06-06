@@ -780,17 +780,6 @@ export default function Dashboard({
               </Link>
             )}
 
-            <div className="space-y-3 3xl:hidden">
-              <SummaryGrid
-                compact
-                players={players}
-                matches={viewedMatches}
-                loseMoney={loseMoney}
-                seasons={seasons}
-                playerSeasonSettings={sharedData.playerSeasonSettings}
-              />
-              <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} />
-            </div>
           </aside>
 
           <section className="min-w-0 space-y-4">
@@ -804,6 +793,15 @@ export default function Dashboard({
                 Dev preview đang dùng chung database với production nên các thao tác ghi/sửa/xóa đã bị khóa để bảo vệ data thật.
               </div>
             )}
+            <div className="3xl:hidden">
+              <SummaryGrid
+                players={players}
+                matches={viewedMatches}
+                loseMoney={loseMoney}
+                seasons={seasons}
+                playerSeasonSettings={sharedData.playerSeasonSettings}
+              />
+            </div>
             <Leaderboard
               players={leaderboardPlayers}
               matches={activeMatches}
@@ -830,6 +828,9 @@ export default function Dashboard({
                 />
               </section>
             )}
+            <div className="3xl:hidden">
+              <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} />
+            </div>
           </section>
 
           <aside className="hidden min-w-0 space-y-3 self-start 3xl:block 3xl:sticky 3xl:top-[74px] 3xl:max-h-[calc(100vh-88px)] 3xl:overflow-y-auto 3xl:overflow-x-hidden">
