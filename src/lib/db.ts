@@ -249,12 +249,16 @@ export async function replaceMatchesLocal(matches: StoredMatch[]) {
   emitCacheChange();
 }
 
-export async function removeMatchesLocal(matchIds: string[]) {
+export async function removeMatchesLocal(matchIds: string[], dataVersion?: number, partVersions?: Partial<AppCachePartVersions>) {
   if (matchIds.length === 0) return;
   const db = await openDB();
-  const tx = db.transaction(STORES.matches, 'readwrite');
+  const tx = db.transaction([STORES.matches, STORES.syncMeta], 'readwrite');
   const store = tx.objectStore(STORES.matches);
   matchIds.forEach((id) => store.delete(id));
+  if (typeof dataVersion === 'number') {
+    tx.objectStore(STORES.syncMeta).put({ key: 'dataVersion', value: dataVersion });
+    tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: normalizePartVersions(partVersions || { matches: dataVersion }, 0) });
+  }
   await new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve(true);
     tx.onerror = () => reject(tx.error);

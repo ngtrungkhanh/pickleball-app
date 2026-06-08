@@ -9,13 +9,14 @@ import { RecentHistory } from './dashboard/RecentHistory';
 import { ScoreForm } from './ScoreForm';
 import { SettingsModal } from './SettingsModal';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
-import { seedAppCache, type StoredPlayerSeasonSetting } from '@/lib/db';
+import { removeMatchesLocal, saveMatchesLocal, seedAppCache, type StoredPlayerSeasonSetting } from '@/lib/db';
 import { isGuestId } from '@/lib/guest';
 import { buildAnalysisSnapshot } from '@/lib/analysis-core';
 import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
 import { getGlobalSelectedSeason, setGlobalSelectedSeason, isGlobalSeasonSet } from '@/lib/season-state';
 import { PreviousChampionTitleLine } from '@/components/PreviousChampionTitleLine';
 import { buildHallOfFameEntries, formatHallDate, getLatestHallOfFameEntry } from '@/lib/hall-of-fame';
+import { deleteMatchAction } from '@/app/actions';
 
 const INSIGHT_SELECTION_STATE_KEY = 'pickleball.analysis.insightSelection.v1';
 
@@ -266,6 +267,20 @@ export default function Dashboard({
   const rejectLocalMatch = (tempId: string) => {
     setMatches(prev => prev.filter(m => m.id !== tempId));
   };
+  const deleteLocalMatch = useCallback(async (matchId: string) => {
+    const match = matches.find(m => String(m.id || '') === matchId);
+    if (!match) return;
+    setMatches(prev => prev.filter(m => String(m.id || '') !== matchId));
+    await removeMatchesLocal([matchId]);
+    const result = await deleteMatchAction(matchId);
+    if (result && 'error' in result) {
+      setMatches(prev => [match, ...prev.filter(m => String(m.id || '') !== matchId)]);
+      await saveMatchesLocal([match]);
+      alert(String(result.error || 'Xóa trận thất bại. Đã khôi phục lại dữ liệu local.'));
+      return;
+    }
+    await removeMatchesLocal([matchId], result?.dataVersion, result?.partVersions);
+  }, [matches]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const canEdit = useSyncExternalStore(subscribeEditMode, getEditModeSnapshot, () => false);
@@ -1022,7 +1037,7 @@ export default function Dashboard({
 
       {/* 4. Recent History */}
       <div className={DESKTOP_PANEL_WIDTH}>
-        <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} />
+        <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} onDeleteMatch={deleteLocalMatch} />
       </div>
 
     </div>

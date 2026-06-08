@@ -3,7 +3,6 @@ import { useState, useTransition, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { History, X, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
-import { deleteMatchAction } from '@/app/actions';
 import { isGuestId } from '@/lib/guest';
 
 type PlayerNameMode = 'full' | 'tiny';
@@ -152,7 +151,7 @@ function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCance
   );
 }
 
-function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { matches: any[]; players: any[]; onClose: () => void; canEdit: boolean; matchExpected?: any }) {
+function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDeleteMatch }: { matches: any[]; players: any[]; onClose: () => void; canEdit: boolean; matchExpected?: any; onDeleteMatch?: (matchId: string) => Promise<void> | void }) {
   const [isClosing, setIsClosing] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
@@ -222,7 +221,7 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
             setDeleteTarget(null);
             setIsDeletingId(id);
             start(async () => {
-              await deleteMatchAction(id);
+              await onDeleteMatch?.(id);
               setIsDeletingId(null);
             });
           }}
@@ -366,7 +365,7 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
         <span className="text-[10px] font-bold text-slate-400/75 tabular-nums sm:text-[11px]">{date}</span>
       </div>
       <div className={cn("min-w-0 flex-1 px-3 py-3 sm:px-5 sm:py-4", canEdit && "pr-9 sm:pr-11")}>
-        {canEdit && (
+        {canEdit && !m.pending && (
           <button disabled={isDeleting} onClick={onDelete} className={cn("absolute right-2 top-2 rounded-lg p-1.5 text-white/25 transition-all hover:bg-red-500/10 hover:text-red-400 active:scale-90", isDeleting && "pointer-events-none opacity-50")}>
             {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
           </button>
@@ -410,7 +409,7 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
 }
 
 // ─── Main RecentHistory ───────────────────────────────────────────────────────
-export function RecentHistory({ matches, players, canEdit = false, matchExpected, defaultShowAll = false }: { matches: any[]; players: any[]; canEdit?: boolean; matchExpected?: any; defaultShowAll?: boolean }) {
+export function RecentHistory({ matches, players, canEdit = false, matchExpected, defaultShowAll = false, onDeleteMatch }: { matches: any[]; players: any[]; canEdit?: boolean; matchExpected?: any; defaultShowAll?: boolean; onDeleteMatch?: (matchId: string) => Promise<void> | void }) {
   const [showAll, setShowAll] = useState(defaultShowAll);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
@@ -429,7 +428,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
     <>
       {showAll && (
         <PortalLayer>
-          <HistoryModal matches={matches} players={players} canEdit={canEdit} onClose={() => setShowAll(false)} matchExpected={matchExpected} />
+          <HistoryModal matches={matches} players={players} canEdit={canEdit} onClose={() => setShowAll(false)} matchExpected={matchExpected} onDeleteMatch={onDeleteMatch} />
         </PortalLayer>
       )}
       {deleteTarget && (
@@ -441,7 +440,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
               setDeleteTarget(null);
               setIsDeletingId(id);
               start(async () => {
-                await deleteMatchAction(id);
+                await onDeleteMatch?.(id);
                 setIsDeletingId(null);
               });
             }}
@@ -490,6 +489,9 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                   <div className="px-4 py-2 rounded-xl bg-primary/10 border border-primary/20 text-primary font-black text-[17px] tabular-nums tracking-tight whitespace-nowrap">
                     {m.win_score}–{m.lose_score}
                   </div>
+                  {m.pending && (
+                    <span className="mt-1 text-[9px] font-black uppercase tracking-widest text-amber-300/80">Đang lưu...</span>
+                  )}
                   {matchExpected?.get(m.id) && (
                     <span className="text-[10px] font-bold text-white/30 mt-1 block tracking-tight">
                       Dự đoán trước trận: {Math.round(matchExpected.get(m.id).winProb * 100)}% - {Math.round(matchExpected.get(m.id).loseProb * 100)}%
@@ -503,7 +505,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                 </div>
 
                 <div className="shrink-0 flex items-center justify-center w-12">
-                  {canEdit && (
+                  {canEdit && !m.pending && (
                     <button disabled={isDeletingId === m.id} onClick={() => setDeleteTarget(m.id)}
                       className={cn("p-2 text-white/15 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors", isDeletingId === m.id && "opacity-50 pointer-events-none")}>
                       {isDeletingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
@@ -521,7 +523,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                   </div>
 
                   <div className={cn("min-w-0 flex-1 px-3 py-3", canEdit && "pr-9")}>
-                    {canEdit && (
+                    {canEdit && !m.pending && (
                       <button disabled={isDeletingId === m.id} onClick={() => setDeleteTarget(m.id)}
                         className={cn("absolute right-2 top-2 rounded-lg p-1.5 text-white/15 transition-colors hover:bg-red-500/10 hover:text-red-400", isDeletingId === m.id && "pointer-events-none opacity-50")}>
                         {isDeletingId === m.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
@@ -538,6 +540,9 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                         <div className="min-w-[62px] rounded-xl border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-center text-sm font-black text-primary tabular-nums whitespace-nowrap">
                           <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
                         </div>
+                        {m.pending && (
+                          <span className="mt-1 text-[8px] font-black uppercase tracking-widest text-amber-300/80">Đang lưu</span>
+                        )}
                         {matchExpected?.get(m.id) && (
                           <span className="mt-1 block whitespace-nowrap text-[8px] font-bold tracking-tight text-white/30">
                             {Math.round(matchExpected.get(m.id).winProb * 100)}% - {Math.round(matchExpected.get(m.id).loseProb * 100)}%

@@ -61,6 +61,8 @@ async function ensureSoftDeleteColumns() {
   await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS hidden BOOLEAN DEFAULT FALSE`;
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80)`;
+  await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS client_request_id VARCHAR(120)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS matches_client_request_id_unique ON matches (client_request_id) WHERE client_request_id IS NOT NULL`;
   await ensurePlayerSeasonSettingsTable();
 }
 
@@ -120,12 +122,56 @@ async function getSeasonLoseMoney(season: string) {
 }
 
 
-async function updatePlayerStatsIncremental(playerId: string, season: string, deltaWins: number, deltaLosses: number, deltaMoney: number) {
+type DbClient = any;
+
+async function withTransaction<T>(work: (client: DbClient) => Promise<T>) {
+  const client = await sql.connect();
+  try {
+    await client.sql`BEGIN`;
+    const result = await work(client);
+    await client.sql`COMMIT`;
+    return result;
+  } catch (error) {
+    try {
+      await client.sql`ROLLBACK`;
+    } catch (rollbackError) {
+      console.error('Transaction rollback failed:', rollbackError);
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function normalizeTeam(a?: string | null, b?: string | null) {
+  return [a || '', b || ''].filter(Boolean).sort().join('|');
+}
+
+function normalizeMatchRow(row: any, fallbackSeason = 'Season 1') {
+  return {
+    id: String(row.id || ''),
+    date: row.date ? String(row.date) : new Date().toISOString(),
+    win_1: String(row.win_1 || ''),
+    win_2: row.win_2 ? String(row.win_2) : null,
+    lose_1: String(row.lose_1 || ''),
+    lose_2: row.lose_2 ? String(row.lose_2) : null,
+    win_score: Number(row.win_score || 0),
+    lose_score: Number(row.lose_score || 0),
+    season: String(row.season || fallbackSeason),
+    created_by: String(row.created_by || 'SYSTEM'),
+    client_request_id: row.client_request_id ? String(row.client_request_id) : null,
+    deleted_at: row.deleted_at ? String(row.deleted_at) : null,
+    delete_group_id: row.delete_group_id ? String(row.delete_group_id) : null,
+  };
+}
+
+async function updatePlayerStatsIncremental(playerId: string, season: string, deltaWins: number, deltaLosses: number, deltaMoney: number, runner?: DbClient) {
   if (!playerId || isGuestId(playerId)) return;
+  const query = runner?.sql ?? sql;
   
   let moneyToChange = deltaMoney;
   if (deltaMoney !== 0) {
-    const { rows } = await sql`
+    const { rows } = await query`
       SELECT COALESCE(pss.pay_fine, p.pay_fine, TRUE) AS pay_fine
       FROM players p
       LEFT JOIN player_season_settings pss
@@ -138,7 +184,7 @@ async function updatePlayerStatsIncremental(playerId: string, season: string, de
     }
   }
 
-  await sql`
+  await query`
     INSERT INTO player_stats (player_id, season, wins, losses, total, money)
     VALUES (${playerId}, ${season}, ${deltaWins}, ${deltaLosses}, ${deltaWins + deltaLosses}, ${moneyToChange})
     ON CONFLICT (player_id, season) DO UPDATE SET
@@ -164,81 +210,95 @@ export async function addMatchAction(formData: FormData) {
   const season = (formData.get('season') as string) || await getConfigValue('active_season', 'Season 1');
   const created_by = (formData.get('created_by') as string) || 'SYSTEM';
   const duplicate_confirmed = String(formData.get('duplicate_confirmed') || '').toLowerCase() === 'true';
+  const rawClientRequestId = String(formData.get('client_request_id') || formData.get('temp_id') || '').trim();
+  const client_request_id = rawClientRequestId ? rawClientRequestId.slice(0, 120) : null;
 
   if (!win_1 || !win_2 || !lose_1 || !lose_2) {
     return { error: 'Thiếu người chơi. Cần đủ 4 người.' };
   }
 
-  const normalizeTeam = (a?: string | null, b?: string | null) => [a || '', b || ''].filter(Boolean).sort().join('|');
-
   try {
     const currentWinTeam = normalizeTeam(win_1, win_2);
     const currentLoseTeam = normalizeTeam(lose_1, lose_2);
-    const { rows: recent } = await sql`
-      SELECT id, win_1, win_2, lose_1, lose_2 FROM matches
-      WHERE date > NOW() - INTERVAL '15 minutes'
-        AND season = ${season}
-        AND deleted_at IS NULL
-      ORDER BY date DESC
-      LIMIT 20
-    `;
-
-    const isDuplicate = recent.some((m) => {
-      const winTeam = normalizeTeam(String(m.win_1 || ''), String(m.win_2 || ''));
-      const loseTeam = normalizeTeam(String(m.lose_1 || ''), String(m.lose_2 || ''));
-      return winTeam === currentWinTeam && loseTeam === currentLoseTeam;
-    });
-
-    if (isDuplicate && !duplicate_confirmed) {
-      return { skippedDuplicate: true };
-    }
-  } catch {
-    // Duplicate check is non-critical; saving can continue.
-  }
-
-  try {
-    const { rows: insertedRows } = await sql`
-      INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by)
-      VALUES (${id}, NOW(), ${win_1}, ${win_2}, ${lose_1}, ${lose_2}, ${win_score}, ${lose_score}, ${season}, ${created_by})
-      RETURNING id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by
-    `;
-    const inserted = insertedRows[0];
-
+    const duplicateLockKey = `match:${season}:${currentWinTeam}>${currentLoseTeam}`;
     const lose_money = await getSeasonLoseMoney(season);
     const hasGuest = matchHasGuest({ win_1, win_2, lose_1, lose_2 });
 
-    if (!hasGuest) {
-      await updatePlayerStatsIncremental(win_1, season, 1, 0, 0);
-      if (win_2) await updatePlayerStatsIncremental(win_2, season, 1, 0, 0);
-      await updatePlayerStatsIncremental(lose_1, season, 0, 1, 0);
-      if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 1, 0);
+    const txResult = await withTransaction(async (client) => {
+      if (client_request_id) {
+        await client.sql`SELECT pg_advisory_xact_lock(hashtext(${`request:${client_request_id}`}))`;
+        const { rows: replayRows } = await client.sql`
+          SELECT * FROM matches
+          WHERE client_request_id = ${client_request_id}
+          LIMIT 1
+        `;
+        if (replayRows[0]) {
+          return { success: true, match: normalizeMatchRow(replayRows[0], season), dataVersion: null as number | null };
+        }
+      }
+
+      await client.sql`SELECT pg_advisory_xact_lock(hashtext(${duplicateLockKey}))`;
+      const { rows: recent } = await client.sql`
+        SELECT * FROM matches
+        WHERE date > NOW() - INTERVAL '15 minutes'
+          AND season = ${season}
+          AND deleted_at IS NULL
+        ORDER BY date DESC
+        LIMIT 20
+      `;
+
+      const duplicate = recent.find((m: any) => {
+        const winTeam = normalizeTeam(String(m.win_1 || ''), String(m.win_2 || ''));
+        const loseTeam = normalizeTeam(String(m.lose_1 || ''), String(m.lose_2 || ''));
+        return winTeam === currentWinTeam && loseTeam === currentLoseTeam;
+      });
+
+      if (duplicate && !duplicate_confirmed) {
+        return {
+          duplicateConflict: true,
+          duplicateMatch: normalizeMatchRow(duplicate, season),
+          dataVersion: null as number | null,
+        };
+      }
+
+      const { rows: insertedRows } = await client.sql`
+        INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by, client_request_id)
+        VALUES (${id}, NOW(), ${win_1}, ${win_2}, ${lose_1}, ${lose_2}, ${win_score}, ${lose_score}, ${season}, ${created_by}, ${client_request_id})
+        RETURNING *
+      `;
+      const inserted = insertedRows[0];
+
+      if (!hasGuest) {
+        await updatePlayerStatsIncremental(win_1, season, 1, 0, 0, client);
+        if (win_2) await updatePlayerStatsIncremental(win_2, season, 1, 0, 0, client);
+        await updatePlayerStatsIncremental(lose_1, season, 0, 1, 0, client);
+        if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 1, 0, client);
+      }
+
+      await updatePlayerStatsIncremental(lose_1, season, 0, 0, lose_money, client);
+      if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 0, lose_money, client);
+
+      await logAudit('ADD_MATCH', `Match ${id} by ${created_by}: ${win_1}${win_2 ? '/' + win_2 : ''} beat ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`, client);
+      const dataVersion = await bumpDataVersions(['matches', 'admin'], client as any);
+      return { success: true, match: normalizeMatchRow(inserted, season), dataVersion };
+    });
+
+    if (txResult.duplicateConflict) {
+      return {
+        duplicateConflict: true,
+        duplicateMatch: txResult.duplicateMatch,
+      };
     }
 
-    await updatePlayerStatsIncremental(lose_1, season, 0, 0, lose_money);
-    if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 0, lose_money);
-
-    await logAudit('ADD_MATCH', `Match ${id} by ${created_by}: ${win_1}${win_2 ? '/' + win_2 : ''} beat ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
-    const dataVersion = await bumpDataVersions(['matches', 'admin']);
     const manifest = await getAppManifest();
 
     revalidatePath('/');
     revalidatePath('/analysis');
     return {
       success: true,
-      dataVersion,
+      dataVersion: txResult.dataVersion ?? manifest.globalVersion,
       partVersions: manifest.parts,
-      match: {
-        id: String(inserted.id),
-        date: inserted.date ? String(inserted.date) : new Date().toISOString(),
-        win_1: String(inserted.win_1 || ''),
-        win_2: inserted.win_2 ? String(inserted.win_2) : null,
-        lose_1: String(inserted.lose_1 || ''),
-        lose_2: inserted.lose_2 ? String(inserted.lose_2) : null,
-        win_score: Number(inserted.win_score || 0),
-        lose_score: Number(inserted.lose_score || 0),
-        season: String(inserted.season || season),
-        created_by: String(inserted.created_by || created_by),
-      },
+      match: txResult.match,
     };
   } catch (error) {
     console.error('Failed to add match:', error);
@@ -250,6 +310,49 @@ export async function deleteMatchAction(matchId: string) {
 
   try {
     await ensureSoftDeleteColumns();
+    const txResult = await withTransaction(async (client) => {
+      await client.sql`SELECT pg_advisory_xact_lock(hashtext(${`delete:${matchId}`}))`;
+      const { rows } = await client.sql`SELECT * FROM matches WHERE id = ${matchId} LIMIT 1`;
+      if (rows.length === 0) return { error: 'KhÃ´ng tÃ¬m tháº¥y tráº­n Ä‘áº¥u' };
+      const m = rows[0];
+
+      if (m.deleted_at) {
+        return { success: true, deletedMatchId: matchId, dataVersion: null as number | null };
+      }
+
+      const lose_money = await getSeasonLoseMoney(String(m.season || 'Season 1'));
+      const hasGuest = matchHasGuest(m);
+
+      if (!hasGuest) {
+        await updatePlayerStatsIncremental(m.win_1, m.season, -1, 0, 0, client);
+        if (m.win_2) await updatePlayerStatsIncremental(m.win_2, m.season, -1, 0, 0, client);
+        await updatePlayerStatsIncremental(m.lose_1, m.season, 0, -1, 0, client);
+        if (m.lose_2) await updatePlayerStatsIncremental(m.lose_2, m.season, 0, -1, 0, client);
+      }
+      await updatePlayerStatsIncremental(m.lose_1, m.season, 0, 0, -lose_money, client);
+      if (m.lose_2) await updatePlayerStatsIncremental(m.lose_2, m.season, 0, 0, -lose_money, client);
+
+      const groupId = `delete-match-${matchId}-${Date.now().toString(36)}`;
+      await client.sql`UPDATE matches SET deleted_at = NOW(), delete_group_id = ${groupId} WHERE id = ${matchId} AND deleted_at IS NULL`;
+
+      await logAudit('DELETE_MATCH', `Deleted Match ${matchId}`, client);
+      const dataVersion = await bumpDataVersions(['matches', 'admin'], client as any);
+      return { success: true, deletedMatchId: matchId, dataVersion };
+    });
+
+    if (txResult.error) return { error: txResult.error };
+    const manifest = await getAppManifest();
+
+    revalidatePath('/');
+    revalidatePath('/history');
+    revalidatePath('/analysis');
+    return {
+      success: true,
+      deletedMatchId: matchId,
+      dataVersion: txResult.dataVersion ?? manifest.globalVersion,
+      partVersions: manifest.parts,
+    };
+
     const { rows } = await sql`SELECT * FROM matches WHERE id = ${matchId}`;
     if (rows.length === 0) return { error: 'Không tìm thấy trận đấu' };
     const m = rows[0];
@@ -720,11 +823,12 @@ export async function rebuildStatsAction() {
   }
 }
 
-export async function logAudit(type: string, details: string) {
+export async function logAudit(type: string, details: string, runner?: DbClient) {
   if (shouldBlockPreviewWrites()) return;
+  const query = runner?.sql ?? sql;
 
   try {
-    await sql`
+    await query`
       INSERT INTO audit_logs (action_type, details)
       VALUES (${type}, ${details})
     `;
@@ -835,6 +939,7 @@ function normalizeMatchRows(rows: any[]) {
     lose_score: Number(row.lose_score || 0),
     season: String(row.season || 'Season 1'),
     created_by: String(row.created_by || 'SYSTEM'),
+    client_request_id: row.client_request_id ? String(row.client_request_id) : null,
     deleted_at: row.deleted_at ? String(row.deleted_at) : null,
     delete_group_id: row.delete_group_id ? String(row.delete_group_id) : null,
   }));

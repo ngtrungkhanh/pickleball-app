@@ -38,6 +38,7 @@ export async function GET() {
         lose_score INT NOT NULL,
         season VARCHAR(50) NOT NULL,
         created_by VARCHAR(50) DEFAULT 'SYSTEM',
+        client_request_id VARCHAR(120),
         deleted_at TIMESTAMP,
         delete_group_id VARCHAR(80)
       );
@@ -47,6 +48,8 @@ export async function GET() {
     try {
       await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS created_by VARCHAR(50) DEFAULT 'SYSTEM';`;
       await sql`ALTER TABLE matches ALTER COLUMN created_by TYPE VARCHAR(50);`;
+      await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS client_request_id VARCHAR(120);`;
+      await sql`CREATE UNIQUE INDEX IF NOT EXISTS matches_client_request_id_unique ON matches (client_request_id) WHERE client_request_id IS NOT NULL;`;
       await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`;
       await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80);`;
       await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`;

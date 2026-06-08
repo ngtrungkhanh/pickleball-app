@@ -58,6 +58,8 @@ async function ensureRestoreColumns() {
   await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_path TEXT`;
   await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_updated_at TIMESTAMP`;
   await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS lose_money INT DEFAULT 5000`;
+  await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS client_request_id VARCHAR(120)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS matches_client_request_id_unique ON matches (client_request_id) WHERE client_request_id IS NOT NULL`;
   await sql`
     CREATE TABLE IF NOT EXISTS player_season_settings (
       player_id VARCHAR(80) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
@@ -177,8 +179,8 @@ export async function POST(request: Request) {
     // 3. Restore Matches
     for (const m of matches) {
       await sql`
-        INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by, deleted_at, delete_group_id)
-        VALUES (${m.id}, ${m.date || new Date().toISOString()}, ${m.win_1}, ${m.win_2 || null}, ${m.lose_1}, ${m.lose_2 || null}, ${m.win_score || 0}, ${m.lose_score || 0}, ${m.season || 'Season 1'}, ${m.created_by || 'SYSTEM'}, ${m.deleted_at || null}, ${m.delete_group_id || null})
+        INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by, client_request_id, deleted_at, delete_group_id)
+        VALUES (${m.id}, ${m.date || new Date().toISOString()}, ${m.win_1}, ${m.win_2 || null}, ${m.lose_1}, ${m.lose_2 || null}, ${m.win_score || 0}, ${m.lose_score || 0}, ${m.season || 'Season 1'}, ${m.created_by || 'SYSTEM'}, ${m.client_request_id || null}, ${m.deleted_at || null}, ${m.delete_group_id || null})
       `;
     }
 
