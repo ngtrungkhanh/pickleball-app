@@ -27,6 +27,12 @@ async function ensureSeasonTable() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `;
+  await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS end_date TIMESTAMP`;
+  await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT FALSE`;
+  await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE`;
+  await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`;
+  await sql`UPDATE seasons SET active = FALSE WHERE active IS NULL`;
+  await sql`UPDATE seasons SET archived = FALSE WHERE archived IS NULL`;
 }
 
 async function ensureChampionImageColumns() {
@@ -41,6 +47,7 @@ async function ensureConfigTable() {
 }
 
 async function ensurePlayerSeasonSettingsTable() {
+  await ensureSeasonTable();
   await sql`
     CREATE TABLE IF NOT EXISTS player_season_settings (
       player_id VARCHAR(80) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
@@ -125,9 +132,34 @@ async function getSeasonLoseMoney(season: string) {
 
 
 type DbClient = any;
+type AppManifestParts = Awaited<ReturnType<typeof getAppManifest>>['parts'];
 
 function getSqlRunner(runner?: DbClient) {
   return runner?.sql ? runner.sql.bind(runner) as typeof sql : sql;
+}
+
+async function getPostWriteVersions(fallbackDataVersion?: number | null): Promise<{
+  dataVersion?: number;
+  partVersions?: AppManifestParts;
+}> {
+  try {
+    const manifest = await getAppManifest();
+    return {
+      dataVersion: fallbackDataVersion ?? manifest.globalVersion,
+      partVersions: manifest.parts,
+    };
+  } catch (error) {
+    console.error('Post-write manifest refresh failed:', error);
+    return typeof fallbackDataVersion === 'number' ? { dataVersion: fallbackDataVersion } : {};
+  }
+}
+
+function revalidateAfterWrite(paths: string[]) {
+  try {
+    paths.forEach(path => revalidatePath(path));
+  } catch (error) {
+    console.error('Post-write revalidate failed:', error);
+  }
 }
 
 async function withTransaction<T>(work: (client: DbClient) => Promise<T>) {
@@ -296,14 +328,12 @@ export async function addMatchAction(formData: FormData) {
       };
     }
 
-    const manifest = await getAppManifest();
+    const versions = await getPostWriteVersions(txResult.dataVersion);
 
-    revalidatePath('/');
-    revalidatePath('/analysis');
+    revalidateAfterWrite(['/', '/analysis']);
     return {
       success: true,
-      dataVersion: txResult.dataVersion ?? manifest.globalVersion,
-      partVersions: manifest.parts,
+      ...versions,
       match: txResult.match,
     };
   } catch (error) {
@@ -348,16 +378,13 @@ export async function deleteMatchAction(matchId: string) {
       return { success: true, deletedMatchId: matchId, dataVersion };
     });
 
-    const manifest = await getAppManifest();
+    const versions = await getPostWriteVersions(txResult.dataVersion);
 
-    revalidatePath('/');
-    revalidatePath('/history');
-    revalidatePath('/analysis');
+    revalidateAfterWrite(['/', '/history', '/analysis']);
     return {
       success: true,
       deletedMatchId: matchId,
-      dataVersion: txResult.dataVersion ?? manifest.globalVersion,
-      partVersions: manifest.parts,
+      ...versions,
     };
 
   } catch (error) {
