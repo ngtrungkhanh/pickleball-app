@@ -1,11 +1,11 @@
 'use client';
 import { useState, useTransition, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { addMatchAction } from '@/app/actions';
+import { addMatchAction, getAppDataPartsAction } from '@/app/actions';
 import { Minus, Plus, Trophy, Ghost, Send, RefreshCw, AlertCircle, CheckCircle2, Check, ChevronDown, UserRound, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isGuestId } from '@/lib/guest';
-import { removeMatchesLocal, replaceOptimisticMatchLocal, saveMatchesLocal } from '@/lib/db';
+import { removeMatchesLocal, replaceAppCacheParts, replaceOptimisticMatchLocal, saveMatchesLocal, type AppCachePart, type StoredPlayer, type StoredPlayerSeasonSetting, type StoredSeason } from '@/lib/db';
 
 const PENDING_KEY = 'pickleball_pending_match';
 const RECENT_KEY = 'pickleball_recent_matches';
@@ -36,6 +36,8 @@ type ServerResult = {
   duplicateConflict?: boolean;
   error?: string;
   debug?: string;
+  staleClientData?: boolean;
+  missingPlayerIds?: string[];
   dataVersion?: number;
   partVersions?: Record<string, number>;
   match?: Record<string, unknown>;
@@ -118,19 +120,22 @@ function clearPending(requestId?: string) {
   writePendingSaves(readPendingSaves().filter(item => item.requestId !== requestId));
 }
 
-function SyncBadge({ state, onRetry }: { state: 'idle' | 'syncing' | 'error' | 'ok'; onRetry?: () => void }) {
+function SyncBadge({ state, message, onRetry }: { state: 'idle' | 'syncing' | 'error' | 'ok'; message?: string; onRetry?: () => void }) {
   if (state === 'idle') return null;
+  const label = state === 'syncing' ? 'Đang lưu...' : state === 'error' ? (message || 'Lưu lỗi - thử lại') : 'Đã lưu';
   return (
     <div className={cn(
-      'fixed top-6 right-6 z-[700] flex items-center gap-3 px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] animate-in slide-in-from-top-6 duration-300 backdrop-blur-xl border transition-all',
+      'fixed top-6 right-6 z-[700] flex max-w-[min(92vw,560px)] items-start gap-3 rounded-2xl px-5 py-3 text-[11px] font-black shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] animate-in slide-in-from-top-6 duration-300 backdrop-blur-xl border transition-all',
       state === 'syncing' && 'bg-amber-500/10 border-amber-500/20 text-amber-400',
       state === 'error' && 'bg-red-500/10 border-red-500/20 text-red-400 cursor-pointer hover:bg-red-500/20',
       state === 'ok' && 'bg-primary/10 border-primary/20 text-primary',
     )} onClick={state === 'error' ? onRetry : undefined}>
-      {state === 'syncing' && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-      {state === 'error' && <AlertCircle className="w-3.5 h-3.5" />}
-      {state === 'ok' && <CheckCircle2 className="w-3.5 h-3.5" />}
-      {state === 'syncing' ? 'Đang lưu...' : state === 'error' ? 'Lưu lỗi - thử lại' : 'Đã lưu'}
+      {state === 'syncing' && <RefreshCw className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />}
+      {state === 'error' && <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+      {state === 'ok' && <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+      <span className={cn('min-w-0 text-left leading-snug', state !== 'error' && 'uppercase tracking-[0.18em]')}>
+        {label}
+      </span>
     </div>
   );
 }
@@ -322,6 +327,7 @@ export function ScoreForm({
   const router = useRouter();
   const [ui, setUi] = useState<'idle' | 'saved'>('idle');
   const [sync, setSync] = useState<'idle' | 'syncing' | 'error' | 'ok'>('idle');
+  const [syncError, setSyncError] = useState('');
   const [pendingFd, setPendingFd] = useState<FormData | null>(null);
   const inFlightRequestIds = useRef(new Set<string>());
   const recoveredPendingOnce = useRef(false);
@@ -436,6 +442,23 @@ export function ScoreForm({
     }]);
   }, [activeSeason, onFailMatch]);
 
+  const refreshStaleLocalData = useCallback(async () => {
+    const parts: AppCachePart[] = ['players', 'config', 'seasons', 'playerSeasonSettings'];
+    const appData = await getAppDataPartsAction(parts);
+    if (!appData) throw new Error('Không tải lại được dữ liệu server');
+    await replaceAppCacheParts({
+      players: appData.players as StoredPlayer[] | undefined,
+      seasons: appData.seasons as StoredSeason[] | undefined,
+      config: appData.config,
+      playerSeasonSettings: appData.playerSeasonSettings as StoredPlayerSeasonSetting[] | undefined,
+    }, {
+      dataVersion: appData.dataVersion,
+      partVersions: appData.partVersions,
+      manifestCheckedAt: Date.now(),
+    });
+    router.refresh();
+  }, [router]);
+
   const handleServerResult = async (r: ServerResult | undefined, fd: FormData, options: ServerResultOptions = {}) => {
     const silent = options.silent === true;
     const tempId = String(fd.get('temp_id') || '');
@@ -457,6 +480,7 @@ export function ScoreForm({
         season: String(fd.get('season') || activeSeason),
       });
       if (!silent) {
+        setSyncError('');
         setSync('ok');
         setTimeout(() => setSync('idle'), 2500);
       }
@@ -470,6 +494,7 @@ export function ScoreForm({
         return;
       }
       setSync('idle');
+      setSyncError('');
       const duplicateDate = r.duplicateMatch?.date ? new Date(String(r.duplicateMatch.date)) : null;
       const duplicateTime = duplicateDate && !Number.isNaN(duplicateDate.getTime())
         ? duplicateDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
@@ -506,16 +531,25 @@ export function ScoreForm({
       clearPending(requestId);
       removeOptimisticMatch(fd);
       if (!silent) {
+        setSyncError('');
         setSync('ok');
         setTimeout(() => setSync('idle'), 2500);
       }
       return;
     }
     markOptimisticMatchError(fd, r.error || r.debug);
+    if (r.staleClientData) {
+      try {
+        await refreshStaleLocalData();
+      } catch (error) {
+        console.error('Stale local data refresh failed:', error);
+      }
+    }
     if (silent) {
       setSync('idle');
       return;
     }
+    setSyncError(r.error || r.debug || 'Lưu lỗi - thử lại');
     setSync('error');
     setPendingFd(fd);
   };
@@ -542,6 +576,7 @@ export function ScoreForm({
             await handleServerResult(r, fd, { silent: true });
           } catch (error) {
             console.error('Pending match retry failed:', error);
+            setSyncError(error instanceof Error ? error.message : String(error));
             markOptimisticMatchError(fd, error instanceof Error ? error.message : String(error));
             setSync('idle');
           } finally {
@@ -558,6 +593,7 @@ export function ScoreForm({
     const requestId = String(fd.get('client_request_id') || fd.get('temp_id') || '');
     if (requestId && inFlightRequestIds.current.has(requestId)) return;
     if (requestId) inFlightRequestIds.current.add(requestId);
+    setSyncError('');
     setSync('syncing');
     savePending(Object.fromEntries(fd.entries()));
     start(async () => {
@@ -566,6 +602,7 @@ export function ScoreForm({
         await handleServerResult(r, fd);
       } catch (error) {
         console.error('Match sync failed:', error);
+        setSyncError(error instanceof Error ? error.message : String(error));
         markOptimisticMatchError(fd, error instanceof Error ? error.message : String(error));
         setSync('error');
         setPendingFd(fd);
@@ -611,7 +648,7 @@ export function ScoreForm({
 
   return (
     <>
-      <SyncBadge state={sync} onRetry={() => { if (pendingFd) { doSync(pendingFd); setPendingFd(null); } }} />
+      <SyncBadge state={sync} message={syncError} onRetry={() => { if (pendingFd) { doSync(pendingFd); setPendingFd(null); } }} />
       <form onSubmit={handleSubmit} className={cn("space-y-4", compact ? "p-3" : "p-3 sm:p-4", ui === 'saved' && "pointer-events-none opacity-80")}>
         <div className={cn("grid grid-cols-1 items-stretch", compact ? "gap-2.5" : "md:grid-cols-[minmax(0,0.78fr)_18rem_minmax(0,0.78fr)] gap-3 md:gap-4")}>
 

@@ -70,10 +70,10 @@ function stalePartsFromManifest(
     }
   });
 
-  if (manifest.counts.players > 0 && snapshot.players.length === 0) stale.add('players');
+  if (manifest.counts.players !== snapshot.players.length) stale.add('players');
   if (manifest.counts.matches > 0 && snapshot.matches.length === 0) stale.add('matches');
-  if (manifest.counts.seasons > 0 && snapshot.seasons.length === 0) stale.add('seasons');
-  if (manifest.counts.playerSeasonSettings > 0 && snapshot.playerSeasonSettings.length === 0) stale.add('playerSeasonSettings');
+  if (manifest.counts.seasons !== snapshot.seasons.length) stale.add('seasons');
+  if (manifest.counts.playerSeasonSettings !== snapshot.playerSeasonSettings.length) stale.add('playerSeasonSettings');
   if (Object.keys(snapshot.config).length === 0) stale.add('config');
 
   return Array.from(stale);

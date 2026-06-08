@@ -258,6 +258,24 @@ export async function addMatchAction(formData: FormData) {
 
   try {
     stage = 'prepare match';
+    const selectedPlayerIds = Array.from(new Set([win_1, win_2, lose_1, lose_2].filter(Boolean)));
+    stage = 'validate players';
+    const { rows: selectedPlayers } = await sql`
+      SELECT id FROM players
+      WHERE deleted_at IS NULL
+        AND id IN (${win_1}, ${win_2}, ${lose_1}, ${lose_2})
+    `;
+    const existingPlayerIds = new Set(selectedPlayers.map((player: any) => String(player.id)));
+    const missingPlayerIds = selectedPlayerIds.filter(playerId => !existingPlayerIds.has(playerId));
+    if (missingPlayerIds.length > 0) {
+      return {
+        error: `Dữ liệu local đã cũ. Server không còn thấy người chơi: ${missingPlayerIds.join(', ')}. App sẽ tải lại danh sách mới.`,
+        debug: `validate players: missing/deleted players ${missingPlayerIds.join(', ')}`,
+        staleClientData: true,
+        missingPlayerIds,
+      };
+    }
+
     const currentWinTeam = normalizeTeam(win_1, win_2);
     const currentLoseTeam = normalizeTeam(lose_1, lose_2);
     const duplicateLockKey = `match:${season}:${currentWinTeam}>${currentLoseTeam}`;
