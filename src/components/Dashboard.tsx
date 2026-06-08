@@ -273,6 +273,13 @@ export default function Dashboard({
   const rejectLocalMatch = (tempId: string) => {
     setMatches(prev => prev.filter(m => m.id !== tempId));
   };
+  const failLocalMatch = (tempId: string, error?: string) => {
+    setMatches(prev => prev.map(m => (
+      m.id === tempId
+        ? { ...m, pending: true, sync_status: 'error', sync_error: error || 'Lưu server thất bại' }
+        : m
+    )));
+  };
   const deleteLocalMatch = useCallback(async (matchId: string) => {
     const match = matches.find(m => String(m.id || '') === matchId);
     if (!match) return;
@@ -849,6 +856,7 @@ export default function Dashboard({
                   onAddMatch={addLocalMatch}
                   onConfirmMatch={confirmLocalMatch}
                   onRejectMatch={rejectLocalMatch}
+                  onFailMatch={failLocalMatch}
                   activeSeason={activeSeason}
                 />
               </section>
@@ -1039,6 +1047,7 @@ export default function Dashboard({
               onAddMatch={addLocalMatch}
               onConfirmMatch={confirmLocalMatch}
               onRejectMatch={rejectLocalMatch}
+              onFailMatch={failLocalMatch}
               activeSeason={activeSeason}
             />
           </div>

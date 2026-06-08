@@ -35,6 +35,7 @@ type ServerResult = {
   skippedDuplicate?: boolean;
   duplicateConflict?: boolean;
   error?: string;
+  debug?: string;
   dataVersion?: number;
   partVersions?: Record<string, number>;
   match?: Record<string, unknown>;
@@ -305,6 +306,7 @@ export function ScoreForm({
   onAddMatch,
   onConfirmMatch,
   onRejectMatch,
+  onFailMatch,
   activeSeason = 'Season 1',
   compact = false,
 }: {
@@ -312,6 +314,7 @@ export function ScoreForm({
   onAddMatch?: (m: Record<string, unknown>) => void;
   onConfirmMatch?: (tempId: string, match: Record<string, unknown>) => void;
   onRejectMatch?: (tempId: string) => void;
+  onFailMatch?: (tempId: string, error?: string) => void;
   activeSeason?: string;
   compact?: boolean;
 }) {
@@ -411,6 +414,28 @@ export function ScoreForm({
     void removeMatchesLocal([tempId]);
   }, [onRejectMatch]);
 
+  const markOptimisticMatchError = useCallback((fd: FormData, error?: string) => {
+    const tempId = String(fd.get('temp_id') || '');
+    if (!tempId) return;
+    onFailMatch?.(tempId, error);
+    void saveMatchesLocal([{
+      id: tempId,
+      date: new Date().toISOString(),
+      win_1: String(fd.get('win_1') || ''),
+      win_2: String(fd.get('win_2') || '') || null,
+      lose_1: String(fd.get('lose_1') || ''),
+      lose_2: String(fd.get('lose_2') || '') || null,
+      win_score: Number(fd.get('win_score') || 0),
+      lose_score: Number(fd.get('lose_score') || 0),
+      season: String(fd.get('season') || activeSeason),
+      created_by: String(fd.get('created_by') || 'SYSTEM'),
+      client_request_id: String(fd.get('client_request_id') || ''),
+      pending: true,
+      sync_status: 'error',
+      sync_error: error || 'Lưu server thất bại',
+    }]);
+  }, [activeSeason, onFailMatch]);
+
   const handleServerResult = async (r: ServerResult | undefined, fd: FormData, options: ServerResultOptions = {}) => {
     const silent = options.silent === true;
     const tempId = String(fd.get('temp_id') || '');
@@ -486,8 +511,7 @@ export function ScoreForm({
       }
       return;
     }
-    clearPending(requestId);
-    removeOptimisticMatch(fd);
+    markOptimisticMatchError(fd, r.error || r.debug);
     if (silent) {
       setSync('idle');
       return;
@@ -518,6 +542,7 @@ export function ScoreForm({
             await handleServerResult(r, fd, { silent: true });
           } catch (error) {
             console.error('Pending match retry failed:', error);
+            markOptimisticMatchError(fd, error instanceof Error ? error.message : String(error));
             setSync('idle');
           } finally {
             inFlightRequestIds.current.delete(requestId);
@@ -541,6 +566,7 @@ export function ScoreForm({
         await handleServerResult(r, fd);
       } catch (error) {
         console.error('Match sync failed:', error);
+        markOptimisticMatchError(fd, error instanceof Error ? error.message : String(error));
         setSync('error');
         setPendingFd(fd);
       } finally {

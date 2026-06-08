@@ -237,6 +237,7 @@ async function updatePlayerStatsIncremental(playerId: string, season: string, de
 export async function addMatchAction(formData: FormData) {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
 
+  let stage = 'ensure schema';
   await ensureGuestPlayer();
   const id = `M${Date.now().toString(36).slice(-10)}`.toUpperCase();
   const win_1 = formData.get('win_1') as string;
@@ -256,14 +257,18 @@ export async function addMatchAction(formData: FormData) {
   }
 
   try {
+    stage = 'prepare match';
     const currentWinTeam = normalizeTeam(win_1, win_2);
     const currentLoseTeam = normalizeTeam(lose_1, lose_2);
     const duplicateLockKey = `match:${season}:${currentWinTeam}>${currentLoseTeam}`;
+    stage = 'load season fine';
     const lose_money = await getSeasonLoseMoney(season);
     const hasGuest = matchHasGuest({ win_1, win_2, lose_1, lose_2 });
 
+    stage = 'transaction';
     const txResult = await withTransaction(async (client) => {
       if (client_request_id) {
+        stage = 'request replay check';
         await client.sql`SELECT pg_advisory_xact_lock(hashtext(${`request:${client_request_id}`}))`;
         const { rows: replayRows } = await client.sql`
           SELECT * FROM matches
@@ -275,6 +280,7 @@ export async function addMatchAction(formData: FormData) {
         }
       }
 
+      stage = 'duplicate check';
       await client.sql`SELECT pg_advisory_xact_lock(hashtext(${duplicateLockKey}))`;
       const { rows: recent } = await client.sql`
         SELECT * FROM matches
@@ -299,6 +305,7 @@ export async function addMatchAction(formData: FormData) {
         };
       }
 
+      stage = 'insert match';
       const { rows: insertedRows } = await client.sql`
         INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by, client_request_id)
         VALUES (${id}, NOW(), ${win_1}, ${win_2}, ${lose_1}, ${lose_2}, ${win_score}, ${lose_score}, ${season}, ${created_by}, ${client_request_id})
@@ -307,15 +314,18 @@ export async function addMatchAction(formData: FormData) {
       const inserted = insertedRows[0];
 
       if (!hasGuest) {
+        stage = 'update win/loss stats';
         await updatePlayerStatsIncremental(win_1, season, 1, 0, 0, client);
         if (win_2) await updatePlayerStatsIncremental(win_2, season, 1, 0, 0, client);
         await updatePlayerStatsIncremental(lose_1, season, 0, 1, 0, client);
         if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 1, 0, client);
       }
 
+      stage = 'update fine stats';
       await updatePlayerStatsIncremental(lose_1, season, 0, 0, lose_money, client);
       if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 0, lose_money, client);
 
+      stage = 'audit and version';
       await logAudit('ADD_MATCH', `Match ${id} by ${created_by}: ${win_1}${win_2 ? '/' + win_2 : ''} beat ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`, client);
       const dataVersion = await bumpDataVersions(['matches', 'admin'], client as any);
       return { success: true, match: normalizeMatchRow(inserted, season), dataVersion };
@@ -328,8 +338,10 @@ export async function addMatchAction(formData: FormData) {
       };
     }
 
+    stage = 'post-write version';
     const versions = await getPostWriteVersions(txResult.dataVersion);
 
+    stage = 'revalidate';
     revalidateAfterWrite(['/', '/analysis']);
     return {
       success: true,
@@ -338,7 +350,13 @@ export async function addMatchAction(formData: FormData) {
     };
   } catch (error) {
     console.error('Failed to add match:', error);
-    return { error: 'Lỗi khi lưu trận đấu. Vui lòng thử lại.' };
+    const message = error instanceof Error ? error.message : String(error);
+    const debug = `${stage}: ${message}`;
+    const showDebug = process.env.VERCEL_ENV === 'preview' || process.env.NODE_ENV !== 'production';
+    return {
+      error: showDebug ? `Lỗi khi lưu trận đấu (${debug})` : 'Lỗi khi lưu trận đấu. Vui lòng thử lại.',
+      debug,
+    };
   }
 }
 export async function deleteMatchAction(matchId: string) {

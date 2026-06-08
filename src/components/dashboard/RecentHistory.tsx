@@ -358,6 +358,9 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
   const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
   const expected = matchExpected?.get(m.id);
+  const syncFailed = m.pending && m.sync_status === 'error';
+  const syncLabel = syncFailed ? 'Lưu lỗi' : 'Đang lưu...';
+  const syncClass = syncFailed ? 'text-red-300/90' : 'text-amber-300/80';
   return (
     <div className="group relative flex overflow-hidden rounded-2xl border border-slate-800/80 bg-[#0f172a]/90 shadow-[0_10px_28px_rgba(0,0,0,0.12)] transition-all hover:bg-[#15233c]/90">
       <div className="flex w-[64px] shrink-0 flex-col items-center justify-center gap-1 border-r border-slate-800/80 bg-white/[0.015] px-2 py-3 sm:w-24">
@@ -385,6 +388,9 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
             <div className="rounded-xl border border-primary/25 bg-primary/[0.12] px-3 py-1.5 text-sm font-black text-primary shadow-lg shadow-primary/5 tabular-nums sm:px-4 sm:text-base">
               <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
             </div>
+            {m.pending && (
+              <span className={cn('mt-1 text-[8px] font-black uppercase tracking-widest sm:text-[9px]', syncClass)}>{syncLabel}</span>
+            )}
             {expected && (
               <span className="mt-1 block whitespace-nowrap text-[8px] font-bold tracking-tight text-slate-400 sm:text-[9px]">
                 <span className="sm:hidden">{Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%</span>
@@ -467,6 +473,9 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
           const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
           const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
           const isDouble = m.win_2 || m.lose_2;
+          const syncFailed = m.pending && m.sync_status === 'error';
+          const syncLabel = syncFailed ? 'Lưu lỗi' : 'Đang lưu...';
+          const syncClass = syncFailed ? 'text-red-300/90' : 'text-amber-300/80';
 
           return (
             <div key={m.id}
@@ -490,7 +499,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                     {m.win_score}–{m.lose_score}
                   </div>
                   {m.pending && (
-                    <span className="mt-1 text-[9px] font-black uppercase tracking-widest text-amber-300/80">Đang lưu...</span>
+                    <span className={cn('mt-1 text-[9px] font-black uppercase tracking-widest', syncClass)}>{syncLabel}</span>
                   )}
                   {matchExpected?.get(m.id) && (
                     <span className="text-[10px] font-bold text-white/30 mt-1 block tracking-tight">
@@ -541,7 +550,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                           <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
                         </div>
                         {m.pending && (
-                          <span className="mt-1 text-[8px] font-black uppercase tracking-widest text-amber-300/80">Đang lưu</span>
+                          <span className={cn('mt-1 text-[8px] font-black uppercase tracking-widest', syncClass)}>{syncFailed ? 'Lưu lỗi' : 'Đang lưu'}</span>
                         )}
                         {matchExpected?.get(m.id) && (
                           <span className="mt-1 block whitespace-nowrap text-[8px] font-bold tracking-tight text-white/30">
