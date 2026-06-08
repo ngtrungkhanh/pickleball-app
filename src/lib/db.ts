@@ -155,6 +155,13 @@ function normalizePartVersions(input: unknown, fallbackVersion = 0): AppCachePar
   return versions;
 }
 
+function mergePartVersions(current: unknown, updates: Partial<AppCachePartVersions> | undefined, fallbackVersion = 0): AppCachePartVersions {
+  return normalizePartVersions({
+    ...normalizePartVersions(current, fallbackVersion),
+    ...(updates || {}),
+  }, fallbackVersion);
+}
+
 export async function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -251,13 +258,16 @@ export async function replaceMatchesLocal(matches: StoredMatch[]) {
 
 export async function removeMatchesLocal(matchIds: string[], dataVersion?: number, partVersions?: Partial<AppCachePartVersions>) {
   if (matchIds.length === 0) return;
+  const currentPartVersions = typeof dataVersion === 'number'
+    ? await getMetaValue<unknown>('partVersions', null)
+    : null;
   const db = await openDB();
   const tx = db.transaction([STORES.matches, STORES.syncMeta], 'readwrite');
   const store = tx.objectStore(STORES.matches);
   matchIds.forEach((id) => store.delete(id));
   if (typeof dataVersion === 'number') {
     tx.objectStore(STORES.syncMeta).put({ key: 'dataVersion', value: dataVersion });
-    tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: normalizePartVersions(partVersions || { matches: dataVersion }, 0) });
+    tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: mergePartVersions(currentPartVersions, partVersions || { matches: dataVersion }, dataVersion) });
   }
   await new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve(true);
@@ -267,6 +277,9 @@ export async function removeMatchesLocal(matchIds: string[], dataVersion?: numbe
 }
 
 export async function replaceOptimisticMatchLocal(tempId: string, match: StoredMatch, dataVersion?: number, partVersions?: Partial<AppCachePartVersions>) {
+  const currentPartVersions = typeof dataVersion === 'number'
+    ? await getMetaValue<unknown>('partVersions', null)
+    : null;
   const db = await openDB();
   const tx = db.transaction([STORES.matches, STORES.syncMeta], 'readwrite');
   const matchStore = tx.objectStore(STORES.matches);
@@ -274,7 +287,7 @@ export async function replaceOptimisticMatchLocal(tempId: string, match: StoredM
   matchStore.put(match);
   if (typeof dataVersion === 'number') {
     tx.objectStore(STORES.syncMeta).put({ key: 'dataVersion', value: dataVersion });
-    tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: normalizePartVersions(partVersions || { matches: dataVersion }, 0) });
+    tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: mergePartVersions(currentPartVersions, partVersions || { matches: dataVersion }, dataVersion) });
   }
   await new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve(true);

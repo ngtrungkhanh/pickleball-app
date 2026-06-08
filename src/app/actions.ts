@@ -75,6 +75,8 @@ async function ensureSoftDeleteColumns() {
   await ensurePlayerSeasonSettingsTable();
 }
 
+// Kept for one-off guest cleanup migrations; hot save path uses ensureGuestPlayerFast.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function ensureGuestPlayer() {
   await ensureSoftDeleteColumns();
   await sql`
@@ -100,6 +102,15 @@ async function ensureGuestPlayer() {
   }
 }
 
+async function ensureGuestPlayerFast(runner?: DbClient) {
+  const query = getSqlRunner(runner);
+  await query`
+    INSERT INTO players (id, name, active)
+    VALUES (${GUEST_ID}, ${GUEST_NAME}, true)
+    ON CONFLICT (id) DO UPDATE SET name = ${GUEST_NAME}, deleted_at = NULL
+  `;
+}
+
 async function getConfigValue(key: string, fallback: string) {
   try {
     const { rows } = await sql`SELECT value FROM config WHERE key = ${key} LIMIT 1`;
@@ -118,16 +129,22 @@ async function setConfigValue(key: string, value: string) {
   `;
 }
 
-async function getSeasonLoseMoney(season: string) {
-  await ensurePlayerSeasonSettingsTable();
+async function getSeasonLoseMoney(season: string, options: { ensureSchema?: boolean } = {}) {
+  if (options.ensureSchema !== false) {
+    await ensurePlayerSeasonSettingsTable();
+  }
   const fallback = parseInt(await getConfigValue('lose_money', '5000')) || 5000;
-  const { rows } = await sql`
-    SELECT lose_money FROM seasons
-    WHERE id = ${season} OR name = ${season}
-    LIMIT 1
-  `;
-  const amount = Number(rows[0]?.lose_money);
-  return Number.isFinite(amount) ? amount : fallback;
+  try {
+    const { rows } = await sql`
+      SELECT lose_money FROM seasons
+      WHERE id = ${season} OR name = ${season}
+      LIMIT 1
+    `;
+    const amount = Number(rows[0]?.lose_money);
+    return Number.isFinite(amount) ? amount : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 
@@ -138,20 +155,18 @@ function getSqlRunner(runner?: DbClient) {
   return runner?.sql ? runner.sql.bind(runner) as typeof sql : sql;
 }
 
-async function getPostWriteVersions(fallbackDataVersion?: number | null): Promise<{
+function getPostWriteVersions(fallbackDataVersion?: number | null): {
   dataVersion?: number;
-  partVersions?: AppManifestParts;
-}> {
-  try {
-    const manifest = await getAppManifest();
-    return {
-      dataVersion: fallbackDataVersion ?? manifest.globalVersion,
-      partVersions: manifest.parts,
-    };
-  } catch (error) {
-    console.error('Post-write manifest refresh failed:', error);
-    return typeof fallbackDataVersion === 'number' ? { dataVersion: fallbackDataVersion } : {};
-  }
+  partVersions?: Partial<AppManifestParts>;
+} {
+  if (typeof fallbackDataVersion !== 'number') return {};
+  return {
+    dataVersion: fallbackDataVersion,
+    partVersions: {
+      matches: fallbackDataVersion,
+      admin: fallbackDataVersion,
+    },
+  };
 }
 
 function revalidateAfterWrite(paths: string[]) {
@@ -160,6 +175,22 @@ function revalidateAfterWrite(paths: string[]) {
   } catch (error) {
     console.error('Post-write revalidate failed:', error);
   }
+}
+
+async function bumpMatchWriteVersions(runner?: DbClient) {
+  const query = getSqlRunner(runner);
+  const nextVersion = Date.now();
+  const value = String(nextVersion);
+  await query`
+    INSERT INTO config (key, value)
+    VALUES
+      ('data_version', ${value}),
+      ('version_global', ${value}),
+      ('version_matches', ${value}),
+      ('version_admin', ${value})
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+  `;
+  return nextVersion;
 }
 
 async function withTransaction<T>(work: (client: DbClient) => Promise<T>) {
@@ -234,11 +265,77 @@ async function updatePlayerStatsIncremental(playerId: string, season: string, de
   `;
 }
 
+type StatsDelta = {
+  wins: number;
+  losses: number;
+  money: number;
+};
+
+async function applyMatchStatsDelta(
+  match: { win_1?: string | null; win_2?: string | null; lose_1?: string | null; lose_2?: string | null },
+  season: string,
+  loseMoney: number,
+  direction: 1 | -1,
+  runner?: DbClient,
+) {
+  const query = getSqlRunner(runner);
+  const deltas = new Map<string, StatsDelta>();
+  const addDelta = (playerId: string | null | undefined, delta: Partial<StatsDelta>) => {
+    if (!playerId || isGuestId(playerId)) return;
+    const current = deltas.get(playerId) || { wins: 0, losses: 0, money: 0 };
+    deltas.set(playerId, {
+      wins: current.wins + (delta.wins || 0),
+      losses: current.losses + (delta.losses || 0),
+      money: current.money + (delta.money || 0),
+    });
+  };
+
+  const hasGuest = matchHasGuest(match);
+  if (!hasGuest) {
+    addDelta(match.win_1, { wins: direction });
+    addDelta(match.win_2, { wins: direction });
+    addDelta(match.lose_1, { losses: direction });
+    addDelta(match.lose_2, { losses: direction });
+  }
+  addDelta(match.lose_1, { money: direction * loseMoney });
+  addDelta(match.lose_2, { money: direction * loseMoney });
+
+  const moneyPlayerIds = Array.from(deltas.entries())
+    .filter(([, delta]) => delta.money !== 0)
+    .map(([playerId]) => playerId);
+  const payFineById = new Map<string, boolean>();
+  if (moneyPlayerIds.length > 0) {
+    const { rows } = await query`
+      SELECT p.id, COALESCE(pss.pay_fine, p.pay_fine, TRUE) AS pay_fine
+      FROM players p
+      LEFT JOIN player_season_settings pss
+        ON pss.player_id = p.id AND pss.season = ${season}
+      WHERE p.id IN (${moneyPlayerIds[0] || ''}, ${moneyPlayerIds[1] || ''})
+    `;
+    rows.forEach((row: any) => {
+      payFineById.set(String(row.id), row.pay_fine !== false);
+    });
+  }
+
+  for (const [playerId, delta] of deltas) {
+    const moneyToChange = delta.money !== 0 && payFineById.get(playerId) === false ? 0 : delta.money;
+    await query`
+      INSERT INTO player_stats (player_id, season, wins, losses, total, money)
+      VALUES (${playerId}, ${season}, ${delta.wins}, ${delta.losses}, ${delta.wins + delta.losses}, ${moneyToChange})
+      ON CONFLICT (player_id, season) DO UPDATE SET
+        wins = player_stats.wins + EXCLUDED.wins,
+        losses = player_stats.losses + EXCLUDED.losses,
+        total = player_stats.total + EXCLUDED.total,
+        money = player_stats.money + EXCLUDED.money,
+        last_updated = NOW()
+    `;
+  }
+}
+
 export async function addMatchAction(formData: FormData) {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
 
-  let stage = 'ensure schema';
-  await ensureGuestPlayer();
+  let stage = 'read form';
   const id = `M${Date.now().toString(36).slice(-10)}`.toUpperCase();
   const win_1 = formData.get('win_1') as string;
   const win_2 = (formData.get('win_2') as string) || null;
@@ -259,6 +356,11 @@ export async function addMatchAction(formData: FormData) {
   try {
     stage = 'prepare match';
     const selectedPlayerIds = Array.from(new Set([win_1, win_2, lose_1, lose_2].filter(Boolean)));
+    const hasGuest = matchHasGuest({ win_1, win_2, lose_1, lose_2 });
+    if (hasGuest) {
+      stage = 'ensure guest';
+      await ensureGuestPlayerFast();
+    }
     stage = 'validate players';
     const { rows: selectedPlayers } = await sql`
       SELECT id FROM players
@@ -280,8 +382,7 @@ export async function addMatchAction(formData: FormData) {
     const currentLoseTeam = normalizeTeam(lose_1, lose_2);
     const duplicateLockKey = `match:${season}:${currentWinTeam}>${currentLoseTeam}`;
     stage = 'load season fine';
-    const lose_money = await getSeasonLoseMoney(season);
-    const hasGuest = matchHasGuest({ win_1, win_2, lose_1, lose_2 });
+    const lose_money = await getSeasonLoseMoney(season, { ensureSchema: false });
 
     stage = 'transaction';
     const txResult = await withTransaction(async (client) => {
@@ -331,21 +432,12 @@ export async function addMatchAction(formData: FormData) {
       `;
       const inserted = insertedRows[0];
 
-      if (!hasGuest) {
-        stage = 'update win/loss stats';
-        await updatePlayerStatsIncremental(win_1, season, 1, 0, 0, client);
-        if (win_2) await updatePlayerStatsIncremental(win_2, season, 1, 0, 0, client);
-        await updatePlayerStatsIncremental(lose_1, season, 0, 1, 0, client);
-        if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 1, 0, client);
-      }
-
-      stage = 'update fine stats';
-      await updatePlayerStatsIncremental(lose_1, season, 0, 0, lose_money, client);
-      if (lose_2) await updatePlayerStatsIncremental(lose_2, season, 0, 0, lose_money, client);
+      stage = 'update stats';
+      await applyMatchStatsDelta({ win_1, win_2, lose_1, lose_2 }, season, lose_money, 1, client);
 
       stage = 'audit and version';
       await logAudit('ADD_MATCH', `Match ${id} by ${created_by}: ${win_1}${win_2 ? '/' + win_2 : ''} beat ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`, client);
-      const dataVersion = await bumpDataVersions(['matches', 'admin'], client as any);
+      const dataVersion = await bumpMatchWriteVersions(client);
       return { success: true, match: normalizeMatchRow(inserted, season), dataVersion };
     });
 
@@ -357,7 +449,7 @@ export async function addMatchAction(formData: FormData) {
     }
 
     stage = 'post-write version';
-    const versions = await getPostWriteVersions(txResult.dataVersion);
+    const versions = getPostWriteVersions(txResult.dataVersion);
 
     stage = 'revalidate';
     revalidateAfterWrite(['/', '/analysis']);
@@ -381,7 +473,6 @@ export async function deleteMatchAction(matchId: string) {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
 
   try {
-    await ensureSoftDeleteColumns();
     const txResult = await withTransaction(async (client) => {
       await client.sql`SELECT pg_advisory_xact_lock(hashtext(${`delete:${matchId}`}))`;
       const { rows } = await client.sql`SELECT * FROM matches WHERE id = ${matchId} LIMIT 1`;
@@ -394,27 +485,18 @@ export async function deleteMatchAction(matchId: string) {
         return { success: true, deletedMatchId: matchId, dataVersion: null as number | null };
       }
 
-      const lose_money = await getSeasonLoseMoney(String(m.season || 'Season 1'));
-      const hasGuest = matchHasGuest(m);
-
-      if (!hasGuest) {
-        await updatePlayerStatsIncremental(m.win_1, m.season, -1, 0, 0, client);
-        if (m.win_2) await updatePlayerStatsIncremental(m.win_2, m.season, -1, 0, 0, client);
-        await updatePlayerStatsIncremental(m.lose_1, m.season, 0, -1, 0, client);
-        if (m.lose_2) await updatePlayerStatsIncremental(m.lose_2, m.season, 0, -1, 0, client);
-      }
-      await updatePlayerStatsIncremental(m.lose_1, m.season, 0, 0, -lose_money, client);
-      if (m.lose_2) await updatePlayerStatsIncremental(m.lose_2, m.season, 0, 0, -lose_money, client);
+      const lose_money = await getSeasonLoseMoney(String(m.season || 'Season 1'), { ensureSchema: false });
+      await applyMatchStatsDelta(m, String(m.season || 'Season 1'), lose_money, -1, client);
 
       const groupId = `delete-match-${matchId}-${Date.now().toString(36)}`;
       await client.sql`UPDATE matches SET deleted_at = NOW(), delete_group_id = ${groupId} WHERE id = ${matchId} AND deleted_at IS NULL`;
 
       await logAudit('DELETE_MATCH', `Deleted Match ${matchId}`, client);
-      const dataVersion = await bumpDataVersions(['matches', 'admin'], client as any);
+      const dataVersion = await bumpMatchWriteVersions(client);
       return { success: true, deletedMatchId: matchId, dataVersion };
     });
 
-    const versions = await getPostWriteVersions(txResult.dataVersion);
+    const versions = getPostWriteVersions(txResult.dataVersion);
 
     revalidateAfterWrite(['/', '/history', '/analysis']);
     return {
