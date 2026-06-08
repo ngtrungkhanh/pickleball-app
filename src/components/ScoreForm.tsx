@@ -41,6 +41,10 @@ type ServerResult = {
   duplicateMatch?: Record<string, unknown>;
 };
 
+type ServerResultOptions = {
+  silent?: boolean;
+};
+
 function teamKey(a: string, b: string): string {
   return [a, b].filter(Boolean).sort().join('|');
 }
@@ -407,7 +411,8 @@ export function ScoreForm({
     void removeMatchesLocal([tempId]);
   }, [onRejectMatch]);
 
-  const handleServerResult = async (r: ServerResult | undefined, fd: FormData) => {
+  const handleServerResult = async (r: ServerResult | undefined, fd: FormData, options: ServerResultOptions = {}) => {
+    const silent = options.silent === true;
     const tempId = String(fd.get('temp_id') || '');
     const requestId = String(fd.get('client_request_id') || tempId);
     if (r?.success) {
@@ -426,12 +431,19 @@ export function ScoreForm({
         lose2: String(fd.get('lose_2') || ''),
         season: String(fd.get('season') || activeSeason),
       });
-      setSync('ok');
-      setTimeout(() => setSync('idle'), 2500);
+      if (!silent) {
+        setSync('ok');
+        setTimeout(() => setSync('idle'), 2500);
+      }
       return;
     }
     if (r?.duplicateConflict) {
       removeOptimisticMatch(fd);
+      if (silent) {
+        clearPending(requestId);
+        setSync('idle');
+        return;
+      }
       setSync('idle');
       const duplicateDate = r.duplicateMatch?.date ? new Date(String(r.duplicateMatch.date)) : null;
       const duplicateTime = duplicateDate && !Number.isNaN(duplicateDate.getTime())
@@ -459,19 +471,27 @@ export function ScoreForm({
     if (r?.skippedDuplicate) {
       clearPending(requestId);
       removeOptimisticMatch(fd);
-      setSync('idle');
-      router.refresh();
+      if (!silent) {
+        setSync('idle');
+        router.refresh();
+      }
       return;
     }
     if (!r?.error) {
       clearPending(requestId);
       removeOptimisticMatch(fd);
-      setSync('ok');
-      setTimeout(() => setSync('idle'), 2500);
+      if (!silent) {
+        setSync('ok');
+        setTimeout(() => setSync('idle'), 2500);
+      }
       return;
     }
     clearPending(requestId);
     removeOptimisticMatch(fd);
+    if (silent) {
+      setSync('idle');
+      return;
+    }
     setSync('error');
     setPendingFd(fd);
   };
@@ -492,15 +512,13 @@ export function ScoreForm({
         if (!fd.get('created_by')) fd.append('created_by', fullIdentity);
         if (!fd.get('client_request_id')) fd.append('client_request_id', requestId);
         inFlightRequestIds.current.add(requestId);
-        queueMicrotask(() => setSync('syncing'));
         start(async () => {
           try {
             const r = await addMatchAction(fd);
-            await handleServerResult(r, fd);
+            await handleServerResult(r, fd, { silent: true });
           } catch (error) {
             console.error('Pending match retry failed:', error);
-            setSync('error');
-            setPendingFd(fd);
+            setSync('idle');
           } finally {
             inFlightRequestIds.current.delete(requestId);
           }
