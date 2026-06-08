@@ -768,7 +768,7 @@ export default function Dashboard({
                     <div className="mt-1 rounded-full border border-amber-200/20 bg-amber-200/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-amber-100/75">
                       {previousChampion.season}
                     </div>
-                    <div className="mt-2 line-clamp-2 text-lg font-black uppercase leading-tight text-white" title={previousChampion.playerName}>
+                    <div className="mt-2 line-clamp-2 break-words py-0.5 text-lg font-black leading-snug text-white" title={previousChampion.playerName}>
                       {previousChampion.playerName}
                     </div>
                     {previousChampion.lastMatchDate ? (

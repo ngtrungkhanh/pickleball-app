@@ -16,6 +16,16 @@ Every UI change must be reviewed in this order:
 Do not make a desktop fix that causes mobile overflow, hidden text, or poor tap
 targets.
 
+## Review Data Source
+
+- Do not use a local dev page as the main UI review surface when the local
+  environment has no real app data. It can be used only for compile/smoke
+  checks in that case.
+- For visual/UI judgement, prefer Vercel Preview, Production, a user-provided
+  screenshot, or a local environment that has representative real data.
+- Do not create or rely on local demo/test pages for UI review unless the user
+  explicitly asks for them.
+
 ## Overall Style
 
 - Dark, compact, utilitarian dashboard with primary green accents.
