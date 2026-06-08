@@ -1031,7 +1031,24 @@ export async function getAppDataManifestAction() {
     return await getAppManifest();
   } catch (error) {
     console.error('Fetch app data manifest failed:', error);
-    return null;
+    return {
+      globalVersion: 0,
+      parts: {
+        matches: 0,
+        players: 0,
+        seasons: 0,
+        config: 0,
+        playerSeasonSettings: 0,
+        admin: 0,
+      },
+      counts: {
+        matches: 0,
+        players: 0,
+        seasons: 0,
+        playerSeasonSettings: 0,
+      },
+      checkedAt: Date.now(),
+    };
   }
 }
 
@@ -1098,6 +1115,14 @@ function normalizePlayerSeasonSettingRows(rows: any[]) {
 export async function getAppDataPartsAction(parts?: string[]) {
   try {
     const requestedParts = normalizeRequestedParts(parts);
+    const emptyPartVersions = {
+      matches: 0,
+      players: 0,
+      seasons: 0,
+      config: 0,
+      playerSeasonSettings: 0,
+      admin: 0,
+    };
     const response: {
       players?: ReturnType<typeof normalizePlayerRows>;
       matches?: ReturnType<typeof normalizeMatchRows>;
@@ -1108,27 +1133,42 @@ export async function getAppDataPartsAction(parts?: string[]) {
       dataVersion: number;
       partVersions: Awaited<ReturnType<typeof getAppManifest>>['parts'];
     } = {
-      manifest: await getAppManifest(),
-      dataVersion: 0,
-      partVersions: {
-        matches: 0,
-        players: 0,
-        seasons: 0,
-        config: 0,
-        playerSeasonSettings: 0,
-        admin: 0,
+      manifest: {
+        globalVersion: 0,
+        parts: emptyPartVersions,
+        counts: {
+          matches: 0,
+          players: 0,
+          seasons: 0,
+          playerSeasonSettings: 0,
+        },
+        checkedAt: Date.now(),
       },
+      dataVersion: 0,
+      partVersions: emptyPartVersions,
     };
 
     const queries: Array<Promise<void>> = [];
 
     if (requestedParts.includes('players')) {
-      queries.push(sql`SELECT * FROM players WHERE deleted_at IS NULL ORDER BY active DESC, name ASC`
-        .then((result) => { response.players = normalizePlayerRows(result.rows); }));
+      queries.push(
+        sql`SELECT * FROM players WHERE deleted_at IS NULL ORDER BY active DESC, name ASC`
+          .catch(() => sql`SELECT * FROM players ORDER BY active DESC, name ASC`)
+          .then((result) => { response.players = normalizePlayerRows(result.rows); })
+          .catch((error) => {
+            console.error('Fetch players part failed:', error);
+          })
+      );
     }
     if (requestedParts.includes('matches')) {
-      queries.push(sql`SELECT * FROM matches WHERE deleted_at IS NULL ORDER BY date DESC`
-        .then((result) => { response.matches = normalizeMatchRows(result.rows); }));
+      queries.push(
+        sql`SELECT * FROM matches WHERE deleted_at IS NULL ORDER BY date DESC`
+          .catch(() => sql`SELECT * FROM matches ORDER BY date DESC`)
+          .then((result) => { response.matches = normalizeMatchRows(result.rows); })
+          .catch((error) => {
+            console.error('Fetch matches part failed:', error);
+          })
+      );
     }
     if (requestedParts.includes('config')) {
       queries.push(sql`SELECT key, value FROM config`
@@ -1138,21 +1178,61 @@ export async function getAppDataPartsAction(parts?: string[]) {
             config[String(row.key)] = String(row.value);
           });
           response.config = config;
+        })
+        .catch((error) => {
+          console.error('Fetch config part failed:', error);
         }));
     }
     if (requestedParts.includes('seasons')) {
-      queries.push(sql`SELECT id, name, active, start_date, champion_image_url, champion_image_path, champion_image_updated_at, lose_money FROM seasons WHERE archived = false ORDER BY start_date DESC`
-        .then((result) => { response.seasons = normalizeSeasonRows(result.rows); }));
+      queries.push(
+        sql`SELECT id, name, active, start_date, champion_image_url, champion_image_path, champion_image_updated_at, lose_money FROM seasons WHERE archived = false ORDER BY start_date DESC`
+          .catch(() => sql`SELECT * FROM seasons ORDER BY start_date DESC`)
+          .then((result) => { response.seasons = normalizeSeasonRows(result.rows); })
+          .catch((error) => {
+            console.error('Fetch seasons part failed:', error);
+          })
+      );
     }
     if (requestedParts.includes('playerSeasonSettings')) {
-      queries.push(sql`SELECT * FROM player_season_settings`
-        .then((result) => { response.playerSeasonSettings = normalizePlayerSeasonSettingRows(result.rows); }));
+      queries.push(
+        sql`SELECT * FROM player_season_settings`
+          .then((result) => { response.playerSeasonSettings = normalizePlayerSeasonSettingRows(result.rows); })
+          .catch((error) => {
+            console.error('Fetch player season settings part failed:', error);
+          })
+      );
     }
 
     await Promise.all(queries);
-    response.manifest = await getAppManifest();
-    response.dataVersion = response.manifest.globalVersion;
-    response.partVersions = response.manifest.parts;
+    try {
+      response.manifest = await getAppManifest();
+      response.dataVersion = response.manifest.globalVersion;
+      response.partVersions = response.manifest.parts;
+    } catch (error) {
+      console.error('Fetch app data manifest after parts failed:', error);
+      const configVersion = Number(response.config?.version_global || response.config?.data_version || 0) || 0;
+      response.manifest = {
+        ...response.manifest,
+        globalVersion: configVersion,
+        parts: {
+          matches: configVersion,
+          players: configVersion,
+          seasons: configVersion,
+          config: configVersion,
+          playerSeasonSettings: configVersion,
+          admin: configVersion,
+        },
+        counts: {
+          matches: response.matches?.length ?? 0,
+          players: response.players?.length ?? 0,
+          seasons: response.seasons?.length ?? 0,
+          playerSeasonSettings: response.playerSeasonSettings?.length ?? 0,
+        },
+        checkedAt: Date.now(),
+      };
+      response.dataVersion = configVersion;
+      response.partVersions = response.manifest.parts;
+    }
 
     return response;
   } catch (error) {

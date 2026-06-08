@@ -70,9 +70,9 @@ function stalePartsFromManifest(
     }
   });
 
-  if (manifest.counts.players !== snapshot.players.length) stale.add('players');
-  if (manifest.counts.matches > 0 && snapshot.matches.length === 0) stale.add('matches');
-  if (manifest.counts.seasons !== snapshot.seasons.length) stale.add('seasons');
+  if (snapshot.players.length === 0 || manifest.counts.players !== snapshot.players.length) stale.add('players');
+  if (snapshot.matches.length === 0 || (manifest.counts.matches > 0 && snapshot.matches.length === 0)) stale.add('matches');
+  if (snapshot.seasons.length === 0 || manifest.counts.seasons !== snapshot.seasons.length) stale.add('seasons');
   if (manifest.counts.playerSeasonSettings !== snapshot.playerSeasonSettings.length) stale.add('playerSeasonSettings');
   if (Object.keys(snapshot.config).length === 0) stale.add('config');
 
