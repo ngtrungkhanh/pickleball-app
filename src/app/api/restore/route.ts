@@ -52,6 +52,12 @@ function synthesizeSeasons(matches: BackupMatch[], config: Record<string, unknow
   }));
 }
 
+function normalizeBackupTimestamp(value: unknown, fallback?: string) {
+  if (value === null || value === undefined || value === '') return fallback ?? null;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? (fallback ?? null) : date.toISOString();
+}
+
 async function ensureRestoreColumns() {
   await ensureConfigTable();
   await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_url TEXT`;
@@ -161,7 +167,7 @@ export async function POST(request: Request) {
       const id = String(s.id || name);
       await sql`
         INSERT INTO seasons (id, name, start_date, end_date, active, archived, champion_image_url, champion_image_path, champion_image_updated_at, created_at, lose_money)
-        VALUES (${id}, ${name}, ${s.start_date || new Date().toISOString()}, ${s.end_date || null}, ${name === resolvedActiveSeason}, ${s.archived ? true : false}, ${s.champion_image_url || null}, ${s.champion_image_path || null}, ${s.champion_image_updated_at || null}, ${s.created_at || new Date().toISOString()}, ${Number(s.lose_money || 5000) || 5000})
+        VALUES (${id}, ${name}, ${normalizeBackupTimestamp(s.start_date, new Date().toISOString())}, ${normalizeBackupTimestamp(s.end_date)}, ${name === resolvedActiveSeason}, ${s.archived ? true : false}, ${s.champion_image_url || null}, ${s.champion_image_path || null}, ${normalizeBackupTimestamp(s.champion_image_updated_at)}, ${normalizeBackupTimestamp(s.created_at, new Date().toISOString())}, ${Number(s.lose_money || 5000) || 5000})
       `;
     }
 
@@ -180,7 +186,7 @@ export async function POST(request: Request) {
     for (const m of matches) {
       await sql`
         INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by, client_request_id, deleted_at, delete_group_id)
-        VALUES (${m.id}, ${m.date || new Date().toISOString()}, ${m.win_1}, ${m.win_2 || null}, ${m.lose_1}, ${m.lose_2 || null}, ${m.win_score || 0}, ${m.lose_score || 0}, ${m.season || 'Season 1'}, ${m.created_by || 'SYSTEM'}, ${m.client_request_id || null}, ${m.deleted_at || null}, ${m.delete_group_id || null})
+        VALUES (${m.id}, ${normalizeBackupTimestamp(m.date, new Date().toISOString())}, ${m.win_1}, ${m.win_2 || null}, ${m.lose_1}, ${m.lose_2 || null}, ${m.win_score || 0}, ${m.lose_score || 0}, ${m.season || 'Season 1'}, ${m.created_by || 'SYSTEM'}, ${m.client_request_id || null}, ${normalizeBackupTimestamp(m.deleted_at)}, ${m.delete_group_id || null})
       `;
     }
 
@@ -213,7 +219,7 @@ export async function POST(request: Request) {
     for (const a of archives) {
       await sql`
         INSERT INTO archives (type, original_id, name, data, deleted_at)
-        VALUES (${a.type}, ${a.original_id}, ${a.name || null}, ${JSON.stringify(a.data)}, ${a.deleted_at || new Date().toISOString()})
+        VALUES (${a.type}, ${a.original_id}, ${a.name || null}, ${JSON.stringify(a.data)}, ${normalizeBackupTimestamp(a.deleted_at, new Date().toISOString())})
       `;
     }
 
@@ -221,7 +227,7 @@ export async function POST(request: Request) {
     for (const l of logs) {
       await sql`
         INSERT INTO audit_logs (id, action_type, details, created_at)
-        VALUES (${l.id}, ${l.action_type}, ${l.details}, ${l.created_at || new Date().toISOString()})
+        VALUES (${l.id}, ${l.action_type}, ${l.details}, ${normalizeBackupTimestamp(l.created_at, new Date().toISOString())})
       `;
     }
 
