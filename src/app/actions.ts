@@ -59,6 +59,8 @@ async function ensureSoftDeleteColumns() {
   await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80)`;
   await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS pay_fine BOOLEAN DEFAULT TRUE`;
   await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS hidden BOOLEAN DEFAULT FALSE`;
+  await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS created_by TEXT DEFAULT 'SYSTEM'`;
+  await sql`ALTER TABLE matches ALTER COLUMN created_by TYPE TEXT`;
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80)`;
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS client_request_id VARCHAR(120)`;
@@ -317,7 +319,9 @@ export async function deleteMatchAction(matchId: string) {
     const txResult = await withTransaction(async (client) => {
       await client.sql`SELECT pg_advisory_xact_lock(hashtext(${`delete:${matchId}`}))`;
       const { rows } = await client.sql`SELECT * FROM matches WHERE id = ${matchId} LIMIT 1`;
-      if (rows.length === 0) return { error: 'KhÃ´ng tÃ¬m tháº¥y tráº­n Ä‘áº¥u' };
+      if (rows.length === 0) {
+        return { success: true, deletedMatchId: matchId, dataVersion: null as number | null };
+      }
       const m = rows[0];
 
       if (m.deleted_at) {
@@ -344,7 +348,6 @@ export async function deleteMatchAction(matchId: string) {
       return { success: true, deletedMatchId: matchId, dataVersion };
     });
 
-    if (txResult.error) return { error: txResult.error };
     const manifest = await getAppManifest();
 
     revalidatePath('/');
@@ -357,32 +360,6 @@ export async function deleteMatchAction(matchId: string) {
       partVersions: manifest.parts,
     };
 
-    const { rows } = await sql`SELECT * FROM matches WHERE id = ${matchId}`;
-    if (rows.length === 0) return { error: 'Không tìm thấy trận đấu' };
-    const m = rows[0];
-
-    const lose_money = await getSeasonLoseMoney(String(m.season || 'Season 1'));
-    const hasGuest = matchHasGuest(m);
-
-    // Reverse stats
-    if (!hasGuest) {
-      await updatePlayerStatsIncremental(m.win_1, m.season, -1, 0, 0);
-      if (m.win_2) await updatePlayerStatsIncremental(m.win_2, m.season, -1, 0, 0);
-      await updatePlayerStatsIncremental(m.lose_1, m.season, 0, -1, 0);
-      if (m.lose_2) await updatePlayerStatsIncremental(m.lose_2, m.season, 0, -1, 0);
-    }
-    await updatePlayerStatsIncremental(m.lose_1, m.season, 0, 0, -lose_money);
-    if (m.lose_2) await updatePlayerStatsIncremental(m.lose_2, m.season, 0, 0, -lose_money);
-
-    const groupId = `delete-match-${matchId}-${Date.now().toString(36)}`;
-    await sql`UPDATE matches SET deleted_at = NOW(), delete_group_id = ${groupId} WHERE id = ${matchId}`;
-
-    await logAudit('DELETE_MATCH', `Deleted Match ${matchId}`);
-    await bumpDataVersions(['matches', 'admin']);
-
-    revalidatePath('/');
-    revalidatePath('/analysis');
-    return { success: true };
   } catch (error) {
     console.error('Failed to delete match:', error);
     return { error: 'Lỗi khi xóa trận đấu' };

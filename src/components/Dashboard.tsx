@@ -72,6 +72,12 @@ function avatarLetter(value: unknown) {
   return Array.from(String(value || '').trim())[0]?.toLocaleUpperCase('vi-VN') || '?';
 }
 
+function isMissingMatchError(value: unknown) {
+  const text = String(value || '').toLocaleLowerCase('vi-VN');
+  const ascii = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return ascii.includes('khong tim thay tran') || /kh.{0,6}ng.*t.{0,6}m.*tr/i.test(text);
+}
+
 function matchTime(match: Match) {
   const value = new Date(String(match.date || '')).getTime();
   return Number.isFinite(value) ? value : 0;
@@ -274,6 +280,10 @@ export default function Dashboard({
     await removeMatchesLocal([matchId]);
     const result = await deleteMatchAction(matchId);
     if (result && 'error' in result) {
+      if (isMissingMatchError(result.error)) {
+        await removeMatchesLocal([matchId]);
+        return;
+      }
       setMatches(prev => [match, ...prev.filter(m => String(m.id || '') !== matchId)]);
       await saveMatchesLocal([match]);
       alert(String(result.error || 'Xóa trận thất bại. Đã khôi phục lại dữ liệu local.'));

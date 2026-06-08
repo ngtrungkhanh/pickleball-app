@@ -470,6 +470,7 @@ export function ScoreForm({
       setTimeout(() => setSync('idle'), 2500);
       return;
     }
+    clearPending(requestId);
     removeOptimisticMatch(fd);
     setSync('error');
     setPendingFd(fd);
@@ -496,6 +497,10 @@ export function ScoreForm({
           try {
             const r = await addMatchAction(fd);
             await handleServerResult(r, fd);
+          } catch (error) {
+            console.error('Pending match retry failed:', error);
+            setSync('error');
+            setPendingFd(fd);
           } finally {
             inFlightRequestIds.current.delete(requestId);
           }
@@ -516,6 +521,10 @@ export function ScoreForm({
       try {
         const r = await addMatchAction(fd);
         await handleServerResult(r, fd);
+      } catch (error) {
+        console.error('Match sync failed:', error);
+        setSync('error');
+        setPendingFd(fd);
       } finally {
         if (requestId) inFlightRequestIds.current.delete(requestId);
       }
