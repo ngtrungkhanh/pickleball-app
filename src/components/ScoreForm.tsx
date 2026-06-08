@@ -120,6 +120,16 @@ function clearPending(requestId?: string) {
   writePendingSaves(readPendingSaves().filter(item => item.requestId !== requestId));
 }
 
+function runAfterNextPaint(task: () => void) {
+  if (typeof window === 'undefined') {
+    task();
+    return;
+  }
+  window.requestAnimationFrame(() => {
+    window.setTimeout(task, 0);
+  });
+}
+
 function SyncBadge({ state, message, onRetry }: { state: 'idle' | 'syncing' | 'error' | 'ok'; message?: string; onRetry?: () => void }) {
   if (state === 'idle') return null;
   const label = state === 'syncing' ? 'Đang lưu...' : state === 'error' ? (message || 'Lưu lỗi - thử lại') : 'Đã lưu';
@@ -612,7 +622,7 @@ export function ScoreForm({
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!win1 || !win2 || !lose1 || !lose2) return alert('Vui lòng chọn đủ 4 người.');
 
@@ -626,24 +636,27 @@ export function ScoreForm({
     const requestId = makeRequestId();
     const tempId = 'TMP-' + requestId;
     const optimisticMatch = { id: tempId, date: new Date().toISOString(), win_1: win1, win_2: win2 || null, lose_1: lose1, lose_2: lose2 || null, win_score: ws, lose_score: ls, season: activeSeason, created_by: fullIdentity, client_request_id: requestId, pending: true, sync_status: 'syncing' };
-    onAddMatch?.(optimisticMatch);
-    void saveMatchesLocal([optimisticMatch]);
     setUi('saved');
     setTimeout(() => { reset(); setUi('idle'); }, 1000);
 
-    const fd = new FormData();
-    fd.append('win_1', win1);
-    fd.append('win_2', win2);
-    fd.append('lose_1', lose1);
-    fd.append('lose_2', lose2);
-    fd.append('win_score', String(ws));
-    fd.append('lose_score', String(ls));
-    fd.append('season', activeSeason);
-    fd.append('created_by', fullIdentity);
-    fd.append('temp_id', tempId);
-    fd.append('client_request_id', requestId);
-    if (duplicateConfirmed) fd.append('duplicate_confirmed', 'true');
-    doSync(fd);
+    runAfterNextPaint(() => {
+      onAddMatch?.(optimisticMatch);
+      void saveMatchesLocal([optimisticMatch]);
+
+      const fd = new FormData();
+      fd.append('win_1', win1);
+      fd.append('win_2', win2);
+      fd.append('lose_1', lose1);
+      fd.append('lose_2', lose2);
+      fd.append('win_score', String(ws));
+      fd.append('lose_score', String(ls));
+      fd.append('season', activeSeason);
+      fd.append('created_by', fullIdentity);
+      fd.append('temp_id', tempId);
+      fd.append('client_request_id', requestId);
+      if (duplicateConfirmed) fd.append('duplicate_confirmed', 'true');
+      doSync(fd);
+    });
   };
 
   return (
@@ -691,7 +704,7 @@ export function ScoreForm({
             type="submit"
             disabled={ui === 'saved'}
             className={cn(
-              'w-full min-h-12 py-3 rounded-2xl font-black uppercase transition-all duration-300 flex items-center justify-center gap-3',
+              'w-full min-h-12 py-3 rounded-2xl font-black uppercase transition-colors duration-150 flex items-center justify-center gap-3',
               compact ? 'text-[11px] tracking-[0.18em]' : 'text-xs sm:text-sm tracking-[0.24em]',
               ui === 'saved'
                 ? 'bg-primary/20 text-primary/60 cursor-default'
