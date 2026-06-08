@@ -124,6 +124,10 @@ async function getSeasonLoseMoney(season: string) {
 
 type DbClient = any;
 
+function getSqlRunner(runner?: DbClient) {
+  return runner?.sql ? runner.sql.bind(runner) as typeof sql : sql;
+}
+
 async function withTransaction<T>(work: (client: DbClient) => Promise<T>) {
   const client = await sql.connect();
   try {
@@ -167,7 +171,7 @@ function normalizeMatchRow(row: any, fallbackSeason = 'Season 1') {
 
 async function updatePlayerStatsIncremental(playerId: string, season: string, deltaWins: number, deltaLosses: number, deltaMoney: number, runner?: DbClient) {
   if (!playerId || isGuestId(playerId)) return;
-  const query = runner?.sql ?? sql;
+  const query = getSqlRunner(runner);
   
   let moneyToChange = deltaMoney;
   if (deltaMoney !== 0) {
@@ -825,7 +829,7 @@ export async function rebuildStatsAction() {
 
 export async function logAudit(type: string, details: string, runner?: DbClient) {
   if (shouldBlockPreviewWrites()) return;
-  const query = runner?.sql ?? sql;
+  const query = getSqlRunner(runner);
 
   try {
     await query`

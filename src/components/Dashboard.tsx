@@ -844,7 +844,7 @@ export default function Dashboard({
               </section>
             )}
             <div className="3xl:hidden">
-              <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} />
+              <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} onDeleteMatch={deleteLocalMatch} />
             </div>
           </section>
 
@@ -857,7 +857,7 @@ export default function Dashboard({
               seasons={seasons}
               playerSeasonSettings={sharedData.playerSeasonSettings}
             />
-            <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} />
+            <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} onDeleteMatch={deleteLocalMatch} />
           </aside>
         </div>
       </div>

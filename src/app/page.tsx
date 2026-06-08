@@ -1,4 +1,5 @@
 import Dashboard from '@/components/Dashboard';
+import { shouldBlockPreviewWrites } from '@/lib/environment';
 
 export const dynamic = 'force-static';
 
@@ -15,7 +16,7 @@ export default async function HomePage() {
           initialConfig={{}}
           initialSeasons={[]}
           initialPlayerSeasonSettings={[]}
-          previewWritesBlocked={false}
+          previewWritesBlocked={shouldBlockPreviewWrites()}
         />
       </div>
     </div>

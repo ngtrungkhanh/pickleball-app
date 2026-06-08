@@ -43,7 +43,7 @@ type SqlRunner = {
 };
 
 function db(runner?: SqlRunner) {
-  return runner?.sql ?? sql;
+  return runner?.sql ? runner.sql.bind(runner) as SqlTag : sql;
 }
 
 export async function ensureConfigTable(runner?: SqlRunner) {
