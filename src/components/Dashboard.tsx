@@ -844,7 +844,7 @@ export default function Dashboard({
               showSeasonHeader={false}
             />
             {canWrite && (
-              <section className="rounded-2xl border border-white/10 bg-[#111d31]/86 shadow-[0_14px_40px_rgba(0,0,0,0.24)] backdrop-blur-xl">
+              <section className="relative z-[100] overflow-visible rounded-2xl border border-white/10 bg-[#111d31]/86 shadow-[0_14px_40px_rgba(0,0,0,0.24)] backdrop-blur-xl">
                 <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
                   <Sparkles className="h-3.5 w-3.5 text-primary/80" />
                   <h2 className="min-w-0 truncate text-[10px] font-black uppercase tracking-[0.2em] text-white/55">Nhập trận nhanh</h2>
@@ -859,7 +859,7 @@ export default function Dashboard({
                 />
               </section>
             )}
-            <div className="3xl:hidden">
+            <div className="relative z-0 3xl:hidden">
               <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} onDeleteMatch={deleteLocalMatch} />
             </div>
           </section>
@@ -1039,7 +1039,7 @@ export default function Dashboard({
             </span>
             <h3 className="font-black text-[10px] sm:text-xs uppercase tracking-[0.4em] text-slate-300/70">Ghi kết quả</h3>
           </div>
-          <div className="relative z-30 rounded-2xl border border-slate-500/25 bg-[#142034]/95 overflow-visible">
+          <div className="relative z-[100] rounded-2xl border border-slate-500/25 bg-[#142034]/95 overflow-visible">
             <ScoreForm
               players={players}
               onAddMatch={addLocalMatch}
@@ -1053,7 +1053,7 @@ export default function Dashboard({
       )}
 
       {/* 4. Recent History */}
-      <div className={DESKTOP_PANEL_WIDTH}>
+      <div className={`relative z-0 ${DESKTOP_PANEL_WIDTH}`}>
         <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} onDeleteMatch={deleteLocalMatch} />
       </div>
 
