@@ -445,15 +445,15 @@ export async function addMatchAction(formData: FormData) {
       };
     }
 
-    stage = 'audit and version';
+    stage = 'post-write side effects';
     let dataVersion = txResult.dataVersion;
     let syncWarning: string | undefined;
     if (dataVersion === null && !txResult.replay) {
-      await logAudit('ADD_MATCH', `Match ${id} by ${created_by}: ${win_1}${win_2 ? '/' + win_2 : ''} beat ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
       try {
+        await logAudit('ADD_MATCH', `Match ${id} by ${created_by}: ${win_1}${win_2 ? '/' + win_2 : ''} beat ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
         dataVersion = await bumpMatchWriteVersions();
-      } catch (versionError) {
-        console.error('Post-match version bump failed:', versionError);
+      } catch (sideEffectError) {
+        console.error('Post-match side effects failed:', sideEffectError);
         syncWarning = 'match_saved_version_not_bumped';
       }
     }
@@ -508,11 +508,11 @@ export async function deleteMatchAction(matchId: string) {
     let dataVersion = txResult.dataVersion;
     let syncWarning: string | undefined;
     if (dataVersion === null && txResult.changed) {
-      await logAudit('DELETE_MATCH', `Deleted Match ${matchId}`);
       try {
+        await logAudit('DELETE_MATCH', `Deleted Match ${matchId}`);
         dataVersion = await bumpMatchWriteVersions();
-      } catch (versionError) {
-        console.error('Post-delete version bump failed:', versionError);
+      } catch (sideEffectError) {
+        console.error('Post-delete side effects failed:', sideEffectError);
         syncWarning = 'match_deleted_version_not_bumped';
       }
     }
