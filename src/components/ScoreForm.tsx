@@ -25,6 +25,12 @@ type ScorePlayer = {
   deleted_at?: unknown;
 };
 
+type ScoreSlot = 'win1' | 'win2' | 'lose1' | 'lose2';
+
+type SelectedSlots = Record<ScoreSlot, string>;
+
+type PlayerRelation = 'current' | 'available' | 'same' | 'other';
+
 type RecentLocalMatch = {
   key: string;
   timestamp: number;
@@ -195,12 +201,16 @@ function PlayerPicker({
   value,
   players,
   tone,
+  slot,
+  selectedSlots,
   onChange,
 }: {
   label: string;
   value: string;
   players: ScorePlayer[];
   tone: 'win' | 'lose';
+  slot: ScoreSlot;
+  selectedSlots: SelectedSlots;
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -230,11 +240,46 @@ function PlayerPicker({
     setOpen(false);
   };
 
+  const teammateSlot: Record<ScoreSlot, ScoreSlot> = {
+    win1: 'win2',
+    win2: 'win1',
+    lose1: 'lose2',
+    lose2: 'lose1',
+  };
+  const otherTeamSlots: Record<ScoreSlot, ScoreSlot[]> = {
+    win1: ['lose1', 'lose2'],
+    win2: ['lose1', 'lose2'],
+    lose1: ['win1', 'win2'],
+    lose2: ['win1', 'win2'],
+  };
+
+  const playerRelation = (playerId: string): PlayerRelation => {
+    if (playerId === value) return 'current';
+    if (selectedSlots[teammateSlot[slot]] === playerId) return 'same';
+    if (otherTeamSlots[slot].some(otherSlot => selectedSlots[otherSlot] === playerId)) return 'other';
+    return 'available';
+  };
+
+  const relationPriority: Record<PlayerRelation, number> = {
+    current: 0,
+    available: 1,
+    same: 2,
+    other: 3,
+  };
+
+  const sortedMembers = members
+    .map((player, index) => ({ player, index, relation: playerRelation(player.id) }))
+    .sort((a, b) => relationPriority[a.relation] - relationPriority[b.relation] || a.index - b.index);
+
+  const sameTeamClass = tone === 'win'
+    ? 'bg-green-500/10 text-green-100 border-green-400/30 hover:bg-green-500/15'
+    : 'bg-red-500/10 text-red-100 border-red-400/30 hover:bg-red-500/15';
+
   const list = (
     <div className="max-h-[70vh] overflow-y-auto p-2">
       <div className="space-y-1">
-        {members.map(player => {
-          const active = player.id === value;
+        {sortedMembers.map(({ player, relation }) => {
+          const active = relation === 'current';
           return (
             <button
               key={player.id}
@@ -242,11 +287,18 @@ function PlayerPicker({
               onClick={() => choose(player.id)}
               className={cn(
                 'flex min-h-14 w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-base font-black transition',
-                active ? accent.active : `border-transparent text-white ${accent.hover}`,
+                active && accent.active,
+                relation === 'available' && `border-transparent text-white ${accent.hover}`,
+                relation === 'same' && sameTeamClass,
+                relation === 'other' && 'bg-amber-400/10 text-amber-100 border-amber-300/30 hover:bg-amber-400/15',
               )}
             >
               <span className="min-w-0 break-words leading-5">{player.name}</span>
-              {active && <Check className="h-5 w-5 shrink-0" strokeWidth={3} />}
+              <span className="flex shrink-0 items-center gap-2">
+                {relation === 'same' && <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] uppercase tracking-widest text-current/70">Cùng đội</span>}
+                {relation === 'other' && <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-[9px] uppercase tracking-widest text-amber-100/80">Đội kia</span>}
+                {active && <Check className="h-5 w-5" strokeWidth={3} />}
+              </span>
             </button>
           );
         })}
@@ -370,7 +422,9 @@ export function ScoreForm({
     }));
   const reset = () => { setWin1(''); setWin2(''); setLose1(''); setLose2(''); setWs(11); setLs(5); };
 
-  type Slot = 'win1' | 'win2' | 'lose1' | 'lose2';
+  type Slot = ScoreSlot;
+  const selectedSlots: SelectedSlots = { win1, win2, lose1, lose2 };
+
   const setSlot = (slot: Slot, value: string) => {
     if (value && !isGuestId(value)) {
       if (slot !== 'win1' && win1 === value) setWin1('');
@@ -385,13 +439,7 @@ export function ScoreForm({
     if (slot === 'lose2') setLose2(value);
   };
 
-  const optionsFor = (slot: Slot) => {
-    const sameSideSelected = slot.startsWith('win')
-      ? [slot === 'win1' ? win2 : win1]
-      : [slot === 'lose1' ? lose2 : lose1];
-
-    return active.filter(p => isGuestId(p.id) || !sameSideSelected.includes(p.id));
-  };
+  const optionsFor = () => active;
 
   useEffect(() => {
     try {
@@ -679,8 +727,8 @@ export function ScoreForm({
               <span className="text-[10px] font-black text-green-300 uppercase tracking-[0.2em]">Đội thắng</span>
             </div>
             <div className="space-y-2">
-              <PlayerPicker label="Người thắng 1" tone="win" value={win1} players={optionsFor('win1')} onChange={value => setSlot('win1', value)} />
-              <PlayerPicker label="Người thắng 2" tone="win" value={win2} players={optionsFor('win2')} onChange={value => setSlot('win2', value)} />
+              <PlayerPicker label="Người thắng 1" tone="win" slot="win1" selectedSlots={selectedSlots} value={win1} players={optionsFor()} onChange={value => setSlot('win1', value)} />
+              <PlayerPicker label="Người thắng 2" tone="win" slot="win2" selectedSlots={selectedSlots} value={win2} players={optionsFor()} onChange={value => setSlot('win2', value)} />
             </div>
           </div>
 
@@ -700,8 +748,8 @@ export function ScoreForm({
               <Ghost className="w-4 h-4 text-red-400 opacity-60" />
             </div>
             <div className="space-y-2">
-              <PlayerPicker label="Người thua 1" tone="lose" value={lose1} players={optionsFor('lose1')} onChange={value => setSlot('lose1', value)} />
-              <PlayerPicker label="Người thua 2" tone="lose" value={lose2} players={optionsFor('lose2')} onChange={value => setSlot('lose2', value)} />
+              <PlayerPicker label="Người thua 1" tone="lose" slot="lose1" selectedSlots={selectedSlots} value={lose1} players={optionsFor()} onChange={value => setSlot('lose1', value)} />
+              <PlayerPicker label="Người thua 2" tone="lose" slot="lose2" selectedSlots={selectedSlots} value={lose2} players={optionsFor()} onChange={value => setSlot('lose2', value)} />
             </div>
           </div>
 
