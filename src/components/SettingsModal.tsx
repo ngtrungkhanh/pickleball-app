@@ -417,7 +417,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
               </div>
             )}
 
-            {canEdit && activeTab === 'access' && (
+            {activeTab === 'access' && (
               <div className="rounded-2xl border border-slate-500/25 bg-white/[0.055] p-6">
                 <div className="flex items-center gap-4 mb-5">
                   <div className={cn(

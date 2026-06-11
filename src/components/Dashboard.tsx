@@ -1061,7 +1061,7 @@ export default function Dashboard({
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        canEdit={canWrite}
+        canEdit={canEdit}
         onUnlock={unlock}
         onLock={lock}
         players={players}

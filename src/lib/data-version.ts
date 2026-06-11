@@ -85,6 +85,15 @@ function emptyLocalVersions(): Partial<AppPartVersions> {
   return {};
 }
 
+function parsePartVersions(config: Record<string, string>) {
+  const legacyVersion = Number(config[GLOBAL_VERSION_KEY] || config[DATA_VERSION_KEY] || 0) || 0;
+  const versions = emptyPartVersions();
+  APP_DATA_PARTS.forEach((part) => {
+    versions[part] = Number(config[VERSION_KEYS[part]] || legacyVersion || 0) || 0;
+  });
+  return versions;
+}
+
 export async function getDataVersion() {
   const { rows } = await sql`
     SELECT key, value FROM config
@@ -103,13 +112,7 @@ export async function getPartVersions(): Promise<AppPartVersions> {
   rows.forEach((row) => {
     config[String(row.key)] = String(row.value);
   });
-
-  const legacyVersion = Number(config[GLOBAL_VERSION_KEY] || config[DATA_VERSION_KEY] || 0) || 0;
-  const versions = emptyPartVersions();
-  APP_DATA_PARTS.forEach((part) => {
-    versions[part] = Number(config[VERSION_KEYS[part]] || legacyVersion || 0) || 0;
-  });
-  return versions;
+  return parsePartVersions(config);
 }
 
 export async function getCacheEpoch() {
@@ -180,11 +183,16 @@ export async function getChangedPartVersions(parts: AppDataPart[]) {
 }
 
 export async function getSyncManifest(localParts?: Partial<AppPartVersions>): Promise<SyncManifest> {
-  const [partVersions, cacheEpoch, serverTimeResult] = await Promise.all([
-    getPartVersions(),
-    getCacheEpoch(),
+  const [configResult, serverTimeResult] = await Promise.all([
+    sql`SELECT key, value FROM config`,
     sql`SELECT NOW() AS now`,
   ]);
+  const config: Record<string, string> = {};
+  configResult.rows.forEach((row) => {
+    config[String(row.key)] = String(row.value);
+  });
+  const partVersions = parsePartVersions(config);
+  const cacheEpoch = String(config[CACHE_EPOCH_KEY] || 'legacy');
   const local = localParts || emptyLocalVersions();
   const changedParts = APP_DATA_PARTS.filter((part) => {
     if (part === 'admin') return false;
