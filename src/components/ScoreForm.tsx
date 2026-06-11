@@ -304,7 +304,7 @@ function PlayerPicker({
                 active && accent.active,
                 relation === 'available' && `border-transparent text-white ${accent.hover}`,
                 relation === 'same' && sameTeamClass,
-                relation === 'other' && 'bg-amber-400/10 text-amber-100 border-amber-300/30 hover:bg-amber-400/15',
+                relation === 'other' && 'border-amber-200/75 bg-amber-400/24 text-amber-50 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.18)] hover:bg-amber-400/30',
               )}
             >
               <span className="min-w-0 break-words leading-5">{player.name}</span>
