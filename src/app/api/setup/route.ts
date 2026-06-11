@@ -1,6 +1,5 @@
 import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
-import { randomUUID } from 'crypto';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
 
 export async function GET() {
@@ -53,23 +52,6 @@ export async function GET() {
       await sql`CREATE UNIQUE INDEX IF NOT EXISTS matches_client_request_id_unique ON matches (client_request_id) WHERE client_request_id IS NOT NULL;`;
       await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`;
       await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80);`;
-      await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();`;
-      await sql`
-        CREATE OR REPLACE FUNCTION set_matches_updated_at()
-        RETURNS TRIGGER AS $$
-        BEGIN
-          NEW.updated_at = NOW();
-          RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-      `;
-      await sql`DROP TRIGGER IF EXISTS matches_updated_at_trigger ON matches;`;
-      await sql`
-        CREATE TRIGGER matches_updated_at_trigger
-        BEFORE UPDATE ON matches
-        FOR EACH ROW
-        EXECUTE FUNCTION set_matches_updated_at();
-      `;
       await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`;
       await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS delete_group_id VARCHAR(80);`;
       await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS pay_fine BOOLEAN DEFAULT TRUE;`;
@@ -84,11 +66,6 @@ export async function GET() {
         key VARCHAR(50) PRIMARY KEY,
         value VARCHAR(255) NOT NULL
       );
-    `;
-    await sql`
-      INSERT INTO config (key, value)
-      VALUES ('cache_epoch', ${randomUUID()})
-      ON CONFLICT (key) DO NOTHING;
     `;
 
     // 4. Create seasons table

@@ -48,6 +48,14 @@ type ServerResultOptions = {
   silent?: boolean;
 };
 
+function pickPartVersions(partVersions: Record<string, number> | undefined, parts: AppCachePart[]) {
+  if (!partVersions) return undefined;
+  return parts.reduce<Record<string, number>>((acc, part) => {
+    if (typeof partVersions[part] === 'number') acc[part] = partVersions[part];
+    return acc;
+  }, {});
+}
+
 function teamKey(a: string, b: string): string {
   return [a, b].filter(Boolean).sort().join('|');
 }
@@ -463,7 +471,7 @@ export function ScoreForm({
       playerSeasonSettings: appData.playerSeasonSettings as StoredPlayerSeasonSetting[] | undefined,
     }, {
       dataVersion: appData.dataVersion,
-      partVersions: appData.partVersions,
+      partVersions: pickPartVersions(appData.partVersions, parts),
       manifestCheckedAt: Date.now(),
     });
     router.refresh();

@@ -23,9 +23,8 @@ import {
   updatePlayerAction,
   deletePlayerAction,
   getAppDataAction,
+  getAppDataManifestAction,
   getAppDataPartsAction,
-  getMatchesDeltaAction,
-  getSyncManifestAction,
   deleteMatchAction,
   togglePlayerActiveAction,
   updateMatchAction
@@ -33,8 +32,6 @@ import {
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import {
-  applyMatchesDeltaLocal,
-  clearAppCacheLocal,
   getAppCacheSnapshot,
   hasUsableAppCache,
   replaceAppCacheParts,
@@ -113,16 +110,15 @@ function clearPendingMatchEdit() {
 
 function getStaleParts(
   snapshot: Awaited<ReturnType<typeof getAppCacheSnapshot>>,
-  manifest: NonNullable<Awaited<ReturnType<typeof getSyncManifestAction>>>,
+  manifest: NonNullable<Awaited<ReturnType<typeof getAppDataManifestAction>>>,
 ) {
   const stale = new Set<AppCachePart>();
-  manifest.changedParts.forEach((part) => {
-    if (CORE_PARTS.includes(part as AppCachePart)) stale.add(part as AppCachePart);
+  CORE_PARTS.forEach((part) => {
+    if ((manifest.parts[part] || 0) > (snapshot.partVersions[part] || 0)) {
+      stale.add(part);
+    }
   });
-  if (snapshot.players.length === 0) stale.add('players');
-  if (snapshot.matches.length === 0) stale.add('matches');
-  if (snapshot.seasons.length === 0) stale.add('seasons');
-  if (Object.keys(snapshot.config).length === 0) stale.add('config');
+  if (!hasUsableAppCache(snapshot)) CORE_PARTS.forEach((part) => stale.add(part));
   return Array.from(stale);
 }
 
@@ -191,83 +187,31 @@ export default function AdminPage() {
         applySnapshot(snapshot);
       }
 
-      const manifest = await getSyncManifestAction(snapshot.partVersions);
+      const manifest = await getAppDataManifestAction();
       if (!manifest) throw new Error('manifest unavailable');
       const staleParts = getStaleParts(snapshot, manifest);
 
-      if (manifest.cacheEpoch !== snapshot.cacheEpoch) {
-        await clearAppCacheLocal({ includeHallImages: true });
-        const appData = await getAppDataPartsAction(CORE_PARTS);
+      if (staleParts.length > 0) {
+        const appData = await getAppDataPartsAction(staleParts);
         if (!appData) throw new Error('app data unavailable');
-        await seedAppCache({
+        await replaceAppCacheParts({
           players: appData.players,
           matches: appData.matches,
           seasons: appData.seasons,
           config: appData.config,
-          playerSeasonSettings: appData.playerSeasonSettings || [],
+          playerSeasonSettings: appData.playerSeasonSettings || undefined,
+        }, {
           dataVersion: appData.dataVersion,
-          partVersions: appData.partVersions,
-          cacheEpoch: appData.cacheEpoch || manifest.cacheEpoch,
-          matchesCursor: appData.serverTime ? { updatedAt: appData.serverTime, id: '' } : undefined,
+          partVersions: staleParts.length === CORE_PARTS.length ? appData.partVersions : pickPartVersions(appData.partVersions, staleParts),
           manifestCheckedAt: Date.now(),
         });
         snapshot = await getAppCacheSnapshot();
       } else {
-        const smallParts = staleParts.filter(part => part !== 'matches');
-        if (smallParts.length > 0) {
-          const appData = await getAppDataPartsAction(smallParts);
-          if (!appData) throw new Error('app data unavailable');
-          await replaceAppCacheParts({
-            players: appData.players,
-            seasons: appData.seasons,
-            config: appData.config,
-            playerSeasonSettings: appData.playerSeasonSettings || undefined,
-          }, {
-            dataVersion: appData.dataVersion,
-            partVersions: pickPartVersions(appData.partVersions, smallParts),
-            cacheEpoch: appData.cacheEpoch || manifest.cacheEpoch,
-            manifestCheckedAt: Date.now(),
-          });
-          snapshot = await getAppCacheSnapshot();
-        }
-        if (staleParts.includes('matches')) {
-          if (snapshot.matches.length === 0) {
-            const appData = await getAppDataPartsAction(CORE_PARTS);
-            if (!appData) throw new Error('app data unavailable');
-            await seedAppCache({
-              players: appData.players,
-              matches: appData.matches,
-              seasons: appData.seasons,
-              config: appData.config,
-              playerSeasonSettings: appData.playerSeasonSettings || [],
-              dataVersion: appData.dataVersion,
-              partVersions: appData.partVersions,
-              cacheEpoch: appData.cacheEpoch || manifest.cacheEpoch,
-              matchesCursor: appData.serverTime ? { updatedAt: appData.serverTime, id: '' } : undefined,
-              manifestCheckedAt: Date.now(),
-            });
-          } else {
-            let cursor = snapshot.matchesCursor;
-            for (let page = 0; page < 20; page += 1) {
-              const delta = await getMatchesDeltaAction(cursor);
-              await applyMatchesDeltaLocal(delta.matches, {
-                partVersions: delta.hasMore ? undefined : { matches: manifest.partVersions.matches, admin: manifest.partVersions.admin },
-                cacheEpoch: manifest.cacheEpoch,
-                matchesCursor: delta.hasMore ? delta.nextCursor : delta.finalCursor,
-                manifestCheckedAt: Date.now(),
-              });
-              cursor = delta.nextCursor;
-              if (!delta.hasMore) break;
-            }
-          }
-          snapshot = await getAppCacheSnapshot();
-        } else if (staleParts.length === 0) {
-          await seedAppCache({
-            partVersions: manifest.partVersions,
-            cacheEpoch: manifest.cacheEpoch,
-            manifestCheckedAt: Date.now(),
-          });
-        }
+        await seedAppCache({
+          dataVersion: manifest.globalVersion,
+          partVersions: manifest.parts,
+          manifestCheckedAt: manifest.checkedAt,
+        });
       }
 
       applySnapshot(snapshot);
@@ -439,8 +383,6 @@ export default function AdminPage() {
             playerSeasonSettings: appData.playerSeasonSettings || [],
             dataVersion: appData.dataVersion,
             partVersions: appData.partVersions,
-            cacheEpoch: appData.cacheEpoch,
-            matchesCursor: appData.serverTime ? { updatedAt: appData.serverTime, id: '' } : undefined,
             manifestCheckedAt: Date.now(),
           });
         }

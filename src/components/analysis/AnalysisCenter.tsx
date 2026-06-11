@@ -139,8 +139,8 @@ export function AnalysisCenter({
     initialPlayerSeasonSettings,
     routeKey: 'analysis',
     localOnly,
-    fetchIfEmpty: localOnly,
-    syncOnMount: 'throttled',
+    fetchIfEmpty: false,
+    syncOnMount: 'empty-only',
   });
   const players = sharedData.players.length > 0 ? sharedData.players as Player[] : initialPlayers;
   const allMatches = (sharedData.matches.length > 0 ? sharedData.matches : initialMatches) as Match[];
@@ -384,8 +384,8 @@ export function AnalysisCenter({
             </p>
             <p className="mt-2 text-sm font-semibold text-white/40">
               {sharedData.syncState === 'error'
-                ? 'Mở Dashboard để tải lại dữ liệu mới nhất.'
-                : 'Đang tải dữ liệu mới nhất lần đầu để lưu vào máy này...'}
+                ? 'Mo Tong quan de tai lai du lieu moi nhat.'
+                : 'Mo Tong quan truoc de tai du lieu vao may nay.'}
             </p>
             <Link href="/" className="mt-4 inline-flex rounded-xl border border-primary/30 bg-primary/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-primary hover:bg-primary/20">
               Về Dashboard

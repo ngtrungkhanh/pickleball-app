@@ -5,7 +5,7 @@ import * as xlsx from 'xlsx';
 import path from 'path';
 import fs from 'fs';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
-import { bumpDataVersions, rotateCacheEpoch } from '@/lib/data-version';
+import { bumpDataVersions } from '@/lib/data-version';
 import { rebuildPlayerStatsFromMatches } from '@/lib/player-stats-rebuild';
 
 const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
@@ -114,7 +114,6 @@ export async function GET(request: Request) {
 
     // 2. Migrate MATCHES
     await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS client_request_id VARCHAR(120)`;
-    await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`;
     await sql`CREATE UNIQUE INDEX IF NOT EXISTS matches_client_request_id_unique ON matches (client_request_id) WHERE client_request_id IS NOT NULL`;
     const matchesSheet = workbook.Sheets['MATCHES'];
     if (matchesSheet) {
@@ -132,7 +131,7 @@ export async function GET(request: Request) {
         const season = String(m.season || 'Season 1');
         
         await sql`
-          INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, client_request_id, updated_at)
+          INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, client_request_id)
           VALUES (
             ${id}, 
             ${date.toISOString()}, 
@@ -143,8 +142,7 @@ export async function GET(request: Request) {
             ${winScore}, 
             ${loseScore}, 
             ${season},
-            NULL,
-            ${date.toISOString()}
+            NULL
           )
           ON CONFLICT (id) DO NOTHING;
         `;
@@ -174,7 +172,6 @@ export async function GET(request: Request) {
     }
 
     await rebuildPlayerStatsFromMatches();
-    await rotateCacheEpoch();
     await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
 
     return NextResponse.json({ message: 'Migration completed successfully!' }, { status: 200 });
@@ -259,7 +256,6 @@ export async function POST(request: Request) {
 
     await sql`DELETE FROM matches`;
     await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS client_request_id VARCHAR(120)`;
-    await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`;
     await sql`CREATE UNIQUE INDEX IF NOT EXISTS matches_client_request_id_unique ON matches (client_request_id) WHERE client_request_id IS NOT NULL`;
 
     let inserted = 0;
@@ -279,15 +275,14 @@ export async function POST(request: Request) {
       if (!win_1 || !lose_1) continue;
 
       await sql`
-        INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by, client_request_id, deleted_at, delete_group_id, updated_at)
-        VALUES (${id}, ${date.toISOString()}, ${win_1}, ${win_2}, ${lose_1}, ${lose_2}, ${win_score}, ${lose_score}, ${season}, ${created_by}, NULL, NULL, NULL, ${date.toISOString()})
+        INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by, client_request_id, deleted_at, delete_group_id)
+        VALUES (${id}, ${date.toISOString()}, ${win_1}, ${win_2}, ${lose_1}, ${lose_2}, ${win_score}, ${lose_score}, ${season}, ${created_by}, NULL, NULL, NULL)
       `;
       inserted++;
     }
 
     await rebuildPlayerStatsFromMatches();
 
-    await rotateCacheEpoch();
     await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
 
     revalidatePath('/');
