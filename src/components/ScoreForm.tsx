@@ -214,6 +214,7 @@ function PlayerPicker({
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const selected = players.find(p => p.id === value);
   const guest = players.find(p => isGuestId(p.id));
   const members = players.filter(p => !isGuestId(p.id));
@@ -239,6 +240,19 @@ function PlayerPicker({
     onChange(id);
     setOpen(false);
   };
+
+  useEffect(() => {
+    if (!open) return;
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && pickerRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [open]);
 
   const teammateSlot: Record<ScoreSlot, ScoreSlot> = {
     win1: 'win2',
@@ -294,11 +308,7 @@ function PlayerPicker({
               )}
             >
               <span className="min-w-0 break-words leading-5">{player.name}</span>
-              <span className="flex shrink-0 items-center gap-2">
-                {relation === 'same' && <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] uppercase tracking-widest text-current/70">Cùng đội</span>}
-                {relation === 'other' && <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-[9px] uppercase tracking-widest text-amber-100/80">Đội kia</span>}
-                {active && <Check className="h-5 w-5" strokeWidth={3} />}
-              </span>
+              {active && <Check className="h-5 w-5 shrink-0" strokeWidth={3} />}
             </button>
           );
         })}
@@ -328,7 +338,7 @@ function PlayerPicker({
   );
 
   return (
-    <div className="relative min-w-0">
+    <div ref={pickerRef} className="relative min-w-0">
       <button
         type="button"
         onClick={() => setOpen(true)}
