@@ -1,14 +1,25 @@
 import { sql } from '@vercel/postgres';
 import { isGuestId, matchHasGuest } from './guest';
 
-export async function rebuildPlayerStatsFromMatches() {
-  await sql`
+type SqlTag = typeof sql;
+type SqlRunner = {
+  sql: SqlTag;
+};
+
+function db(runner?: SqlRunner) {
+  return runner?.sql ? runner.sql.bind(runner) as SqlTag : sql;
+}
+
+export async function rebuildPlayerStatsFromMatches(runner?: SqlRunner) {
+  const query = db(runner);
+
+  await query`
     CREATE TABLE IF NOT EXISTS config (
       key VARCHAR(50) PRIMARY KEY,
       value VARCHAR(255) NOT NULL
     )
   `;
-  await sql`
+  await query`
     CREATE TABLE IF NOT EXISTS seasons (
       id VARCHAR(50) PRIMARY KEY,
       name VARCHAR(100) NOT NULL,
@@ -19,7 +30,7 @@ export async function rebuildPlayerStatsFromMatches() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `;
-  await sql`
+  await query`
     CREATE TABLE IF NOT EXISTS player_stats (
       player_id VARCHAR(10) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
       season VARCHAR(50) NOT NULL,
@@ -31,10 +42,10 @@ export async function rebuildPlayerStatsFromMatches() {
       PRIMARY KEY (player_id, season)
     )
   `;
-  await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS pay_fine BOOLEAN DEFAULT TRUE`;
-  await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
-  await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS lose_money INT DEFAULT 5000`;
-  await sql`
+  await query`ALTER TABLE players ADD COLUMN IF NOT EXISTS pay_fine BOOLEAN DEFAULT TRUE`;
+  await query`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
+  await query`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS lose_money INT DEFAULT 5000`;
+  await query`
     CREATE TABLE IF NOT EXISTS player_season_settings (
       player_id VARCHAR(80) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
       season VARCHAR(80) NOT NULL,
@@ -45,20 +56,20 @@ export async function rebuildPlayerStatsFromMatches() {
     )
   `;
 
-  const { rows: players } = await sql`SELECT id, pay_fine FROM players WHERE deleted_at IS NULL`;
+  const { rows: players } = await query`SELECT id, pay_fine FROM players WHERE deleted_at IS NULL`;
   const validPlayerIds = new Set(players.map(player => String(player.id)).filter(id => !isGuestId(id)));
   const playerDefaultPayFine = new Map(players.map(player => [String(player.id), player.pay_fine !== false]));
-  const { rows: playerSeasonSettings } = await sql`SELECT player_id, season, pay_fine FROM player_season_settings`;
+  const { rows: playerSeasonSettings } = await query`SELECT player_id, season, pay_fine FROM player_season_settings`;
   const playerSeasonPayFine = new Map(
     playerSeasonSettings.map(setting => [`${setting.player_id}:${setting.season}`, setting.pay_fine !== false]),
   );
-  const { rows: configRows } = await sql`SELECT value FROM config WHERE key = 'lose_money' LIMIT 1`;
+  const { rows: configRows } = await query`SELECT value FROM config WHERE key = 'lose_money' LIMIT 1`;
   const fallbackLoseMoney = Number(configRows[0]?.value || 5000) || 5000;
-  const { rows: seasons } = await sql`SELECT name, lose_money FROM seasons WHERE archived = false`;
+  const { rows: seasons } = await query`SELECT name, lose_money FROM seasons WHERE archived = false`;
   const seasonLoseMoney = new Map(
     seasons.map(season => [String(season.name), Number(season.lose_money ?? fallbackLoseMoney)]),
   );
-  const { rows: matches } = await sql`SELECT * FROM matches WHERE deleted_at IS NULL`;
+  const { rows: matches } = await query`SELECT * FROM matches WHERE deleted_at IS NULL`;
 
   const statsMap = new Map<string, { wins: number; losses: number; money: number }>();
 
@@ -99,11 +110,11 @@ export async function rebuildPlayerStatsFromMatches() {
     });
   }
 
-  await sql`DELETE FROM player_stats`;
+  await query`DELETE FROM player_stats`;
 
   for (const [key, stat] of statsMap.entries()) {
     const [playerId, season] = key.split(':');
-    await sql`
+    await query`
       INSERT INTO player_stats (player_id, season, wins, losses, total, money)
       VALUES (${playerId}, ${season}, ${stat.wins}, ${stat.losses}, ${stat.wins + stat.losses}, ${stat.money})
     `;

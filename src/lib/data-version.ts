@@ -1,7 +1,9 @@
 import { sql } from '@vercel/postgres';
+import { randomUUID } from 'crypto';
 
 export const DATA_VERSION_KEY = 'data_version';
 export const GLOBAL_VERSION_KEY = 'version_global';
+export const CACHE_EPOCH_KEY = 'cache_epoch';
 
 export const APP_DATA_PARTS = [
   'matches',
@@ -26,6 +28,14 @@ export type AppDataManifest = {
     playerSeasonSettings: number;
   };
   checkedAt: number;
+};
+
+export type SyncManifest = {
+  cacheEpoch: string;
+  partVersions: AppPartVersions;
+  changedParts: AppDataPart[];
+  matchesChanged: boolean;
+  serverTime: string;
 };
 
 const VERSION_KEYS: Record<AppDataPart, string> = {
@@ -71,6 +81,10 @@ function normalizeParts(parts: AppDataPart[]) {
   return APP_DATA_PARTS.filter((part) => parts.includes(part));
 }
 
+function emptyLocalVersions(): Partial<AppPartVersions> {
+  return {};
+}
+
 export async function getDataVersion() {
   const { rows } = await sql`
     SELECT key, value FROM config
@@ -98,9 +112,45 @@ export async function getPartVersions(): Promise<AppPartVersions> {
   return versions;
 }
 
-export async function bumpDataVersions(parts: AppDataPart[], runner?: SqlRunner) {
+export async function getCacheEpoch() {
+  try {
+    const { rows } = await sql`
+      SELECT value FROM config WHERE key = ${CACHE_EPOCH_KEY} LIMIT 1
+    `;
+    return String(rows[0]?.value || 'legacy');
+  } catch {
+    return 'legacy';
+  }
+}
+
+export async function ensureCacheEpoch(runner?: SqlRunner) {
   const query = db(runner);
   await ensureConfigTable(runner);
+  const epoch = randomUUID();
+  const { rows } = await query`
+    INSERT INTO config (key, value)
+    VALUES (${CACHE_EPOCH_KEY}, ${epoch})
+    ON CONFLICT (key) DO UPDATE SET value = config.value
+    RETURNING value
+  `;
+  return String(rows[0]?.value || epoch);
+}
+
+export async function rotateCacheEpoch(runner?: SqlRunner) {
+  const query = db(runner);
+  await ensureConfigTable(runner);
+  const epoch = randomUUID();
+  await query`
+    INSERT INTO config (key, value)
+    VALUES (${CACHE_EPOCH_KEY}, ${epoch})
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+  `;
+  return epoch;
+}
+
+export async function bumpDataVersions(parts: AppDataPart[], runner?: SqlRunner) {
+  const query = db(runner);
+  await ensureCacheEpoch(runner);
   const selectedParts = normalizeParts(parts);
   const nextVersion = Date.now();
   const updates = [
@@ -118,6 +168,36 @@ export async function bumpDataVersions(parts: AppDataPart[], runner?: SqlRunner)
   }
 
   return nextVersion;
+}
+
+export async function getChangedPartVersions(parts: AppDataPart[]) {
+  const versions = await getPartVersions();
+  const selected = normalizeParts(parts);
+  return selected.reduce<Partial<AppPartVersions>>((acc, part) => {
+    acc[part] = versions[part];
+    return acc;
+  }, {});
+}
+
+export async function getSyncManifest(localParts?: Partial<AppPartVersions>): Promise<SyncManifest> {
+  const [partVersions, cacheEpoch, serverTimeResult] = await Promise.all([
+    getPartVersions(),
+    getCacheEpoch(),
+    sql`SELECT NOW() AS now`,
+  ]);
+  const local = localParts || emptyLocalVersions();
+  const changedParts = APP_DATA_PARTS.filter((part) => {
+    if (part === 'admin') return false;
+    return (partVersions[part] || 0) > (local[part] || 0);
+  });
+
+  return {
+    cacheEpoch,
+    partVersions,
+    changedParts,
+    matchesChanged: changedParts.includes('matches'),
+    serverTime: new Date(serverTimeResult.rows[0]?.now || Date.now()).toISOString(),
+  };
 }
 
 export async function bumpDataVersion() {

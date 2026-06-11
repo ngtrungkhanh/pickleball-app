@@ -23,8 +23,9 @@ import {
   updatePlayerAction,
   deletePlayerAction,
   getAppDataAction,
-  getAppDataManifestAction,
   getAppDataPartsAction,
+  getMatchesDeltaAction,
+  getSyncManifestAction,
   deleteMatchAction,
   togglePlayerActiveAction,
   updateMatchAction
@@ -32,6 +33,8 @@ import {
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import {
+  applyMatchesDeltaLocal,
+  clearAppCacheLocal,
   getAppCacheSnapshot,
   hasUsableAppCache,
   replaceAppCacheParts,
@@ -110,20 +113,28 @@ function clearPendingMatchEdit() {
 
 function getStaleParts(
   snapshot: Awaited<ReturnType<typeof getAppCacheSnapshot>>,
-  manifest: NonNullable<Awaited<ReturnType<typeof getAppDataManifestAction>>>,
+  manifest: NonNullable<Awaited<ReturnType<typeof getSyncManifestAction>>>,
 ) {
   const stale = new Set<AppCachePart>();
-  CORE_PARTS.forEach((part) => {
-    if ((manifest.parts[part] || 0) > (snapshot.partVersions[part] || 0)) {
-      stale.add(part);
-    }
+  manifest.changedParts.forEach((part) => {
+    if (CORE_PARTS.includes(part as AppCachePart)) stale.add(part as AppCachePart);
   });
-  if (manifest.counts.players > 0 && snapshot.players.length === 0) stale.add('players');
-  if (manifest.counts.matches > 0 && snapshot.matches.length === 0) stale.add('matches');
-  if (manifest.counts.seasons > 0 && snapshot.seasons.length === 0) stale.add('seasons');
-  if (manifest.counts.playerSeasonSettings > 0 && snapshot.playerSeasonSettings.length === 0) stale.add('playerSeasonSettings');
+  if (snapshot.players.length === 0) stale.add('players');
+  if (snapshot.matches.length === 0) stale.add('matches');
+  if (snapshot.seasons.length === 0) stale.add('seasons');
   if (Object.keys(snapshot.config).length === 0) stale.add('config');
   return Array.from(stale);
+}
+
+function pickPartVersions(
+  partVersions: Partial<Record<AppCachePart, number>> | undefined,
+  parts: AppCachePart[],
+) {
+  if (!partVersions) return undefined;
+  return parts.reduce<Partial<Record<AppCachePart, number>>>((acc, part) => {
+    if (typeof partVersions[part] === 'number') acc[part] = partVersions[part];
+    return acc;
+  }, {});
 }
 
 export default function AdminPage() {
@@ -180,31 +191,83 @@ export default function AdminPage() {
         applySnapshot(snapshot);
       }
 
-      const manifest = await getAppDataManifestAction();
+      const manifest = await getSyncManifestAction(snapshot.partVersions);
       if (!manifest) throw new Error('manifest unavailable');
       const staleParts = getStaleParts(snapshot, manifest);
 
-      if (staleParts.length > 0) {
-        const appData = await getAppDataPartsAction(staleParts);
+      if (manifest.cacheEpoch !== snapshot.cacheEpoch) {
+        await clearAppCacheLocal({ includeHallImages: true });
+        const appData = await getAppDataPartsAction(CORE_PARTS);
         if (!appData) throw new Error('app data unavailable');
-        await replaceAppCacheParts({
+        await seedAppCache({
           players: appData.players,
           matches: appData.matches,
           seasons: appData.seasons,
           config: appData.config,
-          playerSeasonSettings: appData.playerSeasonSettings || undefined,
-        }, {
+          playerSeasonSettings: appData.playerSeasonSettings || [],
           dataVersion: appData.dataVersion,
           partVersions: appData.partVersions,
+          cacheEpoch: appData.cacheEpoch || manifest.cacheEpoch,
+          matchesCursor: appData.serverTime ? { updatedAt: appData.serverTime, id: '' } : undefined,
           manifestCheckedAt: Date.now(),
         });
         snapshot = await getAppCacheSnapshot();
       } else {
-        await seedAppCache({
-          dataVersion: manifest.globalVersion,
-          partVersions: manifest.parts,
-          manifestCheckedAt: manifest.checkedAt,
-        });
+        const smallParts = staleParts.filter(part => part !== 'matches');
+        if (smallParts.length > 0) {
+          const appData = await getAppDataPartsAction(smallParts);
+          if (!appData) throw new Error('app data unavailable');
+          await replaceAppCacheParts({
+            players: appData.players,
+            seasons: appData.seasons,
+            config: appData.config,
+            playerSeasonSettings: appData.playerSeasonSettings || undefined,
+          }, {
+            dataVersion: appData.dataVersion,
+            partVersions: pickPartVersions(appData.partVersions, smallParts),
+            cacheEpoch: appData.cacheEpoch || manifest.cacheEpoch,
+            manifestCheckedAt: Date.now(),
+          });
+          snapshot = await getAppCacheSnapshot();
+        }
+        if (staleParts.includes('matches')) {
+          if (snapshot.matches.length === 0) {
+            const appData = await getAppDataPartsAction(CORE_PARTS);
+            if (!appData) throw new Error('app data unavailable');
+            await seedAppCache({
+              players: appData.players,
+              matches: appData.matches,
+              seasons: appData.seasons,
+              config: appData.config,
+              playerSeasonSettings: appData.playerSeasonSettings || [],
+              dataVersion: appData.dataVersion,
+              partVersions: appData.partVersions,
+              cacheEpoch: appData.cacheEpoch || manifest.cacheEpoch,
+              matchesCursor: appData.serverTime ? { updatedAt: appData.serverTime, id: '' } : undefined,
+              manifestCheckedAt: Date.now(),
+            });
+          } else {
+            let cursor = snapshot.matchesCursor;
+            for (let page = 0; page < 20; page += 1) {
+              const delta = await getMatchesDeltaAction(cursor);
+              await applyMatchesDeltaLocal(delta.matches, {
+                partVersions: delta.hasMore ? undefined : { matches: manifest.partVersions.matches, admin: manifest.partVersions.admin },
+                cacheEpoch: manifest.cacheEpoch,
+                matchesCursor: delta.hasMore ? delta.nextCursor : delta.finalCursor,
+                manifestCheckedAt: Date.now(),
+              });
+              cursor = delta.nextCursor;
+              if (!delta.hasMore) break;
+            }
+          }
+          snapshot = await getAppCacheSnapshot();
+        } else if (staleParts.length === 0) {
+          await seedAppCache({
+            partVersions: manifest.partVersions,
+            cacheEpoch: manifest.cacheEpoch,
+            manifestCheckedAt: Date.now(),
+          });
+        }
       }
 
       applySnapshot(snapshot);
@@ -376,6 +439,8 @@ export default function AdminPage() {
             playerSeasonSettings: appData.playerSeasonSettings || [],
             dataVersion: appData.dataVersion,
             partVersions: appData.partVersions,
+            cacheEpoch: appData.cacheEpoch,
+            matchesCursor: appData.serverTime ? { updatedAt: appData.serverTime, id: '' } : undefined,
             manifestCheckedAt: Date.now(),
           });
         }

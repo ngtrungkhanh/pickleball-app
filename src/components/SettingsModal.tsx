@@ -31,7 +31,7 @@ import {
   updateSeasonFineAction,
 } from '@/app/actions';
 import { cn } from '@/lib/utils';
-import { type StoredPlayerSeasonSetting } from '@/lib/db';
+import { type AppCachePart, type StoredPlayerSeasonSetting } from '@/lib/db';
 import { GUEST_NAME, isGuestId } from '@/lib/guest';
 import { buildHallOfFameEntries, type HallOfFameEntry } from '@/lib/hall-of-fame';
 import { getGlobalSelectedSeason, setGlobalSelectedSeason, isGlobalSeasonSet } from '@/lib/season-state';
@@ -62,6 +62,7 @@ type Props = {
   seasons: Season[];
   config: Record<string, string>;
   playerSeasonSettings?: StoredPlayerSeasonSetting[];
+  onDataChanged?: (parts?: AppCachePart[]) => void;
 };
 
 const tabs = [
@@ -171,7 +172,7 @@ async function resizeChampionImage(file: File) {
   throw new Error('Ảnh sau xử lý vẫn lớn hơn 1.5MB.');
 }
 
-export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, players, matches, seasons, config, playerSeasonSettings = [] }: Props) {
+export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, players, matches, seasons, config, playerSeasonSettings = [], onDataChanged }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<(typeof tabs)[number]['id']>(canEdit ? 'players' : 'access');
   const [password, setPassword] = useState('');
@@ -190,7 +191,8 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
 
   useEffect(() => {
     if (!isGlobalSeasonSet() && activeSeasonVal) {
-      setSelectedConfigSeason(activeSeasonVal);
+      const id = window.setTimeout(() => setSelectedConfigSeason(activeSeasonVal), 0);
+      return () => window.clearTimeout(id);
     }
   }, [activeSeasonVal]);
 
@@ -242,7 +244,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
 
   if (!open) return null;
 
-  const submit = async (action: (fd: FormData) => Promise<ActionResult>, formData: FormData, target: string, successText = 'Đã lưu') => {
+  const submit = async (action: (fd: FormData) => Promise<ActionResult>, formData: FormData, target: string, successText = 'Đã lưu', changedParts?: AppCachePart[]) => {
     if (isPending) return;
     setFeedback({ target, type: 'saving', text: 'Đang lưu...' });
     setIsSaving(true);
@@ -257,6 +259,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
 
       setFeedback({ target, type: 'success', text: successText });
       startTransition(() => {
+        onDataChanged?.(changedParts);
         router.refresh();
         setIsSaving(false);
       });
@@ -265,7 +268,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
     }
   };
 
-  const submitDirect = async (action: () => Promise<ActionResult>, target: string, successText = 'Đã lưu') => {
+  const submitDirect = async (action: () => Promise<ActionResult>, target: string, successText = 'Đã lưu', changedParts?: AppCachePart[]) => {
     if (isPending) return;
     setFeedback({ target, type: 'saving', text: 'Đang lưu...' });
     setIsSaving(true);
@@ -279,6 +282,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
       }
       setFeedback({ target, type: 'success', text: successText });
       startTransition(() => {
+        onDataChanged?.(changedParts);
         router.refresh();
         setIsSaving(false);
       });
@@ -306,6 +310,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
       }
       setFeedback({ target, type: 'success', text: 'Đã tải ảnh' });
       startTransition(() => {
+        onDataChanged?.(['seasons']);
         router.refresh();
         setIsSaving(false);
       });
@@ -336,6 +341,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
       }
       setFeedback({ target, type: 'success', text: 'Đã xóa ảnh' });
       startTransition(() => {
+        onDataChanged?.(['seasons']);
         router.refresh();
         setIsSaving(false);
       });
@@ -484,7 +490,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
               <div className="space-y-4">
                   <div className="space-y-2">
                     <div className="text-[10px] font-black text-slate-300/65 uppercase tracking-[0.2em] px-1">Thêm thành viên</div>
-                    <form action={(fd) => submit(addPlayerAction, fd, 'add-player', 'Đã thêm')} className="flex gap-2">
+                    <form action={(fd) => submit(addPlayerAction, fd, 'add-player', 'Đã thêm', ['players'])} className="flex gap-2">
                       <input name="name" placeholder="Tên thành viên..." className="flex-1 rounded-xl bg-[#0f1a2c] border border-slate-500/25 px-4 py-2.5 text-sm text-white outline-none focus:border-primary/50 transition-all" />
                       <button disabled={isPending} className="rounded-xl bg-primary px-5 py-2.5 text-[10px] font-black text-black uppercase tracking-widest active:scale-95 transition-all">Thêm</button>
                     </form>
@@ -524,7 +530,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                                     fd.append('active', String(p.active !== false));
                                     fd.append('pay_fine', String(p.pay_fine !== false));
                                     fd.append('hidden', String(p.hidden === true));
-                                    submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu');
+                                    submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu', ['players', 'playerSeasonSettings']);
                                   }
                                 }}
                                 className="flex-1 bg-transparent px-2 py-0.5 text-sm font-bold text-white outline-none focus:text-primary transition-colors min-w-0 disabled:text-primary disabled:cursor-not-allowed" 
@@ -539,9 +545,10 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                                 onChange={(e) => {
                                   const isChecked = e.target.checked;
                                   submitDirect(
-                                    () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, isChecked, p.pay_fine !== false, p.hidden === true),
-                                    `player-${p.id}`,
-                                    'Đã lưu'
+                                      () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, isChecked, p.pay_fine !== false, p.hidden === true),
+                                      `player-${p.id}`,
+                                      'Đã lưu',
+                                      ['playerSeasonSettings']
                                   );
                                 }}
                                 className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0" 
@@ -559,7 +566,8 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                                     submitDirect(
                                       () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, p.active !== false, isChecked, p.hidden === true),
                                       `player-${p.id}`,
-                                      'Đã lưu'
+                                      'Đã lưu',
+                                      ['playerSeasonSettings']
                                     );
                                   }}
                                   className="w-3.5 h-3.5 rounded border-amber-500/20 bg-white/5 text-amber-500 focus:ring-0 focus:ring-offset-0" 
@@ -578,7 +586,8 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                                     submitDirect(
                                       () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, p.active !== false, p.pay_fine !== false, isChecked),
                                       `player-${p.id}`,
-                                      'Đã lưu'
+                                      'Đã lưu',
+                                      ['playerSeasonSettings']
                                     );
                                   }}
                                   className="w-3.5 h-3.5 rounded border-slate-500/20 bg-white/5 text-slate-400 focus:ring-0 focus:ring-offset-0" 
@@ -608,7 +617,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-3">
                     <div className="text-[10px] font-black text-slate-300/70 uppercase tracking-[0.2em] px-1">Tạo Season mới</div>
-                    <form action={(fd) => submit(createSeasonAction, fd, 'create-season', 'Đã tạo')} className="flex gap-2">
+                    <form action={(fd) => submit(createSeasonAction, fd, 'create-season', 'Đã tạo', ['seasons', 'config'])} className="flex gap-2">
                       <input name="name" placeholder="Tên Season..." className="flex-1 rounded-2xl bg-[#0f1a2c] border border-slate-500/25 px-4 py-3 text-sm text-white outline-none focus:border-primary/50 transition-all" />
                       <button disabled={isPending} className="rounded-2xl bg-primary px-4 py-3 text-[10px] font-black text-black uppercase tracking-widest shadow-lg shadow-primary/10 active:scale-95 transition-all">Tạo</button>
                     </form>
@@ -618,7 +627,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                   <div className="space-y-3">
                     <div className="text-[10px] font-black text-slate-300/70 uppercase tracking-[0.2em] px-1">Kết thúc nhanh</div>
                     <button 
-                      onClick={() => submit(endSeasonAction, new FormData(), 'end-season', 'Đã bắt đầu Season mới')}
+                      onClick={() => submit(endSeasonAction, new FormData(), 'end-season', 'Đã bắt đầu Season mới', ['seasons', 'config'])}
                       disabled={isPending}
                       className="w-full rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] border border-slate-500/25 px-5 py-3 text-[10px] font-black text-white/60 hover:text-white uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2"
                     >
@@ -647,7 +656,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
 
                         <div className="flex items-center gap-2 shrink-0">
                           {!s.active && (
-                            <form action={(fd) => submit(setActiveSeasonAction, fd, `season-${s.name}`, 'Đã kích hoạt')}>
+                            <form action={(fd) => submit(setActiveSeasonAction, fd, `season-${s.name}`, 'Đã kích hoạt', ['seasons', 'config'])}>
                               <input type="hidden" name="name" value={s.name} />
                               <button disabled={isPending} className="rounded-lg bg-white/[0.07] hover:bg-white/[0.12] px-3 py-1.5 text-[9px] font-black text-slate-300/80 hover:text-white uppercase tracking-widest transition-all">
                                 Kích hoạt
@@ -761,7 +770,8 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                 submitDirect(
                   () => updateSeasonFineAction(seasonId, amount),
                   'fine',
-                  'Đã lưu'
+                  'Đã lưu',
+                  ['seasons', 'config']
                 );
               };
 
@@ -820,6 +830,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                             return;
                           }
                           setFeedback({ target: 'delete-player', type: 'success', text: 'Đã xóa' });
+                          onDataChanged?.(['players', 'matches', 'playerSeasonSettings']);
                           setDeleteTarget(null);
                           startTransition(() => {
                             router.refresh();
@@ -874,6 +885,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                             return;
                           }
                           setFeedback({ target: 'delete-season', type: 'success', text: 'Đã xóa' });
+                          onDataChanged?.(['seasons', 'matches', 'config', 'playerSeasonSettings']);
                           setDeleteSeasonTarget(null);
                           startTransition(() => {
                             router.refresh();

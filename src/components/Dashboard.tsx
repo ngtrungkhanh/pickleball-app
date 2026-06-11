@@ -602,8 +602,6 @@ export default function Dashboard({
         seasons,
         config,
         playerSeasonSettings: sharedData.playerSeasonSettings,
-        dataVersion: Number(config.data_version || 0) || 0,
-        manifestCheckedAt: Date.now(),
       });
     } catch (error) {
       console.error('Failed to prepare analysis cache:', error);
@@ -1071,6 +1069,7 @@ export default function Dashboard({
         seasons={seasons}
         config={config}
         playerSeasonSettings={sharedData.playerSeasonSettings}
+        onDataChanged={sharedData.refresh}
       />
     </div>
   );

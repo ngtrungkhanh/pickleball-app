@@ -7,8 +7,14 @@ import { previewWriteBlockedResult, shouldBlockPreviewWrites } from '@/lib/envir
 import {
   APP_DATA_PARTS,
   bumpDataVersions,
+  CACHE_EPOCH_KEY,
+  ensureCacheEpoch,
   ensureConfigTable as ensureSharedConfigTable,
+  getCacheEpoch,
   getAppManifest,
+  getChangedPartVersions,
+  getSyncManifest,
+  type AppDataPart,
 } from '@/lib/data-version';
 import { rebuildPlayerStatsFromMatches } from '@/lib/player-stats-rebuild';
 
@@ -75,6 +81,15 @@ async function ensureSoftDeleteColumns() {
   await ensurePlayerSeasonSettingsTable();
 }
 
+async function ensureMatchUpdatedAtColumn() {
+  await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`;
+}
+
+async function ensureSyncMetadata(runner?: DbClient) {
+  await ensureSharedConfigTable(runner);
+  await ensureCacheEpoch(runner);
+}
+
 // Kept for one-off guest cleanup migrations; hot save path uses ensureGuestPlayerFast.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function ensureGuestPlayer() {
@@ -111,31 +126,34 @@ async function ensureGuestPlayerFast(runner?: DbClient) {
   `;
 }
 
-async function getConfigValue(key: string, fallback: string) {
+async function getConfigValue(key: string, fallback: string, runner?: DbClient) {
   try {
-    const { rows } = await sql`SELECT value FROM config WHERE key = ${key} LIMIT 1`;
+    const query = getSqlRunner(runner);
+    const { rows } = await query`SELECT value FROM config WHERE key = ${key} LIMIT 1`;
     return rows[0]?.value ?? fallback;
   } catch {
     return fallback;
   }
 }
 
-async function setConfigValue(key: string, value: string) {
-  await ensureConfigTable();
-  await sql`
+async function setConfigValue(key: string, value: string, runner?: DbClient) {
+  if (!runner) await ensureConfigTable();
+  const query = getSqlRunner(runner);
+  await query`
     INSERT INTO config (key, value)
     VALUES (${key}, ${value})
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
   `;
 }
 
-async function getSeasonLoseMoney(season: string, options: { ensureSchema?: boolean } = {}) {
+async function getSeasonLoseMoney(season: string, options: { ensureSchema?: boolean; runner?: DbClient } = {}) {
   if (options.ensureSchema !== false) {
     await ensurePlayerSeasonSettingsTable();
   }
-  const fallback = parseInt(await getConfigValue('lose_money', '5000')) || 5000;
+  const query = getSqlRunner(options.runner);
+  const fallback = parseInt(await getConfigValue('lose_money', '5000', options.runner)) || 5000;
   try {
-    const { rows } = await sql`
+    const { rows } = await query`
       SELECT lose_money FROM seasons
       WHERE id = ${season} OR name = ${season}
       LIMIT 1
@@ -150,6 +168,13 @@ async function getSeasonLoseMoney(season: string, options: { ensureSchema?: bool
 
 type DbClient = any;
 type AppManifestParts = Awaited<ReturnType<typeof getAppManifest>>['parts'];
+type MutationMeta = {
+  dataVersion?: number;
+  partVersions?: Partial<AppManifestParts>;
+  changedPartVersions?: Partial<AppManifestParts>;
+  cacheEpoch: string;
+  serverTime: string;
+};
 
 function getSqlRunner(runner?: DbClient) {
   return runner?.sql ? runner.sql.bind(runner) as typeof sql : sql;
@@ -169,6 +194,24 @@ function getPostWriteVersions(fallbackDataVersion?: number | null): {
   };
 }
 
+async function getMutationMeta(parts: AppDataPart[], fallbackDataVersion?: number | null): Promise<MutationMeta> {
+  const [changedPartVersions, cacheEpoch, serverTimeResult] = await Promise.all([
+    getChangedPartVersions(parts),
+    getCacheEpoch(),
+    sql`SELECT NOW() AS now`,
+  ]);
+  const inferredVersion = typeof fallbackDataVersion === 'number'
+    ? fallbackDataVersion
+    : Math.max(0, ...Object.values(changedPartVersions).map(value => Number(value || 0)));
+  const legacy = inferredVersion > 0 ? getPostWriteVersions(inferredVersion) : {};
+  return {
+    ...legacy,
+    changedPartVersions,
+    cacheEpoch,
+    serverTime: new Date(serverTimeResult.rows[0]?.now || Date.now()).toISOString(),
+  };
+}
+
 function revalidateAfterWrite(paths: string[]) {
   try {
     paths.forEach(path => revalidatePath(path));
@@ -179,6 +222,7 @@ function revalidateAfterWrite(paths: string[]) {
 
 async function bumpMatchWriteVersions(runner?: DbClient) {
   const query = getSqlRunner(runner);
+  await ensureSyncMetadata(runner);
   const nextVersion = Date.now();
   const value = String(nextVersion);
   await query`
@@ -231,38 +275,8 @@ function normalizeMatchRow(row: any, fallbackSeason = 'Season 1') {
     client_request_id: row.client_request_id ? String(row.client_request_id) : null,
     deleted_at: row.deleted_at ? String(row.deleted_at) : null,
     delete_group_id: row.delete_group_id ? String(row.delete_group_id) : null,
+    updated_at: row.updated_at ? String(row.updated_at) : (row.date ? String(row.date) : new Date().toISOString()),
   };
-}
-
-async function updatePlayerStatsIncremental(playerId: string, season: string, deltaWins: number, deltaLosses: number, deltaMoney: number, runner?: DbClient) {
-  if (!playerId || isGuestId(playerId)) return;
-  const query = getSqlRunner(runner);
-  
-  let moneyToChange = deltaMoney;
-  if (deltaMoney !== 0) {
-    const { rows } = await query`
-      SELECT COALESCE(pss.pay_fine, p.pay_fine, TRUE) AS pay_fine
-      FROM players p
-      LEFT JOIN player_season_settings pss
-        ON pss.player_id = p.id AND pss.season = ${season}
-      WHERE p.id = ${playerId}
-      LIMIT 1
-    `;
-    if (rows[0] && rows[0].pay_fine === false) {
-      moneyToChange = 0;
-    }
-  }
-
-  await query`
-    INSERT INTO player_stats (player_id, season, wins, losses, total, money)
-    VALUES (${playerId}, ${season}, ${deltaWins}, ${deltaLosses}, ${deltaWins + deltaLosses}, ${moneyToChange})
-    ON CONFLICT (player_id, season) DO UPDATE SET
-      wins = player_stats.wins + EXCLUDED.wins,
-      losses = player_stats.losses + EXCLUDED.losses,
-      total = player_stats.total + EXCLUDED.total,
-      money = player_stats.money + EXCLUDED.money,
-      last_updated = NOW()
-  `;
 }
 
 type StatsDelta = {
@@ -355,6 +369,8 @@ export async function addMatchAction(formData: FormData) {
 
   try {
     stage = 'prepare match';
+    await ensureMatchUpdatedAtColumn();
+    await ensureSyncMetadata();
     const selectedPlayerIds = Array.from(new Set([win_1, win_2, lose_1, lose_2].filter(Boolean)));
     const hasGuest = matchHasGuest({ win_1, win_2, lose_1, lose_2 });
     if (hasGuest) {
@@ -449,13 +465,14 @@ export async function addMatchAction(formData: FormData) {
     }
 
     stage = 'post-write version';
-    const versions = getPostWriteVersions(txResult.dataVersion);
+    const versions = await getMutationMeta(['matches', 'admin'], txResult.dataVersion);
 
     stage = 'revalidate';
     revalidateAfterWrite(['/', '/analysis']);
     return {
       success: true,
       ...versions,
+      canonical: txResult.match,
       match: txResult.match,
     };
   } catch (error) {
@@ -473,6 +490,8 @@ export async function deleteMatchAction(matchId: string) {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
 
   try {
+    await ensureMatchUpdatedAtColumn();
+    await ensureSyncMetadata();
     const txResult = await withTransaction(async (client) => {
       await client.sql`SELECT pg_advisory_xact_lock(hashtext(${`delete:${matchId}`}))`;
       const { rows } = await client.sql`SELECT * FROM matches WHERE id = ${matchId} LIMIT 1`;
@@ -489,19 +508,20 @@ export async function deleteMatchAction(matchId: string) {
       await applyMatchStatsDelta(m, String(m.season || 'Season 1'), lose_money, -1, client);
 
       const groupId = `delete-match-${matchId}-${Date.now().toString(36)}`;
-      await client.sql`UPDATE matches SET deleted_at = NOW(), delete_group_id = ${groupId} WHERE id = ${matchId} AND deleted_at IS NULL`;
+      await client.sql`UPDATE matches SET deleted_at = NOW(), updated_at = NOW(), delete_group_id = ${groupId} WHERE id = ${matchId} AND deleted_at IS NULL`;
 
       await logAudit('DELETE_MATCH', `Deleted Match ${matchId}`, client);
       const dataVersion = await bumpMatchWriteVersions(client);
       return { success: true, deletedMatchId: matchId, dataVersion };
     });
 
-    const versions = getPostWriteVersions(txResult.dataVersion);
+    const versions = await getMutationMeta(['matches', 'admin'], txResult.dataVersion);
 
     revalidateAfterWrite(['/', '/history', '/analysis']);
     return {
       success: true,
       deletedMatchId: matchId,
+      deletedId: matchId,
       ...versions,
     };
 
@@ -522,11 +542,12 @@ export async function addPlayerAction(formData: FormData) {
     await sql`INSERT INTO players (id, name, active) VALUES (${id}, ${name}, true)`;
     
     await logAudit('ADD_PLAYER', `Added player ${name} (${id})`);
-    await bumpDataVersions(['players', 'admin']);
+    const dataVersion = await bumpDataVersions(['players', 'admin']);
+    const versions = await getMutationMeta(['players', 'admin'], dataVersion);
 
     revalidatePath('/');
     revalidatePath('/analysis');
-    return { success: true };
+    return { success: true, ...versions };
   } catch (error) {
     console.error('Failed to add player:', error);
     return { error: 'Lỗi khi thêm thành viên. Kiểm tra lại database/setup.' };
@@ -603,51 +624,55 @@ export async function deletePlayerAction(formData: FormData) {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
 
   try {
+    await ensureMatchUpdatedAtColumn();
+    await ensureSyncMetadata();
     const id = String(formData.get('id') || '').trim();
     if (isGuestId(id)) return { error: 'Không được xóa Khách' };
     if (!id) return { error: 'Thành viên không hợp lệ' };
 
     await ensureArchiveTable();
     await ensureSoftDeleteColumns();
-    await ensureSoftDeleteColumns();
 
-    // Get player info
-    const { rows: players } = await sql`SELECT * FROM players WHERE id = ${id}`;
-    if (players.length === 0) return { error: 'Không tìm thấy thành viên' };
+    const txResult = await withTransaction(async (client) => {
+      await client.sql`SELECT pg_advisory_xact_lock(hashtext(${`delete-player:${id}`}))`;
+      const { rows: players } = await client.sql`SELECT * FROM players WHERE id = ${id} FOR UPDATE`;
+      if (players.length === 0) return { error: 'Player not found' };
 
-    // Get all related matches
-    const { rows: matches } = await sql`
-      SELECT * FROM matches 
-      WHERE deleted_at IS NULL
-        AND (win_1 = ${id} OR win_2 = ${id} OR lose_1 = ${id} OR lose_2 = ${id})
-    `;
+      const { rows: matches } = await client.sql`
+        SELECT * FROM matches
+        WHERE deleted_at IS NULL
+          AND (win_1 = ${id} OR win_2 = ${id} OR lose_1 = ${id} OR lose_2 = ${id})
+        FOR UPDATE
+      `;
 
-    // Archive data
-    const archiveData = { player: players[0], matches };
-    await sql`
-      INSERT INTO archives (type, original_id, name, data)
-      VALUES ('PLAYER', ${id}, ${players[0].name}, ${JSON.stringify(archiveData)})
-    `;
+      const archiveData = { player: players[0], matches };
+      await client.sql`
+        INSERT INTO archives (type, original_id, name, data)
+        VALUES ('PLAYER', ${id}, ${players[0].name}, ${JSON.stringify(archiveData)})
+      `;
 
-    const groupId = `delete-player-${id}-${Date.now().toString(36)}`;
-    await sql`
-      UPDATE matches
-      SET deleted_at = NOW(), delete_group_id = ${groupId}
-      WHERE deleted_at IS NULL
-        AND (win_1 = ${id} OR win_2 = ${id} OR lose_1 = ${id} OR lose_2 = ${id})
-    `;
-    await sql`UPDATE players SET deleted_at = NOW(), active = false, delete_group_id = ${groupId} WHERE id = ${id}`;
-    
-    // Also clean up stats for this player
-    await sql`DELETE FROM player_stats WHERE player_id = ${id}`;
+      const groupId = `delete-player-${id}-${Date.now().toString(36)}`;
+      await client.sql`
+        UPDATE matches
+        SET deleted_at = NOW(), updated_at = NOW(), delete_group_id = ${groupId}
+        WHERE deleted_at IS NULL
+          AND (win_1 = ${id} OR win_2 = ${id} OR lose_1 = ${id} OR lose_2 = ${id})
+      `;
+      await client.sql`UPDATE players SET deleted_at = NOW(), active = false, delete_group_id = ${groupId} WHERE id = ${id}`;
+      await client.sql`DELETE FROM player_stats WHERE player_id = ${id}`;
 
-    await rebuildStatsAction();
-    await logAudit('DELETE_PLAYER', `Soft deleted player ${players[0].name} (${id}) and ${matches.length} related matches.`);
-    await bumpDataVersions(['players', 'matches', 'playerSeasonSettings', 'admin']);
+      await rebuildPlayerStatsFromMatches(client);
+      await logAudit('DELETE_PLAYER', `Soft deleted player ${players[0].name} (${id}) and ${matches.length} related matches.`, client);
+      const dataVersion = await bumpDataVersions(['players', 'matches', 'playerSeasonSettings', 'admin'], client);
+      return { success: true, dataVersion };
+    });
+
+    if ('error' in txResult) return txResult;
+    const versions = await getMutationMeta(['players', 'matches', 'playerSeasonSettings', 'admin'], txResult.dataVersion);
 
     revalidatePath('/');
     revalidatePath('/analysis');
-    return { success: true };
+    return { success: true, ...versions };
   } catch (error) {
     console.error('Failed to destructive delete player:', error);
     return { error: 'Lỗi khi xóa thành viên và dữ liệu liên quan.' };
@@ -658,39 +683,43 @@ export async function deleteSeasonAction(formData: FormData) {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
 
   try {
+    await ensureMatchUpdatedAtColumn();
+    await ensureSyncMetadata();
     const name = String(formData.get('name') || '').trim();
     if (!name) return { error: 'Season không hợp lệ' };
 
     await ensureArchiveTable();
 
-    // Get season info
-    const { rows: seasons } = await sql`SELECT * FROM seasons WHERE name = ${name}`;
-    
-    // Get all matches in this season
-    const { rows: matches } = await sql`SELECT * FROM matches WHERE season = ${name} AND deleted_at IS NULL`;
+    const txResult = await withTransaction(async (client) => {
+      await client.sql`SELECT pg_advisory_xact_lock(hashtext(${`delete-season:${name}`}))`;
+      const { rows: seasons } = await client.sql`SELECT * FROM seasons WHERE name = ${name} FOR UPDATE`;
+      const { rows: matches } = await client.sql`SELECT * FROM matches WHERE season = ${name} AND deleted_at IS NULL FOR UPDATE`;
 
-    // Archive
-    const archiveData = { season: seasons[0] || { name }, matches };
-    await sql`
-      INSERT INTO archives (type, original_id, name, data)
-      VALUES ('SEASON', ${name}, ${name}, ${JSON.stringify(archiveData)})
-    `;
+      const archiveData = { season: seasons[0] || { name }, matches };
+      await client.sql`
+        INSERT INTO archives (type, original_id, name, data)
+        VALUES ('SEASON', ${name}, ${name}, ${JSON.stringify(archiveData)})
+      `;
 
-    const groupId = `delete-season-${name}-${Date.now().toString(36)}`;
-    await sql`UPDATE matches SET deleted_at = NOW(), delete_group_id = ${groupId} WHERE season = ${name} AND deleted_at IS NULL`;
-    await sql`UPDATE seasons SET archived = true WHERE name = ${name}`;
-    
-    // If we deleted the active season, we should probably set another one as active or clear config
-    const activeSeason = await getConfigValue('active_season', '');
-    if (activeSeason === name) {
-      await sql`DELETE FROM config WHERE key = 'active_season'`;
-    }
+      const groupId = `delete-season-${name}-${Date.now().toString(36)}`;
+      await client.sql`UPDATE matches SET deleted_at = NOW(), updated_at = NOW(), delete_group_id = ${groupId} WHERE season = ${name} AND deleted_at IS NULL`;
+      await client.sql`UPDATE seasons SET archived = true, active = false WHERE name = ${name}`;
 
-    await rebuildStatsAction();
-    await bumpDataVersions(['seasons', 'matches', 'config', 'playerSeasonSettings', 'admin']);
+      const activeSeason = await getConfigValue('active_season', '', client);
+      if (activeSeason === name) {
+        await client.sql`DELETE FROM config WHERE key = 'active_season'`;
+      }
+
+      await rebuildPlayerStatsFromMatches(client);
+      await logAudit('DELETE_SEASON', `Soft deleted season ${name} and ${matches.length} matches.`, client);
+      const dataVersion = await bumpDataVersions(['seasons', 'matches', 'config', 'playerSeasonSettings', 'admin'], client);
+      return { success: true, dataVersion };
+    });
+
+    const versions = await getMutationMeta(['seasons', 'matches', 'config', 'playerSeasonSettings', 'admin'], txResult.dataVersion);
     revalidatePath('/');
     revalidatePath('/analysis');
-    return { success: true };
+    return { success: true, ...versions };
   } catch (error) {
     console.error('Failed to delete season:', error);
     return { error: 'Lỗi khi xóa Season.' };
@@ -1026,6 +1055,51 @@ export async function verifyAdminAction(pass: string) {
   return { success: false, error: 'Mật khẩu sai' };
 }
 
+export async function getSyncManifestAction(localPartVersions?: Partial<AppManifestParts>) {
+  try {
+    return await getSyncManifest(localPartVersions);
+  } catch (error) {
+    console.error('Fetch sync manifest failed:', error);
+    throw new Error('sync manifest unavailable');
+  }
+}
+
+export async function getMatchesDeltaAction(cursor?: { updatedAt?: string; id?: string } | string | null) {
+  try {
+    await ensureMatchUpdatedAtColumn();
+    const cursorUpdatedAt = typeof cursor === 'string'
+      ? cursor
+      : cursor?.updatedAt || '1970-01-01T00:00:00.000Z';
+    const cursorId = typeof cursor === 'string' ? '' : cursor?.id || '';
+    const { rows: cutoffRows } = await sql`SELECT NOW() AS cutoff`;
+    const cutoff = new Date(cutoffRows[0]?.cutoff || Date.now()).toISOString();
+    const { rows } = await sql`
+      SELECT *
+      FROM matches
+      WHERE updated_at <= ${cutoff}
+        AND (
+          updated_at > ${cursorUpdatedAt}
+          OR (updated_at = ${cursorUpdatedAt} AND id > ${cursorId})
+        )
+      ORDER BY updated_at ASC, id ASC
+      LIMIT 500
+    `;
+    const matches = normalizeMatchRows(rows);
+    const last = rows[rows.length - 1];
+    return {
+      matches,
+      hasMore: rows.length === 500,
+      nextCursor: last
+        ? { updatedAt: new Date(last.updated_at || cutoff).toISOString(), id: String(last.id || '') }
+        : { updatedAt: cutoff, id: '' },
+      finalCursor: { updatedAt: cutoff, id: '' },
+    };
+  } catch (error) {
+    console.error('Fetch matches delta failed:', error);
+    throw new Error('matches delta unavailable');
+  }
+}
+
 export async function getAppDataManifestAction() {
   try {
     return await getAppManifest();
@@ -1085,6 +1159,7 @@ function normalizeMatchRows(rows: any[]) {
     client_request_id: row.client_request_id ? String(row.client_request_id) : null,
     deleted_at: row.deleted_at ? String(row.deleted_at) : null,
     delete_group_id: row.delete_group_id ? String(row.delete_group_id) : null,
+    updated_at: row.updated_at ? String(row.updated_at) : (row.date ? String(row.date) : new Date().toISOString()),
   }));
 }
 
@@ -1132,6 +1207,8 @@ export async function getAppDataPartsAction(parts?: string[]) {
       manifest: Awaited<ReturnType<typeof getAppManifest>>;
       dataVersion: number;
       partVersions: Awaited<ReturnType<typeof getAppManifest>>['parts'];
+      cacheEpoch?: string;
+      serverTime?: string;
     } = {
       manifest: {
         globalVersion: 0,
@@ -1208,6 +1285,8 @@ export async function getAppDataPartsAction(parts?: string[]) {
       response.manifest = await getAppManifest();
       response.dataVersion = response.manifest.globalVersion;
       response.partVersions = response.manifest.parts;
+      response.cacheEpoch = await getCacheEpoch();
+      response.serverTime = new Date().toISOString();
     } catch (error) {
       console.error('Fetch app data manifest after parts failed:', error);
       const configVersion = Number(response.config?.version_global || response.config?.data_version || 0) || 0;
@@ -1232,6 +1311,8 @@ export async function getAppDataPartsAction(parts?: string[]) {
       };
       response.dataVersion = configVersion;
       response.partVersions = response.manifest.parts;
+      response.cacheEpoch = response.config?.[CACHE_EPOCH_KEY] || 'legacy';
+      response.serverTime = new Date().toISOString();
     }
 
     return response;
@@ -1313,6 +1394,8 @@ export async function updateMatchAction(formData: FormData) {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
 
   try {
+    await ensureMatchUpdatedAtColumn();
+    await ensureSyncMetadata();
     const id = String(formData.get('id') || '');
     const win_1 = String(formData.get('win_1') || '');
     const win_2 = (formData.get('win_2') as string) || null;
@@ -1324,61 +1407,56 @@ export async function updateMatchAction(formData: FormData) {
 
     if (!id || !win_1 || !lose_1) return { error: 'Thông tin trận đấu không hợp lệ' };
 
-    // Get old match first to reverse stats
-    const { rows } = await sql`SELECT * FROM matches WHERE id = ${id}`;
-    if (rows.length === 0) return { error: 'Không tìm thấy trận đấu cũ' };
-    const old = rows[0];
+    await ensurePlayerSeasonSettingsTable();
 
-    const lose_money = await getSeasonLoseMoney(String(old.season || 'Season 1'));
-    const oldHasGuest = matchHasGuest(old);
-    const newHasGuest = matchHasGuest({ win_1, win_2, lose_1, lose_2 });
+    const txResult = await withTransaction(async (client) => {
+      await client.sql`SELECT pg_advisory_xact_lock(hashtext(${`update-match:${id}`}))`;
+      const { rows } = await client.sql`SELECT * FROM matches WHERE id = ${id} LIMIT 1 FOR UPDATE`;
+      if (rows.length === 0) return { error: 'Match not found' };
+      const old = rows[0];
+      const season = String(old.season || 'Season 1');
+      const loseMoney = await getSeasonLoseMoney(season, { ensureSchema: false, runner: client });
 
-    // 1. Reverse old stats
-    if (!oldHasGuest) {
-      await updatePlayerStatsIncremental(old.win_1, old.season, -1, 0, 0);
-      if (old.win_2) await updatePlayerStatsIncremental(old.win_2, old.season, -1, 0, 0);
-      await updatePlayerStatsIncremental(old.lose_1, old.season, 0, -1, 0);
-      if (old.lose_2) await updatePlayerStatsIncremental(old.lose_2, old.season, 0, -1, 0);
-    }
-    await updatePlayerStatsIncremental(old.lose_1, old.season, 0, 0, -lose_money);
-    if (old.lose_2) await updatePlayerStatsIncremental(old.lose_2, old.season, 0, 0, -lose_money);
+      let dateVal: Date;
+      if (dateStr && dateStr.includes('T')) {
+        const [datePart, timePart] = dateStr.split('T');
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hour, minute] = timePart.split(':').map(Number);
+        const isoString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+07:00`;
+        dateVal = new Date(isoString);
+      } else {
+        dateVal = new Date(old.date);
+      }
 
-    // 2. Update match details
-    let dateVal: Date;
-    if (dateStr && dateStr.includes('T')) {
-      // datetime-local gửi về dạng "YYYY-MM-DDTHH:mm" (local time của user)
-      // Thêm timezone +07:00 để JavaScript parse đúng giờ Việt Nam, rồi convert sang UTC để lưu
-      const [datePart, timePart] = dateStr.split('T');
-      const [year, month, day] = datePart.split('-').map(Number);
-      const [hour, minute] = timePart.split(':').map(Number);
-      const isoString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+07:00`;
-      dateVal = new Date(isoString);
-    } else {
-      dateVal = new Date(old.date);
-    }
-    await sql`
-      UPDATE matches 
-      SET win_1 = ${win_1}, win_2 = ${win_2}, lose_1 = ${lose_1}, lose_2 = ${lose_2}, 
-          win_score = ${win_score}, lose_score = ${lose_score}, date = ${dateVal.toISOString()}
-      WHERE id = ${id}
-    `;
+      await applyMatchStatsDelta(old, season, loseMoney, -1, client);
 
-    // 3. Apply new stats
-    if (!newHasGuest) {
-      await updatePlayerStatsIncremental(win_1, old.season, 1, 0, 0);
-      if (win_2) await updatePlayerStatsIncremental(win_2, old.season, 1, 0, 0);
-      await updatePlayerStatsIncremental(lose_1, old.season, 0, 1, 0);
-      if (lose_2) await updatePlayerStatsIncremental(lose_2, old.season, 0, 1, 0);
-    }
-    await updatePlayerStatsIncremental(lose_1, old.season, 0, 0, lose_money);
-    if (lose_2) await updatePlayerStatsIncremental(lose_2, old.season, 0, 0, lose_money);
+      const { rows: updatedRows } = await client.sql`
+        UPDATE matches
+        SET win_1 = ${win_1}, win_2 = ${win_2}, lose_1 = ${lose_1}, lose_2 = ${lose_2},
+            win_score = ${win_score}, lose_score = ${lose_score}, date = ${dateVal.toISOString()}, updated_at = NOW()
+        WHERE id = ${id}
+        RETURNING *
+      `;
+      const updatedRow = updatedRows[0];
+      if (!updatedRow) return { error: 'Match not found' };
 
-    await logAudit('UPDATE_MATCH', `Updated Match ${id}: ${win_1}${win_2 ? '/' + win_2 : ''} vs ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
-    await bumpDataVersions(['matches', 'admin']);
+      await applyMatchStatsDelta(updatedRow, season, loseMoney, 1, client);
+      await logAudit('UPDATE_MATCH', `Updated Match ${id}: ${win_1}${win_2 ? '/' + win_2 : ''} vs ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`, client);
+      const dataVersion = await bumpDataVersions(['matches', 'admin'], client);
+      return {
+        success: true,
+        dataVersion,
+        match: normalizeMatchRow(updatedRow, season),
+      };
+    });
+
+    if ('error' in txResult) return txResult;
+    const versions = await getMutationMeta(['matches', 'admin'], txResult.dataVersion);
+    const updatedMatch = txResult.match;
 
     revalidatePath('/');
     revalidatePath('/analysis');
-    return { success: true };
+    return { success: true, ...versions, canonical: updatedMatch, match: updatedMatch };
   } catch (error: unknown) {
     console.error('Update match failed:', error);
     const message = error instanceof Error ? error.message : String(error);

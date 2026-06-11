@@ -27,6 +27,10 @@ export const APP_CACHE_PARTS = [
 
 export type AppCachePart = typeof APP_CACHE_PARTS[number];
 export type AppCachePartVersions = Record<AppCachePart, number>;
+export type MatchesCursor = {
+  updatedAt: string;
+  id: string;
+};
 
 export type StoredMatch = {
   id?: string;
@@ -87,6 +91,8 @@ export type AppCacheInput = {
   playerSeasonSettings?: StoredPlayerSeasonSetting[];
   dataVersion?: number;
   partVersions?: Partial<AppCachePartVersions>;
+  cacheEpoch?: string;
+  matchesCursor?: MatchesCursor | string | null;
   manifestCheckedAt?: number;
 };
 
@@ -98,6 +104,8 @@ export type AppCacheSnapshot = {
   playerSeasonSettings: StoredPlayerSeasonSetting[];
   dataVersion: number;
   partVersions: AppCachePartVersions;
+  cacheEpoch: string;
+  matchesCursor: MatchesCursor | null;
   lastManifestCheck: number;
 };
 
@@ -156,10 +164,24 @@ function normalizePartVersions(input: unknown, fallbackVersion = 0): AppCachePar
 }
 
 function mergePartVersions(current: unknown, updates: Partial<AppCachePartVersions> | undefined, fallbackVersion = 0): AppCachePartVersions {
-  return normalizePartVersions({
-    ...normalizePartVersions(current, fallbackVersion),
-    ...(updates || {}),
-  }, fallbackVersion);
+  const hasUpdates = updates && Object.keys(updates).length > 0;
+  if (hasUpdates) {
+    return normalizePartVersions({
+      ...normalizePartVersions(current, 0),
+      ...updates,
+    }, 0);
+  }
+  return normalizePartVersions(current, fallbackVersion);
+}
+
+function normalizeMatchesCursor(input: unknown): MatchesCursor | null {
+  if (typeof input === 'string' && input) return { updatedAt: input, id: '' };
+  if (typeof input === 'object' && input !== null) {
+    const record = input as Record<string, unknown>;
+    const updatedAt = String(record.updatedAt || '');
+    if (updatedAt) return { updatedAt, id: String(record.id || '') };
+  }
+  return null;
 }
 
 export async function openDB(): Promise<IDBDatabase> {
@@ -296,6 +318,71 @@ export async function replaceOptimisticMatchLocal(tempId: string, match: StoredM
   emitCacheChange();
 }
 
+export async function applyMatchesDeltaLocal(matches: StoredMatch[], meta?: {
+  dataVersion?: number;
+  partVersions?: Partial<AppCachePartVersions>;
+  cacheEpoch?: string;
+  matchesCursor?: MatchesCursor | string | null;
+  manifestCheckedAt?: number;
+}) {
+  const currentPartVersions = meta?.partVersions || typeof meta?.dataVersion === 'number'
+    ? await getMetaValue<unknown>('partVersions', null)
+    : null;
+  const db = await openDB();
+  const tx = db.transaction([STORES.matches, STORES.syncMeta], 'readwrite');
+  const matchStore = tx.objectStore(STORES.matches);
+  const metaStore = tx.objectStore(STORES.syncMeta);
+
+  matches.forEach((match) => {
+    const id = String(match.id || '');
+    if (!id) return;
+    if (match.deleted_at) matchStore.delete(id);
+    else matchStore.put(match);
+  });
+
+  if (typeof meta?.dataVersion === 'number') {
+    metaStore.put({ key: 'dataVersion', value: meta.dataVersion });
+  }
+  if (meta?.partVersions || typeof meta?.dataVersion === 'number') {
+    metaStore.put({ key: 'partVersions', value: mergePartVersions(currentPartVersions, meta?.partVersions, meta?.dataVersion) });
+  }
+  if (meta?.cacheEpoch) {
+    metaStore.put({ key: 'cacheEpoch', value: meta.cacheEpoch });
+  }
+  if (meta?.matchesCursor !== undefined) {
+    metaStore.put({ key: 'matchesCursor', value: normalizeMatchesCursor(meta.matchesCursor) });
+  }
+  if (typeof meta?.manifestCheckedAt === 'number') {
+    metaStore.put({ key: 'lastManifestCheck', value: meta.manifestCheckedAt });
+  }
+
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+  emitCacheChange();
+}
+
+export async function clearAppCacheLocal(options: { includeHallImages?: boolean } = {}) {
+  const stores = [
+    STORES.matches,
+    STORES.players,
+    STORES.seasons,
+    STORES.config,
+    STORES.playerSeasonSettings,
+    STORES.syncMeta,
+    ...(options.includeHallImages ? [STORES.hallImages] : []),
+  ];
+  const db = await openDB();
+  const tx = db.transaction(stores, 'readwrite');
+  stores.forEach((storeName) => tx.objectStore(storeName).clear());
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+  emitCacheChange();
+}
+
 export async function getLocalMatches(): Promise<StoredMatch[]> {
   const matches = await getAllFromStore<StoredMatch>(STORES.matches);
   return sortMatchesNewestFirst(matches);
@@ -307,12 +394,13 @@ export async function getLastMatchId(): Promise<string | null> {
 }
 
 export async function seedAppCache(input: AppCacheInput) {
+  if (input.matches) await replaceStore(STORES.matches, uniqueMatches(input.matches));
+  if (input.players) await replaceStore(STORES.players, input.players);
+  if (input.seasons) await replaceStore(STORES.seasons, input.seasons);
+  if (input.config) await replaceStore(STORES.config, configToEntries(input.config));
+  if (input.playerSeasonSettings) await replaceStore(STORES.playerSeasonSettings, input.playerSeasonSettings);
+
   const writes: Array<Promise<unknown>> = [];
-  if (input.matches) writes.push(replaceMatchesLocal(input.matches));
-  if (input.players) writes.push(replaceStore(STORES.players, input.players));
-  if (input.seasons) writes.push(replaceStore(STORES.seasons, input.seasons));
-  if (input.config) writes.push(replaceStore(STORES.config, configToEntries(input.config)));
-  if (input.playerSeasonSettings) writes.push(replaceStore(STORES.playerSeasonSettings, input.playerSeasonSettings));
   if (typeof input.dataVersion === 'number') {
     writes.push(setMetaValue('dataVersion', input.dataVersion));
   }
@@ -324,6 +412,12 @@ export async function seedAppCache(input: AppCacheInput) {
   if (typeof input.manifestCheckedAt === 'number') {
     writes.push(setMetaValue('lastManifestCheck', input.manifestCheckedAt));
   }
+  if (input.cacheEpoch) {
+    writes.push(setMetaValue('cacheEpoch', input.cacheEpoch));
+  }
+  if (input.matchesCursor !== undefined) {
+    writes.push(setMetaValue('matchesCursor', normalizeMatchesCursor(input.matchesCursor)));
+  }
   await Promise.all(writes);
   emitCacheChange();
 }
@@ -331,18 +425,22 @@ export async function seedAppCache(input: AppCacheInput) {
 export async function replaceAppCacheParts(input: AppCachePartsInput, meta?: {
   dataVersion?: number;
   partVersions?: Partial<AppCachePartVersions>;
+  cacheEpoch?: string;
+  matchesCursor?: MatchesCursor | string | null;
   manifestCheckedAt?: number;
 }) {
   await seedAppCache({
     ...input,
     dataVersion: meta?.dataVersion,
     partVersions: meta?.partVersions,
+    cacheEpoch: meta?.cacheEpoch,
+    matchesCursor: meta?.matchesCursor,
     manifestCheckedAt: meta?.manifestCheckedAt,
   });
 }
 
 export async function getAppCacheSnapshot(): Promise<AppCacheSnapshot> {
-  const [players, matches, seasons, configEntries, playerSeasonSettings, dataVersion, rawPartVersions, lastManifestCheck] = await Promise.all([
+  const [players, matches, seasons, configEntries, playerSeasonSettings, dataVersion, rawPartVersions, cacheEpoch, rawMatchesCursor, lastManifestCheck] = await Promise.all([
     getAllFromStore<StoredPlayer>(STORES.players),
     getLocalMatches(),
     getAllFromStore<StoredSeason>(STORES.seasons),
@@ -350,6 +448,8 @@ export async function getAppCacheSnapshot(): Promise<AppCacheSnapshot> {
     getAllFromStore<StoredPlayerSeasonSetting>(STORES.playerSeasonSettings),
     getMetaValue<number>('dataVersion', 0),
     getMetaValue<unknown>('partVersions', null),
+    getMetaValue<string>('cacheEpoch', 'legacy'),
+    getMetaValue<unknown>('matchesCursor', null),
     getMetaValue<number>('lastManifestCheck', 0),
   ]);
 
@@ -363,6 +463,8 @@ export async function getAppCacheSnapshot(): Promise<AppCacheSnapshot> {
     playerSeasonSettings,
     dataVersion,
     partVersions,
+    cacheEpoch,
+    matchesCursor: normalizeMatchesCursor(rawMatchesCursor),
     lastManifestCheck,
   };
 }

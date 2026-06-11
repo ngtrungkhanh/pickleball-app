@@ -30,7 +30,11 @@ The exact schema lives in setup/migration code. Current important concepts:
 
 - `players` - members, active state, and display names
 - `matches` - match history
+  - `updated_at` is the cursor column for match delta sync.
 - `config` - app config such as active season and fine amount
+  - Sync metadata keys include `cache_epoch`, `version_matches`,
+    `version_players`, `version_seasons`, `version_config`,
+    `version_player_season_settings`, and `version_admin`.
 - `seasons` - season records, including seasons with 0 matches
   - Hall of Fame image metadata lives on `seasons`:
     `champion_image_url`, `champion_image_path`, and
@@ -46,6 +50,9 @@ Critical constraints:
 - New matches must set both explicitly.
 - New matches must use `config.active_season`.
 - Soft-deleted records use `deleted_at` and optional `delete_group_id`.
+- Bulk/destructive restore/import rotates `cache_epoch`. When the browser sees
+  a new epoch, it clears the app IndexedDB cache and reseeds from Postgres so
+  old local rows cannot reappear.
 
 ## Read Flow
 
@@ -53,21 +60,26 @@ Normal viewing should be cheap:
 
 1. `/` is a static client shell.
 2. Dashboard reads IndexedDB first and renders immediately when cache exists.
-3. Dashboard checks a lightweight multi-part manifest and only downloads stale
-   parts.
+3. Dashboard checks a lightweight per-part sync manifest and only downloads
+   stale parts.
 4. Client-side filtering/sorting handles common UI changes without extra DB
    calls where practical.
 
-Expected match volume is only a few hundred records, so v1 still refreshes full
-matches when `matches` is stale. It does not re-download matches when only
-config, seasons, or player metadata changed.
+`matches` is the only large app part in the current sync design. When match data
+is stale, the client uses `getMatchesDeltaAction(cursor)` and applies active or
+soft-deleted rows by `updated_at`; it does not re-download full matches during
+normal sync. Full match fetch remains reserved for first bootstrap, empty cache,
+epoch reset, restore/import recovery, or explicit recovery. Smaller parts such
+as players, seasons, config, and player-season settings are fetched full when
+their part version is stale.
 
 Route cache notes:
 
 - `/` is a static client shell and uses manifest/parts server actions after
   first paint.
-- `/analysis` is a static client shell and reads only the shared IndexedDB
-  route cache.
+- `/analysis` is a static client shell. It renders from shared IndexedDB first,
+  fetches full app parts only when the cache is empty, and otherwise uses a
+  throttled sync check.
 - `/history` and `/add-match` are removed. Full history and match entry live on
   the Dashboard.
 - Server actions revalidate `/` and/or `/analysis` after writes.
@@ -118,14 +130,17 @@ Expected save flow:
 8. If duplicate exists and `duplicate_confirmed` is missing/false, server skips
    insert and returns `skippedDuplicate`.
 9. `addMatchAction` inserts into `matches` with id, date, players, score,
-   season, and `created_by`.
+   season, `created_by`, `client_request_id`, and `updated_at`.
 10. `addMatchAction` updates `player_stats` incrementally:
    - guest matches do not count wins/losses
    - loser fines still count for non-guest losers
 11. `addMatchAction` writes an audit log.
-12. `addMatchAction` revalidates `/` and `/analysis`.
-13. Client clears pending state after confirmed success, refreshes on
-    `skippedDuplicate`, or keeps retry state on error.
+12. `addMatchAction` bumps `matches/admin` part versions and returns the
+    canonical match plus mutation metadata.
+13. `addMatchAction` revalidates `/` and `/analysis`.
+14. Client replaces the optimistic `TMP-*` row with the canonical row, clears
+    pending state after confirmed success, refreshes on `skippedDuplicate`, or
+    keeps retry state on error.
 
 Do not remove local-first/pending behavior unless replacing it with an equally
 safe flow.
@@ -134,12 +149,15 @@ safe flow.
 
 Editing a match must keep stats balanced:
 
-1. Read old match state.
+1. Lock and read old match state inside a transaction.
 2. Reverse old contribution where incremental stats are used.
-3. Update the match row.
+3. Update the match row and set `updated_at`.
 4. Apply new match contribution.
 5. Write audit log.
-6. Revalidate `/` and `/analysis`.
+6. Bump `matches/admin` versions.
+7. Revalidate `/` and `/analysis`.
+8. Return the canonical updated match so Admin can patch local cache without a
+   full reload.
 
 Never update match rows in a way that leaves leaderboard/fines inconsistent.
 
@@ -155,6 +173,9 @@ Current delete behavior:
   matches, soft-deletes the player, and removes `player_stats` rows.
 - Season delete archives the season and matches, soft-deletes season matches,
   marks season archived, and clears `active_season` when needed.
+- Match delete, match edit, player delete, and season delete now wrap the
+  state-changing database work, stats rebuild/delta, audit, and version bump in
+  one transaction.
 - Restore from archive can restore archived player and match data.
 - Admin JSON restore replaces the current database state with the backup
   contents. Seasons, config, and player-season settings are restored from the
@@ -203,10 +224,12 @@ Implementation files:
 
 - `src/components/analysis/AnalysisCenter.tsx`
 - `src/components/Dashboard.tsx`
+- `src/lib/use-shared-app-data.ts`
 - `src/lib/analysis-core.ts`
 - `src/lib/insights.ts`
 - `src/lib/db.ts`
-- `src/app/actions.ts` via `getMatchesAfterAction`
+- `src/app/actions.ts` via `getSyncManifestAction`,
+  `getAppDataPartsAction`, and `getMatchesDeltaAction`
 - `src/app/analysis/page.tsx`
 
 Shared cache policy:
@@ -214,11 +237,11 @@ Shared cache policy:
 - Postgres remains the source of truth.
 - IndexedDB is only a replaceable local copy used to avoid refetching full match
   history when moving between dashboard, analysis, and history-oriented views.
-- Dashboard/F5 is the normal user-facing manifest check point. Analysis reads
-  the local cache only and does not auto-fetch online when cache exists. If
-  Analysis is opened on a device with no usable local cache, it fetches the full
-  app parts once, seeds IndexedDB, then stays local-only. Admin remains the
-  always-online data-management path.
+- Dashboard/F5 is the normal user-facing manifest check point. Analysis renders
+  local cache first and only performs a throttled online sync when cache exists.
+  If Analysis is opened on a device with no usable local cache, it fetches the
+  full app parts once, seeds IndexedDB, then renders from local cache. Admin
+  remains the always-online data-management path.
 - Do not poll in the background. Route preload/reload or explicit data writes
   are the normal sync triggers.
 - Dashboard always checks the manifest on mount/F5 after local render. The
@@ -232,20 +255,24 @@ Shared cache policy:
   rendering analysis-derived facts. Background sync can continue for other
   seasons after the current view is usable.
 
-Dashboard client sync is the first-render sync source:
+Shared client sync flow:
 
 1. `/` mounts with empty server props.
 2. Dashboard reads IndexedDB through `useSharedAppData`.
-3. Dashboard calls `getAppDataManifestAction`.
-4. Dashboard calls `getAppDataPartsAction(staleParts)` only when local part
-   versions are missing or older than the manifest.
-5. The Dashboard Analysis link writes the current in-memory Dashboard snapshot
-   into IndexedDB before navigating to `/analysis`.
-6. `/analysis` mounts with empty server props and reads IndexedDB through
+3. Dashboard calls `getSyncManifestAction(localPartVersions)`.
+4. If `cache_epoch` changed, the client clears app stores and Hall image cache,
+   then bootstraps full app data from Postgres.
+5. If small parts are stale, the client calls `getAppDataPartsAction(staleParts)`.
+6. If matches are stale, the client calls `getMatchesDeltaAction(matchesCursor)`
+   until `hasMore` is false, applying active rows and removing soft-deleted rows.
+7. The Dashboard Analysis link writes the current in-memory Dashboard snapshot
+   into IndexedDB before navigating to `/analysis` without advancing stale
+   metadata.
+8. `/analysis` mounts with empty server props and reads IndexedDB through
    `useSharedAppData({ localOnly: true, fetchIfEmpty: true, syncOnMount:
    'throttled' })`.
 
-Client sync flow:
+Mutation/cache convergence:
 
 1. Dashboard seeds/updates IndexedDB from manifest-driven part downloads.
 2. Dashboard, Analysis, and other client views read from the shared cache state
@@ -253,30 +280,34 @@ Client sync flow:
 3. When a score is submitted, the client writes an optimistic `TMP-*` match to
    IndexedDB and the Dashboard state.
 4. `addMatchAction` inserts the canonical match in Postgres and returns the
-   inserted match row plus `dataVersion`.
+   inserted match row plus `changedPartVersions`, `cacheEpoch`, and legacy
+   `dataVersion/partVersions` compatibility fields.
 5. The client replaces the optimistic `TMP-*` row in IndexedDB with the
    canonical server match. If the server rejects or errors, the optimistic row
    is removed.
-6. After Admin JSON restore, the Admin client fetches authoritative app data and
-   replaces the shared IndexedDB route cache so old local seasons/matches do not
-   reappear.
+6. Settings writes do not patch every field optimistically. On success they
+   call the shared sync engine for affected parts; small parts are cheap to
+   refetch full.
+7. After Admin JSON restore/import, the server rotates `cache_epoch`; the Admin
+   client clears the shared IndexedDB route cache and reseeds authoritative app
+   data so old local seasons/matches do not reappear.
 7. New JSON backups include `schemaVersion`, `config`, and
    `playerSeasonSettings`. Restore remains compatible with older backups that
    do not include those fields.
 8. The Analysis page reads local cache only when cache exists. On first direct
    entry with empty cache, it fetches all app parts once and seeds the local
    cache.
-9. Future phase: split full refresh into season-priority batches. The current
-   implementation keeps full refresh tied to route preload/reload while the
-   dataset is still small.
+9. `getMatchesAfterAction(lastId)` remains only as a deprecated compatibility
+   read; the shared sync engine should not use it.
 
 Important caveat:
 
 - `getMatchesAfterAction(lastId)` still supports incremental reads for older
-  admin/helper screens, but shared client routes should prefer the shared cache
-  and explicit full refresh path.
+  admin/helper screens, but shared client routes should use
+  `getMatchesDeltaAction(cursor)`.
 - The analysis cache is a replaceable local copy. Full imports, deletes, edits,
-  and new match batches should converge on the next analysis page sync.
+  and new match batches should converge through epoch reset, mutation responses,
+  or the next manifest/delta sync.
 - All writes that change user-visible data should call `bumpDataVersions()` for
   the affected parts. `data_version` remains as a backward-compatible global
   version, while new sync logic reads `version_global` and per-part versions.

@@ -1,14 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getAppDataManifestAction, getAppDataPartsAction } from '@/app/actions';
+import { getAppDataPartsAction, getMatchesDeltaAction, getSyncManifestAction } from '@/app/actions';
 import {
+  applyMatchesDeltaLocal,
+  clearAppCacheLocal,
   getAppCacheSnapshot,
   hasUsableAppCache,
   replaceAppCacheParts,
   seedAppCache,
   type AppCachePart,
   type AppCacheSnapshot,
+  type MatchesCursor,
   type StoredMatch,
   type StoredPlayer,
   type StoredPlayerSeasonSetting,
@@ -29,6 +32,7 @@ type SyncState = 'idle' | 'checking' | 'syncing' | 'error';
 type SyncOnMountPolicy = 'always' | 'throttled' | 'empty-only';
 
 const APP_DATA_PARTS: AppCachePart[] = ['players', 'matches', 'seasons', 'config', 'playerSeasonSettings'];
+const SMALL_DATA_PARTS: AppCachePart[] = ['players', 'seasons', 'config', 'playerSeasonSettings'];
 const MANIFEST_CHECK_THROTTLE_MS = 60_000;
 
 function dataVersionFromConfig(config: SharedConfig) {
@@ -58,25 +62,26 @@ function recentlyChecked(snapshot: AppCacheSnapshot) {
     && Date.now() - snapshot.lastManifestCheck < MANIFEST_CHECK_THROTTLE_MS;
 }
 
-function stalePartsFromManifest(
-  snapshot: AppCacheSnapshot,
-  manifest: NonNullable<Awaited<ReturnType<typeof getAppDataManifestAction>>>,
-) {
+function staleSmallParts(snapshot: AppCacheSnapshot, changedParts: string[]) {
   const stale = new Set<AppCachePart>();
-
-  APP_DATA_PARTS.forEach((part) => {
-    if ((manifest.parts[part] || 0) > (snapshot.partVersions[part] || 0)) {
-      stale.add(part);
-    }
+  changedParts.forEach((part) => {
+    if (SMALL_DATA_PARTS.includes(part as AppCachePart)) stale.add(part as AppCachePart);
   });
-
-  if (snapshot.players.length === 0 || manifest.counts.players !== snapshot.players.length) stale.add('players');
-  if (snapshot.matches.length === 0 || (manifest.counts.matches > 0 && snapshot.matches.length === 0)) stale.add('matches');
-  if (snapshot.seasons.length === 0 || manifest.counts.seasons !== snapshot.seasons.length) stale.add('seasons');
-  if (manifest.counts.playerSeasonSettings !== snapshot.playerSeasonSettings.length) stale.add('playerSeasonSettings');
+  if (snapshot.players.length === 0) stale.add('players');
+  if (snapshot.seasons.length === 0) stale.add('seasons');
   if (Object.keys(snapshot.config).length === 0) stale.add('config');
-
   return Array.from(stale);
+}
+
+function pickPartVersions(
+  partVersions: Partial<Record<AppCachePart, number>> | undefined,
+  parts: AppCachePart[],
+) {
+  if (!partVersions) return undefined;
+  return parts.reduce<Partial<Record<AppCachePart, number>>>((acc, part) => {
+    if (typeof partVersions[part] === 'number') acc[part] = partVersions[part];
+    return acc;
+  }, {});
 }
 
 export function useSharedAppData({
@@ -125,13 +130,18 @@ export function useSharedAppData({
     return snapshot;
   }, [initialData]);
 
-  const fetchParts = useCallback(async (parts: AppCachePart[], message: string) => {
+  const fetchParts = useCallback(async (
+    parts: AppCachePart[],
+    message: string,
+    options?: { fullBootstrap?: boolean; cacheEpoch?: string },
+  ) => {
     if (parts.length === 0) return;
     setSyncState('syncing');
     setSyncMessage(message);
 
     const appData = await getAppDataPartsAction(parts);
     if (!appData) throw new Error('app data unavailable');
+    const serverCursor = appData.serverTime ? { updatedAt: appData.serverTime, id: '' } : undefined;
 
     await replaceAppCacheParts({
       players: appData.players as StoredPlayer[] | undefined,
@@ -141,9 +151,33 @@ export function useSharedAppData({
       playerSeasonSettings: appData.playerSeasonSettings as StoredPlayerSeasonSetting[] | undefined,
     }, {
       dataVersion: appData.dataVersion,
-      partVersions: appData.partVersions,
+      partVersions: options?.fullBootstrap ? appData.partVersions : pickPartVersions(appData.partVersions, parts),
+      cacheEpoch: appData.cacheEpoch || options?.cacheEpoch,
+      matchesCursor: options?.fullBootstrap ? serverCursor : undefined,
       manifestCheckedAt: Date.now(),
     });
+  }, []);
+
+  const fetchMatchesDelta = useCallback(async (
+    startCursor: MatchesCursor | null,
+    manifest: Awaited<ReturnType<typeof getSyncManifestAction>>,
+  ) => {
+    let cursor: MatchesCursor | null = startCursor;
+    for (let page = 0; page < 20; page += 1) {
+      const delta = await getMatchesDeltaAction(cursor);
+      await applyMatchesDeltaLocal(delta.matches as StoredMatch[], {
+        partVersions: delta.hasMore ? undefined : {
+          matches: manifest.partVersions.matches,
+          admin: manifest.partVersions.admin,
+        },
+        cacheEpoch: manifest.cacheEpoch,
+        matchesCursor: delta.hasMore ? delta.nextCursor : delta.finalCursor,
+        manifestCheckedAt: Date.now(),
+      });
+      cursor = delta.nextCursor;
+      if (!delta.hasMore) return;
+    }
+    throw new Error('matches delta pagination exceeded safety limit');
   }, []);
 
   const seedRoutePreloadIfPresent = useCallback(async () => {
@@ -167,7 +201,7 @@ export function useSharedAppData({
     });
   }, [initialConfig, initialData, initialMatches, initialPlayers, initialSeasons, initialPlayerSeasonSettings]);
 
-  const checkManifestAndRefresh = useCallback(async (options?: { force?: boolean; allowWhenLocalOnly?: boolean }) => {
+  const checkManifestAndRefresh = useCallback(async (options?: { force?: boolean; allowWhenLocalOnly?: boolean; parts?: AppCachePart[] }) => {
     if (localOnly && !options?.allowWhenLocalOnly) return;
     const now = Date.now();
     if (!options?.force && now - lastManifestCheckRef.current < MANIFEST_CHECK_THROTTLE_MS) return;
@@ -179,7 +213,7 @@ export function useSharedAppData({
 
     try {
       setSyncState('checking');
-      setSyncMessage('Đang kiểm tra dữ liệu...');
+      setSyncMessage('Dang kiem tra du lieu...');
 
       let snapshot = await getAppCacheSnapshot();
       if (!isCurrentRun()) return;
@@ -193,21 +227,42 @@ export function useSharedAppData({
         setCacheLoaded(true);
       }
 
-      const manifest = await getAppDataManifestAction();
+      const manifest = await getSyncManifestAction(snapshot.partVersions);
       if (!isCurrentRun()) return;
-      if (!manifest) throw new Error('manifest unavailable');
 
-      const staleParts = stalePartsFromManifest(snapshot, manifest);
-      if (staleParts.length > 0) {
-        await fetchParts(staleParts, 'Đang tải phần dữ liệu mới...');
-        if (!isCurrentRun()) return;
+      if (manifest.cacheEpoch !== snapshot.cacheEpoch) {
+        await clearAppCacheLocal({ includeHallImages: true });
+        await fetchParts(APP_DATA_PARTS, 'Dang tai lai du lieu...', { fullBootstrap: true, cacheEpoch: manifest.cacheEpoch });
         snapshot = await getAppCacheSnapshot();
       } else {
-        await seedAppCache({
-          dataVersion: manifest.globalVersion,
-          partVersions: manifest.parts,
-          manifestCheckedAt: manifest.checkedAt,
-        });
+        const requestedParts = Array.from(new Set([
+          ...(manifest.changedParts as AppCachePart[]),
+          ...(options?.parts || []),
+        ]));
+        const smallParts = staleSmallParts(snapshot, requestedParts);
+        if (smallParts.length > 0) {
+          await fetchParts(smallParts, 'Dang tai phan du lieu moi...', { cacheEpoch: manifest.cacheEpoch });
+          if (!isCurrentRun()) return;
+          snapshot = await getAppCacheSnapshot();
+        }
+
+        const shouldSyncMatches = requestedParts.includes('matches') || manifest.matchesChanged || snapshot.matches.length === 0;
+        if (shouldSyncMatches) {
+          if (snapshot.matches.length === 0) {
+            await fetchParts(APP_DATA_PARTS, 'Dang tai du lieu ban dau...', { fullBootstrap: true, cacheEpoch: manifest.cacheEpoch });
+          } else {
+            await fetchMatchesDelta(snapshot.matchesCursor, manifest);
+          }
+          if (!isCurrentRun()) return;
+          snapshot = await getAppCacheSnapshot();
+        } else {
+          await seedAppCache({
+            partVersions: manifest.partVersions,
+            cacheEpoch: manifest.cacheEpoch,
+            manifestCheckedAt: Date.now(),
+          });
+          snapshot = await getAppCacheSnapshot();
+        }
       }
 
       if (!isCurrentRun()) return;
@@ -220,10 +275,10 @@ export function useSharedAppData({
       console.error('Shared app data refresh failed:', error);
       if (!isCurrentRun()) return;
       setSyncState('error');
-      setSyncMessage('Không đồng bộ được dữ liệu mới');
+      setSyncMessage('Khong dong bo duoc du lieu moi');
       setCacheLoaded(true);
     }
-  }, [fetchParts, initialData, localOnly, seedRoutePreloadIfPresent]);
+  }, [fetchMatchesDelta, fetchParts, initialData, localOnly, seedRoutePreloadIfPresent]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -280,8 +335,8 @@ export function useSharedAppData({
     cacheLoaded,
     isCheckingManifest: syncState === 'checking',
     isSyncingData: syncState === 'syncing',
-    refresh: () => {
-      void checkManifestAndRefresh({ force: true, allowWhenLocalOnly: fetchIfEmpty });
+    refresh: (parts?: AppCachePart[]) => {
+      void checkManifestAndRefresh({ force: true, allowWhenLocalOnly: fetchIfEmpty, parts });
     },
   };
 }
