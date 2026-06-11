@@ -59,11 +59,12 @@ Read only when relevant:
   partner/opponent impact edges, profile cards, Network cards, and Hub insight
   comments.
 - Dashboard is the normal user-facing manifest sync point for the shared
-  IndexedDB route cache. Postgres remains authoritative, Dashboard/F5 checks
-  per-part versions and downloads only stale data parts, score-save responses
-  replace optimistic local rows with canonical server matches, and Analysis
-  reads local cache unless the cache is empty on first direct entry. Admin
-  remains the always-online data-management path.
+  IndexedDB route cache. Postgres remains authoritative, Dashboard/F5 always
+  checks per-part versions after local render and downloads only stale data
+  parts, score-save responses replace optimistic local rows with canonical
+  server matches, and Analysis reads local cache with a 60-second manifest
+  cooldown unless the cache is empty on first direct entry. Admin remains the
+  always-online data-management path.
 - Hall of Fame champion portraits are stored in Vercel Blob and cached locally
   in IndexedDB by season image path/update timestamp.
 - Dashboard and Analysis no longer show manual `Làm mới` buttons; browser
@@ -77,16 +78,8 @@ Read only when relevant:
   copy/triggers.
 - Local demo routes such as `/ui-demo` and `/picker-demo` may exist on one
   machine for review, but should not be pushed unless explicitly requested.
-- Local history UI testing has one preferred path: run
-  `npm run visual:test:history`. It uses the newest
-  `pickleball_backup_YYYY-MM-DD.json`, creates a temporary route, runs
-  `next build` + `next start` on a free port from `3100`, captures mobile and
-  desktop screenshots for both the full-history modal and standalone history
-  page in `.next/visual-tests/`, and removes the temporary routes. Use this
-  instead of trying Dashboard/server cache first when `.env.local` has a direct
-  Postgres URL or the browser cache is empty. If a manual temporary route is
-  needed, restart the existing Next dev process; Next allows only one dev server
-  per repo.
+- Full match history is shown through the Dashboard modal; standalone
+  `/history` and `/add-match` routes have been removed.
 
 ## Current Pending Tasks (Next Session)
 

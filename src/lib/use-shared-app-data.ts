@@ -26,6 +26,7 @@ type SharedData = {
 };
 
 type SyncState = 'idle' | 'checking' | 'syncing' | 'error';
+type SyncOnMountPolicy = 'always' | 'throttled' | 'empty-only';
 
 const APP_DATA_PARTS: AppCachePart[] = ['players', 'matches', 'seasons', 'config', 'playerSeasonSettings'];
 const MANIFEST_CHECK_THROTTLE_MS = 60_000;
@@ -60,22 +61,33 @@ function recentlyChecked(snapshot: AppCacheSnapshot) {
 function stalePartsFromManifest(
   snapshot: AppCacheSnapshot,
   manifest: NonNullable<Awaited<ReturnType<typeof getAppDataManifestAction>>>,
+  forceParts?: AppCachePart[],
 ) {
   const stale = new Set<AppCachePart>();
+  const forced = forceParts && forceParts.length > 0;
 
-  APP_DATA_PARTS.forEach((part) => {
+  (forced ? forceParts : APP_DATA_PARTS).forEach((part) => {
     if ((manifest.parts[part] || 0) > (snapshot.partVersions[part] || 0)) {
       stale.add(part);
     }
   });
 
-  if (manifest.counts.players > 0 && snapshot.players.length === 0) stale.add('players');
-  if (manifest.counts.matches > 0 && snapshot.matches.length === 0) stale.add('matches');
-  if (manifest.counts.seasons > 0 && snapshot.seasons.length === 0) stale.add('seasons');
-  if (manifest.counts.playerSeasonSettings > 0 && snapshot.playerSeasonSettings.length === 0) stale.add('playerSeasonSettings');
-  if (Object.keys(snapshot.config).length === 0) stale.add('config');
+  if (!forced && !hasUsableAppCache(snapshot)) {
+    APP_DATA_PARTS.forEach((part) => stale.add(part));
+  }
 
   return Array.from(stale);
+}
+
+function pickPartVersions(
+  partVersions: Partial<Record<AppCachePart, number>> | undefined,
+  parts: AppCachePart[],
+) {
+  if (!partVersions) return undefined;
+  return parts.reduce<Partial<Record<AppCachePart, number>>>((acc, part) => {
+    if (typeof partVersions[part] === 'number') acc[part] = partVersions[part];
+    return acc;
+  }, {});
 }
 
 export function useSharedAppData({
@@ -87,6 +99,7 @@ export function useSharedAppData({
   routeKey,
   localOnly = false,
   fetchIfEmpty = false,
+  syncOnMount = 'throttled',
 }: {
   initialPlayers: StoredPlayer[];
   initialMatches: StoredMatch[];
@@ -96,6 +109,7 @@ export function useSharedAppData({
   routeKey: string;
   localOnly?: boolean;
   fetchIfEmpty?: boolean;
+  syncOnMount?: SyncOnMountPolicy;
 }) {
   const initialData = useMemo<SharedData>(() => ({
     players: initialPlayers,
@@ -138,7 +152,7 @@ export function useSharedAppData({
       playerSeasonSettings: appData.playerSeasonSettings as StoredPlayerSeasonSetting[] | undefined,
     }, {
       dataVersion: appData.dataVersion,
-      partVersions: appData.partVersions,
+      partVersions: parts.length === APP_DATA_PARTS.length ? appData.partVersions : pickPartVersions(appData.partVersions, parts),
       manifestCheckedAt: Date.now(),
     });
   }, []);
@@ -164,7 +178,7 @@ export function useSharedAppData({
     });
   }, [initialConfig, initialData, initialMatches, initialPlayers, initialSeasons, initialPlayerSeasonSettings]);
 
-  const checkManifestAndRefresh = useCallback(async (options?: { force?: boolean; allowWhenLocalOnly?: boolean }) => {
+  const checkManifestAndRefresh = useCallback(async (options?: { force?: boolean; allowWhenLocalOnly?: boolean; parts?: AppCachePart[] }) => {
     if (localOnly && !options?.allowWhenLocalOnly) return;
     const now = Date.now();
     if (!options?.force && now - lastManifestCheckRef.current < MANIFEST_CHECK_THROTTLE_MS) return;
@@ -176,7 +190,7 @@ export function useSharedAppData({
 
     try {
       setSyncState('checking');
-      setSyncMessage('Đang kiểm tra dữ liệu...');
+      setSyncMessage('');
 
       let snapshot = await getAppCacheSnapshot();
       if (!isCurrentRun()) return;
@@ -194,7 +208,7 @@ export function useSharedAppData({
       if (!isCurrentRun()) return;
       if (!manifest) throw new Error('manifest unavailable');
 
-      const staleParts = stalePartsFromManifest(snapshot, manifest);
+      const staleParts = stalePartsFromManifest(snapshot, manifest, options?.parts);
       if (staleParts.length > 0) {
         await fetchParts(staleParts, 'Đang tải phần dữ liệu mới...');
         if (!isCurrentRun()) return;
@@ -227,9 +241,11 @@ export function useSharedAppData({
       void (async () => {
         const snapshot = await loadLocalSnapshot();
         if (localOnly) {
-          if (fetchIfEmpty && !hasUsableAppCache(snapshot)) {
-            await checkManifestAndRefresh({ force: true, allowWhenLocalOnly: true });
-          }
+          return;
+        }
+        if (syncOnMount === 'empty-only' && hasUsableAppCache(snapshot)) return;
+        if (syncOnMount === 'always') {
+          await checkManifestAndRefresh({ force: true });
           return;
         }
         if (hasUsableAppCache(snapshot) && recentlyChecked(snapshot)) return;
@@ -237,16 +253,7 @@ export function useSharedAppData({
       })();
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [checkManifestAndRefresh, fetchIfEmpty, loadLocalSnapshot, localOnly, routeKey]);
-
-  useEffect(() => {
-    if (localOnly) return;
-    const onFocus = () => {
-      void checkManifestAndRefresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [checkManifestAndRefresh, localOnly]);
+  }, [checkManifestAndRefresh, fetchIfEmpty, loadLocalSnapshot, localOnly, routeKey, syncOnMount]);
 
   useEffect(() => {
     const onCacheChange = () => {
@@ -264,8 +271,8 @@ export function useSharedAppData({
     cacheLoaded,
     isCheckingManifest: syncState === 'checking',
     isSyncingData: syncState === 'syncing',
-    refresh: () => {
-      void checkManifestAndRefresh({ force: true, allowWhenLocalOnly: fetchIfEmpty });
+    refresh: (parts?: AppCachePart[]) => {
+      void checkManifestAndRefresh({ force: true, allowWhenLocalOnly: fetchIfEmpty, parts });
     },
   };
 }

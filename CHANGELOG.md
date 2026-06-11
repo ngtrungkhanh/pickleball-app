@@ -16,6 +16,11 @@ repo.
 
 ### Bug Fixes
 
+- Removed standalone `/history` and `/add-match` routes, kept full match
+  history in the Dashboard modal, updated local-first sync so Dashboard/Admin
+  check server manifests on F5 while Analysis uses a 60-second cache cooldown,
+  fixed Analysis profile/network selected-player rebinding after cache loads,
+  and added local pending/saving protection for Admin match edits.
 - Compacted full match history rows by moving match date/time into a left rail
   and keeping player/team content to a two-line match layout on mobile and
   desktop.

@@ -1,21 +1,22 @@
 'use client';
-import { useState, useEffect, useSyncExternalStore, useMemo, useRef, useCallback, type MouseEvent } from 'react';
+import { useState, useEffect, useSyncExternalStore, useMemo, useRef, useCallback, type MouseEvent, type MutableRefObject } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BarChart3, RefreshCw, Settings, X } from 'lucide-react';
+import { BarChart3, CalendarDays, Crown, RefreshCw, Settings, Sparkles, X } from 'lucide-react';
 import { SummaryGrid } from './dashboard/SummaryGrid';
 import { Leaderboard } from './dashboard/Leaderboard';
 import { RecentHistory } from './dashboard/RecentHistory';
 import { ScoreForm } from './ScoreForm';
 import { SettingsModal } from './SettingsModal';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
-import { seedAppCache, type StoredPlayerSeasonSetting } from '@/lib/db';
+import { removeMatchesLocal, saveMatchesLocal, seedAppCache, type StoredPlayerSeasonSetting } from '@/lib/db';
 import { isGuestId } from '@/lib/guest';
 import { buildAnalysisSnapshot } from '@/lib/analysis-core';
 import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
 import { getGlobalSelectedSeason, setGlobalSelectedSeason, isGlobalSeasonSet } from '@/lib/season-state';
 import { PreviousChampionTitleLine } from '@/components/PreviousChampionTitleLine';
-import { buildHallOfFameEntries, getLatestHallOfFameEntry } from '@/lib/hall-of-fame';
+import { buildHallOfFameEntries, formatHallDate, getLatestHallOfFameEntry } from '@/lib/hall-of-fame';
+import { deleteMatchAction } from '@/app/actions';
 
 const INSIGHT_SELECTION_STATE_KEY = 'pickleball.analysis.insightSelection.v1';
 
@@ -54,6 +55,133 @@ type Season = {
 };
 const EDIT_EVENT = 'pickleball-edit-mode-change';
 const DESKTOP_PANEL_WIDTH = 'mx-auto w-full lg:w-[85%]';
+const TICKER_PIXELS_PER_SECOND = 60;
+
+function formatShortDate(value?: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+}
+
+function formatCurrency(value: number) {
+  return `${value.toLocaleString('vi-VN')}d`;
+}
+
+function avatarLetter(value: unknown) {
+  return Array.from(String(value || '').trim())[0]?.toLocaleUpperCase('vi-VN') || '?';
+}
+
+function isMissingMatchError(value: unknown) {
+  const text = String(value || '').toLocaleLowerCase('vi-VN');
+  const ascii = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return ascii.includes('khong tim thay tran') || /kh.{0,6}ng.*t.{0,6}m.*tr/i.test(text);
+}
+
+function matchTime(match: Match) {
+  const value = new Date(String(match.date || '')).getTime();
+  return Number.isFinite(value) ? value : 0;
+}
+
+function useTickerMarquee<TContainer extends HTMLElement = HTMLDivElement, TMarquee extends HTMLElement = HTMLDivElement>({
+  enabled,
+  itemCount,
+  contentKey,
+  repeatedCount,
+  pausedRef,
+}: {
+  enabled: boolean;
+  itemCount: number;
+  contentKey: string;
+  repeatedCount: number;
+  pausedRef: MutableRefObject<boolean>;
+}) {
+  const containerRef = useRef<TContainer>(null);
+  const marqueeRef = useRef<TMarquee>(null);
+  const translateXRef = useRef(0);
+  const animationFrameIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!enabled || itemCount === 0 || !marqueeRef.current || !containerRef.current) {
+      if (animationFrameIdRef.current) {
+        cancelAnimationFrame(animationFrameIdRef.current);
+        animationFrameIdRef.current = null;
+      }
+      return;
+    }
+
+    const marquee = marqueeRef.current;
+    if (animationFrameIdRef.current) {
+      cancelAnimationFrame(animationFrameIdRef.current);
+      animationFrameIdRef.current = null;
+    }
+
+    let oneCycleWidth = 0;
+    const measureWidth = () => {
+      if (marquee.children && marquee.children.length > itemCount) {
+        const firstChild = marquee.children[0];
+        const targetChild = marquee.children[itemCount];
+        const dist = targetChild.getBoundingClientRect().left - firstChild.getBoundingClientRect().left;
+        if (dist > 0) oneCycleWidth = dist;
+      }
+    };
+
+    measureWidth();
+    const measureTimeout = window.setTimeout(measureWidth, 1000);
+
+    if (oneCycleWidth > 0 && Math.abs(translateXRef.current) >= oneCycleWidth) {
+      translateXRef.current %= oneCycleWidth;
+    }
+    marquee.style.transform = `translate3d(${translateXRef.current}px, 0, 0)`;
+
+    const handleResize = () => measureWidth();
+    window.addEventListener('resize', handleResize);
+
+    let lastTime: number | null = null;
+    const step = (timestamp: number) => {
+      if (pausedRef.current) {
+        lastTime = timestamp;
+        animationFrameIdRef.current = requestAnimationFrame(step);
+        return;
+      }
+
+      if (lastTime === null) lastTime = timestamp;
+      const deltaTime = timestamp - lastTime;
+      lastTime = timestamp;
+
+      const moveAmount = (TICKER_PIXELS_PER_SECOND * Math.min(deltaTime, 50)) / 1000;
+      translateXRef.current -= moveAmount;
+
+      if (oneCycleWidth > 0) {
+        if (Math.abs(translateXRef.current) >= oneCycleWidth) {
+          translateXRef.current %= oneCycleWidth;
+        }
+      } else {
+        const cycleRatio = itemCount > 0 ? repeatedCount / itemCount : 1;
+        const fallbackWidth = marquee.offsetWidth / Math.max(1, cycleRatio);
+        if (fallbackWidth > 0 && Math.abs(translateXRef.current) >= fallbackWidth) {
+          translateXRef.current %= fallbackWidth;
+        }
+      }
+
+      marquee.style.transform = `translate3d(${translateXRef.current}px, 0, 0)`;
+      animationFrameIdRef.current = requestAnimationFrame(step);
+    };
+
+    animationFrameIdRef.current = requestAnimationFrame(step);
+
+    return () => {
+      window.clearTimeout(measureTimeout);
+      window.removeEventListener('resize', handleResize);
+      if (animationFrameIdRef.current) {
+        cancelAnimationFrame(animationFrameIdRef.current);
+        animationFrameIdRef.current = null;
+      }
+    };
+  }, [enabled, itemCount, contentKey, repeatedCount, pausedRef]);
+
+  return { containerRef, marqueeRef };
+}
 
 function subscribeEditMode(callback: () => void) {
   window.addEventListener('storage', callback);
@@ -91,6 +219,7 @@ export default function Dashboard({
     initialSeasons,
     initialPlayerSeasonSettings,
     routeKey: 'dashboard',
+    syncOnMount: 'always',
   });
   const players = (sharedData.players.length > 0 ? sharedData.players : initialPlayers) as Player[];
   const config = Object.keys(sharedData.config).length > 0 ? sharedData.config : initialConfig;
@@ -144,6 +273,31 @@ export default function Dashboard({
   const rejectLocalMatch = (tempId: string) => {
     setMatches(prev => prev.filter(m => m.id !== tempId));
   };
+  const failLocalMatch = (tempId: string, error?: string) => {
+    setMatches(prev => prev.map(m => (
+      m.id === tempId
+        ? { ...m, pending: true, sync_status: 'error', sync_error: error || 'Lưu server thất bại' }
+        : m
+    )));
+  };
+  const deleteLocalMatch = useCallback(async (matchId: string) => {
+    const match = matches.find(m => String(m.id || '') === matchId);
+    if (!match) return;
+    setMatches(prev => prev.filter(m => String(m.id || '') !== matchId));
+    await removeMatchesLocal([matchId]);
+    const result = await deleteMatchAction(matchId);
+    if (result && 'error' in result) {
+      if (isMissingMatchError(result.error)) {
+        await removeMatchesLocal([matchId]);
+        return;
+      }
+      setMatches(prev => [match, ...prev.filter(m => String(m.id || '') !== matchId)]);
+      await saveMatchesLocal([match]);
+      alert(String(result.error || 'Xóa trận thất bại. Đã khôi phục lại dữ liệu local.'));
+      return;
+    }
+    await removeMatchesLocal([matchId], result?.dataVersion, result?.partVersions);
+  }, [matches]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const canEdit = useSyncExternalStore(subscribeEditMode, getEditModeSnapshot, () => false);
@@ -153,7 +307,7 @@ export default function Dashboard({
 
   useEffect(() => {
     if (!isGlobalSeasonSet()) {
-      setSelectedSeason(activeSeason);
+      queueMicrotask(() => setSelectedSeason(activeSeason));
     }
   }, [activeSeason]);
 
@@ -292,13 +446,24 @@ export default function Dashboard({
     committedInsightSeedRef.current = insightSeed;
   }, [insightSeed, insightSelectionResult.nextSelectionState, insightsReady]);
 
-  // Ticker animation refs and states
+  // Ticker animation state is shared, while desktop/mobile use separate refs.
   const tickerContainerRef = useRef<HTMLDivElement>(null);
   const marqueeRef = useRef<HTMLDivElement>(null);
   const isPausedRef = useRef(false);
   const translateXRef = useRef(0);
   const animationFrameIdRef = useRef<number | null>(null);
   const [tickerPaused, setTickerPaused] = useState(false);
+  const tickerEnabled = tickerOpen && insightsReady && insights.length > 0;
+  const {
+    containerRef: desktopTickerContainerRef,
+    marqueeRef: desktopTickerMarqueeRef,
+  } = useTickerMarquee<HTMLSpanElement, HTMLSpanElement>({
+    enabled: tickerEnabled,
+    itemCount: insights.length,
+    contentKey: tickerContentKey,
+    repeatedCount: repeatedInsights.length,
+    pausedRef: isPausedRef,
+  });
 
   useEffect(() => {
     if (!tickerOpen || !insightsReady || insights.length === 0 || !marqueeRef.current || !tickerContainerRef.current) {
@@ -437,8 +602,6 @@ export default function Dashboard({
         seasons,
         config,
         playerSeasonSettings: sharedData.playerSeasonSettings,
-        dataVersion: Number(config.data_version || 0) || 0,
-        manifestCheckedAt: Date.now(),
       });
     } catch (error) {
       console.error('Failed to prepare analysis cache:', error);
@@ -447,8 +610,275 @@ export default function Dashboard({
     router.push('/analysis');
   };
 
+  const seasonOptions = useMemo(() => Array.from(new Set([
+    activeSeason,
+    ...seasons.map(s => s.name),
+    ...matches.map(m => String(m.season || 'Season 1')),
+  ].filter(Boolean))), [activeSeason, seasons, matches]);
+  const seasonLabel = selectedSeason ?? 'Tổng hợp';
+  const selectedSeasonInfo = selectedSeason ? seasons.find(s => s.name === selectedSeason) : null;
+  const seasonStatus = selectedSeason === null
+    ? `${seasonOptions.length} mùa`
+    : (selectedSeasonInfo?.active === true || selectedSeason === activeSeason ? 'Đang chạy' : 'Đã chốt');
+  const seasonTimeText = useMemo(() => {
+    const times = viewedMatches.map(matchTime).filter(Boolean).sort((a, b) => a - b);
+    const firstMatchDate = times[0] ? formatShortDate(new Date(times[0]).toISOString()) : '';
+    const lastMatchDate = times.length > 0 ? formatShortDate(new Date(times[times.length - 1]).toISOString()) : '';
+    const seasonStartDate = formatShortDate(selectedSeasonInfo?.start_date || null);
+
+    if (selectedSeason === null) {
+      if (firstMatchDate && lastMatchDate && firstMatchDate !== lastMatchDate) return `${firstMatchDate} - ${lastMatchDate}`;
+      return firstMatchDate || 'Chưa có dữ liệu';
+    }
+
+    const start = seasonStartDate || firstMatchDate;
+    if (start && lastMatchDate && start !== lastMatchDate) return `${start} - ${lastMatchDate}`;
+    return start || lastMatchDate || 'Chưa có dữ liệu';
+  }, [selectedSeason, selectedSeasonInfo?.start_date, viewedMatches]);
+
   return (
-    <div className="space-y-5 transition-all duration-500 w-full">
+    <div className="w-full">
+      <div className="hidden lg:block">
+        <header className="sticky top-0 z-40 -mx-4 border-b border-white/10 bg-[#07101d]/88 backdrop-blur-2xl shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
+          <style>{`
+            .desktop-news-marquee {
+              display: inline-flex;
+              min-width: max-content;
+              gap: 1.75rem;
+              will-change: transform;
+            }
+          `}</style>
+          <div className="mx-auto grid max-w-[1680px] grid-cols-[minmax(210px,auto)_minmax(0,1fr)_auto] items-center gap-4 px-4 py-2.5">
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-2">
+                <h1 className="truncate !text-xl xl:!text-2xl !leading-none font-black tracking-tight text-white drop-shadow-[0_0_18px_rgba(34,197,94,0.20)]">
+                  Pickleball <span className="text-primary">Ranking</span>
+                </h1>
+                <span className="hidden rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-primary xl:inline-block">
+                  live
+                </span>
+              </div>
+              <div className="mt-1 truncate text-[10px] font-bold uppercase tracking-[0.24em] text-white/35">
+                {seasonLabel} · {viewedMatches.length} trận
+              </div>
+            </div>
+
+            <div className="min-w-0 overflow-hidden rounded-lg border border-primary/20 bg-slate-950/45 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.06)]">
+              {tickerOpen && insightsReady && insights.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={handleTickerClick}
+                  className="group flex h-9 w-full min-w-0 items-center overflow-hidden text-left"
+                  title={tickerPaused ? 'Click để tiếp tục chạy' : 'Click để tạm dừng'}
+                >
+                  <span className="flex h-full shrink-0 items-center gap-1.5 border-r border-primary/20 bg-primary px-3 text-[9px] font-black uppercase tracking-[0.18em] text-slate-950">
+                    <span className="h-1.5 w-1.5 rounded-full bg-slate-950 shadow-[0_0_8px_rgba(2,6,23,0.7)]" />
+                  </span>
+                  <span ref={desktopTickerContainerRef} className="min-w-0 flex-1 overflow-hidden px-3">
+                    <span
+                      ref={desktopTickerMarqueeRef}
+                      className="desktop-news-marquee text-[11px] font-bold text-slate-200/85"
+                    >
+                      {repeatedInsights.map((insight, idx) => (
+                        <span key={idx} className="inline-flex items-center gap-2 whitespace-nowrap">
+                          <span className="rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-primary">
+                            {insight.title || 'Điểm nhấn'}
+                          </span>
+                          <span>{insight.text}</span>
+                        </span>
+                      ))}
+                    </span>
+                  </span>
+                </button>
+              ) : (
+                <div className="flex h-9 items-center px-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/25">
+                  Đang tải tin nhanh...
+                </div>
+              )}
+            </div>
+
+            <div className="flex min-w-0 items-center justify-end gap-2">
+              {sharedData.syncMessage ? (
+                <div className="hidden h-9 max-w-[220px] items-center gap-2 rounded-lg border border-slate-500/20 bg-white/[0.035] px-3 text-[10px] font-black uppercase tracking-widest text-slate-300/55 2xl:flex">
+                  <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${sharedData.syncState === 'syncing' ? 'animate-spin' : ''}`} />
+                  <span className="min-w-0 truncate">{sharedData.syncMessage}</span>
+                </div>
+              ) : null}
+              <Link href="/analysis" onClick={openAnalysisFromLocalCache} className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary">
+                <BarChart3 className="h-4 w-4" />
+                <span className="hidden xl:inline">Phân tích</span>
+              </Link>
+              <button onClick={() => setSettingsOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary">
+                <Settings className="h-4 w-4" />
+                <span className="hidden xl:inline">Cài đặt</span>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {sharedData.syncMessage ? (
+          <div className="pointer-events-none fixed right-4 top-[70px] z-50 hidden max-w-[300px] items-center gap-2 rounded-xl border border-slate-500/20 bg-[#07101d]/92 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300/60 shadow-[0_14px_42px_rgba(0,0,0,0.24)] backdrop-blur-xl lg:flex 2xl:hidden">
+            <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${sharedData.syncState === 'syncing' ? 'animate-spin' : ''}`} />
+            <span className="min-w-0 truncate">{sharedData.syncMessage}</span>
+          </div>
+        ) : null}
+
+        <div className="mx-auto grid max-w-[1680px] grid-cols-[300px_minmax(0,1fr)] gap-4 py-4 3xl:grid-cols-[300px_minmax(780px,1fr)_340px]">
+          <aside className="min-w-0 space-y-3 self-start lg:sticky lg:top-[74px] lg:max-h-[calc(100vh-88px)] lg:overflow-y-auto lg:overflow-x-hidden">
+            <section className="rounded-2xl border border-white/10 bg-[#111d31]/86 p-3 shadow-[0_14px_40px_rgba(0,0,0,0.24)] backdrop-blur-xl">
+              <div className="mb-2 flex items-center gap-2 px-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/45">
+                <CalendarDays className="h-3.5 w-3.5 text-primary/70" />
+                Mùa giải
+              </div>
+              <select
+                value={selectedSeason ?? 'all'}
+                onChange={e => handleSeasonChange(e.target.value === 'all' ? null : e.target.value)}
+                className="h-10 w-full rounded-xl border border-primary/20 !bg-slate-950/70 px-3 text-sm font-black text-white/85 outline-none transition focus:border-primary/60"
+              >
+                <option value="all">Tổng hợp</option>
+                {seasonOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <div className="mt-3 rounded-xl border border-primary/15 bg-primary/[0.055] px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-[9px] font-black uppercase tracking-[0.16em] text-white/35">Trạng thái</div>
+                  <div className="shrink-0 rounded-lg border border-primary/20 bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-primary">{seasonStatus}</div>
+                </div>
+                <div className="mt-2 text-xs font-bold leading-snug text-white/45">{seasonTimeText}</div>
+                <div className="mt-2 flex items-center justify-between gap-2 border-t border-white/10 pt-2 text-[10px] font-black uppercase tracking-[0.14em] text-white/35">
+                  <span>Mức phạt</span>
+                  <span className="text-white/70">{formatCurrency(loseMoney)}</span>
+                </div>
+              </div>
+            </section>
+
+            {previousChampion && (
+              <Link
+                href="/analysis?zone=hall"
+                className="group block overflow-hidden rounded-2xl border border-amber-300/24 bg-slate-950/35 p-3 shadow-[0_14px_38px_rgba(0,0,0,0.20)] transition hover:border-amber-200/45 hover:bg-amber-300/[0.07]"
+              >
+                <div className="grid grid-cols-[82px_minmax(0,1fr)] gap-3">
+                  <div className="relative aspect-[3/4] overflow-hidden rounded-xl border border-amber-200/35 bg-slate-950/85 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+                    {previousChampion.imageUrl ? (
+                      <div
+                        role="img"
+                        aria-label={`Ảnh vinh danh ${previousChampion.playerName}`}
+                        className="absolute inset-0 bg-cover bg-center transition duration-300 group-hover:brightness-110"
+                        style={{ backgroundImage: `url("${previousChampion.imageUrl}")` }}
+                      />
+                    ) : (
+                      <>
+                        <div className="absolute inset-2 rounded-lg border border-amber-100/15" />
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(251,191,36,0.24),transparent_42%),linear-gradient(145deg,rgba(251,191,36,0.16),rgba(15,23,42,0.18)_45%,rgba(15,23,42,0.62))]" />
+                        <div className="relative flex h-full items-center justify-center text-3xl font-black text-amber-100">
+                          {avatarLetter(previousChampion.playerName)}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <div className="min-w-0 self-center">
+                    <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-amber-200/70">
+                      <Crown className="h-3.5 w-3.5" />
+                      Champion
+                    </div>
+                    <div className="mt-1 rounded-full border border-amber-200/20 bg-amber-200/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-amber-100/75">
+                      {previousChampion.season}
+                    </div>
+                    <div className="mt-2 line-clamp-2 break-words py-0.5 text-lg font-black leading-snug text-white" title={previousChampion.playerName}>
+                      {previousChampion.playerName}
+                    </div>
+                    {previousChampion.lastMatchDate ? (
+                      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-100/38">
+                        Chốt {formatHallDate(previousChampion.lastMatchDate)}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <div className="rounded-lg border border-amber-100/10 bg-black/10 px-2 py-1.5 text-center">
+                    <div className="text-[9px] font-black uppercase tracking-wider text-amber-100/40">Tỉ lệ</div>
+                    <div className="mt-0.5 text-sm font-black text-amber-50">{Math.round(previousChampion.winRate)}%</div>
+                  </div>
+                  <div className="rounded-lg border border-amber-100/10 bg-black/10 px-2 py-1.5 text-center">
+                    <div className="text-[9px] font-black uppercase tracking-wider text-amber-100/40">W-L</div>
+                    <div className="mt-0.5 text-sm font-black text-amber-50">{previousChampion.wins}-{previousChampion.losses}</div>
+                  </div>
+                  <div className="rounded-lg border border-amber-100/10 bg-black/10 px-2 py-1.5 text-center">
+                    <div className="text-[9px] font-black uppercase tracking-wider text-amber-100/40">Trận</div>
+                    <div className="mt-0.5 text-sm font-black text-amber-50">{previousChampion.total}</div>
+                  </div>
+                </div>
+              </Link>
+            )}
+
+          </aside>
+
+          <section className="min-w-0 space-y-4">
+            {!sharedData.hasLocalCache && sharedData.syncState !== 'idle' && (
+              <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-left text-xs font-black uppercase tracking-widest text-primary">
+                Đang tải dữ liệu...
+              </div>
+            )}
+            {previewWritesBlocked && (
+              <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-left text-xs font-bold text-amber-200">
+                Dev preview đang dùng chung database với production nên các thao tác ghi/sửa/xóa đã bị khóa để bảo vệ data thật.
+              </div>
+            )}
+            <div className="3xl:hidden">
+              <SummaryGrid
+                players={players}
+                matches={viewedMatches}
+                loseMoney={loseMoney}
+                seasons={seasons}
+                playerSeasonSettings={sharedData.playerSeasonSettings}
+              />
+            </div>
+            <Leaderboard
+              players={leaderboardPlayers}
+              matches={activeMatches}
+              seasons={seasons}
+              activeSeason={activeSeason}
+              selectedSeason={selectedSeason}
+              onSeasonChange={handleSeasonChange}
+              loseMoney={loseMoney}
+              playerSeasonSettings={sharedData.playerSeasonSettings}
+              showSeasonHeader={false}
+            />
+            {canWrite && (
+              <section className="relative z-[100] overflow-visible rounded-2xl border border-white/10 bg-[#111d31]/86 shadow-[0_14px_40px_rgba(0,0,0,0.24)] backdrop-blur-xl">
+                <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+                  <Sparkles className="h-3.5 w-3.5 text-primary/80" />
+                  <h2 className="min-w-0 truncate text-[10px] font-black uppercase tracking-[0.2em] text-white/55">Nhập trận nhanh</h2>
+                </div>
+                <ScoreForm
+                  players={players}
+                  onAddMatch={addLocalMatch}
+                  onConfirmMatch={confirmLocalMatch}
+                  onRejectMatch={rejectLocalMatch}
+                  onFailMatch={failLocalMatch}
+                  activeSeason={activeSeason}
+                />
+              </section>
+            )}
+            <div className="relative z-0 3xl:hidden">
+              <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} onDeleteMatch={deleteLocalMatch} />
+            </div>
+          </section>
+
+          <aside className="hidden min-w-0 space-y-3 self-start 3xl:block 3xl:sticky 3xl:top-[74px] 3xl:max-h-[calc(100vh-88px)] 3xl:overflow-y-auto 3xl:overflow-x-hidden">
+            <SummaryGrid
+              compact
+              players={players}
+              matches={viewedMatches}
+              loseMoney={loseMoney}
+              seasons={seasons}
+              playerSeasonSettings={sharedData.playerSeasonSettings}
+            />
+            <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} onDeleteMatch={deleteLocalMatch} />
+          </aside>
+        </div>
+      </div>
+
+      <div className="space-y-5 transition-all duration-500 w-full lg:hidden">
       {previousChampion && (
         <PreviousChampionTitleLine champion={previousChampion} />
       )}
@@ -517,7 +947,6 @@ export default function Dashboard({
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-950 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-slate-950"></span>
               </span>
-              <span className="text-[9px] font-black tracking-widest text-slate-950 uppercase hidden sm:inline">TIN NHANH</span>
             </div>
             
             {/* Dòng chữ chạy */}
@@ -610,12 +1039,13 @@ export default function Dashboard({
             </span>
             <h3 className="font-black text-[10px] sm:text-xs uppercase tracking-[0.4em] text-slate-300/70">Ghi kết quả</h3>
           </div>
-          <div className="relative z-30 rounded-2xl border border-slate-500/25 bg-[#142034]/95 overflow-visible">
+          <div className="relative z-[100] rounded-2xl border border-slate-500/25 bg-[#142034]/95 overflow-visible">
             <ScoreForm
               players={players}
               onAddMatch={addLocalMatch}
               onConfirmMatch={confirmLocalMatch}
               onRejectMatch={rejectLocalMatch}
+              onFailMatch={failLocalMatch}
               activeSeason={activeSeason}
             />
           </div>
@@ -623,14 +1053,15 @@ export default function Dashboard({
       )}
 
       {/* 4. Recent History */}
-      <div className={DESKTOP_PANEL_WIDTH}>
-        <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} />
+      <div className={`relative z-0 ${DESKTOP_PANEL_WIDTH}`}>
+        <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} onDeleteMatch={deleteLocalMatch} />
       </div>
 
+    </div>
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        canEdit={canWrite}
+        canEdit={canEdit}
         onUnlock={unlock}
         onLock={lock}
         players={players}
@@ -638,8 +1069,8 @@ export default function Dashboard({
         seasons={seasons}
         config={config}
         playerSeasonSettings={sharedData.playerSeasonSettings}
+        onDataChanged={sharedData.refresh}
       />
-
     </div>
   );
 }

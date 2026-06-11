@@ -37,8 +37,18 @@ const VERSION_KEYS: Record<AppDataPart, string> = {
   admin: 'version_admin',
 };
 
-export async function ensureConfigTable() {
-  await sql`
+type SqlTag = typeof sql;
+type SqlRunner = {
+  sql: SqlTag;
+};
+
+function db(runner?: SqlRunner) {
+  return runner?.sql ? runner.sql.bind(runner) as SqlTag : sql;
+}
+
+export async function ensureConfigTable(runner?: SqlRunner) {
+  const query = db(runner);
+  await query`
     CREATE TABLE IF NOT EXISTS config (
       key VARCHAR(50) PRIMARY KEY,
       value VARCHAR(255) NOT NULL
@@ -88,8 +98,9 @@ export async function getPartVersions(): Promise<AppPartVersions> {
   return versions;
 }
 
-export async function bumpDataVersions(parts: AppDataPart[]) {
-  await ensureConfigTable();
+export async function bumpDataVersions(parts: AppDataPart[], runner?: SqlRunner) {
+  const query = db(runner);
+  await ensureConfigTable(runner);
   const selectedParts = normalizeParts(parts);
   const nextVersion = Date.now();
   const updates = [
@@ -99,7 +110,7 @@ export async function bumpDataVersions(parts: AppDataPart[]) {
   ];
 
   for (const [key, value] of updates) {
-    await sql`
+    await query`
       INSERT INTO config (key, value)
       VALUES (${key}, ${value})
       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
@@ -114,23 +125,17 @@ export async function bumpDataVersion() {
 }
 
 export async function getAppManifest(): Promise<AppDataManifest> {
-  const [versions, matchCount, playerCount, seasonCount, playerSeasonSettingCount] = await Promise.all([
-    getPartVersions(),
-    sql`SELECT COUNT(*)::int AS count FROM matches WHERE deleted_at IS NULL`,
-    sql`SELECT COUNT(*)::int AS count FROM players WHERE deleted_at IS NULL`,
-    sql`SELECT COUNT(*)::int AS count FROM seasons WHERE archived = false`,
-    sql`SELECT COUNT(*)::int AS count FROM player_season_settings`,
-  ]);
-  const globalVersion = Math.max(...Object.values(versions), await getDataVersion());
+  const versions = await getPartVersions();
+  const globalVersion = Math.max(...Object.values(versions));
 
   return {
     globalVersion,
     parts: versions,
     counts: {
-      matches: Number(matchCount.rows[0]?.count || 0),
-      players: Number(playerCount.rows[0]?.count || 0),
-      seasons: Number(seasonCount.rows[0]?.count || 0),
-      playerSeasonSettings: Number(playerSeasonSettingCount.rows[0]?.count || 0),
+      matches: 0,
+      players: 0,
+      seasons: 0,
+      playerSeasonSettings: 0,
     },
     checkedAt: Date.now(),
   };

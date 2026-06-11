@@ -1,8 +1,8 @@
 'use client';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { History, X, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
-import { deleteMatchAction } from '@/app/actions';
 import { isGuestId } from '@/lib/guest';
 
 type PlayerNameMode = 'full' | 'tiny';
@@ -76,10 +76,14 @@ function CompactRecentPlayerName({ players, id, className }: { players: any[]; i
   const fullName = playerName(players, id);
   return (
     <span className={cn('block truncate', className)} data-mobile-player-name title={fullName}>
-      <span className="sm:hidden">{playerName(players, id, 'tiny')}</span>
-      <span className="hidden sm:inline">{fullName}</span>
+      {playerName(players, id, 'tiny')}
     </span>
   );
+}
+
+function PortalLayer({ children }: { children: ReactNode }) {
+  if (typeof document === 'undefined') return null;
+  return createPortal(children, document.body);
 }
 
 function dateKeyOf(value: Date | string) {
@@ -120,7 +124,7 @@ function groupMatchesByDay(matches: any[]): DayMatchGroup[] {
 // ─── Delete confirm modal ─────────────────────────────────────────────────────
 function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
   return (
-    <div className="fixed inset-0 z-[600] flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-[1200] flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-300" onClick={onCancel} />
       <div className="relative rounded-[2.5rem] border border-red-500/20 bg-slate-950 shadow-2xl p-8 max-w-sm w-full animate-in zoom-in-95 duration-200">
         <div className="flex flex-col items-center gap-6 text-center">
@@ -147,7 +151,7 @@ function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCance
   );
 }
 
-function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { matches: any[]; players: any[]; onClose: () => void; canEdit: boolean; matchExpected?: any }) {
+function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDeleteMatch }: { matches: any[]; players: any[]; onClose: () => void; canEdit: boolean; matchExpected?: any; onDeleteMatch?: (matchId: string) => Promise<void> | void }) {
   const [isClosing, setIsClosing] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
@@ -207,7 +211,7 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
   };
 
   return (
-    <div className={cn("fixed inset-0 z-[500] flex items-end justify-center p-0 sm:items-center sm:p-4", isClosing && "pointer-events-none")}>
+    <div className={cn("fixed inset-0 z-[1100] flex items-end justify-center p-0 sm:items-center sm:p-4", isClosing && "pointer-events-none")}>
       <div className={cn("history-modal-backdrop absolute inset-0 bg-black/65 backdrop-blur-md", isClosing && "history-modal-backdrop-out")} onClick={requestClose} />
       {deleteTarget && (
         <ConfirmDelete
@@ -217,7 +221,7 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected }: { m
             setDeleteTarget(null);
             setIsDeletingId(id);
             start(async () => {
-              await deleteMatchAction(id);
+              await onDeleteMatch?.(id);
               setIsDeletingId(null);
             });
           }}
@@ -354,6 +358,9 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
   const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
   const expected = matchExpected?.get(m.id);
+  const syncFailed = m.pending && m.sync_status === 'error';
+  const syncLabel = syncFailed ? 'Lưu lỗi' : 'Đang lưu...';
+  const syncClass = syncFailed ? 'text-red-300/90' : 'text-amber-300/80';
   return (
     <div className="group relative flex overflow-hidden rounded-2xl border border-slate-800/80 bg-[#0f172a]/90 shadow-[0_10px_28px_rgba(0,0,0,0.12)] transition-all hover:bg-[#15233c]/90">
       <div className="flex w-[64px] shrink-0 flex-col items-center justify-center gap-1 border-r border-slate-800/80 bg-white/[0.015] px-2 py-3 sm:w-24">
@@ -361,7 +368,7 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
         <span className="text-[10px] font-bold text-slate-400/75 tabular-nums sm:text-[11px]">{date}</span>
       </div>
       <div className={cn("min-w-0 flex-1 px-3 py-3 sm:px-5 sm:py-4", canEdit && "pr-9 sm:pr-11")}>
-        {canEdit && (
+        {canEdit && !m.pending && (
           <button disabled={isDeleting} onClick={onDelete} className={cn("absolute right-2 top-2 rounded-lg p-1.5 text-white/25 transition-all hover:bg-red-500/10 hover:text-red-400 active:scale-90", isDeleting && "pointer-events-none opacity-50")}>
             {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
           </button>
@@ -381,6 +388,9 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
             <div className="rounded-xl border border-primary/25 bg-primary/[0.12] px-3 py-1.5 text-sm font-black text-primary shadow-lg shadow-primary/5 tabular-nums sm:px-4 sm:text-base">
               <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
             </div>
+            {m.pending && (
+              <span className={cn('mt-1 text-[8px] font-black uppercase tracking-widest sm:text-[9px]', syncClass)}>{syncLabel}</span>
+            )}
             {expected && (
               <span className="mt-1 block whitespace-nowrap text-[8px] font-bold tracking-tight text-slate-400 sm:text-[9px]">
                 <span className="sm:hidden">{Math.round(expected.winProb * 100)}% - {Math.round(expected.loseProb * 100)}%</span>
@@ -405,7 +415,7 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
 }
 
 // ─── Main RecentHistory ───────────────────────────────────────────────────────
-export function RecentHistory({ matches, players, canEdit = false, matchExpected, defaultShowAll = false }: { matches: any[]; players: any[]; canEdit?: boolean; matchExpected?: any; defaultShowAll?: boolean }) {
+export function RecentHistory({ matches, players, canEdit = false, matchExpected, defaultShowAll = false, onDeleteMatch }: { matches: any[]; players: any[]; canEdit?: boolean; matchExpected?: any; defaultShowAll?: boolean; onDeleteMatch?: (matchId: string) => Promise<void> | void }) {
   const [showAll, setShowAll] = useState(defaultShowAll);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
@@ -422,20 +432,26 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
 
   return (
     <>
-      {showAll && <HistoryModal matches={matches} players={players} canEdit={canEdit} onClose={() => setShowAll(false)} matchExpected={matchExpected} />}
+      {showAll && (
+        <PortalLayer>
+          <HistoryModal matches={matches} players={players} canEdit={canEdit} onClose={() => setShowAll(false)} matchExpected={matchExpected} onDeleteMatch={onDeleteMatch} />
+        </PortalLayer>
+      )}
       {deleteTarget && (
-        <ConfirmDelete
-          onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => {
-            const id = deleteTarget;
-            setDeleteTarget(null);
-            setIsDeletingId(id);
-            start(async () => {
-              await deleteMatchAction(id);
-              setIsDeletingId(null);
-            });
-          }}
-        />
+        <PortalLayer>
+          <ConfirmDelete
+            onCancel={() => setDeleteTarget(null)}
+            onConfirm={() => {
+              const id = deleteTarget;
+              setDeleteTarget(null);
+              setIsDeletingId(id);
+              start(async () => {
+                await onDeleteMatch?.(id);
+                setIsDeletingId(null);
+              });
+            }}
+          />
+        </PortalLayer>
       )}
 
       <div className="recent-history-container w-full rounded-2xl border border-white/[0.06] bg-slate-900/80 overflow-hidden">
@@ -457,6 +473,9 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
           const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
           const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
           const isDouble = m.win_2 || m.lose_2;
+          const syncFailed = m.pending && m.sync_status === 'error';
+          const syncLabel = syncFailed ? 'Lưu lỗi' : 'Đang lưu...';
+          const syncClass = syncFailed ? 'text-red-300/90' : 'text-amber-300/80';
 
           return (
             <div key={m.id}
@@ -479,6 +498,9 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                   <div className="px-4 py-2 rounded-xl bg-primary/10 border border-primary/20 text-primary font-black text-[17px] tabular-nums tracking-tight whitespace-nowrap">
                     {m.win_score}–{m.lose_score}
                   </div>
+                  {m.pending && (
+                    <span className={cn('mt-1 text-[9px] font-black uppercase tracking-widest', syncClass)}>{syncLabel}</span>
+                  )}
                   {matchExpected?.get(m.id) && (
                     <span className="text-[10px] font-bold text-white/30 mt-1 block tracking-tight">
                       Dự đoán trước trận: {Math.round(matchExpected.get(m.id).winProb * 100)}% - {Math.round(matchExpected.get(m.id).loseProb * 100)}%
@@ -492,7 +514,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                 </div>
 
                 <div className="shrink-0 flex items-center justify-center w-12">
-                  {canEdit && (
+                  {canEdit && !m.pending && (
                     <button disabled={isDeletingId === m.id} onClick={() => setDeleteTarget(m.id)}
                       className={cn("p-2 text-white/15 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors", isDeletingId === m.id && "opacity-50 pointer-events-none")}>
                       {isDeletingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
@@ -510,7 +532,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                   </div>
 
                   <div className={cn("min-w-0 flex-1 px-3 py-3", canEdit && "pr-9")}>
-                    {canEdit && (
+                    {canEdit && !m.pending && (
                       <button disabled={isDeletingId === m.id} onClick={() => setDeleteTarget(m.id)}
                         className={cn("absolute right-2 top-2 rounded-lg p-1.5 text-white/15 transition-colors hover:bg-red-500/10 hover:text-red-400", isDeletingId === m.id && "pointer-events-none opacity-50")}>
                         {isDeletingId === m.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
@@ -527,6 +549,9 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                         <div className="min-w-[62px] rounded-xl border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-center text-sm font-black text-primary tabular-nums whitespace-nowrap">
                           <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
                         </div>
+                        {m.pending && (
+                          <span className={cn('mt-1 text-[8px] font-black uppercase tracking-widest', syncClass)}>{syncFailed ? 'Lưu lỗi' : 'Đang lưu'}</span>
+                        )}
                         {matchExpected?.get(m.id) && (
                           <span className="mt-1 block whitespace-nowrap text-[8px] font-bold tracking-tight text-white/30">
                             {Math.round(matchExpected.get(m.id).winProb * 100)}% - {Math.round(matchExpected.get(m.id).loseProb * 100)}%

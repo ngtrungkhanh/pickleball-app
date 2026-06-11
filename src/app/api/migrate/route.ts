@@ -113,6 +113,8 @@ export async function GET(request: Request) {
     }
 
     // 2. Migrate MATCHES
+    await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS client_request_id VARCHAR(120)`;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS matches_client_request_id_unique ON matches (client_request_id) WHERE client_request_id IS NOT NULL`;
     const matchesSheet = workbook.Sheets['MATCHES'];
     if (matchesSheet) {
       const matches = xlsx.utils.sheet_to_json<SheetRow>(matchesSheet);
@@ -129,7 +131,7 @@ export async function GET(request: Request) {
         const season = String(m.season || 'Season 1');
         
         await sql`
-          INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season)
+          INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, client_request_id)
           VALUES (
             ${id}, 
             ${date.toISOString()}, 
@@ -139,7 +141,8 @@ export async function GET(request: Request) {
             ${lose2}, 
             ${winScore}, 
             ${loseScore}, 
-            ${season}
+            ${season},
+            NULL
           )
           ON CONFLICT (id) DO NOTHING;
         `;
@@ -252,6 +255,8 @@ export async function POST(request: Request) {
     }
 
     await sql`DELETE FROM matches`;
+    await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS client_request_id VARCHAR(120)`;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS matches_client_request_id_unique ON matches (client_request_id) WHERE client_request_id IS NOT NULL`;
 
     let inserted = 0;
     for (const m of rows) {
@@ -270,8 +275,8 @@ export async function POST(request: Request) {
       if (!win_1 || !lose_1) continue;
 
       await sql`
-        INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by, deleted_at, delete_group_id)
-        VALUES (${id}, ${date.toISOString()}, ${win_1}, ${win_2}, ${lose_1}, ${lose_2}, ${win_score}, ${lose_score}, ${season}, ${created_by}, NULL, NULL)
+        INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by, client_request_id, deleted_at, delete_group_id)
+        VALUES (${id}, ${date.toISOString()}, ${win_1}, ${win_2}, ${lose_1}, ${lose_2}, ${win_score}, ${lose_score}, ${season}, ${created_by}, NULL, NULL, NULL)
       `;
       inserted++;
     }
@@ -282,8 +287,6 @@ export async function POST(request: Request) {
 
     revalidatePath('/');
     revalidatePath('/analysis');
-    revalidatePath('/history');
-    revalidatePath('/add-match');
 
     return NextResponse.json({ success: true, inserted, playersUpserted }, { status: 200 });
   } catch (error: any) {

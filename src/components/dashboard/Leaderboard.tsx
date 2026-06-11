@@ -71,6 +71,8 @@ type DetailFallback = {
   note: string;
 };
 
+const DETAIL_CLOSE_MS = 240;
+
 function formatShortDate(value: unknown) {
   const date = new Date(String(value));
   if (Number.isNaN(date.getTime())) return null;
@@ -127,7 +129,7 @@ function DetailTitle({
   );
 }
 
-function DetailPanel({ adv }: { adv: AdvancedStats }) {
+function DetailPanel({ adv, closing = false }: { adv: AdvancedStats; closing?: boolean }) {
   const recent = adv.recent?.length ? adv.recent : [];
   const partnerFallback = adv.bestPartnerFallback || {
     main: 'Chưa có cặp ăn ý',
@@ -146,13 +148,7 @@ function DetailPanel({ adv }: { adv: AdvancedStats }) {
   };
 
   return (
-    <div className="overflow-hidden bg-[#0f1b2e]/92" style={{ animation: 'expandDown 0.2s ease-out' }}>
-      <style>{`
-        @keyframes expandDown {
-          from { opacity: 0; max-height: 0; transform: translateY(-5px); }
-          to { opacity: 1; max-height: 460px; transform: translateY(0); }
-        }
-      `}</style>
+    <div className={cn('leaderboard-detail-panel overflow-hidden bg-[#0f1b2e]/92', closing && 'leaderboard-detail-panel-out')}>
       <div className="px-3 py-3 sm:px-4 sm:py-4 border-t border-slate-500/20">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 items-stretch">
           <div className="min-w-0 rounded-2xl border border-slate-400/20 bg-white/[0.055] px-3 py-3 flex flex-col items-center justify-center text-center gap-2">
@@ -285,6 +281,7 @@ export function Leaderboard({
   onSeasonChange,
   loseMoney = 5000,
   playerSeasonSettings = [],
+  showSeasonHeader = true,
 }: {
   players: Player[];
   matches: Match[];
@@ -294,11 +291,14 @@ export function Leaderboard({
   onSeasonChange?: (season: string | null) => void;
   loseMoney?: number;
   playerSeasonSettings?: PlayerSeasonSetting[];
+  showSeasonHeader?: boolean;
 }) {
   const currentSeason = selectedSeason === undefined ? activeSeason : selectedSeason;
   const [seasonOpen, setSeasonOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [closingIds, setClosingIds] = useState<Set<string>>(() => new Set());
+  const closeTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -307,6 +307,14 @@ export function Leaderboard({
     if (seasonOpen) document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, [seasonOpen]);
+
+  useEffect(() => {
+    const closeTimers = closeTimersRef.current;
+    return () => {
+      closeTimers.forEach(timer => clearTimeout(timer));
+      closeTimers.clear();
+    };
+  }, []);
 
   const seasons = Array.from(new Set([
     ...seasonList.map(s => s.name),
@@ -354,10 +362,58 @@ export function Leaderboard({
     .filter(p => p.active !== false && p.id !== '__GUEST__')
     .slice(0, 20);
 
-  const toggle = (id: string) => setExpandedId(prev => prev === id ? null : id);
+  const stopClosing = (id: string) => {
+    const timer = closeTimersRef.current.get(id);
+    if (timer) clearTimeout(timer);
+    closeTimersRef.current.delete(id);
+
+    setClosingIds(current => {
+      if (!current.has(id)) return current;
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const startClosing = (id: string) => {
+    stopClosing(id);
+
+    setClosingIds(current => {
+      const next = new Set(current);
+      next.add(id);
+      return next;
+    });
+
+    const timer = setTimeout(() => {
+      setClosingIds(current => {
+        if (!current.has(id)) return current;
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+      closeTimersRef.current.delete(id);
+    }, DETAIL_CLOSE_MS);
+    closeTimersRef.current.set(id, timer);
+  };
+
+  const toggle = (id: string) => {
+    if (expandedId === id) {
+      setExpandedId(null);
+      startClosing(id);
+      return;
+    }
+
+    if (expandedId) startClosing(expandedId);
+    stopClosing(id);
+    setExpandedId(id);
+  };
 
   return (
-    <div className="w-full rounded-2xl sm:rounded-[2rem] border border-slate-400/25 bg-[#192844]/95 shadow-[0_24px_70px_rgba(0,0,0,0.30)] overflow-visible backdrop-blur-2xl">
+    <div className={cn(
+      "w-full rounded-2xl sm:rounded-[2rem] border border-slate-400/25 bg-[#192844]/95 shadow-[0_24px_70px_rgba(0,0,0,0.30)] backdrop-blur-2xl",
+      showSeasonHeader ? "overflow-visible" : "overflow-hidden",
+    )}>
+      {showSeasonHeader && (
       <div className="flex items-center justify-center px-4 sm:px-6 py-5 sm:py-6 border-b border-slate-400/25">
         <div className="relative flex flex-col items-center" ref={dropRef}>
           <button
@@ -403,9 +459,10 @@ export function Leaderboard({
           )}
         </div>
       </div>
+      )}
 
       <div className="hidden sm:block">
-        <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
+        <table className="w-full border-separate border-spacing-0" style={{ tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: '8%' }} />
             <col style={{ width: '32%' }} />
@@ -429,6 +486,8 @@ export function Leaderboard({
           <tbody>
             {board.map((p, i) => {
               const exp = expandedId === p.id;
+              const closing = closingIds.has(p.id);
+              const showDetail = exp || closing;
               const adv = getPlayerAdvancedStats(p.id, filtered, players);
               const rate = Math.round(p.winRate);
 
@@ -438,7 +497,7 @@ export function Leaderboard({
                     onClick={() => toggle(p.id)}
                     className={cn(
                       'border-t border-slate-500/18 cursor-pointer transition-all group',
-                      exp ? 'bg-emerald-400/[0.075]' : 'bg-[#17243a]/55 hover:bg-slate-700/65',
+                      exp || closing ? 'bg-emerald-400/[0.075]' : 'bg-[#17243a]/55 hover:bg-slate-700/65',
                     )}
                   >
                     <td className="py-3 px-4 text-center"><RankBadge i={i} /></td>
@@ -447,7 +506,7 @@ export function Leaderboard({
                         <span className={cn('font-black text-base 2xl:text-lg truncate transition-all', i === 0 ? 'text-amber-400' : exp ? 'text-primary' : 'text-white group-hover:text-white')}>
                           {p.name}
                         </span>
-                        <div className={cn('w-1.5 h-1.5 rounded-full bg-primary opacity-0 transition-all scale-0', exp && 'opacity-100 scale-100')} />
+                        <div className={cn('w-1.5 h-1.5 rounded-full bg-primary opacity-0 transition-all scale-0', (exp || closing) && 'opacity-100 scale-100')} />
                       </div>
                     </td>
                     <td className="py-3 px-4 text-center font-black text-base 2xl:text-lg text-slate-100 tabular-nums">{p.total}</td>
@@ -458,10 +517,10 @@ export function Leaderboard({
                       {formatMoney(p.money)}
                     </td>
                   </tr>
-                  {exp && (
+                  {showDetail && (
                     <tr key={`${p.id}-detail`} className="bg-[#101c2f]">
                       <td colSpan={7} className="p-0 border-t border-slate-500/20">
-                        <DetailPanel adv={adv} />
+                        <DetailPanel adv={adv} closing={closing} />
                       </td>
                     </tr>
                   )}
@@ -475,6 +534,8 @@ export function Leaderboard({
       <div className="sm:hidden">
         {board.map((p, i) => {
           const exp = expandedId === p.id;
+          const closing = closingIds.has(p.id);
+          const showDetail = exp || closing;
           const adv = getPlayerAdvancedStats(p.id, filtered, players);
           const rate = Math.round(p.winRate);
           const rateColor = rate >= 60 ? '#22c55e' : rate >= 40 ? '#94a3b8' : '#f87171';
@@ -483,7 +544,7 @@ export function Leaderboard({
             <div key={p.id} className="border-t border-slate-500/20 first:border-t-0">
               <button
                 onClick={() => toggle(p.id)}
-                className={cn('w-full flex items-center gap-3 px-4 py-4 text-left transition-all', exp ? 'bg-primary/[0.09]' : 'active:bg-white/[0.05]')}
+                className={cn('w-full flex items-center gap-3 px-4 py-4 text-left transition-all', exp || closing ? 'bg-primary/[0.09]' : 'active:bg-white/[0.05]')}
               >
                 <div className="w-8 shrink-0 flex justify-center"><RankBadge i={i} /></div>
                 <div className="flex-1 min-w-0">
@@ -501,7 +562,7 @@ export function Leaderboard({
                   <span className="text-xs font-black text-amber-400/90">{formatMoney(p.money)}</span>
                 </div>
               </button>
-              {exp && <DetailPanel adv={adv} />}
+              {showDetail && <DetailPanel adv={adv} closing={closing} />}
             </div>
           );
         })}

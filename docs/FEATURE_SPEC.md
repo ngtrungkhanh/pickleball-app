@@ -32,10 +32,12 @@ empty cache.
 
 - `/` - dashboard with summary, leaderboard, score entry, recent history, and
   settings access.
-- `/history` - standalone full history page.
+- Full history is opened from the Dashboard recent-history modal; there is no
+  standalone `/history` user route.
 - `/analysis` - read-only analysis center.
 - `/admin` - admin-oriented data management view.
-- `/add-match` - direct match-entry route retained for reference/direct entry.
+- Match entry is handled in the Dashboard `ScoreForm`; there is no standalone
+  `/add-match` user route.
 - `/api/setup` - schema setup/upgrade helper; should be protected by process
   and not treated as a normal user feature.
 - `/api/migrate` - Excel migration helper; production requires `SETUP_SECRET`.
@@ -72,7 +74,7 @@ Expected behavior:
 - Save to the active season.
 - Show sync states: saving, saved, error/retry.
 - Retry pending save when a recent pending draft exists.
-- Refresh/revalidate dashboard/history/analysis after server success.
+- Refresh/revalidate dashboard/analysis after server success.
 
 ## Leaderboard and Stats
 
@@ -148,7 +150,7 @@ Expanded detail behavior:
 - Season selector merges seasons from the `seasons` table, active season, and
   seasons present in match data.
 - Creating or activating a season updates active season state and revalidates
-  dashboard/history/analysis.
+  dashboard/analysis.
 
 ## Guest Player
 
@@ -212,11 +214,7 @@ Recent history on dashboard:
 - filters by member 1, member 2, partner/opponent relation, and member result
 - allows delete only in edit mode
 
-Standalone `/history`:
-
-- fetches all non-deleted matches
-- groups by season
-- displays match rows with delete button
+Standalone `/history` has been removed. Full history uses the Dashboard modal.
 
 ## Analysis Center
 

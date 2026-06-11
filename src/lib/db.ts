@@ -155,6 +155,16 @@ function normalizePartVersions(input: unknown, fallbackVersion = 0): AppCachePar
   return versions;
 }
 
+function mergePartVersions(current: unknown, updates: Partial<AppCachePartVersions> | undefined, fallbackVersion = 0): AppCachePartVersions {
+  if (updates && Object.keys(updates).length > 0) {
+    return normalizePartVersions({
+      ...normalizePartVersions(current, 0),
+      ...updates,
+    }, 0);
+  }
+  return normalizePartVersions(current, fallbackVersion);
+}
+
 export async function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -249,12 +259,19 @@ export async function replaceMatchesLocal(matches: StoredMatch[]) {
   emitCacheChange();
 }
 
-export async function removeMatchesLocal(matchIds: string[]) {
+export async function removeMatchesLocal(matchIds: string[], dataVersion?: number, partVersions?: Partial<AppCachePartVersions>) {
   if (matchIds.length === 0) return;
+  const currentPartVersions = typeof dataVersion === 'number'
+    ? await getMetaValue<unknown>('partVersions', null)
+    : null;
   const db = await openDB();
-  const tx = db.transaction(STORES.matches, 'readwrite');
+  const tx = db.transaction([STORES.matches, STORES.syncMeta], 'readwrite');
   const store = tx.objectStore(STORES.matches);
   matchIds.forEach((id) => store.delete(id));
+  if (typeof dataVersion === 'number') {
+    tx.objectStore(STORES.syncMeta).put({ key: 'dataVersion', value: dataVersion });
+    tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: mergePartVersions(currentPartVersions, partVersions || { matches: dataVersion }, dataVersion) });
+  }
   await new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve(true);
     tx.onerror = () => reject(tx.error);
@@ -263,6 +280,9 @@ export async function removeMatchesLocal(matchIds: string[]) {
 }
 
 export async function replaceOptimisticMatchLocal(tempId: string, match: StoredMatch, dataVersion?: number, partVersions?: Partial<AppCachePartVersions>) {
+  const currentPartVersions = typeof dataVersion === 'number'
+    ? await getMetaValue<unknown>('partVersions', null)
+    : null;
   const db = await openDB();
   const tx = db.transaction([STORES.matches, STORES.syncMeta], 'readwrite');
   const matchStore = tx.objectStore(STORES.matches);
@@ -270,7 +290,7 @@ export async function replaceOptimisticMatchLocal(tempId: string, match: StoredM
   matchStore.put(match);
   if (typeof dataVersion === 'number') {
     tx.objectStore(STORES.syncMeta).put({ key: 'dataVersion', value: dataVersion });
-    tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: normalizePartVersions(partVersions || { matches: dataVersion }, 0) });
+    tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: mergePartVersions(currentPartVersions, partVersions || { matches: dataVersion }, dataVersion) });
   }
   await new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve(true);
@@ -290,24 +310,27 @@ export async function getLastMatchId(): Promise<string | null> {
 }
 
 export async function seedAppCache(input: AppCacheInput) {
-  const writes: Array<Promise<unknown>> = [];
-  if (input.matches) writes.push(replaceMatchesLocal(input.matches));
-  if (input.players) writes.push(replaceStore(STORES.players, input.players));
-  if (input.seasons) writes.push(replaceStore(STORES.seasons, input.seasons));
-  if (input.config) writes.push(replaceStore(STORES.config, configToEntries(input.config)));
-  if (input.playerSeasonSettings) writes.push(replaceStore(STORES.playerSeasonSettings, input.playerSeasonSettings));
+  const dataWrites: Array<Promise<unknown>> = [];
+  if (input.matches) dataWrites.push(replaceStore(STORES.matches, uniqueMatches(input.matches)));
+  if (input.players) dataWrites.push(replaceStore(STORES.players, input.players));
+  if (input.seasons) dataWrites.push(replaceStore(STORES.seasons, input.seasons));
+  if (input.config) dataWrites.push(replaceStore(STORES.config, configToEntries(input.config)));
+  if (input.playerSeasonSettings) dataWrites.push(replaceStore(STORES.playerSeasonSettings, input.playerSeasonSettings));
+  await Promise.all(dataWrites);
+
+  const metaWrites: Array<Promise<unknown>> = [];
   if (typeof input.dataVersion === 'number') {
-    writes.push(setMetaValue('dataVersion', input.dataVersion));
+    metaWrites.push(setMetaValue('dataVersion', input.dataVersion));
   }
   if (input.partVersions) {
-    writes.push(setMetaValue('partVersions', normalizePartVersions(input.partVersions, input.dataVersion || 0)));
+    metaWrites.push(setMetaValue('partVersions', normalizePartVersions(input.partVersions, 0)));
   } else if (typeof input.dataVersion === 'number') {
-    writes.push(setMetaValue('partVersions', normalizePartVersions(null, input.dataVersion)));
+    metaWrites.push(setMetaValue('partVersions', normalizePartVersions(null, input.dataVersion)));
   }
   if (typeof input.manifestCheckedAt === 'number') {
-    writes.push(setMetaValue('lastManifestCheck', input.manifestCheckedAt));
+    metaWrites.push(setMetaValue('lastManifestCheck', input.manifestCheckedAt));
   }
-  await Promise.all(writes);
+  await Promise.all(metaWrites);
   emitCacheChange();
 }
 
@@ -352,7 +375,6 @@ export async function getAppCacheSnapshot(): Promise<AppCacheSnapshot> {
 
 export function hasUsableAppCache(snapshot: AppCacheSnapshot) {
   return snapshot.players.length > 0
-    && snapshot.matches.length > 0
     && Object.keys(snapshot.config).length > 0
     && snapshot.seasons.length > 0;
 }

@@ -1,11 +1,11 @@
 'use client';
 import { useState, useTransition, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { addMatchAction } from '@/app/actions';
+import { addMatchAction, getAppDataPartsAction } from '@/app/actions';
 import { Minus, Plus, Trophy, Ghost, Send, RefreshCw, AlertCircle, CheckCircle2, Check, ChevronDown, UserRound, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isGuestId } from '@/lib/guest';
-import { removeMatchesLocal, replaceOptimisticMatchLocal, saveMatchesLocal } from '@/lib/db';
+import { removeMatchesLocal, replaceAppCacheParts, replaceOptimisticMatchLocal, saveMatchesLocal, type AppCachePart, type StoredPlayer, type StoredPlayerSeasonSetting, type StoredSeason } from '@/lib/db';
 
 const PENDING_KEY = 'pickleball_pending_match';
 const RECENT_KEY = 'pickleball_recent_matches';
@@ -25,6 +25,12 @@ type ScorePlayer = {
   deleted_at?: unknown;
 };
 
+type ScoreSlot = 'win1' | 'win2' | 'lose1' | 'lose2';
+
+type SelectedSlots = Record<ScoreSlot, string>;
+
+type PlayerRelation = 'current' | 'available' | 'same' | 'other';
+
 type RecentLocalMatch = {
   key: string;
   timestamp: number;
@@ -33,11 +39,28 @@ type RecentLocalMatch = {
 type ServerResult = {
   success?: boolean;
   skippedDuplicate?: boolean;
+  duplicateConflict?: boolean;
   error?: string;
+  debug?: string;
+  staleClientData?: boolean;
+  missingPlayerIds?: string[];
   dataVersion?: number;
   partVersions?: Record<string, number>;
   match?: Record<string, unknown>;
+  duplicateMatch?: Record<string, unknown>;
 };
+
+type ServerResultOptions = {
+  silent?: boolean;
+};
+
+function pickPartVersions(partVersions: Record<string, number> | undefined, parts: AppCachePart[]) {
+  if (!partVersions) return undefined;
+  return parts.reduce<Record<string, number>>((acc, part) => {
+    if (typeof partVersions[part] === 'number') acc[part] = partVersions[part];
+    return acc;
+  }, {});
+}
 
 function teamKey(a: string, b: string): string {
   return [a, b].filter(Boolean).sort().join('|');
@@ -66,44 +89,90 @@ function saveRecentLocal(slots: MatchSlots) {
   } catch {}
 }
 
-function savePending(data: object) {
+type PendingSave = {
+  requestId: string;
+  match: Record<string, unknown>;
+  timestamp: number;
+};
+
+function readPendingSaves(): PendingSave[] {
   try {
-    localStorage.setItem(PENDING_KEY, JSON.stringify({ match: data, timestamp: Date.now() }));
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { matches?: PendingSave[]; match?: Record<string, unknown>; timestamp?: number };
+    if (Array.isArray(parsed?.matches)) {
+      return parsed.matches.filter(item => item?.requestId && item.match);
+    }
+    if (parsed?.match) {
+      const requestId = String(parsed.match.client_request_id || parsed.match.temp_id || `LEGACY-${parsed.timestamp || Date.now()}`);
+      return [{ requestId, match: parsed.match, timestamp: parsed.timestamp || Date.now() }];
+    }
+  } catch {}
+  return [];
+}
+
+function writePendingSaves(matches: PendingSave[]) {
+  try {
+    if (matches.length === 0) localStorage.removeItem(PENDING_KEY);
+    else localStorage.setItem(PENDING_KEY, JSON.stringify({ matches }));
   } catch {}
 }
 
-function clearPending() {
-  try {
-    localStorage.removeItem(PENDING_KEY);
-  } catch {}
+function savePending(data: Record<string, unknown>) {
+  const requestId = String(data.client_request_id || data.temp_id || '');
+  if (!requestId) return;
+  const next = readPendingSaves().filter(item => item.requestId !== requestId);
+  next.push({ requestId, match: data, timestamp: Date.now() });
+  writePendingSaves(next.slice(-12));
 }
 
-function SyncBadge({ state, onRetry }: { state: 'idle' | 'syncing' | 'error' | 'ok'; onRetry?: () => void }) {
+function clearPending(requestId?: string) {
+  if (!requestId) {
+    writePendingSaves([]);
+    return;
+  }
+  writePendingSaves(readPendingSaves().filter(item => item.requestId !== requestId));
+}
+
+function runAfterNextPaint(task: () => void) {
+  if (typeof window === 'undefined') {
+    task();
+    return;
+  }
+  window.requestAnimationFrame(() => {
+    window.setTimeout(task, 0);
+  });
+}
+
+function SyncBadge({ state, message, onRetry }: { state: 'idle' | 'syncing' | 'error' | 'ok'; message?: string; onRetry?: () => void }) {
   if (state === 'idle') return null;
+  const label = state === 'syncing' ? 'Đang lưu...' : state === 'error' ? (message || 'Lưu lỗi - thử lại') : 'Đã lưu';
   return (
     <div className={cn(
-      'fixed top-6 right-6 z-[700] flex items-center gap-3 px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] animate-in slide-in-from-top-6 duration-300 backdrop-blur-xl border transition-all',
+      'fixed top-6 right-6 z-[700] flex max-w-[min(92vw,560px)] items-start gap-3 rounded-2xl px-5 py-3 text-[11px] font-black shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] animate-in slide-in-from-top-6 duration-300 backdrop-blur-xl border transition-all',
       state === 'syncing' && 'bg-amber-500/10 border-amber-500/20 text-amber-400',
       state === 'error' && 'bg-red-500/10 border-red-500/20 text-red-400 cursor-pointer hover:bg-red-500/20',
       state === 'ok' && 'bg-primary/10 border-primary/20 text-primary',
     )} onClick={state === 'error' ? onRetry : undefined}>
-      {state === 'syncing' && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-      {state === 'error' && <AlertCircle className="w-3.5 h-3.5" />}
-      {state === 'ok' && <CheckCircle2 className="w-3.5 h-3.5" />}
-      {state === 'syncing' ? 'Đang lưu...' : state === 'error' ? 'Lưu lỗi - thử lại' : 'Đã lưu'}
+      {state === 'syncing' && <RefreshCw className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />}
+      {state === 'error' && <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+      {state === 'ok' && <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+      <span className={cn('min-w-0 text-left leading-snug', state !== 'error' && 'uppercase tracking-[0.18em]')}>
+        {label}
+      </span>
     </div>
   );
 }
 
-function ScoreStepper({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function ScoreStepper({ label, value, onChange, compact = false }: { label: string; value: number; onChange: (v: number) => void; compact?: boolean }) {
   const ref = useRef<HTMLInputElement>(null);
   return (
-    <div className="flex flex-col items-center gap-2">
-      <span className="text-[10px] sm:text-xs font-black text-slate-300/75 uppercase tracking-[0.22em]">{label}</span>
-      <div className="flex items-center gap-2 sm:gap-4">
+    <div className={cn("flex flex-col items-center", compact ? "gap-1" : "gap-2")}>
+      <span className={cn("font-black text-slate-300/75 uppercase", compact ? "text-[9px] tracking-[0.18em]" : "text-[10px] sm:text-xs tracking-[0.22em]")}>{label}</span>
+      <div className={cn("flex items-center", compact ? "gap-1.5" : "gap-2 sm:gap-4")}>
         <button type="button"
           onClick={() => onChange(Math.max(0, value - 1))}
-          className="sm:hidden w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-300/70 active:scale-90 transition-all shrink-0">
+          className={cn(compact ? "flex h-8 w-8" : "sm:hidden w-9 h-9", "rounded-xl bg-white/5 border border-white/10 items-center justify-center text-slate-300/70 active:scale-90 transition-all shrink-0")}>
           <Minus className="w-4 h-4" />
         </button>
 
@@ -113,13 +182,13 @@ function ScoreStepper({ label, value, onChange }: { label: string; value: number
           value={value}
           onChange={e => { const n = parseInt(e.target.value, 10); if (!isNaN(n) && n >= 0) onChange(n); else if (e.target.value === '') onChange(0); }}
           onFocus={() => setTimeout(() => ref.current?.select(), 0)}
-          className="w-14 sm:w-20 text-center bg-transparent border-0 border-b-4 border-white/10 focus:border-primary/50 outline-none font-black text-white text-4xl sm:text-5xl md:text-6xl transition-all py-1 tabular-nums"
+          className={cn("text-center bg-transparent border-0 border-b-4 border-white/10 focus:border-primary/50 outline-none font-black text-white transition-all py-1 tabular-nums", compact ? "w-12 text-3xl" : "w-14 sm:w-20 text-4xl sm:text-5xl md:text-6xl")}
           style={{ lineHeight: 1 }}
         />
 
         <button type="button"
           onClick={() => onChange(value + 1)}
-          className="sm:hidden w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary active:scale-90 transition-all shrink-0">
+          className={cn(compact ? "flex h-8 w-8" : "sm:hidden w-9 h-9", "rounded-xl bg-primary/10 border border-primary/20 items-center justify-center text-primary active:scale-90 transition-all shrink-0")}>
           <Plus className="w-4 h-4" />
         </button>
       </div>
@@ -132,15 +201,20 @@ function PlayerPicker({
   value,
   players,
   tone,
+  slot,
+  selectedSlots,
   onChange,
 }: {
   label: string;
   value: string;
   players: ScorePlayer[];
   tone: 'win' | 'lose';
+  slot: ScoreSlot;
+  selectedSlots: SelectedSlots;
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const selected = players.find(p => p.id === value);
   const guest = players.find(p => isGuestId(p.id));
   const members = players.filter(p => !isGuestId(p.id));
@@ -167,11 +241,59 @@ function PlayerPicker({
     setOpen(false);
   };
 
+  useEffect(() => {
+    if (!open) return;
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && pickerRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [open]);
+
+  const teammateSlot: Record<ScoreSlot, ScoreSlot> = {
+    win1: 'win2',
+    win2: 'win1',
+    lose1: 'lose2',
+    lose2: 'lose1',
+  };
+  const otherTeamSlots: Record<ScoreSlot, ScoreSlot[]> = {
+    win1: ['lose1', 'lose2'],
+    win2: ['lose1', 'lose2'],
+    lose1: ['win1', 'win2'],
+    lose2: ['win1', 'win2'],
+  };
+
+  const playerRelation = (playerId: string): PlayerRelation => {
+    if (playerId === value) return 'current';
+    if (selectedSlots[teammateSlot[slot]] === playerId) return 'same';
+    if (otherTeamSlots[slot].some(otherSlot => selectedSlots[otherSlot] === playerId)) return 'other';
+    return 'available';
+  };
+
+  const relationPriority: Record<PlayerRelation, number> = {
+    current: 0,
+    available: 1,
+    same: 2,
+    other: 3,
+  };
+
+  const sortedMembers = members
+    .map((player, index) => ({ player, index, relation: playerRelation(player.id) }))
+    .sort((a, b) => relationPriority[a.relation] - relationPriority[b.relation] || a.index - b.index);
+
+  const sameTeamClass = tone === 'win'
+    ? 'bg-green-500/10 text-green-100 border-green-400/30 hover:bg-green-500/15'
+    : 'bg-red-500/10 text-red-100 border-red-400/30 hover:bg-red-500/15';
+
   const list = (
     <div className="max-h-[70vh] overflow-y-auto p-2">
       <div className="space-y-1">
-        {members.map(player => {
-          const active = player.id === value;
+        {sortedMembers.map(({ player, relation }) => {
+          const active = relation === 'current';
           return (
             <button
               key={player.id}
@@ -179,7 +301,10 @@ function PlayerPicker({
               onClick={() => choose(player.id)}
               className={cn(
                 'flex min-h-14 w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-base font-black transition',
-                active ? accent.active : `border-transparent text-white ${accent.hover}`,
+                active && accent.active,
+                relation === 'available' && `border-transparent text-white ${accent.hover}`,
+                relation === 'same' && sameTeamClass,
+                relation === 'other' && 'bg-amber-400/10 text-amber-100 border-amber-300/30 hover:bg-amber-400/15',
               )}
             >
               <span className="min-w-0 break-words leading-5">{player.name}</span>
@@ -213,7 +338,7 @@ function PlayerPicker({
   );
 
   return (
-    <div className="relative min-w-0">
+    <div ref={pickerRef} className="relative min-w-0">
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -266,19 +391,26 @@ export function ScoreForm({
   onAddMatch,
   onConfirmMatch,
   onRejectMatch,
+  onFailMatch,
   activeSeason = 'Season 1',
+  compact = false,
 }: {
   players: Array<Record<string, unknown>>;
   onAddMatch?: (m: Record<string, unknown>) => void;
   onConfirmMatch?: (tempId: string, match: Record<string, unknown>) => void;
   onRejectMatch?: (tempId: string) => void;
+  onFailMatch?: (tempId: string, error?: string) => void;
   activeSeason?: string;
+  compact?: boolean;
 }) {
   const [, start] = useTransition();
   const router = useRouter();
   const [ui, setUi] = useState<'idle' | 'saved'>('idle');
   const [sync, setSync] = useState<'idle' | 'syncing' | 'error' | 'ok'>('idle');
+  const [syncError, setSyncError] = useState('');
   const [pendingFd, setPendingFd] = useState<FormData | null>(null);
+  const inFlightRequestIds = useRef(new Set<string>());
+  const recoveredPendingOnce = useRef(false);
 
   const [win1, setWin1] = useState('');
   const [win2, setWin2] = useState('');
@@ -300,7 +432,9 @@ export function ScoreForm({
     }));
   const reset = () => { setWin1(''); setWin2(''); setLose1(''); setLose2(''); setWs(11); setLs(5); };
 
-  type Slot = 'win1' | 'win2' | 'lose1' | 'lose2';
+  type Slot = ScoreSlot;
+  const selectedSlots: SelectedSlots = { win1, win2, lose1, lose2 };
+
   const setSlot = (slot: Slot, value: string) => {
     if (value && !isGuestId(value)) {
       if (slot !== 'win1' && win1 === value) setWin1('');
@@ -315,13 +449,7 @@ export function ScoreForm({
     if (slot === 'lose2') setLose2(value);
   };
 
-  const optionsFor = (slot: Slot) => {
-    const sameSideSelected = slot.startsWith('win')
-      ? [slot === 'win1' ? win2 : win1]
-      : [slot === 'lose1' ? lose2 : lose1];
-
-    return active.filter(p => isGuestId(p.id) || !sameSideSelected.includes(p.id));
-  };
+  const optionsFor = () => active;
 
   useEffect(() => {
     try {
@@ -356,6 +484,11 @@ export function ScoreForm({
 
   const fullIdentity = `${clientId}${nickname ? ` (${nickname})` : ''} [${deviceInfo || 'Unknown'}]`;
 
+  const makeRequestId = () => {
+    const random = Math.random().toString(36).slice(2, 8).toUpperCase();
+    return `SAVE-${Date.now().toString(36).toUpperCase()}-${random}`;
+  };
+
   const removeOptimisticMatch = useCallback((fd: FormData) => {
     const tempId = String(fd.get('temp_id') || '');
     if (!tempId) return;
@@ -363,10 +496,51 @@ export function ScoreForm({
     void removeMatchesLocal([tempId]);
   }, [onRejectMatch]);
 
-  const handleServerResult = useCallback(async (r: ServerResult | undefined, fd: FormData) => {
+  const markOptimisticMatchError = useCallback((fd: FormData, error?: string) => {
     const tempId = String(fd.get('temp_id') || '');
+    if (!tempId) return;
+    onFailMatch?.(tempId, error);
+    void saveMatchesLocal([{
+      id: tempId,
+      date: new Date().toISOString(),
+      win_1: String(fd.get('win_1') || ''),
+      win_2: String(fd.get('win_2') || '') || null,
+      lose_1: String(fd.get('lose_1') || ''),
+      lose_2: String(fd.get('lose_2') || '') || null,
+      win_score: Number(fd.get('win_score') || 0),
+      lose_score: Number(fd.get('lose_score') || 0),
+      season: String(fd.get('season') || activeSeason),
+      created_by: String(fd.get('created_by') || 'SYSTEM'),
+      client_request_id: String(fd.get('client_request_id') || ''),
+      pending: true,
+      sync_status: 'error',
+      sync_error: error || 'Lưu server thất bại',
+    }]);
+  }, [activeSeason, onFailMatch]);
+
+  const refreshStaleLocalData = useCallback(async () => {
+    const parts: AppCachePart[] = ['players', 'config', 'seasons', 'playerSeasonSettings'];
+    const appData = await getAppDataPartsAction(parts);
+    if (!appData) throw new Error('Không tải lại được dữ liệu server');
+    await replaceAppCacheParts({
+      players: appData.players as StoredPlayer[] | undefined,
+      seasons: appData.seasons as StoredSeason[] | undefined,
+      config: appData.config,
+      playerSeasonSettings: appData.playerSeasonSettings as StoredPlayerSeasonSetting[] | undefined,
+    }, {
+      dataVersion: appData.dataVersion,
+      partVersions: pickPartVersions(appData.partVersions, parts),
+      manifestCheckedAt: Date.now(),
+    });
+    router.refresh();
+  }, [router]);
+
+  const handleServerResult = async (r: ServerResult | undefined, fd: FormData, options: ServerResultOptions = {}) => {
+    const silent = options.silent === true;
+    const tempId = String(fd.get('temp_id') || '');
+    const requestId = String(fd.get('client_request_id') || tempId);
     if (r?.success) {
-      clearPending();
+      clearPending(requestId);
       if (r.match) {
         onConfirmMatch?.(tempId, r.match);
         await replaceOptimisticMatchLocal(tempId, r.match, r.dataVersion, r.partVersions);
@@ -381,59 +555,140 @@ export function ScoreForm({
         lose2: String(fd.get('lose_2') || ''),
         season: String(fd.get('season') || activeSeason),
       });
-      setSync('ok');
-      setTimeout(() => setSync('idle'), 2500);
+      if (!silent) {
+        setSyncError('');
+        setSync('ok');
+        setTimeout(() => setSync('idle'), 2500);
+      }
+      return;
+    }
+    if (r?.duplicateConflict) {
+      removeOptimisticMatch(fd);
+      if (silent) {
+        clearPending(requestId);
+        setSync('idle');
+        return;
+      }
+      setSync('idle');
+      setSyncError('');
+      const duplicateDate = r.duplicateMatch?.date ? new Date(String(r.duplicateMatch.date)) : null;
+      const duplicateTime = duplicateDate && !Number.isNaN(duplicateDate.getTime())
+        ? duplicateDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+        : 'gần đây';
+      const confirmed = window.confirm(`Trận này đã được máy khác ghi lúc ${duplicateTime}. Có muốn ghi thêm trận trùng không?`);
+      if (confirmed) {
+        fd.set('duplicate_confirmed', 'true');
+        setSync('syncing');
+        savePending(Object.fromEntries(fd.entries()));
+        inFlightRequestIds.current.add(requestId);
+        start(async () => {
+          try {
+            const retry = await addMatchAction(fd);
+            await handleServerResult(retry, fd);
+          } finally {
+            inFlightRequestIds.current.delete(requestId);
+          }
+        });
+      } else {
+        clearPending(requestId);
+      }
       return;
     }
     if (r?.skippedDuplicate) {
-      clearPending();
+      clearPending(requestId);
       removeOptimisticMatch(fd);
-      setSync('idle');
-      router.refresh();
+      if (!silent) {
+        setSync('idle');
+        router.refresh();
+      }
       return;
     }
     if (!r?.error) {
-      clearPending();
+      clearPending(requestId);
       removeOptimisticMatch(fd);
-      setSync('ok');
-      setTimeout(() => setSync('idle'), 2500);
+      if (!silent) {
+        setSyncError('');
+        setSync('ok');
+        setTimeout(() => setSync('idle'), 2500);
+      }
       return;
     }
-    removeOptimisticMatch(fd);
+    markOptimisticMatchError(fd, r.error || r.debug);
+    if (r.staleClientData) {
+      try {
+        await refreshStaleLocalData();
+      } catch (error) {
+        console.error('Stale local data refresh failed:', error);
+      }
+    }
+    if (silent) {
+      setSync('idle');
+      return;
+    }
+    setSyncError(r.error || r.debug || 'Lưu lỗi - thử lại');
     setSync('error');
     setPendingFd(fd);
-  }, [activeSeason, onConfirmMatch, onRejectMatch, removeOptimisticMatch, router]);
+  };
 
   useEffect(() => {
+    if (recoveredPendingOnce.current) return;
+    recoveredPendingOnce.current = true;
     try {
-      const raw = localStorage.getItem(PENDING_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as { match?: Record<string, unknown>; timestamp?: number };
-      if (!parsed || !parsed.match) return;
-      const { match, timestamp } = parsed;
-      if (timestamp && (Date.now() - timestamp) / 60000 < 60) {
+      const pending = readPendingSaves();
+      pending.forEach(({ match, timestamp, requestId }) => {
+        if (!timestamp || (Date.now() - timestamp) / 60000 >= 60) {
+          clearPending(requestId);
+          return;
+        }
+        if (inFlightRequestIds.current.has(requestId)) return;
         const fd = new FormData();
         Object.entries(match).forEach(([k, v]) => { if (v) fd.append(k, String(v)); });
         if (!fd.get('created_by')) fd.append('created_by', fullIdentity);
-        queueMicrotask(() => setSync('syncing'));
+        if (!fd.get('client_request_id')) fd.append('client_request_id', requestId);
+        inFlightRequestIds.current.add(requestId);
         start(async () => {
-          const r = await addMatchAction(fd);
-          await handleServerResult(r, fd);
+          try {
+            const r = await addMatchAction(fd);
+            await handleServerResult(r, fd, { silent: true });
+          } catch (error) {
+            console.error('Pending match retry failed:', error);
+            setSyncError(error instanceof Error ? error.message : String(error));
+            markOptimisticMatchError(fd, error instanceof Error ? error.message : String(error));
+            setSync('idle');
+          } finally {
+            inFlightRequestIds.current.delete(requestId);
+          }
         });
-      } else clearPending();
+      });
     } catch {}
-  }, [fullIdentity, handleServerResult]);
+    // Pending recovery is intentionally one-shot; in-flight guards handle retries.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullIdentity]);
 
   const doSync = (fd: FormData) => {
+    const requestId = String(fd.get('client_request_id') || fd.get('temp_id') || '');
+    if (requestId && inFlightRequestIds.current.has(requestId)) return;
+    if (requestId) inFlightRequestIds.current.add(requestId);
+    setSyncError('');
     setSync('syncing');
     savePending(Object.fromEntries(fd.entries()));
     start(async () => {
-      const r = await addMatchAction(fd);
-      await handleServerResult(r, fd);
+      try {
+        const r = await addMatchAction(fd);
+        await handleServerResult(r, fd);
+      } catch (error) {
+        console.error('Match sync failed:', error);
+        setSyncError(error instanceof Error ? error.message : String(error));
+        markOptimisticMatchError(fd, error instanceof Error ? error.message : String(error));
+        setSync('error');
+        setPendingFd(fd);
+      } finally {
+        if (requestId) inFlightRequestIds.current.delete(requestId);
+      }
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!win1 || !win2 || !lose1 || !lose2) return alert('Vui lòng chọn đủ 4 người.');
 
@@ -444,62 +699,67 @@ export function ScoreForm({
       if (!duplicateConfirmed) return;
     }
 
-    const tempId = 'TMP-' + Date.now();
-    const optimisticMatch = { id: tempId, date: new Date().toISOString(), win_1: win1, win_2: win2 || null, lose_1: lose1, lose_2: lose2 || null, win_score: ws, lose_score: ls, season: activeSeason, created_by: fullIdentity, pending: true };
-    onAddMatch?.(optimisticMatch);
-    void saveMatchesLocal([optimisticMatch]);
+    const requestId = makeRequestId();
+    const tempId = 'TMP-' + requestId;
+    const optimisticMatch = { id: tempId, date: new Date().toISOString(), win_1: win1, win_2: win2 || null, lose_1: lose1, lose_2: lose2 || null, win_score: ws, lose_score: ls, season: activeSeason, created_by: fullIdentity, client_request_id: requestId, pending: true, sync_status: 'syncing' };
     setUi('saved');
     setTimeout(() => { reset(); setUi('idle'); }, 1000);
 
-    const fd = new FormData();
-    fd.append('win_1', win1);
-    fd.append('win_2', win2);
-    fd.append('lose_1', lose1);
-    fd.append('lose_2', lose2);
-    fd.append('win_score', String(ws));
-    fd.append('lose_score', String(ls));
-    fd.append('season', activeSeason);
-    fd.append('created_by', fullIdentity);
-    fd.append('temp_id', tempId);
-    if (duplicateConfirmed) fd.append('duplicate_confirmed', 'true');
-    doSync(fd);
+    runAfterNextPaint(() => {
+      onAddMatch?.(optimisticMatch);
+      void saveMatchesLocal([optimisticMatch]);
+
+      const fd = new FormData();
+      fd.append('win_1', win1);
+      fd.append('win_2', win2);
+      fd.append('lose_1', lose1);
+      fd.append('lose_2', lose2);
+      fd.append('win_score', String(ws));
+      fd.append('lose_score', String(ls));
+      fd.append('season', activeSeason);
+      fd.append('created_by', fullIdentity);
+      fd.append('temp_id', tempId);
+      fd.append('client_request_id', requestId);
+      if (duplicateConfirmed) fd.append('duplicate_confirmed', 'true');
+      doSync(fd);
+    });
   };
 
   return (
     <>
-      <SyncBadge state={sync} onRetry={() => { if (pendingFd) { doSync(pendingFd); setPendingFd(null); } }} />
-      <form onSubmit={handleSubmit} className="p-3 sm:p-4 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,0.78fr)_18rem_minmax(0,0.78fr)] gap-3 md:gap-4 items-stretch">
+      <SyncBadge state={sync} message={syncError} onRetry={() => { if (pendingFd) { doSync(pendingFd); setPendingFd(null); } }} />
+      <form onSubmit={handleSubmit} className={cn("space-y-4", compact ? "p-3" : "p-3 sm:p-4", ui === 'saved' && "pointer-events-none opacity-80")}>
+        <div className={cn("grid grid-cols-1 items-stretch", compact ? "gap-2.5" : "md:grid-cols-[minmax(0,0.78fr)_18rem_minmax(0,0.78fr)] gap-3 md:gap-4")}>
 
-          <div className="min-w-0 rounded-2xl border border-green-500/35 bg-green-500/5 p-3 space-y-2">
+          <div className={cn("min-w-0 rounded-2xl border border-green-500/35 bg-green-500/5 space-y-2", compact ? "p-2.5" : "p-3")}>
             <div className="flex items-center gap-2">
               <Trophy className="w-4 h-4 text-primary opacity-60" />
               <span className="text-[10px] font-black text-green-300 uppercase tracking-[0.2em]">Đội thắng</span>
             </div>
             <div className="space-y-2">
-              <PlayerPicker label="Người thắng 1" tone="win" value={win1} players={optionsFor('win1')} onChange={value => setSlot('win1', value)} />
-              <PlayerPicker label="Người thắng 2" tone="win" value={win2} players={optionsFor('win2')} onChange={value => setSlot('win2', value)} />
+              <PlayerPicker label="Người thắng 1" tone="win" slot="win1" selectedSlots={selectedSlots} value={win1} players={optionsFor()} onChange={value => setSlot('win1', value)} />
+              <PlayerPicker label="Người thắng 2" tone="win" slot="win2" selectedSlots={selectedSlots} value={win2} players={optionsFor()} onChange={value => setSlot('win2', value)} />
             </div>
           </div>
 
           <div className="flex min-w-0 flex-col items-center">
-            <div className="flex min-h-[122px] w-full items-center justify-center gap-3 rounded-2xl border border-slate-600/60 bg-black/45 p-3 shadow-inner md:min-h-full sm:gap-4">
-              <ScoreStepper label="Thắng" value={ws} onChange={setWs} />
+            <div className={cn("flex w-full items-center justify-center rounded-2xl border border-slate-600/60 bg-black/45 p-3 shadow-inner", compact ? "min-h-[96px] gap-2" : "min-h-[122px] gap-3 md:min-h-full sm:gap-4")}>
+              <ScoreStepper label="Thắng" value={ws} onChange={setWs} compact={compact} />
               <div className="pt-4">
-                <span className="text-slate-400/80 font-black text-3xl sm:text-4xl select-none leading-none">-</span>
+                <span className={cn("text-slate-400/80 font-black select-none leading-none", compact ? "text-2xl" : "text-3xl sm:text-4xl")}>-</span>
               </div>
-              <ScoreStepper label="Thua" value={ls} onChange={setLs} />
+              <ScoreStepper label="Thua" value={ls} onChange={setLs} compact={compact} />
             </div>
           </div>
 
-          <div className="min-w-0 rounded-2xl border border-red-500/35 bg-red-500/5 p-3 space-y-2">
+          <div className={cn("min-w-0 rounded-2xl border border-red-500/35 bg-red-500/5 space-y-2", compact ? "p-2.5" : "p-3")}>
             <div className="flex items-center justify-center md:justify-end gap-2">
               <span className="text-[10px] font-black text-red-300 uppercase tracking-[0.2em]">Đội thua</span>
               <Ghost className="w-4 h-4 text-red-400 opacity-60" />
             </div>
             <div className="space-y-2">
-              <PlayerPicker label="Người thua 1" tone="lose" value={lose1} players={optionsFor('lose1')} onChange={value => setSlot('lose1', value)} />
-              <PlayerPicker label="Người thua 2" tone="lose" value={lose2} players={optionsFor('lose2')} onChange={value => setSlot('lose2', value)} />
+              <PlayerPicker label="Người thua 1" tone="lose" slot="lose1" selectedSlots={selectedSlots} value={lose1} players={optionsFor()} onChange={value => setSlot('lose1', value)} />
+              <PlayerPicker label="Người thua 2" tone="lose" slot="lose2" selectedSlots={selectedSlots} value={lose2} players={optionsFor()} onChange={value => setSlot('lose2', value)} />
             </div>
           </div>
 
@@ -508,15 +768,16 @@ export function ScoreForm({
         <div className="flex flex-col items-center gap-4">
           <button
             type="submit"
-            disabled={ui === 'saved' || sync === 'syncing'}
+            disabled={ui === 'saved'}
             className={cn(
-              'w-full min-h-12 py-3 rounded-2xl font-black text-xs sm:text-sm uppercase tracking-[0.24em] transition-all duration-300 flex items-center justify-center gap-3',
-              (ui === 'saved' || sync === 'syncing')
+              'w-full min-h-12 py-3 rounded-2xl font-black uppercase transition-colors duration-150 flex items-center justify-center gap-3',
+              compact ? 'text-[11px] tracking-[0.18em]' : 'text-xs sm:text-sm tracking-[0.24em]',
+              ui === 'saved'
                 ? 'bg-primary/20 text-primary/60 cursor-default'
                 : 'bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20 active:scale-95'
             )}
           >
-            {ui === 'saved' ? <><CheckCircle2 className="w-5 h-5" /> Đã lưu</> : sync === 'syncing' ? <><RefreshCw className="w-5 h-5 animate-spin" /> Đang lưu</> : <><Send className="w-5 h-5" /> Ghi kết quả</>}
+            {ui === 'saved' ? <><CheckCircle2 className="w-5 h-5" /> Đã ghi tạm</> : <><Send className="w-5 h-5" /> Ghi kết quả</>}
           </button>
         </div>
       </form>

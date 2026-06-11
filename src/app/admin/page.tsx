@@ -11,7 +11,8 @@ import {
   ArrowLeft,
   Search,
   Upload,
-  Download
+  Download,
+  RefreshCw
 } from 'lucide-react';
 import {
   getAuditLogs,
@@ -34,12 +35,14 @@ import {
   getAppCacheSnapshot,
   hasUsableAppCache,
   replaceAppCacheParts,
+  saveMatchesLocal,
   seedAppCache,
   type AppCachePart,
 } from '@/lib/db';
 
 const adminTabs = ['Nhật ký & Hệ thống', 'Thành viên', 'Season', 'Trận đấu'];
 const ADMIN_AUTH_DATE_KEY = 'pickleball_admin_auth_date';
+const ADMIN_PENDING_MATCH_EDIT_KEY = 'pickleball_admin_pending_match_edit';
 
 type FilePickerWindow = Window & {
   showOpenFilePicker?: (options?: {
@@ -59,7 +62,51 @@ function actionError(res: { success?: boolean } | { error?: string } | undefined
   return res && 'error' in res && res.error ? res.error : fallback;
 }
 
+type AdminPendingMatchEdit = {
+  matchId: string;
+  previousMatch: any;
+  nextMatch: any;
+  form: Record<string, string>;
+  timestamp: number;
+};
+
 const CORE_PARTS: AppCachePart[] = ['players', 'matches', 'seasons', 'config', 'playerSeasonSettings'];
+
+function formatAdminDateTime(value: string | Date) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false })} - ${date.toLocaleDateString('vi-VN')}`;
+}
+
+function formatDatetimeLocal(value: string | Date) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const tzOffset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
+}
+
+function readPendingMatchEdit(): AdminPendingMatchEdit | null {
+  try {
+    const raw = localStorage.getItem(ADMIN_PENDING_MATCH_EDIT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AdminPendingMatchEdit;
+    return parsed?.matchId && parsed.nextMatch && parsed.form ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePendingMatchEdit(pending: AdminPendingMatchEdit) {
+  try {
+    localStorage.setItem(ADMIN_PENDING_MATCH_EDIT_KEY, JSON.stringify(pending));
+  } catch {}
+}
+
+function clearPendingMatchEdit() {
+  try {
+    localStorage.removeItem(ADMIN_PENDING_MATCH_EDIT_KEY);
+  } catch {}
+}
 
 function getStaleParts(
   snapshot: Awaited<ReturnType<typeof getAppCacheSnapshot>>,
@@ -71,12 +118,19 @@ function getStaleParts(
       stale.add(part);
     }
   });
-  if (manifest.counts.players > 0 && snapshot.players.length === 0) stale.add('players');
-  if (manifest.counts.matches > 0 && snapshot.matches.length === 0) stale.add('matches');
-  if (manifest.counts.seasons > 0 && snapshot.seasons.length === 0) stale.add('seasons');
-  if (manifest.counts.playerSeasonSettings > 0 && snapshot.playerSeasonSettings.length === 0) stale.add('playerSeasonSettings');
-  if (Object.keys(snapshot.config).length === 0) stale.add('config');
+  if (!hasUsableAppCache(snapshot)) CORE_PARTS.forEach((part) => stale.add(part));
   return Array.from(stale);
+}
+
+function pickPartVersions(
+  partVersions: Partial<Record<AppCachePart, number>> | undefined,
+  parts: AppCachePart[],
+) {
+  if (!partVersions) return undefined;
+  return parts.reduce<Partial<Record<AppCachePart, number>>>((acc, part) => {
+    if (typeof partVersions[part] === 'number') acc[part] = partVersions[part];
+    return acc;
+  }, {});
 }
 
 export default function AdminPage() {
@@ -97,10 +151,13 @@ export default function AdminPage() {
 
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [editMatchData, setEditMatchData] = useState<any>(null);
+  const [savingMatchId, setSavingMatchId] = useState<string | null>(null);
+  const [pendingMatchEdit, setPendingMatchEdit] = useState<AdminPendingMatchEdit | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [, startTransition] = useTransition();
+  const isBusy = loading || Boolean(savingMatchId);
 
   const applySnapshot = useCallback((snapshot: Awaited<ReturnType<typeof getAppCacheSnapshot>>) => {
     setPlayers(snapshot.players || []);
@@ -145,7 +202,7 @@ export default function AdminPage() {
           playerSeasonSettings: appData.playerSeasonSettings || undefined,
         }, {
           dataVersion: appData.dataVersion,
-          partVersions: appData.partVersions,
+          partVersions: staleParts.length === CORE_PARTS.length ? appData.partVersions : pickPartVersions(appData.partVersions, staleParts),
           manifestCheckedAt: Date.now(),
         });
         snapshot = await getAppCacheSnapshot();
@@ -183,6 +240,17 @@ export default function AdminPage() {
       return () => clearTimeout(timer);
     }
   }, [isAuth, loadData]);
+
+  useEffect(() => {
+    if (!isAuth) return;
+    const id = window.setTimeout(() => {
+      const pending = readPendingMatchEdit();
+      if (!pending) return;
+      setPendingMatchEdit(pending);
+      setMsg({ type: 'error', text: 'Có trận đấu đang chờ đồng bộ. Hãy thử lại hoặc hủy thay đổi.' });
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [isAuth]);
 
   useEffect(() => {
     if (isAuth && activeTab === adminTabs[0] && logs.length === 0 && archives.length === 0) {
@@ -449,28 +517,99 @@ export default function AdminPage() {
     setLoading(false);
   };
 
-  const onSaveMatch = async (mid: string) => {
-    if (!editMatchData) return;
-    const fd = new FormData();
-    fd.append('id', mid);
-    fd.append('win_1', editMatchData.win_1);
-    if (editMatchData.win_2) fd.append('win_2', editMatchData.win_2);
-    fd.append('lose_1', editMatchData.lose_1);
-    fd.append('lose_2', editMatchData.lose_2);
-    fd.append('win_score', String(editMatchData.win_score));
-    fd.append('lose_score', String(editMatchData.lose_score));
-    if (editMatchData.date) fd.append('date', editMatchData.date);
+  const applyMatchLocal = useCallback(async (match: any) => {
+    setMatches(prev => prev.map(item => item.id === match.id ? { ...item, ...match } : item));
+    await saveMatchesLocal([match]);
+  }, []);
 
-    setLoading(true);
-    const res = await updateMatchAction(fd);
-    if (actionSucceeded(res)) {
-      setEditingMatchId(null);
-      loadData();
-    } else {
-      alert(actionError(res, 'Lỗi khi cập nhật trận đấu'));
+  const syncPendingMatchEdit = useCallback(async (pending: AdminPendingMatchEdit) => {
+    const fd = new FormData();
+    Object.entries(pending.form).forEach(([key, value]) => {
+      if (value !== '') fd.append(key, value);
+    });
+
+    setSavingMatchId(pending.matchId);
+    setPendingMatchEdit(pending);
+    setMsg({ type: 'success', text: 'Đang lưu trận đấu lên server...' });
+
+    try {
+      const res = await updateMatchAction(fd);
+      if (actionSucceeded(res)) {
+        clearPendingMatchEdit();
+        setPendingMatchEdit(null);
+        setEditingMatchId(null);
+        setEditMatchData(null);
+        setMsg({ type: 'success', text: 'Đã lưu trận đấu và đồng bộ server.' });
+        await loadData();
+      } else {
+        await applyMatchLocal(pending.previousMatch);
+        setPendingMatchEdit(pending);
+        setMsg({ type: 'error', text: actionError(res, 'Lỗi khi cập nhật trận đấu') });
+      }
+    } catch {
+      await applyMatchLocal(pending.previousMatch);
+      setPendingMatchEdit(pending);
+      setMsg({ type: 'error', text: 'Lỗi kết nối khi lưu trận. Có thể thử lại.' });
+    } finally {
+      setSavingMatchId(null);
     }
-    setLoading(false);
+  }, [applyMatchLocal, loadData]);
+
+  const onSaveMatchLocalFirst = async (mid: string) => {
+    if (!editMatchData || savingMatchId) return;
+    const previousMatch = matches.find(match => match.id === mid);
+    if (!previousMatch) return;
+
+    const form = {
+      id: mid,
+      win_1: String(editMatchData.win_1 || ''),
+      win_2: String(editMatchData.win_2 || ''),
+      lose_1: String(editMatchData.lose_1 || ''),
+      lose_2: String(editMatchData.lose_2 || ''),
+      win_score: String(editMatchData.win_score ?? ''),
+      lose_score: String(editMatchData.lose_score ?? ''),
+      date: String(editMatchData.date || ''),
+    };
+    const nextMatch = {
+      ...previousMatch,
+      win_1: form.win_1,
+      win_2: form.win_2 || null,
+      lose_1: form.lose_1,
+      lose_2: form.lose_2 || null,
+      win_score: Number(form.win_score || 0),
+      lose_score: Number(form.lose_score || 0),
+      date: form.date || previousMatch.date,
+    };
+    const pending: AdminPendingMatchEdit = {
+      matchId: mid,
+      previousMatch,
+      nextMatch,
+      form,
+      timestamp: 0,
+    };
+
+    writePendingMatchEdit(pending);
+    setPendingMatchEdit(pending);
+    await applyMatchLocal(nextMatch);
+    await syncPendingMatchEdit(pending);
   };
+
+  const retryPendingMatchEdit = async () => {
+    const pending = pendingMatchEdit || readPendingMatchEdit();
+    if (!pending || savingMatchId) return;
+    writePendingMatchEdit(pending);
+    await applyMatchLocal(pending.nextMatch);
+    await syncPendingMatchEdit(pending);
+  };
+
+  const discardPendingMatchEdit = async () => {
+    const pending = pendingMatchEdit || readPendingMatchEdit();
+    clearPendingMatchEdit();
+    setPendingMatchEdit(null);
+    if (pending?.previousMatch) await applyMatchLocal(pending.previousMatch);
+    setMsg({ type: 'success', text: 'Đã hủy thay đổi trận đang chờ lưu.' });
+  };
+
 
   const playerName = (id?: string | null) => players.find(p => p.id === id)?.name || id || '';
   const visibleMatches = [...matches]
@@ -488,7 +627,7 @@ export default function AdminPage() {
         playerName(m.win_2),
         playerName(m.lose_1),
         playerName(m.lose_2),
-        new Date(m.date).toLocaleString('vi-VN'),
+        new Date(m.date).toLocaleString('vi-VN', { hour12: false }),
       ].join(' ').toLowerCase();
       return text.includes(q);
     });
@@ -551,16 +690,16 @@ export default function AdminPage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <button onClick={onPickXlsx} className="px-5 py-3 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-orange-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
+            <button onClick={onPickXlsx} disabled={isBusy} className="px-5 py-3 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-orange-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all disabled:opacity-40 disabled:pointer-events-none">
               <Upload className="w-4 h-4" /> Import XLSX
             </button>
-            <button onClick={onPickJson} className="px-5 py-3 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
+            <button onClick={onPickJson} disabled={isBusy} className="px-5 py-3 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all disabled:opacity-40 disabled:pointer-events-none">
               <Download className="w-4 h-4" /> Khôi phục Backup
             </button>
-            <button onClick={onBackup} className="px-5 py-3 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
+            <button onClick={onBackup} disabled={isBusy} className="px-5 py-3 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all disabled:opacity-40 disabled:pointer-events-none">
               <Database className="w-4 h-4" /> Sao lưu dữ liệu
             </button>
-            <button onClick={onRebuild} className="px-5 py-3 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all">
+            <button onClick={onRebuild} disabled={isBusy} className="px-5 py-3 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all disabled:opacity-40 disabled:pointer-events-none">
               <RotateCcw className="w-4 h-4" /> Đồng bộ số liệu
             </button>
           </div>
@@ -571,10 +710,12 @@ export default function AdminPage() {
           {adminTabs.map(t => (
             <button
               key={t}
-              onClick={() => setActiveTab(t)}
+              onClick={() => { if (!isBusy) setActiveTab(t); }}
+              disabled={isBusy}
               className={cn(
                 "shrink-0 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
-                activeTab === t ? "bg-primary text-black border-primary" : "bg-white/5 text-white/40 border-white/5 hover:bg-white/10"
+                activeTab === t ? "bg-primary text-black border-primary" : "bg-white/5 text-white/40 border-white/5 hover:bg-white/10",
+                isBusy && "opacity-50 cursor-not-allowed"
               )}
             >
               {t}
@@ -589,6 +730,34 @@ export default function AdminPage() {
           )}>
             {msg.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
             <span className="text-sm font-bold">{msg.text}</span>
+          </div>
+        )}
+
+        {pendingMatchEdit && (
+          <div className="rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-amber-100 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-300" />
+              <span className="text-sm font-bold">Có thay đổi trận đấu đang chờ đồng bộ server.</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={retryPendingMatchEdit}
+                disabled={Boolean(savingMatchId)}
+                className="inline-flex items-center gap-2 rounded-xl bg-amber-300 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-950 disabled:opacity-50"
+              >
+                {savingMatchId && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                Thử lại
+              </button>
+              <button
+                type="button"
+                onClick={discardPendingMatchEdit}
+                disabled={Boolean(savingMatchId)}
+                className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50"
+              >
+                Hủy
+              </button>
+            </div>
           </div>
         )}
 
@@ -667,7 +836,7 @@ export default function AdminPage() {
               <div className="px-6 py-3 border-b border-white/5 text-[10px] font-black uppercase tracking-widest text-white/25">
                 Đang hiện {visibleMatches.length}/{matches.length} trận · Mới nhất lên trước
               </div>
-              <div className="overflow-x-auto">
+              <div className={cn("overflow-x-auto", isBusy && "pointer-events-none opacity-70")}>
                 <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-white/5 text-[10px] font-black uppercase tracking-widest text-white/30">
@@ -683,11 +852,10 @@ export default function AdminPage() {
                     {visibleMatches.map(m => {
                       const isEditing = editingMatchId === m.id;
                       const matchDate = new Date(m.date);
-                      // Adjust to local datetime string format for inputs: YYYY-MM-DDTHH:mm
-                      const tzOffset = matchDate.getTimezoneOffset() * 60000;
-                      const localISOTime = new Date(matchDate.getTime() - tzOffset).toISOString().slice(0, 16);
+                      const localISOTime = formatDatetimeLocal(matchDate);
+                      const isSavingThisMatch = savingMatchId === m.id;
 
-                      const formattedTime = matchDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' - ' + matchDate.toLocaleDateString('vi-VN');
+                      const formattedTime = formatAdminDateTime(matchDate);
 
                       if (isEditing) {
                         return (
@@ -697,6 +865,7 @@ export default function AdminPage() {
                                 type="datetime-local"
                                 value={editMatchData?.date || ''}
                                 onChange={e => setEditMatchData({ ...editMatchData, date: e.target.value })}
+                                disabled={isSavingThisMatch}
                                 className="bg-slate-950 text-white border border-white/10 rounded px-2 py-1 text-xs font-bold"
                               />
                             </td>
@@ -704,6 +873,7 @@ export default function AdminPage() {
                               <select
                                 value={editMatchData?.win_1 || ''}
                                 onChange={e => setEditMatchData({ ...editMatchData, win_1: e.target.value })}
+                                disabled={isSavingThisMatch}
                                 className="bg-slate-950 text-white border border-white/10 rounded px-2 py-1 text-xs font-bold w-full"
                               >
                                 {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -711,6 +881,7 @@ export default function AdminPage() {
                               <select
                                 value={editMatchData?.win_2 || ''}
                                 onChange={e => setEditMatchData({ ...editMatchData, win_2: e.target.value })}
+                                disabled={isSavingThisMatch}
                                 className="bg-slate-950 text-white border border-white/10 rounded px-2 py-1 text-xs font-bold w-full"
                               >
                                 <option value="">(Không có người 2)</option>
@@ -722,6 +893,7 @@ export default function AdminPage() {
                                 type="number"
                                 value={editMatchData?.win_score ?? ''}
                                 onChange={e => setEditMatchData({ ...editMatchData, win_score: parseInt(e.target.value) })}
+                                disabled={isSavingThisMatch}
                                 className="bg-slate-950 text-white border border-white/10 rounded px-2 py-1 text-xs font-bold w-12 text-center"
                               />
                               <span className="text-white/20 font-bold">-</span>
@@ -729,6 +901,7 @@ export default function AdminPage() {
                                 type="number"
                                 value={editMatchData?.lose_score ?? ''}
                                 onChange={e => setEditMatchData({ ...editMatchData, lose_score: parseInt(e.target.value) })}
+                                disabled={isSavingThisMatch}
                                 className="bg-slate-950 text-white border border-white/10 rounded px-2 py-1 text-xs font-bold w-12 text-center"
                               />
                             </td>
@@ -736,6 +909,7 @@ export default function AdminPage() {
                               <select
                                 value={editMatchData?.lose_1 || ''}
                                 onChange={e => setEditMatchData({ ...editMatchData, lose_1: e.target.value })}
+                                disabled={isSavingThisMatch}
                                 className="bg-slate-950 text-white border border-white/10 rounded px-2 py-1 text-xs font-bold w-full"
                               >
                                 {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -743,6 +917,7 @@ export default function AdminPage() {
                               <select
                                 value={editMatchData?.lose_2 || ''}
                                 onChange={e => setEditMatchData({ ...editMatchData, lose_2: e.target.value })}
+                                disabled={isSavingThisMatch}
                                 className="bg-slate-950 text-white border border-white/10 rounded px-2 py-1 text-xs font-bold w-full"
                               >
                                 <option value="">(Không có người 2)</option>
@@ -754,14 +929,17 @@ export default function AdminPage() {
                             </td>
                             <td className="px-6 py-4 text-right space-x-2">
                               <button
-                                onClick={() => onSaveMatch(m.id)}
-                                className="px-3 py-1 bg-primary hover:bg-primary/95 text-black rounded-lg text-[10px] font-black uppercase tracking-wider"
+                                onClick={() => onSaveMatchLocalFirst(m.id)}
+                                disabled={isSavingThisMatch}
+                                className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary hover:bg-primary/95 text-black rounded-lg text-[10px] font-black uppercase tracking-wider disabled:opacity-60"
                               >
-                                Lưu
+                                {isSavingThisMatch && <RefreshCw className="h-3 w-3 animate-spin" />}
+                                {isSavingThisMatch ? 'Đang lưu' : 'Lưu'}
                               </button>
                               <button
                                 onClick={() => setEditingMatchId(null)}
-                                className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-black uppercase tracking-wider"
+                                disabled={isSavingThisMatch}
+                                className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-black uppercase tracking-wider disabled:opacity-50"
                               >
                                 Hủy
                               </button>
@@ -792,6 +970,7 @@ export default function AdminPage() {
                           <td className="px-6 py-4 text-right space-x-1">
                             <button
                               onClick={() => {
+                                if (isBusy) return;
                                 setEditingMatchId(m.id);
                                 setEditMatchData({
                                   win_1: m.win_1,
@@ -803,7 +982,8 @@ export default function AdminPage() {
                                   date: localISOTime
                                 });
                               }}
-                              className="px-2.5 py-1.5 hover:bg-primary/20 text-primary rounded-lg text-[10px] font-black uppercase tracking-wider transition-all"
+                              disabled={isBusy}
+                              className="px-2.5 py-1.5 hover:bg-primary/20 text-primary rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-40"
                             >
                               Sửa
                             </button>
