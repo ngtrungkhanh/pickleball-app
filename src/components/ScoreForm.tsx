@@ -172,7 +172,7 @@ function ScoreStepper({ label, value, onChange, compact = false }: { label: stri
       <div className={cn("flex items-center", compact ? "gap-1.5" : "gap-2 sm:gap-4")}>
         <button type="button"
           onClick={() => onChange(Math.max(0, value - 1))}
-          className={cn(compact ? "flex h-8 w-8" : "sm:hidden w-9 h-9", "rounded-xl bg-white/5 border border-white/10 items-center justify-center text-slate-300/70 active:scale-90 transition-all shrink-0")}>
+          className={cn(compact ? "flex h-8 w-8" : "flex sm:hidden w-9 h-9", "rounded-xl bg-white/5 border border-white/10 items-center justify-center text-slate-300/70 active:scale-90 transition-all shrink-0")}>
           <Minus className="w-4 h-4" />
         </button>
 
@@ -188,7 +188,7 @@ function ScoreStepper({ label, value, onChange, compact = false }: { label: stri
 
         <button type="button"
           onClick={() => onChange(value + 1)}
-          className={cn(compact ? "flex h-8 w-8" : "sm:hidden w-9 h-9", "rounded-xl bg-primary/10 border border-primary/20 items-center justify-center text-primary active:scale-90 transition-all shrink-0")}>
+          className={cn(compact ? "flex h-8 w-8" : "flex sm:hidden w-9 h-9", "rounded-xl bg-primary/10 border border-primary/20 items-center justify-center text-primary active:scale-90 transition-all shrink-0")}>
           <Plus className="w-4 h-4" />
         </button>
       </div>
