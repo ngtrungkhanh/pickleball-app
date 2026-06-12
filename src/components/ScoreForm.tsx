@@ -286,8 +286,8 @@ function PlayerPicker({
     .sort((a, b) => relationPriority[a.relation] - relationPriority[b.relation] || a.index - b.index);
 
   const sameTeamClass = tone === 'win'
-    ? 'bg-green-500/10 text-green-100 border-green-400/30 hover:bg-green-500/15'
-    : 'bg-red-500/10 text-red-100 border-red-400/30 hover:bg-red-500/15';
+    ? 'bg-green-500/20 text-green-200 border-green-400/50 hover:bg-green-500/30 shadow-[inset_0_0_0_1px_rgba(74,222,128,0.15)]'
+    : 'bg-red-500/20 text-red-200 border-red-400/50 hover:bg-red-500/30 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.15)]';
 
   const list = (
     <div className="max-h-[70vh] overflow-y-auto p-1.5">
