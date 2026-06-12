@@ -259,6 +259,16 @@ export default function AdminPage() {
     }
   }, [activeTab, archives.length, isAuth, loadSystemData, logs.length]);
 
+  // Tự động ẩn thông báo thành công sau 4 giây
+  useEffect(() => {
+    if (msg.text && msg.type === 'success') {
+      const timer = setTimeout(() => {
+        setMsg({ type: '', text: '' });
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [msg.text, msg.type]);
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     checkPass(pass);
@@ -703,43 +713,56 @@ export default function AdminPage() {
           ))}
         </div>
 
-        {msg.text && (
-          <div className={cn(
-            "p-4 rounded-2xl flex items-center gap-3 border animate-in slide-in-from-top-2",
-            msg.type === 'success' ? "bg-primary/10 border-primary/20 text-primary" : "bg-red-500/10 border-red-500/20 text-red-400"
-          )}>
-            {msg.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-            <span className="text-sm font-bold">{msg.text}</span>
-          </div>
-        )}
+        {/* Floating Notifications Container */}
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 max-w-md w-[calc(100%-3rem)] sm:w-96 animate-in fade-in slide-in-from-bottom-5">
+          {msg.text && (
+            <div className={cn(
+              "p-4 rounded-2xl flex items-center justify-between gap-3 border shadow-2xl backdrop-blur-md",
+              msg.type === 'success' 
+                ? "bg-slate-900/95 border-primary/20 text-primary" 
+                : "bg-slate-900/95 border-red-500/20 text-red-400"
+            )}>
+              <div className="flex items-center gap-3">
+                {msg.type === 'success' ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
+                <span className="text-sm font-bold">{msg.text}</span>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setMsg({ type: '', text: '' })}
+                className="text-xs text-white/30 hover:text-white/80 font-bold px-1.5 py-0.5 hover:bg-white/5 rounded transition-all shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
-        {pendingMatchEdit && (
-          <div className="rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-amber-100 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-300" />
-              <span className="text-sm font-bold">Có thay đổi trận đấu đang chờ đồng bộ server.</span>
+          {pendingMatchEdit && !savingMatchId && (
+            <div className="rounded-2xl border border-amber-400/25 bg-slate-900/95 p-4 text-amber-100 flex flex-col gap-3 shadow-2xl backdrop-blur-md">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-300 shrink-0" />
+                <span className="text-sm font-bold">Có thay đổi trận đấu chưa đồng bộ server.</span>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={retryPendingMatchEdit}
+                  disabled={Boolean(savingMatchId)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-amber-300 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-slate-950 disabled:opacity-50 transition-all active:scale-95"
+                >
+                  Thử lại
+                </button>
+                <button
+                  type="button"
+                  onClick={discardPendingMatchEdit}
+                  disabled={Boolean(savingMatchId)}
+                  className="rounded-xl bg-white/10 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50 transition-all active:scale-95"
+                >
+                  Hủy
+                </button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={retryPendingMatchEdit}
-                disabled={Boolean(savingMatchId)}
-                className="inline-flex items-center gap-2 rounded-xl bg-amber-300 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-950 disabled:opacity-50"
-              >
-                {savingMatchId && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
-                Thử lại
-              </button>
-              <button
-                type="button"
-                onClick={discardPendingMatchEdit}
-                disabled={Boolean(savingMatchId)}
-                className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50"
-              >
-                Hủy
-              </button>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Tab Content */}
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
