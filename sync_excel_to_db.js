@@ -34,14 +34,6 @@ function excelDateToJSDate(excelDate) {
 }
 
 // Helpers to identify Guest players
-const GUEST_ID = '__GUEST__';
-function isGuestId(id) {
-  return id === GUEST_ID;
-}
-function matchHasGuest(m) {
-  return isGuestId(m.win_1) || isGuestId(m.win_2) || isGuestId(m.lose_1) || isGuestId(m.lose_2);
-}
-
 async function run() {
   try {
     const excelPath = path.join(__dirname, 'legacy', 'PICKLEBALL RANKING.xlsx');
@@ -117,22 +109,8 @@ async function run() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS player_stats (
-        player_id VARCHAR(10) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-        season VARCHAR(50) NOT NULL,
-        wins INT DEFAULT 0,
-        losses INT DEFAULT 0,
-        total INT DEFAULT 0,
-        money INT DEFAULT 0,
-        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (player_id, season)
-      );
-    `;
-
     // 2. Erase existing records to avoid constraints/duplicate errors
     console.log("Erasing old database records...");
-    await sql`DELETE FROM player_stats;`;
     await sql`DELETE FROM matches;`;
     await sql`DELETE FROM players;`;
     await sql`DELETE FROM config;`;
@@ -231,55 +209,7 @@ async function run() {
       console.log(`  - Season: ${s} (Active: ${isActive})`);
     }
 
-    // 7. Recalculate Player Stats (Incremental Stats Rebuilder)
-    console.log("Rebuilding player rankings and stats...");
-    const lose_money = parseInt(configData['lose_money'] || '5000') || 5000;
-    
-    const { rows: playersList } = await sql`SELECT id FROM players WHERE deleted_at IS NULL`;
-    const validPlayerIds = new Set(playersList.map(p => p.id).filter(id => !isGuestId(id)));
-    
-    const statsMap = new Map();
-    
-    for (const m of matchesData) {
-      const season = m.season || 'Season 1';
-      const hasGuest = matchHasGuest(m);
-      const winners = [m.win_1, m.win_2].filter(pid => pid && validPlayerIds.has(pid));
-      const losers = [m.lose_1, m.lose_2].filter(pid => pid && validPlayerIds.has(pid));
-
-      if (!hasGuest) {
-        winners.forEach(pid => {
-          const key = `${pid}:${season}`;
-          const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-          s.wins++;
-          statsMap.set(key, s);
-        });
-
-        losers.forEach(pid => {
-          const key = `${pid}:${season}`;
-          const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-          s.losses++;
-          statsMap.set(key, s);
-        });
-      }
-
-      losers.forEach(pid => {
-        const key = `${pid}:${season}`;
-        const s = statsMap.get(key) || { wins: 0, losses: 0, money: 0 };
-        s.money += m.win_score === 11 && m.lose_score === 0 ? lose_money * 2 : lose_money; // standard loss fine
-        statsMap.set(key, s);
-      });
-    }
-
-    for (const [key, s] of statsMap.entries()) {
-      const [playerId, season] = key.split(':');
-      await sql`
-        INSERT INTO player_stats (player_id, season, wins, losses, total, money)
-        VALUES (${playerId}, ${season}, ${s.wins}, ${s.losses}, ${s.wins + s.losses}, ${s.money});
-      `;
-    }
-    console.log(`  - Successfully calculated stats for ${statsMap.size} player-season entries.`);
-    
-    console.log("\nDatabase successfully synchronized with 100% Excel data! All rank tables are completely up-to-date.");
+    console.log("\nDatabase successfully synchronized with Excel data. Rankings are calculated locally from matches.");
     process.exit(0);
   } catch (error) {
     console.error("\nMigration failed with error:", error.message);

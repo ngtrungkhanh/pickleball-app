@@ -352,7 +352,7 @@ export function Leaderboard({
     : null;
 
   // Task 18: Use pre-calculated stats for active season, calculate from raw matches for history
-  const board = calculateLeaderboard(players, filtered, loseMoney, undefined, {
+  const board = calculateLeaderboard(players, filtered, loseMoney, {
     getLoseMoney: (match) => seasonFineByName.get(String(match.season || 'Season 1')) ?? loseMoney,
     shouldPayFine: (playerId, match) => {
       const season = String(match.season || 'Season 1');

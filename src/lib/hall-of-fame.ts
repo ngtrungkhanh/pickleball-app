@@ -91,7 +91,7 @@ export function buildHallOfFameEntries(
       const seasonMatches = matches.filter(match => !match.deleted_at && (match.season || 'Season 1') === seasonName);
       if (seasonMatches.length === 0) return null;
 
-      const board = calculateLeaderboard(eligiblePlayers, seasonMatches, loseMoney, undefined, {
+      const board = calculateLeaderboard(eligiblePlayers, seasonMatches, loseMoney, {
         getLoseMoney: fineLookup.getLoseMoney,
         shouldPayFine: fineLookup.shouldPayFine,
       })

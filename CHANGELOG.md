@@ -12,6 +12,10 @@ File này chỉ giữ các thay đổi đáng chú ý. Chi tiết theo commit xe
   trận vừa thêm/sửa/xóa thay vì tải lại toàn bộ lịch sử.
 - Đưa audit/revalidation sau add/edit/delete ra khỏi response critical path và
   mở lại form ghi điểm sau khoảng 180 ms.
+- Bỏ `player_stats` khỏi luồng ghi; leaderboard và tiền phạt luôn tính local từ
+  `matches`.
+- Thay version dựa trên thời gian bằng counter atomic trong Postgres để không
+  trùng hoặc lùi version khi nhiều thiết bị ghi đồng thời.
 
 ## 2026-06
 

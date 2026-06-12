@@ -18,7 +18,6 @@ revalidation, backup/restore hoặc Vercel.
 - `matches`: lịch sử trận.
 - `config`: `active_season`, `lose_money` và data versions.
 - `seasons`: season và metadata ảnh champion.
-- `player_stats`: thống kê tăng dần theo người/season.
 - `player_season_settings`: cấu hình theo người và season.
 - `audit_logs`: lịch sử thao tác.
 - `archives`: dữ liệu soft-delete có thể phục hồi.
@@ -29,6 +28,8 @@ Bất biến quan trọng:
 - Trận mới dùng `config.active_season`.
 - Record bị xóa mềm dùng `deleted_at` và có thể có `delete_group_id`.
 - Write làm thay đổi dữ liệu người dùng phải bump data version đúng phần.
+- Xếp hạng, win/loss và tiền phạt được tính ở client từ `matches`; không duy trì
+  bảng thống kê dẫn xuất trong luồng ghi.
 
 ## Read flow và cache
 
@@ -73,7 +74,7 @@ tối ưu payload, full snapshot luôn là fallback correctness.
 2. Client thêm `TMP-*` match vào state/IndexedDB.
 3. Pending draft được lưu ở localStorage.
 4. `addMatchAction` tạo id/date, kiểm tra duplicate server và insert Postgres.
-5. Server cập nhật `player_stats`, audit log và data versions.
+5. Server ghi match delta, audit log và data versions.
 6. Server trả canonical match.
 7. Client thay optimistic row bằng canonical row.
 8. Nếu lỗi, optimistic row bị xử lý theo trạng thái retry và pending draft
@@ -87,13 +88,8 @@ Guest match không tăng win/loss ranking. Tiền phạt cho người thật ở
 
 ## Edit, delete và restore
 
-Khi chỉnh trận:
-
-1. đọc trạng thái cũ;
-2. đảo contribution cũ;
-3. update match;
-4. áp contribution mới;
-5. ghi audit và bump version.
+Khi chỉnh trận, server update bản ghi `matches`, ghi match delta, audit và bump version.
+Client tính lại thống kê từ dữ liệu match đã patch.
 
 Delete dữ liệu có dependency phải ưu tiên soft-delete và archive. Không update
 trận theo cách làm lệch leaderboard hoặc tiền phạt.
@@ -111,7 +107,7 @@ XLSX import:
 - đọc sheet `MATCHES`;
 - có thể thay toàn bộ lịch sử;
 - tạo player id còn thiếu trước khi insert;
-- rebuild stats sau import.
+- tạo reset marker để client tải snapshot mới sau import.
 
 `sync_excel_to_db.js` là helper phá hủy dữ liệu hiện tại; không chạy với
 production nếu chưa được phê duyệt.

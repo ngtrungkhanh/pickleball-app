@@ -3,7 +3,6 @@ import { useState, useEffect, useTransition, useCallback } from 'react';
 import {
   ShieldCheck,
   History,
-  RotateCcw,
   Database,
   Trash2,
   CheckCircle2,
@@ -18,7 +17,6 @@ import {
   getAuditLogs,
   getArchives,
   restoreFromArchive,
-  rebuildStatsAction,
   verifyAdminAction,
   updatePlayerAction,
   deletePlayerAction,
@@ -371,8 +369,6 @@ export default function AdminPage() {
       if (!res.ok) {
         setMsg({ type: 'error', text: json?.error || 'Khôi phục thất bại.' });
       } else {
-        // Run rebuild stats after a successful restore
-        await rebuildStatsAction();
         const appData = await getAppDataPartsAction(CORE_PARTS);
         if (appData) {
           await seedAppCache({
@@ -394,19 +390,6 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const onRebuild = () => {
-    if (!confirm('Bạn có chắc muốn tính toán lại toàn bộ số liệu không?')) return;
-    startTransition(async () => {
-      const res = await rebuildStatsAction();
-      if (actionSucceeded(res)) {
-        setMsg({ type: 'success', text: 'Đã đồng bộ lại toàn bộ số liệu thành công!' });
-        loadData();
-      } else {
-        setMsg({ type: 'error', text: actionError(res, 'Lỗi rồi!') });
-      }
-    });
   };
 
   const deferImport = (file: File | null) => {
@@ -698,9 +681,6 @@ export default function AdminPage() {
             </button>
             <button onClick={onBackup} disabled={isBusy} className="px-5 py-3 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all disabled:opacity-40 disabled:pointer-events-none">
               <Database className="w-4 h-4" /> Sao lưu dữ liệu
-            </button>
-            <button onClick={onRebuild} disabled={isBusy} className="px-5 py-3 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all disabled:opacity-40 disabled:pointer-events-none">
-              <RotateCcw className="w-4 h-4" /> Đồng bộ số liệu
             </button>
           </div>
         </div>

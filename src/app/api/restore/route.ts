@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
 import { bumpDataVersions, ensureConfigTable } from '@/lib/data-version';
 import { recordAppDataReset } from '@/lib/data-delta';
-import { rebuildPlayerStatsFromMatches } from '@/lib/player-stats-rebuild';
 
 type BackupMatch = {
   id?: string;
@@ -77,18 +76,6 @@ async function ensureRestoreColumns() {
       PRIMARY KEY (player_id, season)
     )
   `;
-  await sql`
-    CREATE TABLE IF NOT EXISTS player_stats (
-      player_id VARCHAR(10) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-      season VARCHAR(50) NOT NULL,
-      wins INT DEFAULT 0,
-      losses INT DEFAULT 0,
-      total INT DEFAULT 0,
-      money INT DEFAULT 0,
-      last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (player_id, season)
-    )
-  `;
 }
 
 export async function POST(request: Request) {
@@ -154,7 +141,6 @@ export async function POST(request: Request) {
     // Delete in reverse dependency order to prevent FK violations
     await sql`DELETE FROM audit_logs`;
     await sql`DELETE FROM archives`;
-    await sql`DELETE FROM player_stats`;
     await sql`DELETE FROM player_season_settings`;
     await sql`DELETE FROM matches`;
     await sql`DELETE FROM players`;
@@ -232,7 +218,6 @@ export async function POST(request: Request) {
       `;
     }
 
-    await rebuildPlayerStatsFromMatches();
     const dataVersion = await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
     await recordAppDataReset('matches', dataVersion);
 

@@ -2,6 +2,7 @@ import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
 import { ensureAppDataChangesTable, recordAppDataChange } from '@/lib/data-delta';
+import { ensureDataVersionCounter } from '@/lib/data-version';
 
 export async function GET() {
   try {
@@ -89,21 +90,7 @@ export async function GET() {
     await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_path TEXT;`;
     await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_updated_at TIMESTAMP;`;
 
-    // 5. Create player_stats table (Incremental Stats)
-    await sql`
-      CREATE TABLE IF NOT EXISTS player_stats (
-        player_id VARCHAR(10) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-        season VARCHAR(50) NOT NULL,
-        wins INT DEFAULT 0,
-        losses INT DEFAULT 0,
-        total INT DEFAULT 0,
-        money INT DEFAULT 0,
-        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (player_id, season)
-      );
-    `;
-
-    // 6. Create audit_logs table
+    // 5. Create audit_logs table
     await sql`
       CREATE TABLE IF NOT EXISTS audit_logs (
         id SERIAL PRIMARY KEY,
@@ -114,7 +101,7 @@ export async function GET() {
       );
     `;
 
-    // 7. Create archives table for Recycle Bin
+    // 6. Create archives table for Recycle Bin
     await sql`
       CREATE TABLE IF NOT EXISTS archives (
         id SERIAL PRIMARY KEY,
@@ -144,6 +131,7 @@ export async function GET() {
       ON CONFLICT (key) DO NOTHING;
     `;
 
+    await ensureDataVersionCounter();
     await ensureAppDataChangesTable();
     const { rows: versionRows } = await sql`
       SELECT value FROM config
@@ -165,7 +153,7 @@ export async function GET() {
       await recordAppDataChange('matches', 'reset', currentMatchVersion);
     }
 
-    return NextResponse.json({ message: 'Database schema upgraded with Stats and Logs tables!' }, { status: 200 });
+    return NextResponse.json({ message: 'Database schema upgraded with version and change-log tables!' }, { status: 200 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status: 500 });

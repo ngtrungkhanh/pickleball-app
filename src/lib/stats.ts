@@ -22,14 +22,6 @@ type StatMatch = {
   [key: string]: unknown;
 };
 
-type PrecalculatedStat = {
-  player_id: string;
-  wins: number | string;
-  losses: number | string;
-  total: number | string;
-  money: number | string;
-};
-
 type LeaderboardOptions = {
   getLoseMoney?: (match: StatMatch) => number;
   shouldPayFine?: (playerId: string, match: StatMatch) => boolean;
@@ -128,7 +120,6 @@ export function calculateLeaderboard(
   players: StatPlayer[],
   matches: StatMatch[],
   loseMoney: number = 5000,
-  precalculatedStats?: PrecalculatedStat[],
   options: LeaderboardOptions = {},
 ) {
   const stats = players.map(p => ({
@@ -142,54 +133,41 @@ export function calculateLeaderboard(
 
   const statsMap = new Map(stats.map(s => [s.id, s]));
 
-  if (precalculatedStats && precalculatedStats.length > 0) {
-    // Use pre-calculated stats from database
-    precalculatedStats.forEach(ps => {
-      if (statsMap.has(ps.player_id)) {
-        const s = statsMap.get(ps.player_id)!;
-        s.wins = Number(ps.wins);
-        s.losses = Number(ps.losses);
-        s.total = Number(ps.total);
-        s.money = Number(ps.money);
+  const rankingMatches = matches.filter(isRankingMatch);
+  const fineMatches = matches.filter(m => !m.deleted_at);
+
+  rankingMatches.forEach(m => {
+    [m.win_1, m.win_2].forEach(id => {
+      const playerId = typeof id === 'string' ? id : '';
+      if (playerId && statsMap.has(playerId) && !isGuestId(playerId)) {
+        const s = statsMap.get(playerId)!;
+        s.wins++;
+        s.total++;
       }
     });
-  } else {
-    const rankingMatches = matches.filter(isRankingMatch);
-    const fineMatches = matches.filter(m => !m.deleted_at);
-
-    rankingMatches.forEach(m => {
-      [m.win_1, m.win_2].forEach(id => {
-        const playerId = typeof id === 'string' ? id : '';
-        if (playerId && statsMap.has(playerId) && !isGuestId(playerId)) {
-          const s = statsMap.get(playerId)!;
-          s.wins++;
-          s.total++;
-        }
-      });
-      [m.lose_1, m.lose_2].forEach(id => {
-        const playerId = typeof id === 'string' ? id : '';
-        if (playerId && statsMap.has(playerId) && !isGuestId(playerId)) {
-          const s = statsMap.get(playerId)!;
-          s.losses++;
-          s.total++;
-        }
-      });
+    [m.lose_1, m.lose_2].forEach(id => {
+      const playerId = typeof id === 'string' ? id : '';
+      if (playerId && statsMap.has(playerId) && !isGuestId(playerId)) {
+        const s = statsMap.get(playerId)!;
+        s.losses++;
+        s.total++;
+      }
     });
+  });
 
-    fineMatches.forEach(m => {
-      const matchLoseMoney = options.getLoseMoney?.(m) ?? loseMoney;
-      [m.lose_1, m.lose_2].forEach(id => {
-        const playerId = typeof id === 'string' ? id : '';
-        if (playerId && statsMap.has(playerId) && !isGuestId(playerId)) {
-          const player = statsMap.get(playerId)!;
-          const shouldPayFine = options.shouldPayFine?.(playerId, m) ?? player.pay_fine !== false;
-          if (!shouldPayFine) return;
-          const s = statsMap.get(playerId)!;
-          s.money += matchLoseMoney;
-        }
-      });
+  fineMatches.forEach(m => {
+    const matchLoseMoney = options.getLoseMoney?.(m) ?? loseMoney;
+    [m.lose_1, m.lose_2].forEach(id => {
+      const playerId = typeof id === 'string' ? id : '';
+      if (playerId && statsMap.has(playerId) && !isGuestId(playerId)) {
+        const player = statsMap.get(playerId)!;
+        const shouldPayFine = options.shouldPayFine?.(playerId, m) ?? player.pay_fine !== false;
+        if (!shouldPayFine) return;
+        const s = statsMap.get(playerId)!;
+        s.money += matchLoseMoney;
+      }
     });
-  }
+  });
 
   stats.forEach(s => {
     s.winRate = s.total > 0 ? (s.wins / s.total) * 100 : 0;
