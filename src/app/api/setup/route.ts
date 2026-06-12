@@ -1,6 +1,7 @@
 import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
+import { ensureAppDataChangesTable, recordAppDataChange } from '@/lib/data-delta';
 
 export async function GET() {
   try {
@@ -142,6 +143,27 @@ export async function GET() {
       VALUES ('active_season', 'Season 1'), ('lose_money', '5000')
       ON CONFLICT (key) DO NOTHING;
     `;
+
+    await ensureAppDataChangesTable();
+    const { rows: versionRows } = await sql`
+      SELECT value FROM config
+      WHERE key IN ('version_matches', 'version_global', 'data_version')
+      ORDER BY CASE key
+        WHEN 'version_matches' THEN 1
+        WHEN 'version_global' THEN 2
+        ELSE 3
+      END
+      LIMIT 1
+    `;
+    const currentMatchVersion = Number(versionRows[0]?.value || 0) || 0;
+    const { rows: resetRows } = await sql`
+      SELECT id FROM app_data_changes
+      WHERE part = 'matches' AND operation = 'reset'
+      LIMIT 1
+    `;
+    if (resetRows.length === 0) {
+      await recordAppDataChange('matches', 'reset', currentMatchVersion);
+    }
 
     return NextResponse.json({ message: 'Database schema upgraded with Stats and Logs tables!' }, { status: 200 });
   } catch (error: unknown) {

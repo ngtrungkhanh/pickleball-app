@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
 import { bumpDataVersions, ensureConfigTable } from '@/lib/data-version';
+import { recordAppDataReset } from '@/lib/data-delta';
 import { rebuildPlayerStatsFromMatches } from '@/lib/player-stats-rebuild';
 
 type BackupMatch = {
@@ -232,7 +233,8 @@ export async function POST(request: Request) {
     }
 
     await rebuildPlayerStatsFromMatches();
-    await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
+    const dataVersion = await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
+    await recordAppDataReset('matches', dataVersion);
 
     revalidatePath('/');
     revalidatePath('/admin');

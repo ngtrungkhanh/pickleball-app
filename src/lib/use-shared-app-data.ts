@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getAppDataManifestAction, getAppDataPartsAction } from '@/app/actions';
+import { getAppDataDeltaAction, getAppDataManifestAction, getAppDataPartsAction } from '@/app/actions';
 import {
+  applyMatchChangesLocal,
   getAppCacheSnapshot,
   hasUsableAppCache,
   replaceAppCacheParts,
@@ -10,6 +11,7 @@ import {
   type AppCachePart,
   type AppCacheSnapshot,
   type StoredMatch,
+  type StoredMatchChange,
   type StoredPlayer,
   type StoredPlayerSeasonSetting,
   type StoredSeason,
@@ -157,6 +159,44 @@ export function useSharedAppData({
     });
   }, []);
 
+  const applyMatchDelta = useCallback(async (
+    snapshot: AppCacheSnapshot,
+    manifest: NonNullable<Awaited<ReturnType<typeof getAppDataManifestAction>>>,
+  ) => {
+    const fromVersion = snapshot.partVersions.matches || 0;
+    if (fromVersion <= 0) return false;
+
+    const delta = await getAppDataDeltaAction('matches', fromVersion);
+    if (
+      !delta
+      || delta.resetRequired
+      || delta.toVersion !== manifest.parts.matches
+      || !Array.isArray(delta.changes)
+    ) {
+      return false;
+    }
+
+    const changes = delta.changes.map((change): StoredMatchChange => ({
+      operation: change.operation as StoredMatchChange['operation'],
+      entityId: String(change.entityId || ''),
+      payload: change.payload as StoredMatch | null,
+    }));
+    if (changes.some((change) => (
+      !change.entityId
+      || (change.operation === 'upsert' && !change.payload?.id)
+    ))) {
+      return false;
+    }
+
+    await applyMatchChangesLocal(
+      changes,
+      manifest.globalVersion,
+      { matches: manifest.parts.matches },
+      manifest.checkedAt,
+    );
+    return true;
+  }, []);
+
   const seedRoutePreloadIfPresent = useCallback(async () => {
     if (!routePreloadHasData(initialData)) return;
     const version = dataVersionFromConfig(initialConfig);
@@ -208,12 +248,21 @@ export function useSharedAppData({
       if (!isCurrentRun()) return;
       if (!manifest) throw new Error('manifest unavailable');
 
-      const staleParts = stalePartsFromManifest(snapshot, manifest, options?.parts);
+      let staleParts = stalePartsFromManifest(snapshot, manifest, options?.parts);
+      const hadStaleParts = staleParts.length > 0;
+      if (staleParts.includes('matches')) {
+        const deltaApplied = await applyMatchDelta(snapshot, manifest);
+        if (!isCurrentRun()) return;
+        if (deltaApplied) {
+          staleParts = staleParts.filter((part) => part !== 'matches');
+          snapshot = await getAppCacheSnapshot();
+        }
+      }
       if (staleParts.length > 0) {
         await fetchParts(staleParts, 'Đang tải phần dữ liệu mới...');
         if (!isCurrentRun()) return;
         snapshot = await getAppCacheSnapshot();
-      } else {
+      } else if (!hadStaleParts) {
         await seedAppCache({
           dataVersion: manifest.globalVersion,
           partVersions: manifest.parts,
@@ -234,7 +283,7 @@ export function useSharedAppData({
       setSyncMessage('Không đồng bộ được dữ liệu mới');
       setCacheLoaded(true);
     }
-  }, [fetchParts, initialData, localOnly, seedRoutePreloadIfPresent]);
+  }, [applyMatchDelta, fetchParts, initialData, localOnly, seedRoutePreloadIfPresent]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {

@@ -1,110 +1,71 @@
 # Pickleball Ranking Dashboard
 
-Production app for `https://conchimnon.vercel.app/`.
+Dashboard nội bộ để ghi điểm pickleball đôi, xếp hạng, lịch sử, tiền phạt,
+season, Hall of Fame và phân tích ELO.
 
-Dev preview for branch `dev`:
-`https://pickleball-app-git-dev-ngtrungkhanhs-projects.vercel.app/`
+- Production: <https://conchimnon.vercel.app/>
+- Preview nhánh `dev`:
+  <https://pickleball-app-git-dev-ngtrungkhanhs-projects.vercel.app/>
 
-Built with Next.js App Router, Tailwind CSS, Vercel Postgres, and Vercel
-hosting. The current production source is GitHub `main`.
+Stack chính: Next.js App Router, React, Tailwind CSS, Vercel Postgres, Vercel
+Blob và Vercel Hosting.
 
-## Start Here
-
-Read in tiers to save context:
-
-Always read:
-
-1. `README.md`
-2. `PROJECT_CONTEXT.md`
-3. `CHANGELOG.md`
-
-Read only when relevant:
-
-- `docs/FEATURE_SPEC.md` for product behavior and screen overview
-- `docs/DATA_FLOW.md` for database, server actions, cache, and localStorage
-- `docs/UI_RULES.md` for layout, wording, and responsive UI rules
-- `docs/ANALYSIS_INSIGHTS_RULES.md` for `/analysis` insight rules, triggers,
-  copy, and expansion roadmap
-- `docs/ANALYSIS_INSIGHTS_SELECTION.md` for `/analysis` insight audit,
-  weighting, cooldown/pity, and implementation plan
-
-Avoid reading large legacy files unless the task requires them. Use `rg` first.
-
-## Development
+## Bắt đầu
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Mở <http://localhost:3000/>.
 
-## Verification
+Các lệnh thường dùng:
 
 ```bash
-npm run build
 npx eslint <changed-files>
+npx tsc --noEmit
+npm run build
+npm run visual:test:history
+npm run audit:insights -- pickleball_backup_2026-06-08.json --seeds 1000
 ```
 
-Notes:
+`npm run lint` có thể báo lint debt cũ của toàn repo; với thay đổi nhỏ, ưu tiên
+ESLint đúng các file đã sửa.
 
-- `npm run lint` currently reports older repo-wide lint debt. Prefer targeted
-  lint for changed files until that debt is cleaned up.
-- Dashboard and Analysis are static shells, so `npm run build` should not need
-  to prerender database-backed user pages. Dynamic/admin/API routes still need a
-  valid pooled Vercel Postgres connection when exercised locally.
-- For history UI checks, use the deterministic backup-based visual test instead
-  of trying server/cache data first:
-  `npm run visual:test:history`. The script uses the newest
-  `pickleball_backup_YYYY-MM-DD.json`, creates a temporary route, runs
-  `next build` + `next start` on a free port starting at `3100`, captures mobile
-  and desktop screenshots for the full-history modal to `.next/visual-tests/`,
-  and deletes the temporary routes afterwards. This avoids the known local
-  failure path where `.env.local` has a direct Vercel Postgres URL or the
-  browser cache is empty.
-- If a manual temporary route is still needed, remember Next dev allows one dev
-  server per repo. Stop the existing Next dev PID before expecting newly added
-  routes to appear.
+## Tài liệu
 
-## Deployment
+- `AGENTS.md`: luật làm việc dành cho coding agent.
+- `docs/PRODUCT.md`: hành vi sản phẩm và quy tắc UI.
+- `docs/ARCHITECTURE.md`: database, cache, server action và deploy.
+- `CHANGELOG.md`: các mốc thay đổi đáng chú ý.
 
-Production is deployed by Vercel from GitHub `main`.
+Chỉ đọc tài liệu chuyên sâu liên quan tới task. Code và test đang chạy vẫn là
+nguồn sự thật cao nhất.
 
-Branch policy:
+## Route chính
 
-- `main` is production; do not edit directly.
-- `dev` is the shared working branch for all AI agents and machines.
-- Use Vercel Preview from `dev` for testing.
-- Merge `dev` into `main` only after the user confirms release.
+- `/`: Dashboard, leaderboard, ghi điểm và lịch sử.
+- `/analysis`: trung tâm phân tích read-only.
+- `/admin`: quản trị dữ liệu, backup/restore và import.
+- `/api/setup`, `/api/migrate`, `/api/restore`: route vận hành dữ liệu có rủi ro,
+  không dùng như tính năng thông thường.
 
-Database policy:
+## Cấu trúc repo
 
-- Production deployments from `main` use the Production database.
-- Preview deployments from branch `dev` use a separate dev database.
-- Merging `dev` into `main` merges code only; database data does not merge.
+- `src/app`: route, API route và server actions.
+- `src/components`: Dashboard, Settings, Admin và Analysis UI.
+- `src/lib`: thống kê, analysis core, insights, cache và database helpers.
+- `scripts`: audit/visual test và công cụ hỗ trợ.
+- `public`: static assets.
+- `legacy`: Apps Script cũ, chỉ để tham khảo.
+- `docs`: tài liệu hiện hành, không lưu prompt bàn giao.
 
-Before assuming local code is production-current, compare against Vercel
-Deployments:
+## Branch và deploy
 
-- Domain: `conchimnon.vercel.app`
-- Latest production `main` commit after latest sync: `120e7ce`
-- Latest released feature commit after latest sync: `cd2d0f8`
+- `main` là production.
+- `dev` là nhánh làm việc chung và tạo Vercel Preview.
+- Preview và Production dùng database riêng.
+- Chỉ merge `dev` vào `main` sau khi người dùng xác nhận release.
+- Không commit secret hoặc `.env.local`.
 
-## Repo Layout
-
-- `src/app` - App Router pages, routes, and server actions
-- `src/components` - UI components
-- `src/lib` - stats, analytics, db, and utility logic
-- `legacy` - old Apps Script implementation for reference only
-- `sync_excel_to_db.js` - one-off Excel-to-Postgres migration helper
-- `docs` - deeper product, data, and UI documentation
-
-## UI Review Order
-
-Every UI change must be checked in this order:
-
-1. Mobile
-2. Desktop Full HD
-3. 2K
-4. 4K
-5. Other screen types
+UI phải được review theo thứ tự mobile, Full HD, 2K rồi 4K.

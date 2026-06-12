@@ -2,6 +2,7 @@
 import { sql } from '@vercel/postgres';
 import { del, put } from '@vercel/blob';
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import { GUEST_ID, GUEST_NAME, isGuestId, matchHasGuest } from '@/lib/guest';
 import { previewWriteBlockedResult, shouldBlockPreviewWrites } from '@/lib/environment';
 import {
@@ -10,6 +11,11 @@ import {
   ensureConfigTable as ensureSharedConfigTable,
   getAppManifest,
 } from '@/lib/data-version';
+import {
+  ensureDeltaLogAfterFallback,
+  readAppDataChanges,
+  recordAppDataReset,
+} from '@/lib/data-delta';
 import { rebuildPlayerStatsFromMatches } from '@/lib/player-stats-rebuild';
 
 async function ensureSeasonTable() {
@@ -193,6 +199,69 @@ async function bumpMatchWriteVersions(runner?: DbClient) {
   return nextVersion;
 }
 
+async function commitMatchChangeVersion(
+  operation: 'upsert' | 'delete',
+  entityId: string,
+  payload?: Record<string, unknown> | null,
+) {
+  const nextVersion = Date.now();
+  const value = String(nextVersion);
+  const serializedPayload = payload ? JSON.stringify(payload) : null;
+
+  try {
+    await sql`
+      WITH version_updates AS (
+        INSERT INTO config (key, value)
+        VALUES
+          ('data_version', ${value}),
+          ('version_global', ${value}),
+          ('version_matches', ${value}),
+          ('version_admin', ${value})
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        RETURNING key
+      )
+      INSERT INTO app_data_changes (version, part, operation, entity_id, payload)
+      SELECT
+        ${nextVersion},
+        'matches',
+        ${operation},
+        ${entityId},
+        ${serializedPayload}::jsonb
+      FROM (SELECT COUNT(*) FROM version_updates) AS committed_versions
+    `;
+    return { dataVersion: nextVersion, deltaRecorded: true };
+  } catch (error) {
+    console.warn('Match delta commit unavailable; falling back to version-only sync:', error);
+    return {
+      dataVersion: await bumpMatchWriteVersions(),
+      deltaRecorded: false,
+    };
+  }
+}
+
+function scheduleMatchPostWrite({
+  auditType,
+  auditDetails,
+  paths,
+  dataVersion,
+  deltaRecorded,
+}: {
+  auditType: string;
+  auditDetails: string;
+  paths: string[];
+  dataVersion?: number;
+  deltaRecorded: boolean;
+}) {
+  after(async () => {
+    const tasks: Promise<unknown>[] = [logAudit(auditType, auditDetails)];
+    if (!deltaRecorded && typeof dataVersion === 'number') {
+      tasks.push(ensureDeltaLogAfterFallback('matches', dataVersion));
+    }
+    await Promise.all(tasks);
+    revalidateAfterWrite(paths);
+  });
+}
+
 async function withTransaction<T>(work: (client: DbClient) => Promise<T>) {
   const client = await sql.connect();
   try {
@@ -231,6 +300,21 @@ function normalizeMatchRow(row: any, fallbackSeason = 'Season 1') {
     client_request_id: row.client_request_id ? String(row.client_request_id) : null,
     deleted_at: row.deleted_at ? String(row.deleted_at) : null,
     delete_group_id: row.delete_group_id ? String(row.delete_group_id) : null,
+  };
+}
+
+function matchDeltaPayload(match: Record<string, unknown>) {
+  return {
+    id: String(match.id || ''),
+    date: match.date ? String(match.date) : new Date().toISOString(),
+    win_1: String(match.win_1 || ''),
+    win_2: match.win_2 ? String(match.win_2) : null,
+    lose_1: String(match.lose_1 || ''),
+    lose_2: match.lose_2 ? String(match.lose_2) : null,
+    win_score: Number(match.win_score || 0),
+    lose_score: Number(match.lose_score || 0),
+    season: String(match.season || 'Season 1'),
+    created_by: String(match.created_by || 'SYSTEM'),
   };
 }
 
@@ -444,25 +528,36 @@ export async function addMatchAction(formData: FormData) {
         duplicateMatch: txResult.duplicateMatch,
       };
     }
+    if (!txResult.match) {
+      throw new Error('Saved match payload is missing');
+    }
 
-    stage = 'post-write side effects';
+    stage = 'post-write version';
     let dataVersion = txResult.dataVersion;
     let syncWarning: string | undefined;
+    let deltaRecorded = true;
     if (dataVersion === null && !txResult.replay) {
       try {
-        await logAudit('ADD_MATCH', `Match ${id} by ${created_by}: ${win_1}${win_2 ? '/' + win_2 : ''} beat ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
-        dataVersion = await bumpMatchWriteVersions();
+        const committed = await commitMatchChangeVersion('upsert', id, matchDeltaPayload(txResult.match));
+        dataVersion = committed.dataVersion;
+        deltaRecorded = committed.deltaRecorded;
       } catch (sideEffectError) {
         console.error('Post-match side effects failed:', sideEffectError);
         syncWarning = 'match_saved_version_not_bumped';
       }
     }
 
-    stage = 'post-write version';
     const versions = getPostWriteVersions(dataVersion);
 
-    stage = 'revalidate';
-    revalidateAfterWrite(['/', '/analysis']);
+    if (!txResult.replay) {
+      scheduleMatchPostWrite({
+        auditType: 'ADD_MATCH',
+        auditDetails: `Match ${id} by ${created_by}: ${win_1}${win_2 ? '/' + win_2 : ''} beat ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`,
+        paths: ['/', '/analysis'],
+        dataVersion: versions.dataVersion,
+        deltaRecorded,
+      });
+    }
     return {
       success: true,
       ...versions,
@@ -507,10 +602,12 @@ export async function deleteMatchAction(matchId: string) {
 
     let dataVersion = txResult.dataVersion;
     let syncWarning: string | undefined;
+    let deltaRecorded = true;
     if (dataVersion === null && txResult.changed) {
       try {
-        await logAudit('DELETE_MATCH', `Deleted Match ${matchId}`);
-        dataVersion = await bumpMatchWriteVersions();
+        const committed = await commitMatchChangeVersion('delete', matchId);
+        dataVersion = committed.dataVersion;
+        deltaRecorded = committed.deltaRecorded;
       } catch (sideEffectError) {
         console.error('Post-delete side effects failed:', sideEffectError);
         syncWarning = 'match_deleted_version_not_bumped';
@@ -518,7 +615,15 @@ export async function deleteMatchAction(matchId: string) {
     }
     const versions = getPostWriteVersions(dataVersion);
 
-    revalidateAfterWrite(['/', '/history', '/analysis']);
+    if (txResult.changed) {
+      scheduleMatchPostWrite({
+        auditType: 'DELETE_MATCH',
+        auditDetails: `Deleted Match ${matchId}`,
+        paths: ['/', '/history', '/analysis'],
+        dataVersion: versions.dataVersion,
+        deltaRecorded,
+      });
+    }
     return {
       success: true,
       deletedMatchId: matchId,
@@ -664,7 +769,8 @@ export async function deletePlayerAction(formData: FormData) {
 
     await rebuildStatsAction();
     await logAudit('DELETE_PLAYER', `Soft deleted player ${players[0].name} (${id}) and ${matches.length} related matches.`);
-    await bumpDataVersions(['players', 'matches', 'playerSeasonSettings', 'admin']);
+    const dataVersion = await bumpDataVersions(['players', 'matches', 'playerSeasonSettings', 'admin']);
+    await recordAppDataReset('matches', dataVersion);
 
     revalidatePath('/');
     revalidatePath('/analysis');
@@ -708,7 +814,8 @@ export async function deleteSeasonAction(formData: FormData) {
     }
 
     await rebuildStatsAction();
-    await bumpDataVersions(['seasons', 'matches', 'config', 'playerSeasonSettings', 'admin']);
+    const dataVersion = await bumpDataVersions(['seasons', 'matches', 'config', 'playerSeasonSettings', 'admin']);
+    await recordAppDataReset('matches', dataVersion);
     revalidatePath('/');
     revalidatePath('/analysis');
     return { success: true };
@@ -1029,7 +1136,8 @@ export async function restoreFromArchive(archiveId: number) {
     
     await sql`DELETE FROM archives WHERE id = ${archiveId}`;
     await logAudit('RESTORE', `Restored ${item.type} ${item.name}`);
-    await bumpDataVersions(['players', 'matches', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
+    const dataVersion = await bumpDataVersions(['players', 'matches', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
+    await recordAppDataReset('matches', dataVersion);
     
     revalidatePath('/');
     return { success: true };
@@ -1053,6 +1161,45 @@ export async function getAppDataManifestAction() {
   } catch (error) {
     console.error('Fetch app data manifest failed:', error);
     return null;
+  }
+}
+
+export async function getAppDataDeltaAction(part: string, sinceVersion: number) {
+  if (part !== 'matches') {
+    return {
+      part,
+      fromVersion: Number(sinceVersion || 0),
+      toVersion: Number(sinceVersion || 0),
+      changes: [],
+      resetRequired: true,
+      reason: 'unsupported_part',
+    };
+  }
+
+  try {
+    const manifest = await getAppManifest();
+    const fromVersion = Math.max(0, Number(sinceVersion || 0) || 0);
+    const toVersion = manifest.parts.matches;
+    const result = await readAppDataChanges('matches', fromVersion, toVersion);
+    return {
+      part: 'matches',
+      fromVersion,
+      toVersion,
+      changes: result.changes,
+      resetRequired: result.resetRequired,
+      reason: result.reason,
+      checkedAt: manifest.checkedAt,
+    };
+  } catch (error) {
+    console.error('Fetch app data delta failed:', error);
+    return {
+      part: 'matches',
+      fromVersion: Number(sinceVersion || 0),
+      toVersion: Number(sinceVersion || 0),
+      changes: [],
+      resetRequired: true,
+      reason: 'delta_error',
+    };
   }
 }
 
@@ -1360,11 +1507,12 @@ export async function updateMatchAction(formData: FormData) {
     } else {
       dateVal = new Date(old.date);
     }
-    await sql`
+    const { rows: updatedRows } = await sql`
       UPDATE matches 
       SET win_1 = ${win_1}, win_2 = ${win_2}, lose_1 = ${lose_1}, lose_2 = ${lose_2}, 
           win_score = ${win_score}, lose_score = ${lose_score}, date = ${dateVal.toISOString()}
       WHERE id = ${id}
+      RETURNING *
     `;
 
     // 3. Apply new stats
@@ -1377,12 +1525,17 @@ export async function updateMatchAction(formData: FormData) {
     await updatePlayerStatsIncremental(lose_1, old.season, 0, 0, lose_money);
     if (lose_2) await updatePlayerStatsIncremental(lose_2, old.season, 0, 0, lose_money);
 
-    await logAudit('UPDATE_MATCH', `Updated Match ${id}: ${win_1}${win_2 ? '/' + win_2 : ''} vs ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`);
-    await bumpDataVersions(['matches', 'admin']);
-
-    revalidatePath('/');
-    revalidatePath('/analysis');
-    return { success: true };
+    const updatedMatch = normalizeMatchRow(updatedRows[0], String(old.season || 'Season 1'));
+    const committed = await commitMatchChangeVersion('upsert', id, matchDeltaPayload(updatedMatch));
+    const versions = getPostWriteVersions(committed.dataVersion);
+    scheduleMatchPostWrite({
+      auditType: 'UPDATE_MATCH',
+      auditDetails: `Updated Match ${id}: ${win_1}${win_2 ? '/' + win_2 : ''} vs ${lose_1}${lose_2 ? '/' + lose_2 : ''} (${win_score}-${lose_score})`,
+      paths: ['/', '/analysis'],
+      dataVersion: versions.dataVersion,
+      deltaRecorded: committed.deltaRecorded,
+    });
+    return { success: true, match: updatedMatch, ...versions };
   } catch (error: unknown) {
     console.error('Update match failed:', error);
     const message = error instanceof Error ? error.message : String(error);

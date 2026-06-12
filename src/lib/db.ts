@@ -35,6 +35,12 @@ export type StoredMatch = {
   [key: string]: unknown;
 };
 
+export type StoredMatchChange = {
+  operation: 'upsert' | 'delete';
+  entityId: string;
+  payload?: StoredMatch | null;
+};
+
 export type StoredPlayer = {
   id?: string;
   name?: string;
@@ -292,6 +298,42 @@ export async function replaceOptimisticMatchLocal(tempId: string, match: StoredM
     tx.objectStore(STORES.syncMeta).put({ key: 'dataVersion', value: dataVersion });
     tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: mergePartVersions(currentPartVersions, partVersions || { matches: dataVersion }, dataVersion) });
   }
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+  emitCacheChange();
+}
+
+export async function applyMatchChangesLocal(
+  changes: StoredMatchChange[],
+  dataVersion: number,
+  partVersions: Partial<AppCachePartVersions>,
+  manifestCheckedAt = Date.now(),
+) {
+  const currentPartVersions = await getMetaValue<unknown>('partVersions', null);
+  const db = await openDB();
+  const tx = db.transaction([STORES.matches, STORES.syncMeta], 'readwrite');
+  const matchStore = tx.objectStore(STORES.matches);
+
+  changes.forEach((change) => {
+    if (change.operation === 'delete') {
+      matchStore.delete(change.entityId);
+      return;
+    }
+    if (change.payload?.id) {
+      matchStore.put(change.payload);
+    }
+  });
+
+  const metaStore = tx.objectStore(STORES.syncMeta);
+  metaStore.put({ key: 'dataVersion', value: dataVersion });
+  metaStore.put({
+    key: 'partVersions',
+    value: mergePartVersions(currentPartVersions, partVersions, dataVersion),
+  });
+  metaStore.put({ key: 'lastManifestCheck', value: manifestCheckedAt });
+
   await new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve(true);
     tx.onerror = () => reject(tx.error);

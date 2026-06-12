@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import { shouldBlockPreviewWrites } from '@/lib/environment';
 import { bumpDataVersions } from '@/lib/data-version';
+import { recordAppDataReset } from '@/lib/data-delta';
 import { rebuildPlayerStatsFromMatches } from '@/lib/player-stats-rebuild';
 
 const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
@@ -172,7 +173,8 @@ export async function GET(request: Request) {
     }
 
     await rebuildPlayerStatsFromMatches();
-    await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
+    const dataVersion = await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
+    await recordAppDataReset('matches', dataVersion);
 
     return NextResponse.json({ message: 'Migration completed successfully!' }, { status: 200 });
 
@@ -283,7 +285,8 @@ export async function POST(request: Request) {
 
     await rebuildPlayerStatsFromMatches();
 
-    await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
+    const dataVersion = await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
+    await recordAppDataReset('matches', dataVersion);
 
     revalidatePath('/');
     revalidatePath('/analysis');
