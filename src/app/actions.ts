@@ -192,19 +192,30 @@ async function commitMatchChangeVersion(
   entityId: string,
   payload?: Record<string, unknown> | null,
 ) {
-  const nextVersion = await nextDataVersion();
-  const value = String(nextVersion);
   const serializedPayload = payload ? JSON.stringify(payload) : null;
 
   try {
-    await sql`
-      WITH version_updates AS (
+    const { rows } = await sql`
+      WITH next_version AS (
+        UPDATE app_version_counter
+        SET value = GREATEST(
+          value + 1,
+          FLOOR(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT
+        )
+        WHERE id = 1
+        RETURNING value
+      ),
+      version_updates AS (
         INSERT INTO config (key, value)
-        VALUES
-          ('data_version', ${value}),
-          ('version_global', ${value}),
-          ('version_matches', ${value}),
-          ('version_admin', ${value})
+        SELECT version_key, next_version.value::TEXT
+        FROM next_version
+        CROSS JOIN (
+          VALUES
+            ('data_version'),
+            ('version_global'),
+            ('version_matches'),
+            ('version_admin')
+        ) AS version_keys(version_key)
         ON CONFLICT (key) DO UPDATE SET value = (
           GREATEST(
             CASE
@@ -218,13 +229,19 @@ async function commitMatchChangeVersion(
       )
       INSERT INTO app_data_changes (version, part, operation, entity_id, payload)
       SELECT
-        ${nextVersion},
+        next_version.value,
         'matches',
         ${operation},
         ${entityId},
         ${serializedPayload}::jsonb
-      FROM (SELECT COUNT(*) FROM version_updates) AS committed_versions
+      FROM next_version
+      CROSS JOIN (SELECT COUNT(*) FROM version_updates) AS committed_versions
+      RETURNING version
     `;
+    const nextVersion = Number(rows[0]?.version || 0);
+    if (!Number.isSafeInteger(nextVersion) || nextVersion <= 0) {
+      throw new Error('Match data version counter is unavailable');
+    }
     return { dataVersion: nextVersion, deltaRecorded: true };
   } catch (error) {
     console.warn('Match delta commit unavailable; falling back to version-only sync:', error);
