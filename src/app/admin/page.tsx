@@ -843,6 +843,7 @@ export default function AdminPage() {
                             <td className="px-6 py-4">
                               <input
                                 type="datetime-local"
+                                lang="en-GB"
                                 value={editMatchData?.date || ''}
                                 onChange={e => setEditMatchData({ ...editMatchData, date: e.target.value })}
                                 disabled={isSavingThisMatch}
