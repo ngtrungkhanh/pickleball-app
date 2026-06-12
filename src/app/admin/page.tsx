@@ -864,14 +864,51 @@ export default function AdminPage() {
                         return (
                           <tr key={m.id} className="bg-white/[0.03]">
                             <td className="px-6 py-4">
-                              <input
-                                type="datetime-local"
-                                lang="en-GB"
-                                value={editMatchData?.date || ''}
-                                onChange={e => setEditMatchData({ ...editMatchData, date: e.target.value })}
-                                disabled={isSavingThisMatch}
-                                className="bg-slate-950 text-white border border-white/10 rounded px-2 py-1 text-xs font-bold"
-                              />
+                              {(() => {
+                                const [datePart, timePart] = (editMatchData?.date || 'T').split('T');
+                                return (
+                                  <div className="flex flex-col sm:flex-row gap-1.5 items-center">
+                                    <input
+                                      type="date"
+                                      value={datePart || ''}
+                                      onChange={e => {
+                                        const dPart = e.target.value;
+                                        const tPart = timePart || '00:00';
+                                        setEditMatchData({ ...editMatchData, date: `${dPart}T${tPart}` });
+                                      }}
+                                      disabled={isSavingThisMatch}
+                                      className="bg-slate-950 text-white border border-white/10 rounded px-2 py-1 text-xs font-bold w-[105px] text-center"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={timePart || ''}
+                                      placeholder="HH:mm"
+                                      maxLength={5}
+                                      onChange={e => {
+                                        let val = e.target.value;
+                                        val = val.replace(/[^0-9:]/g, '');
+                                        if (val.length === 2 && !val.includes(':')) {
+                                          val = val + ':';
+                                        }
+                                        const dPart = datePart || new Date().toLocaleDateString('en-CA');
+                                        setEditMatchData({ ...editMatchData, date: `${dPart}T${val}` });
+                                      }}
+                                      onBlur={e => {
+                                        const val = e.target.value;
+                                        const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+                                        if (!timeRegex.test(val)) {
+                                          const oldTime = (formatDatetimeLocal(new Date(m.date)).split('T')[1]) || '00:00';
+                                          const dPart = datePart || new Date().toLocaleDateString('en-CA');
+                                          setEditMatchData({ ...editMatchData, date: `${dPart}T${oldTime}` });
+                                          alert('Giờ nhập vào không hợp lệ (định dạng đúng là HH:mm từ 00:00 đến 23:59)');
+                                        }
+                                      }}
+                                      disabled={isSavingThisMatch}
+                                      className="bg-slate-950 text-white border border-white/10 rounded px-2 py-1 text-xs font-bold w-[50px] text-center"
+                                    />
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td className="px-6 py-4 space-y-1">
                               <select
