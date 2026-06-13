@@ -24,6 +24,7 @@ export function FastAddShell({ previewWritesBlocked }: { previewWritesBlocked: b
       <ScoreForm 
         players={sharedData.players}
         activeSeason={activeSeason}
+        compact={true}
       />
       <div className="text-center mt-4">
         <Link href="/" className="text-sm text-slate-400 hover:text-white underline">

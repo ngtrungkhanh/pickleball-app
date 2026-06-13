@@ -13,7 +13,7 @@ export default function FastAddPage() {
   return (
     <div className="min-h-screen bg-[#0d1421] text-slate-200">
       <div className="max-w-md mx-auto p-4 pt-10">
-        <h1 className="text-2xl font-bold mb-6 text-center text-primary">Nhập điểm siêu tốc</h1>
+        <h2 className="text-2xl font-bold mb-6 text-center text-primary">Nhập điểm siêu tốc</h2>
         <FastAddShell previewWritesBlocked={shouldBlockPreviewWrites()} />
       </div>
     </div>
