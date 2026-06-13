@@ -4,6 +4,8 @@ import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { History, X, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import { isGuestId } from '@/lib/guest';
+import { useSwipeable } from 'react-swipeable';
+import { motion } from 'framer-motion';
 
 type PlayerNameMode = 'full' | 'tiny';
 type DayMatchGroup = {
@@ -210,6 +212,12 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
     window.setTimeout(onClose, 190);
   };
 
+  const swipeHandlers = useSwipeable({
+    onSwipedDown: requestClose,
+    preventDefaultTouchmoveEvent: false,
+    trackMouse: true
+  });
+
   return (
     <div className={cn("fixed inset-0 z-[1100] flex items-end justify-center p-0 sm:items-center sm:p-4", isClosing && "pointer-events-none")}>
       <div className={cn("history-modal-backdrop absolute inset-0 bg-black/65 backdrop-blur-md", isClosing && "history-modal-backdrop-out")} onClick={requestClose} />
@@ -227,7 +235,7 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
           }}
         />
       )}
-      <div className={cn("history-modal-panel relative flex h-[92vh] w-full flex-col overflow-hidden rounded-t-[2.5rem] border border-slate-800/80 bg-[#0b1329]/98 shadow-[0_28px_90px_rgba(0,0,0,0.42)] backdrop-blur-2xl sm:h-auto sm:max-h-[88vh] sm:max-w-[1100px] sm:rounded-[2rem] xl:max-w-[1180px]", isClosing && "history-modal-panel-out")}>
+      <div {...swipeHandlers} className={cn("history-modal-panel relative flex h-[92vh] w-full flex-col overflow-hidden rounded-t-[2.5rem] border border-slate-800/80 bg-[#0b1329]/98 shadow-[0_28px_90px_rgba(0,0,0,0.42)] backdrop-blur-2xl sm:h-auto sm:max-h-[88vh] sm:max-w-[1100px] sm:rounded-[2rem] xl:max-w-[1180px]", isClosing && "history-modal-panel-out")}>
         <div className="flex items-center justify-between px-6 py-5 sm:px-8 sm:py-6 border-b border-slate-800/80 bg-[#0f1b32]/90 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
@@ -361,17 +369,26 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
   const syncFailed = m.pending && m.sync_status === 'error';
   const syncLabel = syncFailed ? 'Lưu lỗi' : 'Đang lưu...';
   const syncClass = syncFailed ? 'text-red-300/90' : 'text-amber-300/80';
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: () => {
+      if (canEdit && !m.pending && !isDeleting) {
+        onDelete();
+      }
+    },
+    preventDefaultTouchmoveEvent: false,
+    trackMouse: true
+  });
   return (
-    <div className="group relative flex overflow-hidden rounded-2xl border border-slate-800/80 bg-[#0f172a]/90 shadow-[0_10px_28px_rgba(0,0,0,0.12)] transition-all hover:bg-[#15233c]/90">
+    <div {...swipeHandlers} className="group relative flex overflow-hidden rounded-2xl border border-slate-800/80 bg-[#0f172a]/90 shadow-[0_10px_28px_rgba(0,0,0,0.12)] transition-all hover:bg-[#15233c]/90">
       <div className="flex w-[64px] shrink-0 flex-col items-center justify-center gap-1 border-r border-slate-800/80 bg-white/[0.015] px-2 py-3 sm:w-24">
         <span className="text-[15px] font-black leading-none text-slate-200/85 tabular-nums sm:text-[17px]">{time}</span>
         <span className="text-[10px] font-bold text-slate-400/75 tabular-nums sm:text-[11px]">{date}</span>
       </div>
       <div className={cn("min-w-0 flex-1 px-3 py-3 sm:px-5 sm:py-4", canEdit && "pr-9 sm:pr-11")}>
         {canEdit && !m.pending && (
-          <button disabled={isDeleting} onClick={onDelete} className={cn("absolute right-2 top-2 rounded-lg p-1.5 text-white/25 transition-all hover:bg-red-500/10 hover:text-red-400 active:scale-90", isDeleting && "pointer-events-none opacity-50")}>
+          <motion.button whileTap={{ scale: 0.85 }} disabled={isDeleting} onClick={onDelete} className={cn("absolute right-2 top-2 rounded-lg p-1.5 text-white/25 transition-all hover:bg-red-500/10 hover:text-red-400 active:scale-90", isDeleting && "pointer-events-none opacity-50")}>
             {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-          </button>
+          </motion.button>
         )}
         <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-5" data-mobile-match-row>
           <div className="min-w-0 space-y-0.5 text-right">
@@ -412,6 +429,15 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
       </div>
     </div>
   );
+}
+
+function SwipeableCompactRow({ children, onSwipeLeft }: { children: ReactNode; onSwipeLeft: () => void }) {
+  const handlers = useSwipeable({
+    onSwipedLeft: onSwipeLeft,
+    preventDefaultTouchmoveEvent: false,
+    trackMouse: true
+  });
+  return <div {...handlers} className="recent-history-compact-row relative min-h-[72px]" data-mobile-match-row>{children}</div>;
 }
 
 // ─── Main RecentHistory ───────────────────────────────────────────────────────
@@ -515,16 +541,16 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
 
                 <div className="shrink-0 flex items-center justify-center w-12">
                   {canEdit && !m.pending && (
-                    <button disabled={isDeletingId === m.id} onClick={() => setDeleteTarget(m.id)}
+                    <motion.button whileTap={{ scale: 0.85 }} disabled={isDeletingId === m.id} onClick={() => setDeleteTarget(m.id)}
                       className={cn("p-2 text-white/15 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors", isDeletingId === m.id && "opacity-50 pointer-events-none")}>
                       {isDeletingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                    </button>
+                    </motion.button>
                   )}
                 </div>
               </div>
 
               {/* ── COMPACT ─────────────────────────────────────────────── */}
-              <div className="recent-history-compact-row relative min-h-[72px]" data-mobile-match-row>
+              <SwipeableCompactRow onSwipeLeft={() => { if (canEdit && !m.pending && isDeletingId !== m.id) setDeleteTarget(m.id); }}>
                 <div className="flex">
                   <div className="flex w-[64px] shrink-0 flex-col items-center justify-center gap-1 border-r border-white/[0.05] bg-white/[0.015] px-2 py-3">
                     <span className="text-[15px] font-black leading-none text-white/75 tabular-nums">{time}</span>
@@ -533,10 +559,10 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
 
                   <div className={cn("min-w-0 flex-1 px-3 py-3", canEdit && "pr-9")}>
                     {canEdit && !m.pending && (
-                      <button disabled={isDeletingId === m.id} onClick={() => setDeleteTarget(m.id)}
+                      <motion.button whileTap={{ scale: 0.85 }} disabled={isDeletingId === m.id} onClick={() => setDeleteTarget(m.id)}
                         className={cn("absolute right-2 top-2 rounded-lg p-1.5 text-white/15 transition-colors hover:bg-red-500/10 hover:text-red-400", isDeletingId === m.id && "pointer-events-none opacity-50")}>
                         {isDeletingId === m.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                      </button>
+                      </motion.button>
                     )}
 
                     <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
@@ -566,7 +592,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                     </div>
                   </div>
                 </div>
-              </div>
+              </SwipeableCompactRow>
 
             </div>
           );

@@ -4,6 +4,7 @@
 
 - Luôn giao tiếp và lập kế hoạch bằng tiếng Việt.
 - Trình bày ngắn, trực tiếp, nêu rõ file đã đổi và cách đã kiểm tra.
+- **Người dùng không tự chạy lệnh hay thao tác code trên máy cá nhân.** Agent phải tự thao tác Git, tự chạy test và deploy. Người dùng chỉ nghiệm thu UI/UX trên web preview (Vercel) hoặc production.
 - Không dùng tài liệu Markdown như nhật ký chat hoặc nơi lưu prompt bàn giao.
 
 ## Đọc trước khi làm

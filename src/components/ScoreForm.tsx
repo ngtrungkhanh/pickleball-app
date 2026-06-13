@@ -1,6 +1,7 @@
 'use client';
 import { useState, useTransition, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { addMatchAction, getAppDataPartsAction } from '@/app/actions';
 import { Minus, Plus, Trophy, Ghost, Send, RefreshCw, AlertCircle, CheckCircle2, Check, ChevronDown, UserRound, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -766,7 +767,8 @@ export function ScoreForm({
         </div>
 
         <div className="flex flex-col items-center gap-4">
-          <button
+          <motion.button
+            whileTap={ui === 'saved' ? undefined : { scale: 0.95 }}
             type="submit"
             disabled={ui === 'saved'}
             className={cn(
@@ -774,11 +776,11 @@ export function ScoreForm({
               compact ? 'text-[11px] tracking-[0.18em]' : 'text-xs sm:text-sm tracking-[0.24em]',
               ui === 'saved'
                 ? 'bg-primary/20 text-primary/60 cursor-default'
-                : 'bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20 active:scale-95'
+                : 'bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20'
             )}
           >
             {ui === 'saved' ? <><CheckCircle2 className="w-5 h-5" /> Đã ghi tạm</> : <><Send className="w-5 h-5" /> Ghi kết quả</>}
-          </button>
+          </motion.button>
         </div>
       </form>
     </>

@@ -1,5 +1,7 @@
 'use client';
 
+import { useSwipeable } from 'react-swipeable';
+
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -355,6 +357,12 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
     : tabs.filter(t => t.id === 'access');
   const activeTab = tab;
 
+  const swipeHandlers = useSwipeable({
+    onSwipedDown: onClose,
+    preventDefaultTouchmoveEvent: false,
+    trackMouse: true
+  });
+
   return (
     <div className="fixed inset-0 z-[500] flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div
@@ -362,6 +370,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
         onClick={onClose}
       />
       <div 
+        {...swipeHandlers}
         className="relative w-full sm:max-w-4xl h-[92vh] sm:h-[640px] sm:rounded-3xl rounded-t-[2.5rem] border border-slate-500/25 bg-[#142034] shadow-[0_28px_90px_rgba(0,0,0,0.42)] overflow-hidden flex flex-col animate-in slide-in-from-bottom-10 duration-300"
       >
         <div className="flex items-center justify-between px-6 py-3.5 sm:py-5 border-b border-slate-500/25 shrink-0">

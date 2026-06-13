@@ -15,10 +15,12 @@
     "@vercel/blob": "^2.4.0",
     "@vercel/postgres": "^0.10.0",
     "clsx": "^2.1.1",
+    "framer-motion": "^12.40.0",
     "lucide-react": "^1.14.0",
     "next": "16.2.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-swipeable": "^7.0.2",
     "tailwind-merge": "^3.5.0",
     "xlsx": "^0.18.5"
   },

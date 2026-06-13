@@ -11,6 +11,7 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import { buildAnalysisSnapshot, edgeRecord, getAnalysisName, type AnalysisEdge, type EloResult, type PlayerMetrics, type PlayerProfile } from '@/lib/analysis-core';
+import { useSwipeable } from 'react-swipeable';
 import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
 import { cn, getAvatarLetter } from '@/lib/utils';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
@@ -299,8 +300,21 @@ export function AnalysisCenter({
     committedInsightSeedRef.current = insightSeed;
   }, [insightSeed, insightSelectionResult.nextSelectionState, insightsReady]);
 
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: () => {
+      const idx = navItems.findIndex(i => i.id === activeNav);
+      if (idx !== -1 && idx < navItems.length - 1) setActiveNav(navItems[idx + 1].id);
+    },
+    onSwipedRight: () => {
+      const idx = navItems.findIndex(i => i.id === activeNav);
+      if (idx > 0) setActiveNav(navItems[idx - 1].id);
+    },
+    preventDefaultTouchmoveEvent: false,
+    trackMouse: false
+  });
+
   return (
-    <div className="min-h-screen bg-slate-900">
+    <div {...swipeHandlers} className="min-h-screen bg-slate-900">
       {/* Header */}
       <div className="sticky top-0 z-50 bg-slate-900/92 backdrop-blur-xl border-b border-white/[0.08]">
         <div className="max-w-[1500px] mx-auto px-4 py-2">
