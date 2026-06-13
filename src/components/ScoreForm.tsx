@@ -490,45 +490,56 @@ export function ScoreForm({
     } catch {}
   }, []);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.lang = 'vi-VN';
-        
-        recognition.onstart = () => setIsListening(true);
-        recognition.onerror = () => setIsListening(false);
-        recognition.onend = () => setIsListening(false);
-        
-        recognition.onresult = (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          const parsed = parseVoiceInput(transcript, activeRef.current);
-          if (parsed.win1) setWin1(parsed.win1);
-          if (parsed.win2) setWin2(parsed.win2);
-          if (parsed.lose1) setLose1(parsed.lose1);
-          if (parsed.lose2) setLose2(parsed.lose2);
-          setWs(parsed.winScore);
-          setLs(parsed.loseScore);
-          setIsListening(false);
-        };
-        
-        recognitionRef.current = recognition;
-      }
-    }
-  }, []);
-
   const toggleListening = () => {
     if (isListening) {
       recognitionRef.current?.stop();
-    } else {
-      try {
-        recognitionRef.current?.start();
-      } catch (e) {
-        console.error('Speech recognition start failed:', e);
-      }
+      setIsListening(false);
+      return;
+    }
+
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      alert('Trình duyệt của bạn không hỗ trợ nhận diện giọng nói. Vui lòng dùng Chrome hoặc Safari mới nhất.');
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'vi-VN';
+
+      recognition.onstart = () => setIsListening(true);
+      
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+          alert('Vui lòng cấp quyền sử dụng Micro cho trang web để nhập điểm bằng giọng nói.');
+        }
+        setIsListening(false);
+      };
+      
+      recognition.onend = () => setIsListening(false);
+      
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        const parsed = parseVoiceInput(transcript, activeRef.current);
+        if (parsed.win1) setWin1(parsed.win1);
+        if (parsed.win2) setWin2(parsed.win2);
+        if (parsed.lose1) setLose1(parsed.lose1);
+        if (parsed.lose2) setLose2(parsed.lose2);
+        setWs(parsed.winScore);
+        setLs(parsed.loseScore);
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (e) {
+      console.error('Speech recognition start failed:', e);
+      setIsListening(false);
     }
   };
 
