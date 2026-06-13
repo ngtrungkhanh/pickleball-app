@@ -30,6 +30,7 @@ nghìn trận:
   Settings.
 - `/analysis`: phân tích read-only.
 - `/admin`: quản lý dữ liệu, audit, archive, backup/restore và import.
+- `/fast-add`: Giao diện nhập điểm nhanh tối giản chuyên dùng cho PWA shortcut. Có một đường link bí mật (phiên bản v1.0.0) ẩn dưới cùng góc trái màn hình Settings để truy cập thủ công.
 - Không có route người dùng riêng cho `/history` hoặc `/add-match`.
 
 ## Ghi điểm

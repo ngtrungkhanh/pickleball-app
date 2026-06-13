@@ -388,8 +388,8 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
 
         <div className="flex-1 min-h-0 flex flex-col sm:grid sm:grid-cols-[220px_1fr]">
           {/* Menu - Grid on Mobile, Sidebar on Desktop */}
-          <div className="shrink-0 p-2 sm:p-4 border-b border-slate-500/25 bg-white/[0.035] sm:bg-white/[0.05]">
-            <div className="grid grid-cols-2 sm:flex sm:flex-col gap-1 sm:gap-2">
+          <div className="shrink-0 p-2 sm:p-4 border-b border-slate-500/25 bg-white/[0.035] sm:bg-white/[0.05] flex flex-col">
+            <div className="grid grid-cols-2 sm:flex sm:flex-col gap-1 sm:gap-2 flex-1">
               {visibleTabs.map(({ id, label, Icon }) => (
                 <motion.button
                   whileTap={{ scale: 0.95 }}
@@ -406,6 +406,16 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                   <span className="truncate">{label}</span>
                 </motion.button>
               ))}
+            </div>
+            
+            <div className="hidden sm:block mt-auto pt-4 text-center">
+              <button 
+                onClick={() => router.push('/fast-add')} 
+                className="text-[8px] font-black uppercase text-slate-500/20 hover:text-primary/50 transition-colors tracking-widest"
+                title="Bí kíp: Nhập điểm siêu tốc"
+              >
+                v1.0.0
+              </button>
             </div>
           </div>
 
