@@ -638,7 +638,7 @@ export default function Dashboard({
   }, [selectedSeason, selectedSeasonInfo?.start_date, viewedMatches]);
 
   return (
-    <div className="w-full">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="w-full">
       <div className="hidden lg:block">
         <header className="sticky top-0 z-40 -mx-4 border-b border-white/10 bg-[#07101d]/88 backdrop-blur-2xl shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
           <style>{`
@@ -1072,6 +1072,6 @@ export default function Dashboard({
         playerSeasonSettings={sharedData.playerSeasonSettings}
         onDataChanged={sharedData.refresh}
       />
-    </div>
+    </motion.div>
   );
 }
