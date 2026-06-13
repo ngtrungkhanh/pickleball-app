@@ -151,4 +151,5 @@ Hall of Fame độc lập với season filter:
 
 ## Backlog (Ý tưởng tương lai)
 
+- **Đóng gói file APK/App (PWABuilder / TWA / Capacitor):** Giải quyết triệt để giới hạn của Web Speech API trên PWA di động (iOS Safari/Android WebView), cho phép sử dụng nút Ghi âm trực tiếp (Native Mic) mà không cần dùng giải pháp "Nút Mic Lai" bật bàn phím ảo.
 - **Cập nhật thời gian thực (Real-time/Push):** Tích hợp Pusher (hoặc Supabase Realtime) qua WebSocket để tự động đẩy trạng thái trận đấu mới xuống các client đang mở (active tab). Tránh dùng Server-Sent Events (SSE) hoặc Polling của Vercel để không bị cạn quota Free 100,000 invocations/tháng. Khi app bị tắt/xuống nền, ngắt kết nối WebSocket và dùng `visibilitychange` (SWR revalidateOnFocus) để đồng bộ lại dữ liệu mới nhất lúc mở lại.

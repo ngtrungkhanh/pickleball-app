@@ -425,7 +425,9 @@ export function ScoreForm({
   const [deviceInfo, setDeviceInfo] = useState('');
 
   const [isListening, setIsListening] = useState(false);
+  const [isFallbackMic, setIsFallbackMic] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const hiddenInputRef = useRef<HTMLInputElement>(null);
 
   const active: ScorePlayer[] = players
     .filter(p => p.active && !p.deleted_at && p.id && p.name && p.hidden !== true)
@@ -492,8 +494,14 @@ export function ScoreForm({
 
   const toggleListening = () => {
     if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
+      if (isFallbackMic) {
+        setIsListening(false);
+        setIsFallbackMic(false);
+        hiddenInputRef.current?.blur();
+      } else {
+        recognitionRef.current?.stop();
+        setIsListening(false);
+      }
       return;
     }
 
@@ -501,7 +509,11 @@ export function ScoreForm({
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     
     if (!SpeechRecognition) {
-      alert('Trình duyệt của bạn không hỗ trợ nhận diện giọng nói. Vui lòng dùng Chrome hoặc Safari mới nhất.');
+      setIsFallbackMic(true);
+      setIsListening(true);
+      setTimeout(() => {
+        hiddenInputRef.current?.focus();
+      }, 50);
       return;
     }
 
@@ -826,7 +838,36 @@ export function ScoreForm({
 
         </div>
 
-        <div className="flex flex-col items-center gap-4">
+        <div className="flex flex-col items-center gap-4 relative">
+          <input 
+            ref={hiddenInputRef}
+            type="text"
+            className="absolute top-0 left-0 w-0 h-0 opacity-0 -z-10"
+            onChange={(e) => {
+              const transcript = e.target.value;
+              if (!transcript.trim()) return;
+              const parsed = parseVoiceInput(transcript, activeRef.current);
+              if (parsed.win1) setWin1(parsed.win1);
+              if (parsed.win2) setWin2(parsed.win2);
+              if (parsed.lose1) setLose1(parsed.lose1);
+              if (parsed.lose2) setLose2(parsed.lose2);
+              setWs(parsed.winScore);
+              setLs(parsed.loseScore);
+            }}
+            onBlur={(e) => {
+              e.target.value = '';
+              setIsFallbackMic(false);
+              setIsListening(false);
+            }}
+          />
+          {isFallbackMic && isListening && (
+            <div className="absolute -top-12 inset-x-0 mx-auto w-max z-50 animate-in fade-in zoom-in-95 duration-200">
+              <div className="bg-amber-400 text-amber-950 text-[11px] font-black tracking-wide px-3.5 py-2 rounded-xl shadow-[0_4px_20px_rgba(251,191,36,0.3)] whitespace-nowrap border border-amber-300">
+                Bấm Icon Micro trên bàn phím để đọc
+                <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-amber-400 border-b border-r border-amber-300 rotate-45" />
+              </div>
+            </div>
+          )}
           <div className="flex w-full items-center gap-3">
             <motion.button
               whileTap={{ scale: 0.95 }}
