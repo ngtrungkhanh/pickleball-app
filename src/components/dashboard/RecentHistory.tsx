@@ -214,7 +214,7 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
 
   const swipeHandlers = useSwipeable({
     onSwipedDown: requestClose,
-    preventDefaultTouchmoveEvent: false,
+    preventScrollOnSwipe: false,
     trackMouse: true
   });
 
@@ -375,7 +375,7 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
         onDelete();
       }
     },
-    preventDefaultTouchmoveEvent: false,
+    preventScrollOnSwipe: false,
     trackMouse: true
   });
   return (
@@ -434,7 +434,7 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
 function SwipeableCompactRow({ children, onSwipeLeft }: { children: ReactNode; onSwipeLeft: () => void }) {
   const handlers = useSwipeable({
     onSwipedLeft: onSwipeLeft,
-    preventDefaultTouchmoveEvent: false,
+    preventScrollOnSwipe: false,
     trackMouse: true
   });
   return <div {...handlers} className="recent-history-compact-row relative min-h-[72px]" data-mobile-match-row>{children}</div>;

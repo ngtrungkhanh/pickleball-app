@@ -359,7 +359,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
 
   const swipeHandlers = useSwipeable({
     onSwipedDown: onClose,
-    preventDefaultTouchmoveEvent: false,
+    preventScrollOnSwipe: false,
     trackMouse: true
   });
 

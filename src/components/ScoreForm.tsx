@@ -704,7 +704,7 @@ export function ScoreForm({
     const tempId = 'TMP-' + requestId;
     const optimisticMatch = { id: tempId, date: new Date().toISOString(), win_1: win1, win_2: win2 || null, lose_1: lose1, lose_2: lose2 || null, win_score: ws, lose_score: ls, season: activeSeason, created_by: fullIdentity, client_request_id: requestId, pending: true, sync_status: 'syncing' };
     setUi('saved');
-    setTimeout(() => { reset(); setUi('idle'); }, 180);
+    setTimeout(() => { reset(); setUi('idle'); }, 1000);
 
     runAfterNextPaint(() => {
       onAddMatch?.(optimisticMatch);

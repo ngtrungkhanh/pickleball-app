@@ -309,7 +309,7 @@ export function AnalysisCenter({
       const idx = navItems.findIndex(i => i.id === activeNav);
       if (idx > 0) setActiveNav(navItems[idx - 1].id);
     },
-    preventDefaultTouchmoveEvent: false,
+    preventScrollOnSwipe: false,
     trackMouse: false
   });
 
