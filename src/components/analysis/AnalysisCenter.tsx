@@ -321,7 +321,7 @@ export function AnalysisCenter({
         <div className="max-w-[1500px] mx-auto px-4 py-2">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center justify-between gap-3 lg:min-w-0 lg:justify-start">
-              <Link href="/" className="inline-flex shrink-0 items-center gap-2 text-xs font-black text-white/45 transition-colors hover:text-primary sm:text-sm">
+              <Link href="/" className="inline-flex shrink-0 items-center gap-2 text-xs font-black text-white/45 transition-all hover:text-primary sm:text-sm active:scale-95">
                 <ArrowLeft className="w-4 h-4" />
                 <span className="hidden sm:inline">Dashboard</span>
               </Link>
@@ -403,7 +403,7 @@ export function AnalysisCenter({
                 ? 'Mo Tong quan de tai lai du lieu moi nhat.'
                 : 'Mo Tong quan truoc de tai du lieu vao may nay.'}
             </p>
-            <Link href="/" className="mt-4 inline-flex rounded-xl border border-primary/30 bg-primary/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-primary hover:bg-primary/20">
+            <Link href="/" className="mt-4 inline-flex rounded-xl border border-primary/30 bg-primary/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-primary hover:bg-primary/20 transition-all active:scale-95">
               Về Dashboard
             </Link>
           </div>
