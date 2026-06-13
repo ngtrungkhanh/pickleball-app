@@ -3,7 +3,8 @@ import { useState, useTransition, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { addMatchAction, getAppDataPartsAction } from '@/app/actions';
-import { Minus, Plus, Trophy, Ghost, Send, RefreshCw, AlertCircle, CheckCircle2, Check, ChevronDown, UserRound, X } from 'lucide-react';
+import { Minus, Plus, Trophy, Ghost, Send, RefreshCw, AlertCircle, CheckCircle2, Check, ChevronDown, UserRound, X, Mic, MicOff } from 'lucide-react';
+import { parseVoiceInput } from '@/lib/voice-input';
 import { cn } from '@/lib/utils';
 import { isGuestId } from '@/lib/guest';
 import { removeMatchesLocal, replaceAppCacheParts, replaceOptimisticMatchLocal, saveMatchesLocal, type AppCachePart, type StoredPlayer, type StoredPlayerSeasonSetting, type StoredSeason } from '@/lib/db';
@@ -423,6 +424,9 @@ export function ScoreForm({
   const [nickname, setNickname] = useState('');
   const [deviceInfo, setDeviceInfo] = useState('');
 
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
   const active: ScorePlayer[] = players
     .filter(p => p.active && !p.deleted_at && p.id && p.name && p.hidden !== true)
     .map(p => ({
@@ -432,6 +436,9 @@ export function ScoreForm({
       deleted_at: p.deleted_at,
     }));
   const reset = () => { setWin1(''); setWin2(''); setLose1(''); setLose2(''); setWs(11); setLs(5); };
+
+  const activeRef = useRef(active);
+  useEffect(() => { activeRef.current = active; }, [active]);
 
   type Slot = ScoreSlot;
   const selectedSlots: SelectedSlots = { win1, win2, lose1, lose2 };
@@ -482,6 +489,48 @@ export function ScoreForm({
       });
     } catch {}
   }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'vi-VN';
+        
+        recognition.onstart = () => setIsListening(true);
+        recognition.onerror = () => setIsListening(false);
+        recognition.onend = () => setIsListening(false);
+        
+        recognition.onresult = (event: any) => {
+          const transcript = event.results[0][0].transcript;
+          const parsed = parseVoiceInput(transcript, activeRef.current);
+          if (parsed.win1) setWin1(parsed.win1);
+          if (parsed.win2) setWin2(parsed.win2);
+          if (parsed.lose1) setLose1(parsed.lose1);
+          if (parsed.lose2) setLose2(parsed.lose2);
+          setWs(parsed.winScore);
+          setLs(parsed.loseScore);
+          setIsListening(false);
+        };
+        
+        recognitionRef.current = recognition;
+      }
+    }
+  }, []);
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+    } else {
+      try {
+        recognitionRef.current?.start();
+      } catch (e) {
+        console.error('Speech recognition start failed:', e);
+      }
+    }
+  };
 
   const fullIdentity = `${clientId}${nickname ? ` (${nickname})` : ''} [${deviceInfo || 'Unknown'}]`;
 
@@ -767,10 +816,25 @@ export function ScoreForm({
         </div>
 
         <div className="flex flex-col items-center gap-4">
-          <motion.button
-            whileTap={ui === 'saved' ? undefined : { scale: 0.95 }}
-            type="submit"
-            disabled={ui === 'saved'}
+          <div className="flex w-full items-center gap-3">
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              type="button"
+              onClick={toggleListening}
+              className={cn(
+                'min-h-12 px-4 sm:px-5 rounded-2xl transition-colors duration-150 flex items-center justify-center shrink-0 border',
+                isListening
+                  ? 'bg-red-500/20 text-red-400 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.3)] animate-pulse'
+                  : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+              )}
+              title="Nhập điểm bằng giọng nói"
+            >
+              {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            </motion.button>
+            <motion.button
+              whileTap={ui === 'saved' ? undefined : { scale: 0.95 }}
+              type="submit"
+              disabled={ui === 'saved'}
             className={cn(
               'w-full min-h-12 py-3 rounded-2xl font-black uppercase transition-colors duration-150 flex items-center justify-center gap-3',
               compact ? 'text-[11px] tracking-[0.18em]' : 'text-xs sm:text-sm tracking-[0.24em]',
@@ -780,7 +844,8 @@ export function ScoreForm({
             )}
           >
             {ui === 'saved' ? <><CheckCircle2 className="w-5 h-5" /> Đã ghi tạm</> : <><Send className="w-5 h-5" /> Ghi kết quả</>}
-          </motion.button>
+            </motion.button>
+          </div>
         </div>
       </form>
     </>
