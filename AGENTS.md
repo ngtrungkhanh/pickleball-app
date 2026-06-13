@@ -65,11 +65,13 @@ cùng thay đổi.
 Chọn mức kiểm tra theo phạm vi thay đổi:
 
 ```bash
+npm run test
 npx eslint <changed-files>
 npx tsc --noEmit
 npm run build
 ```
 
+- Hệ thống dùng Vitest để tự động hóa test. Khi sửa đổi logic cốt lõi (ELO, Ranking) hoặc thêm tính năng xử lý dữ liệu phức tạp (như xử lý text nhận diện giọng nói), BẮT BUỘC phải viết test vào thư mục `src/lib/__tests__/`.
 - Repo có thể còn lint debt cũ; ưu tiên ESLint đúng các file đã sửa.
 - Với lịch sử trận đấu, có thể dùng `npm run visual:test:history`.
 - Với Hub insights, dùng
