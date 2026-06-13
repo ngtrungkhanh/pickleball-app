@@ -538,13 +538,35 @@ export function ScoreForm({
       recognition.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript;
         const parsed = parseVoiceInput(transcript, activeRef.current);
+        
         if (parsed.win1) setWin1(parsed.win1);
         if (parsed.win2) setWin2(parsed.win2);
         if (parsed.lose1) setLose1(parsed.lose1);
         if (parsed.lose2) setLose2(parsed.lose2);
         setWs(parsed.winScore);
         setLs(parsed.loseScore);
-        setIsListening(false);
+
+        const missingPlayers = [];
+        if (!parsed.win1) missingPlayers.push('win1');
+        if (!parsed.win2) missingPlayers.push('win2');
+        if (!parsed.lose1) missingPlayers.push('lose1');
+        if (!parsed.lose2) missingPlayers.push('lose2');
+
+        try {
+          const logs = JSON.parse(localStorage.getItem('pickleball_voice_logs') || '[]');
+          logs.unshift({
+            timestamp: new Date().toISOString(),
+            rawText: parsed.rawText,
+            parsedResult: parsed,
+            missingPlayers,
+          });
+          localStorage.setItem('pickleball_voice_logs', JSON.stringify(logs));
+        } catch (e) {}
+
+        if (missingPlayers.length === 0) {
+          recognition.stop();
+          setIsListening(false);
+        }
       };
 
       recognitionRef.current = recognition;
@@ -853,6 +875,29 @@ export function ScoreForm({
               if (parsed.lose2) setLose2(parsed.lose2);
               setWs(parsed.winScore);
               setLs(parsed.loseScore);
+
+              const missingPlayers = [];
+              if (!parsed.win1) missingPlayers.push('win1');
+              if (!parsed.win2) missingPlayers.push('win2');
+              if (!parsed.lose1) missingPlayers.push('lose1');
+              if (!parsed.lose2) missingPlayers.push('lose2');
+
+              try {
+                const logs = JSON.parse(localStorage.getItem('pickleball_voice_logs') || '[]');
+                logs.unshift({
+                  timestamp: new Date().toISOString(),
+                  rawText: parsed.rawText,
+                  parsedResult: parsed,
+                  missingPlayers,
+                });
+                localStorage.setItem('pickleball_voice_logs', JSON.stringify(logs));
+              } catch (e) {}
+
+              if (missingPlayers.length === 0) {
+                hiddenInputRef.current?.blur();
+                setIsFallbackMic(false);
+                setIsListening(false);
+              }
             }}
             onBlur={(e) => {
               e.target.value = '';

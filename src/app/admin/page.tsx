@@ -683,6 +683,22 @@ export default function AdminPage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
+            <button onClick={() => {
+              try {
+                const logs = localStorage.getItem('pickleball_voice_logs') || '[]';
+                const blob = new Blob([logs], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `voice_logs_${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch (e) {
+                alert('Không thể xuất file logs');
+              }
+            }} disabled={isBusy} className="px-5 py-3 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all disabled:opacity-40 disabled:pointer-events-none">
+              <Download className="w-4 h-4" /> Xuất Voice Logs
+            </button>
             <button onClick={onPickXlsx} disabled={isBusy} className="px-5 py-3 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-orange-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all disabled:opacity-40 disabled:pointer-events-none">
               <Upload className="w-4 h-4" /> Import XLSX
             </button>

@@ -5,6 +5,7 @@ export type VoiceMatchResult = {
   lose2: string;
   winScore: number;
   loseScore: number;
+  rawText: string;
 };
 
 function levenshtein(a: string, b: string): number {
@@ -37,14 +38,26 @@ function removeDiacritics(str: string): string {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
 }
 
+function phonetic(str: string): string {
+  let s = removeDiacritics(str.toLowerCase());
+  s = s.replace(/^tr/g, 'ch')
+       .replace(/^s/g, 'x')
+       .replace(/^gi/g, 'd')
+       .replace(/^r/g, 'd')
+       .replace(/ph/g, 'f');
+  s = s.replace(/p$/g, 't')
+       .replace(/c$/g, 't');
+  return s;
+}
+
 export function parseVoiceInput(
   text: string,
   players: { id: string; name: string; active?: boolean; deleted_at?: unknown }[]
 ): VoiceMatchResult {
+  const rawText = text.trim();
   const normT = removeDiacritics(text.toLowerCase()).trim();
-
-  // First, extract players from the full normalized text
   const textTokens = normT.split(/\s+/).filter(w => w);
+  const phoneticTextTokens = textTokens.map(w => phonetic(w));
 
   type Match = {
     playerId: string;
@@ -56,31 +69,31 @@ export function parseVoiceInput(
   const allMatches: Match[] = [];
   const activePlayers = players.filter(p => p.active !== false && !p.deleted_at && p.id && p.name);
 
+  // 1. Find matches
   for (const p of activePlayers) {
-    const pNorm = removeDiacritics(p.name.toLowerCase());
-    const pTokens = pNorm.split(/\s+/).filter(w => w);
+    const pTokens = removeDiacritics(p.name.toLowerCase()).split(/\s+/).filter(w => w);
     if (pTokens.length === 0) continue;
 
     const candidates: string[][] = [];
     candidates.push(pTokens);
-    if (pTokens.length >= 2) {
-      candidates.push(pTokens.slice(-2));
-    }
+    if (pTokens.length >= 2) candidates.push(pTokens.slice(-2));
     candidates.push([pTokens[pTokens.length - 1]]);
 
     for (const cand of candidates) {
       const candLen = cand.length;
-      const candJoined = cand.join(' ');
+      const candJoined = cand.map(w => phonetic(w)).join(' ');
 
       for (let i = 0; i <= textTokens.length - candLen; i++) {
-        const subTokens = textTokens.slice(i, i + candLen);
+        const subTokens = phoneticTextTokens.slice(i, i + candLen);
         const subJoined = subTokens.join(' ');
 
         const sim = similarity(subJoined, candJoined);
-        if (sim >= 0.75) {
+        if (sim >= 0.70) {
+          // Exact matches get a heavy boost to avoid overlapping conflicts
+          const finalScore = sim === 1.0 ? 10 : sim;
           allMatches.push({
             playerId: p.id,
-            score: sim,
+            score: finalScore,
             startIdx: i,
             endIdx: i + candLen - 1
           });
@@ -89,6 +102,7 @@ export function parseVoiceInput(
     }
   }
 
+  // Sort matches (best score first, then longest, then earliest)
   allMatches.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     const lenB = b.endIdx - b.startIdx;
@@ -107,70 +121,95 @@ export function parseVoiceInput(
 
     let overlap = false;
     for (let i = m.startIdx; i <= m.endIdx; i++) {
-      if (usedTokens.has(i)) {
-        overlap = true;
-        break;
-      }
+      if (usedTokens.has(i)) overlap = true;
     }
     if (overlap) continue;
 
     selectedMatches.push(m);
     usedPlayerIds.add(m.playerId);
-    for (let i = m.startIdx; i <= m.endIdx; i++) {
-      usedTokens.add(i);
-    }
+    for (let i = m.startIdx; i <= m.endIdx; i++) usedTokens.add(i);
   }
 
   selectedMatches.sort((a, b) => a.startIdx - b.startIdx);
 
-  // Now extract scores from the unused tokens
+  // 2. Semantic Analysis
+  let winKeywordIdx = -1;
+  let loseKeywordIdx = -1;
+  for (let i = 0; i < textTokens.length; i++) {
+    if (textTokens[i] === 'thang') winKeywordIdx = i;
+    if (textTokens[i] === 'thua') loseKeywordIdx = i;
+  }
+
+  // 3. Score Parsing
   const unusedTokens = textTokens.filter((_, i) => !usedTokens.has(i));
   let unusedText = unusedTokens.join(' ');
 
-  // Look for standalone digits first (before replacing anything, as speech recognition often returns digits)
-  // e.g. "11", "5", "11-5"
-  unusedText = unusedText.replace(/-/g, ' ');
+  // Look for standalone digits and connected characters
+  unusedText = unusedText.replace(/[-/.]/g, ' ');
+  unusedText = unusedText.replace(/\bdeu\b/g, ' deu ');
 
   const numWords: [RegExp, string][] = [
-    [/\b(muoi mot)\b/g, ' 11 '],
-    [/\b(muoi hai)\b/g, ' 12 '],
-    [/\b(muoi ba)\b/g, ' 13 '],
-    [/\b(muoi bon)\b/g, ' 14 '],
-    [/\b(muoi lam)\b/g, ' 15 '],
-    [/\b(muoi)\b/g, ' 10 '],
-    [/\b(mot)\b/g, ' 1 '],
-    [/\b(hai)\b/g, ' 2 '],
-    [/\b(ba)\b/g, ' 3 '],
-    [/\b(bon)\b/g, ' 4 '],
-    [/\b(nam)\b/g, ' 5 '],
-    [/\b(sau)\b/g, ' 6 '],
-    [/\b(bay)\b/g, ' 7 '],
-    [/\b(tam)\b/g, ' 8 '],
-    [/\b(chin)\b/g, ' 9 '],
-    [/\b(khong)\b/g, ' 0 ']
+    [/\bmuoi mot\b/g, ' 11 '], [/\bmuoi hai\b/g, ' 12 '], [/\bmuoi ba\b/g, ' 13 '],
+    [/\bmuoi bon\b/g, ' 14 '], [/\bmuoi lam\b/g, ' 15 '], [/\bmuoi\b/g, ' 10 '],
+    [/\bmot\b/g, ' 1 '], [/\bhai\b/g, ' 2 '], [/\bba\b/g, ' 3 '],
+    [/\bbon\b/g, ' 4 '], [/\bnam\b/g, ' 5 '], [/\bsau\b/g, ' 6 '],
+    [/\bbay\b/g, ' 7 '], [/\btam\b/g, ' 8 '], [/\bchin\b/g, ' 9 '],
+    [/\bkhong\b/g, ' 0 ']
   ];
+  for (const [reg, val] of numWords) unusedText = unusedText.replace(reg, val);
 
-  for (const [reg, val] of numWords) {
-    unusedText = unusedText.replace(reg, val);
-  }
+  // "11 deu" -> "11 11"
+  unusedText = unusedText.replace(/(\d+)\s+deu/g, '$1 $1');
 
   const digitRegex = /\b\d+\b/g;
   const matches = [...unusedText.matchAll(digitRegex)];
 
+  let s1 = -1, s2 = -1;
+  if (matches.length >= 2) {
+    s1 = parseInt(matches[0][0], 10);
+    s2 = parseInt(matches[1][0], 10);
+  }
+
+  // 4. Determine Win/Lose
+  let win1 = selectedMatches[0]?.playerId || '';
+  let win2 = selectedMatches[1]?.playerId || '';
+  let lose1 = selectedMatches[2]?.playerId || '';
+  let lose2 = selectedMatches[3]?.playerId || '';
   let winScore = 11;
   let loseScore = 5;
 
-  if (matches.length >= 2) {
-    winScore = parseInt(matches[0][0], 10);
-    loseScore = parseInt(matches[1][0], 10);
+  let isTeam1Losing = false;
+
+  if (s1 > -1 && s2 > -1) {
+    winScore = Math.max(s1, s2);
+    loseScore = Math.min(s1, s2);
+    
+    // Auto-detect based on scores if no keyword
+    if (s1 < s2 && winKeywordIdx === -1 && loseKeywordIdx === -1) {
+       isTeam1Losing = true;
+    }
+  }
+
+  // Keyword overrides
+  if (loseKeywordIdx > -1) {
+    // We assume Team 1 is before the keyword.
+    if (selectedMatches[1] && selectedMatches[1].endIdx < loseKeywordIdx) {
+      isTeam1Losing = true;
+    }
+  }
+
+  if (isTeam1Losing) {
+    [win1, lose1] = [lose1, win1];
+    [win2, lose2] = [lose2, win2];
   }
 
   return {
-    win1: selectedMatches[0]?.playerId || '',
-    win2: selectedMatches[1]?.playerId || '',
-    lose1: selectedMatches[2]?.playerId || '',
-    lose2: selectedMatches[3]?.playerId || '',
+    win1,
+    win2,
+    lose1,
+    lose2,
     winScore,
-    loseScore
+    loseScore,
+    rawText
   };
 }
