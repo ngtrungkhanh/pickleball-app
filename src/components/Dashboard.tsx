@@ -3,6 +3,7 @@ import { useState, useEffect, useSyncExternalStore, useMemo, useRef, useCallback
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { BarChart3, CalendarDays, Crown, RefreshCw, Settings, Sparkles, X } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { SummaryGrid } from './dashboard/SummaryGrid';
 import { Leaderboard } from './dashboard/Leaderboard';
 import { RecentHistory } from './dashboard/RecentHistory';
@@ -704,14 +705,14 @@ export default function Dashboard({
                   <span className="min-w-0 truncate">{sharedData.syncMessage}</span>
                 </div>
               ) : null}
-              <Link href="/analysis" onClick={openAnalysisFromLocalCache} className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary">
+              <Link href="/analysis" onClick={openAnalysisFromLocalCache} className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary active:scale-95">
                 <BarChart3 className="h-4 w-4" />
                 <span className="hidden xl:inline">Phân tích</span>
               </Link>
-              <button onClick={() => setSettingsOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary">
+              <motion.button whileTap={{ scale: 0.95 }} onClick={() => setSettingsOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary">
                 <Settings className="h-4 w-4" />
                 <span className="hidden xl:inline">Cài đặt</span>
-              </button>
+              </motion.button>
             </div>
           </div>
         </header>
@@ -891,14 +892,14 @@ export default function Dashboard({
           </div>
         ) : null}
         <div className="ml-auto flex items-center justify-end gap-2">
-          <Link href="/analysis" onClick={openAnalysisFromLocalCache} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
+          <Link href="/analysis" onClick={openAnalysisFromLocalCache} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors active:scale-95">
             <BarChart3 className="w-4 h-4" />
             Trung tâm phân tích
           </Link>
-          <button onClick={() => setSettingsOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
+          <motion.button whileTap={{ scale: 0.95 }} onClick={() => setSettingsOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors">
             <Settings className="w-4 h-4" />
             Cài đặt
-          </button>
+          </motion.button>
           {!tickerOpen && (
             <button onClick={() => {
               setTickerOpen(true);

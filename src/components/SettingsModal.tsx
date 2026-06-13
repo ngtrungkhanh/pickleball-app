@@ -1,6 +1,7 @@
 'use client';
 
 import { useSwipeable } from 'react-swipeable';
+import { motion } from 'framer-motion';
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
@@ -244,6 +245,12 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
     return () => window.clearTimeout(resetId);
   }, [open, canEdit]);
 
+  const swipeHandlers = useSwipeable({
+    onSwipedDown: onClose,
+    preventScrollOnSwipe: false,
+    trackMouse: true
+  });
+
   if (!open) return null;
 
   const submit = async (action: (fd: FormData) => Promise<ActionResult>, formData: FormData, target: string, successText = 'Da luu', changedParts?: AppCachePart[]) => {
@@ -357,12 +364,6 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
     : tabs.filter(t => t.id === 'access');
   const activeTab = tab;
 
-  const swipeHandlers = useSwipeable({
-    onSwipedDown: onClose,
-    preventScrollOnSwipe: false,
-    trackMouse: true
-  });
-
   return (
     <div className="fixed inset-0 z-[500] flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div
@@ -380,9 +381,9 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
               {canEdit ? 'Đang có quyền chỉnh sửa' : 'Nhập mật khẩu để mở khóa'}
             </p>
           </div>
-          <button onClick={onClose} className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] flex items-center justify-center text-slate-300/80 transition-all active:scale-90">
+          <motion.button whileTap={{ scale: 0.9 }} onClick={onClose} className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] flex items-center justify-center text-slate-300/80 transition-all">
             <X className="w-5 h-5" />
-          </button>
+          </motion.button>
         </div>
 
         <div className="flex-1 min-h-0 flex flex-col sm:grid sm:grid-cols-[220px_1fr]">
@@ -390,7 +391,8 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
           <div className="shrink-0 p-2 sm:p-4 border-b border-slate-500/25 bg-white/[0.035] sm:bg-white/[0.05]">
             <div className="grid grid-cols-2 sm:flex sm:flex-col gap-1 sm:gap-2">
               {visibleTabs.map(({ id, label, Icon }) => (
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
                   key={id}
                   onClick={() => setTab(id)}
                   className={cn(
@@ -402,7 +404,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                 >
                   <Icon className={cn("w-3.5 h-3.5 sm:w-4 h-4", activeTab === id ? "opacity-100" : "opacity-40")} />
                   <span className="truncate">{label}</span>
-                </button>
+                </motion.button>
               ))}
             </div>
           </div>

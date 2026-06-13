@@ -10,6 +10,7 @@ import {
   Users, HelpCircle, Shield, Heart,
   type LucideIcon
 } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 import { buildAnalysisSnapshot, edgeRecord, getAnalysisName, type AnalysisEdge, type EloResult, type PlayerMetrics, type PlayerProfile } from '@/lib/analysis-core';
 import { useSwipeable } from 'react-swipeable';
 import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
@@ -314,7 +315,7 @@ export function AnalysisCenter({
   });
 
   return (
-    <div {...swipeHandlers} className="min-h-screen bg-slate-900">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} {...swipeHandlers} className="min-h-screen bg-slate-900">
       {/* Header */}
       <div className="sticky top-0 z-50 bg-slate-900/92 backdrop-blur-xl border-b border-white/[0.08]">
         <div className="max-w-[1500px] mx-auto px-4 py-2">
@@ -367,7 +368,8 @@ export function AnalysisCenter({
                   const Icon = item.icon;
                   const isActive = activeNav === item.id;
                   return (
-                    <button
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
                       key={item.id}
                       type="button"
                       onClick={() => setActiveNav(item.id)}
@@ -380,7 +382,7 @@ export function AnalysisCenter({
                     >
                       <Icon className={cn("h-3.5 w-3.5", isActive && "text-primary")} />
                       {item.label}
-                    </button>
+                    </motion.button>
                   );
                 })}
               </div>
@@ -406,8 +408,17 @@ export function AnalysisCenter({
             </Link>
           </div>
         )}
-        {/* ZONE 1: Hub (Tổng quan) */}
-        {sharedData.hasLocalCache && activeNav === 'hub' && (
+        
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeNav}
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+          >
+            {/* ZONE 1: Hub (Tổng quan) */}
+            {sharedData.hasLocalCache && activeNav === 'hub' && (
           <HubZone 
             board={board}
             rankingMatches={rankingMatches}
@@ -460,9 +471,11 @@ export function AnalysisCenter({
             setPlayerId={setPlayerId}
           />
         )}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
-    </div>
+    </motion.div>
   );
 }
 
