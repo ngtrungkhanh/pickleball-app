@@ -102,6 +102,7 @@ export function useSharedAppData({
   localOnly = false,
   fetchIfEmpty = false,
   syncOnMount = 'throttled',
+  syncParts,
 }: {
   initialPlayers: StoredPlayer[];
   initialMatches: StoredMatch[];
