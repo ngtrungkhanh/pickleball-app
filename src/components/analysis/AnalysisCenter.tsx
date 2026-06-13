@@ -10,7 +10,7 @@ import {
   Users, HelpCircle, Shield, Heart,
   type LucideIcon
 } from 'lucide-react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { buildAnalysisSnapshot, edgeRecord, getAnalysisName, type AnalysisEdge, type EloResult, type PlayerMetrics, type PlayerProfile } from '@/lib/analysis-core';
 import { useSwipeable } from 'react-swipeable';
 import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
