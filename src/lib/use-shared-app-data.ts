@@ -112,6 +112,7 @@ export function useSharedAppData({
   localOnly?: boolean;
   fetchIfEmpty?: boolean;
   syncOnMount?: SyncOnMountPolicy;
+  syncParts?: AppCachePart[];
 }) {
   const initialData = useMemo<SharedData>(() => ({
     players: initialPlayers,
@@ -294,15 +295,15 @@ export function useSharedAppData({
         }
         if (syncOnMount === 'empty-only' && hasUsableAppCache(snapshot)) return;
         if (syncOnMount === 'always') {
-          await checkManifestAndRefresh({ force: true });
+          await checkManifestAndRefresh({ force: true, parts: syncParts });
           return;
         }
         if (hasUsableAppCache(snapshot) && recentlyChecked(snapshot)) return;
-        await checkManifestAndRefresh({ force: true });
+        await checkManifestAndRefresh({ force: true, parts: syncParts });
       })();
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [checkManifestAndRefresh, fetchIfEmpty, loadLocalSnapshot, localOnly, routeKey, syncOnMount]);
+  }, [checkManifestAndRefresh, fetchIfEmpty, loadLocalSnapshot, localOnly, routeKey, syncOnMount, syncParts]);
 
   useEffect(() => {
     const onCacheChange = () => {

@@ -76,6 +76,7 @@ export function FastAddShell({ previewWritesBlocked }: { previewWritesBlocked: b
     initialSeasons: [],
     initialPlayerSeasonSettings: [],
     routeKey: 'fast-add',
+    syncParts: ['players', 'config'],
   });
 
   const activeSeason = sharedData.config.active_season || 'Season 1';
