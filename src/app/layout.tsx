@@ -11,6 +11,12 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Pickleball Ranking",
   description: "Modern Pickleball App",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "Nhập điểm",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export default function RootLayout({
