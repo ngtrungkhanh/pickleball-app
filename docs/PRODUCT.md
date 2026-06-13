@@ -147,5 +147,8 @@ Hall of Fame độc lập với season filter:
 - Không hardcode trận mới vào Season 1.
 - Không ẩn season có 0 trận.
 - Không bỏ optimistic save/pending retry mà không có cơ chế thay thế.
-- Không biến Analysis thành màn hình write ngoài chủ đích sản phẩm.
 - Không dùng `legacy/` làm nguồn sự thật.
+
+## Backlog (Ý tưởng tương lai)
+
+- **Cập nhật thời gian thực (Real-time/Push):** Tích hợp Pusher (hoặc Supabase Realtime) qua WebSocket để tự động đẩy trạng thái trận đấu mới xuống các client đang mở (active tab). Tránh dùng Server-Sent Events (SSE) hoặc Polling của Vercel để không bị cạn quota Free 100,000 invocations/tháng. Khi app bị tắt/xuống nền, ngắt kết nối WebSocket và dùng `visibilitychange` (SWR revalidateOnFocus) để đồng bộ lại dữ liệu mới nhất lúc mở lại.
