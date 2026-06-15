@@ -96,9 +96,9 @@ describe('Voice Input Fuzzy Match & Semantics', () => {
     expect(r4.winScore).toBe(12);
     expect(r4.loseScore).toBe(10);
 
-    // 95 -> 9 and 5
+    // 95 -> should not split and default to 11-5 (no 2-digit splits to protect 12, 13, 20 etc.)
     const r5 = parseVoiceInput('Sơn Tùng Hải Tuấn 95', mockPlayers);
-    expect(r5.winScore).toBe(9);
+    expect(r5.winScore).toBe(11);
     expect(r5.loseScore).toBe(5);
 
     // 11 -> Should default to 11-5 since it is excluded from splitting
