@@ -428,6 +428,7 @@ export function ScoreForm({
   const [isFallbackMic, setIsFallbackMic] = useState(false);
   const recognitionRef = useRef<any>(null);
   const hiddenInputRef = useRef<HTMLInputElement>(null);
+  const submitButtonRef = useRef<HTMLButtonElement>(null);
 
   const active: ScorePlayer[] = players
     .filter(p => p.active && !p.deleted_at && p.id && p.name && p.hidden !== true)
@@ -566,6 +567,9 @@ export function ScoreForm({
         if (missingPlayers.length === 0) {
           recognition.stop();
           setIsListening(false);
+          setTimeout(() => {
+            submitButtonRef.current?.focus();
+          }, 100);
         }
       };
 
@@ -897,6 +901,9 @@ export function ScoreForm({
                 hiddenInputRef.current?.blur();
                 setIsFallbackMic(false);
                 setIsListening(false);
+                setTimeout(() => {
+                  submitButtonRef.current?.focus();
+                }, 100);
               }
             }}
             onBlur={(e) => {
@@ -929,18 +936,40 @@ export function ScoreForm({
               {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
             </motion.button>
             <motion.button
+              ref={submitButtonRef}
               whileTap={ui === 'saved' ? undefined : { scale: 0.95 }}
               type="submit"
               disabled={ui === 'saved'}
-            className={cn(
-              'w-full min-h-12 py-3 rounded-2xl font-black uppercase transition-colors duration-150 flex items-center justify-center gap-3',
-              compact ? 'text-[11px] tracking-[0.18em]' : 'text-xs sm:text-sm tracking-[0.24em]',
-              ui === 'saved'
-                ? 'bg-primary/20 text-primary/60 cursor-default'
-                : 'bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20'
-            )}
-          >
-            {ui === 'saved' ? <><CheckCircle2 className="w-5 h-5" /> Đã ghi tạm</> : <><Send className="w-5 h-5" /> Ghi kết quả</>}
+              animate={win1 && win2 && lose1 && lose2 && ui !== 'saved'
+                ? {
+                    scale: [1, 1.025, 1],
+                    boxShadow: [
+                      "0 10px 15px -3px rgba(34, 197, 94, 0.2)",
+                      "0 0 25px rgba(34, 197, 94, 0.7)",
+                      "0 10px 15px -3px rgba(34, 197, 94, 0.2)"
+                    ]
+                  }
+                : {}
+              }
+              transition={win1 && win2 && lose1 && lose2 && ui !== 'saved'
+                ? {
+                    repeat: Infinity,
+                    duration: 1.5,
+                    ease: "easeInOut"
+                  }
+                : undefined
+              }
+              className={cn(
+                'w-full min-h-12 py-3 rounded-2xl font-black uppercase transition-all duration-150 flex items-center justify-center gap-3',
+                compact ? 'text-[11px] tracking-[0.18em]' : 'text-xs sm:text-sm tracking-[0.24em]',
+                ui === 'saved'
+                  ? 'bg-primary/20 text-primary/60 cursor-default'
+                  : win1 && win2 && lose1 && lose2
+                    ? 'bg-primary text-black border-2 border-primary-foreground/20'
+                    : 'bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20'
+              )}
+            >
+              {ui === 'saved' ? <><CheckCircle2 className="w-5 h-5" /> Đã ghi tạm</> : <><Send className="w-5 h-5" /> Ghi kết quả</>}
             </motion.button>
           </div>
         </div>
