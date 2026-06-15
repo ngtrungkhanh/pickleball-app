@@ -168,6 +168,25 @@ export function parseVoiceInput(
   if (matches.length >= 2) {
     s1 = parseInt(matches[0][0], 10);
     s2 = parseInt(matches[1][0], 10);
+  } else if (matches.length === 1) {
+    const singleMatch = matches[0][0];
+    if (singleMatch.length === 3) {
+      s1 = parseInt(singleMatch.substring(0, 2), 10);
+      s2 = parseInt(singleMatch.substring(2), 10);
+    } else if (singleMatch.length === 4) {
+      s1 = parseInt(singleMatch.substring(0, 2), 10);
+      s2 = parseInt(singleMatch.substring(2), 10);
+    } else if (singleMatch.length === 2) {
+      const val = parseInt(singleMatch, 10);
+      if (val !== 10 && val !== 11 && val !== 15 && val !== 21) {
+        s1 = parseInt(singleMatch[0], 10);
+        s2 = parseInt(singleMatch[1], 10);
+      } else {
+        s1 = val;
+      }
+    } else {
+      s1 = parseInt(singleMatch, 10);
+    }
   }
 
   // 4. Determine Win/Lose

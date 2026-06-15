@@ -74,4 +74,36 @@ describe('Voice Input Fuzzy Match & Semantics', () => {
       winScore: 11, loseScore: 8, rawText: input
     });
   });
+
+  it('handles connected digits correctly (e.g. 116, 112, 118, 1210, 95)', () => {
+    // 116 -> 11 and 6
+    const r1 = parseVoiceInput('Sơn Tùng Hải Tuấn 116', mockPlayers);
+    expect(r1.winScore).toBe(11);
+    expect(r1.loseScore).toBe(6);
+
+    // 112 -> 11 and 2
+    const r2 = parseVoiceInput('Sơn Tùng Hải Tuấn 112', mockPlayers);
+    expect(r2.winScore).toBe(11);
+    expect(r2.loseScore).toBe(2);
+
+    // 118 -> 11 and 8
+    const r3 = parseVoiceInput('Sơn Tùng Hải Tuấn 118', mockPlayers);
+    expect(r3.winScore).toBe(11);
+    expect(r3.loseScore).toBe(8);
+
+    // 1210 -> 12 and 10
+    const r4 = parseVoiceInput('Sơn Tùng Hải Tuấn 1210', mockPlayers);
+    expect(r4.winScore).toBe(12);
+    expect(r4.loseScore).toBe(10);
+
+    // 95 -> 9 and 5
+    const r5 = parseVoiceInput('Sơn Tùng Hải Tuấn 95', mockPlayers);
+    expect(r5.winScore).toBe(9);
+    expect(r5.loseScore).toBe(5);
+
+    // 11 -> Should default to 11-5 since it is excluded from splitting
+    const r6 = parseVoiceInput('Sơn Tùng Hải Tuấn 11', mockPlayers);
+    expect(r6.winScore).toBe(11);
+    expect(r6.loseScore).toBe(5);
+  });
 });
