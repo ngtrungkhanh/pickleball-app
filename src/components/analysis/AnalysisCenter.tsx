@@ -1015,72 +1015,78 @@ function PairZone({
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="relative p-[1.5px] rounded-[2.5rem] bg-gradient-to-r from-amber-500/20 via-yellow-500/40 to-amber-500/20 overflow-hidden shadow-2xl">
-          <div className="relative bg-slate-950/95 backdrop-blur-md rounded-[2.4rem] p-6 flex flex-col h-full items-center text-center">
-            <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-3">
-              <Trophy className="w-6 h-6 text-amber-400" />
+        {/* Card 1 */}
+        <div className="relative p-[1px] rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/40 to-amber-500/20 overflow-hidden shadow-xl">
+          <div className="relative bg-slate-950/95 backdrop-blur-md rounded-[11px] p-2.5 flex flex-col justify-center h-full">
+            <div className="flex items-center gap-1.5 mb-1.5 border-b border-white/5 pb-1.5">
+              <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider">Cặp Bài Trùng</span>
+              {capBaiTrung && (
+                <span className="text-xs font-black text-primary ml-auto italic tabular-nums">{capBaiTrung.points}đ</span>
+              )}
             </div>
-            <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest">🏆 Cặp Bài Trùng</span>
             {capBaiTrung ? (
-              <>
-                <h3 className="mt-2 text-lg font-black text-white">{capBaiTrung.player1Name} & {capBaiTrung.player2Name}</h3>
-                <div className="text-2xl font-black text-primary mt-2 italic">{capBaiTrung.points}đ</div>
-                <div className="text-xs text-white/40 mt-1 font-bold">
-                  Thành tích: {capBaiTrung.wins}W - {capBaiTrung.losses}L ({capBaiTrung.winRate.toFixed(0)}%)
-                </div>
-              </>
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="text-xs font-black text-white truncate max-w-[65%]" title={`${capBaiTrung.player1Name} & ${capBaiTrung.player2Name}`}>
+                  {capBaiTrung.player1Name} & {capBaiTrung.player2Name}
+                </h3>
+                <span className="text-[9px] text-white/40 font-bold shrink-0 tabular-nums">
+                  {capBaiTrung.wins}W-{capBaiTrung.losses}L ({capBaiTrung.winRate.toFixed(0)}%)
+                </span>
+              </div>
             ) : (
-              <p className="text-white/30 text-sm mt-3 italic">Chưa xác định</p>
+              <p className="text-white/30 text-[10px] italic">Chưa xác định</p>
             )}
-            <p className="text-[10px] text-white/30 mt-4 leading-relaxed font-bold uppercase tracking-wide">
-              Cặp song kiếm hợp bích, có điểm tích lũy xếp hạng cao nhất giải.
-            </p>
           </div>
         </div>
 
-        <div className="relative p-[1.5px] rounded-[2.5rem] bg-gradient-to-r from-purple-500/20 via-pink-500/40 to-purple-500/20 overflow-hidden shadow-2xl">
-          <div className="relative bg-slate-950/95 backdrop-blur-md rounded-[2.4rem] p-6 flex flex-col h-full items-center text-center">
-            <div className="w-12 h-12 rounded-full bg-pink-500/10 border border-pink-500/20 flex items-center justify-center mb-3">
-              <Heart className="w-6 h-6 text-pink-400" />
+        {/* Card 2 */}
+        <div className="relative p-[1px] rounded-xl bg-gradient-to-r from-purple-500/20 via-pink-500/40 to-purple-500/20 overflow-hidden shadow-xl">
+          <div className="relative bg-slate-950/95 backdrop-blur-md rounded-[11px] p-2.5 flex flex-col justify-center h-full">
+            <div className="flex items-center gap-1.5 mb-1.5 border-b border-white/5 pb-1.5">
+              <Heart className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+              <span className="text-[10px] font-black text-pink-400 uppercase tracking-wider">Cặp Tri Kỷ</span>
+              {capTriKy && (
+                <span className="text-xs font-black text-primary ml-auto italic tabular-nums">{capTriKy.total} trận</span>
+              )}
             </div>
-            <span className="text-[10px] font-black text-pink-400 uppercase tracking-widest">🤝 Cặp Tri Kỷ</span>
             {capTriKy ? (
-              <>
-                <h3 className="mt-2 text-lg font-black text-white">{capTriKy.player1Name} & {capTriKy.player2Name}</h3>
-                <div className="text-2xl font-black text-primary mt-2 italic">{capTriKy.total} trận</div>
-                <div className="text-xs text-white/40 mt-1 font-bold">
-                  Thành tích: {capTriKy.wins}W - {capTriKy.losses}L ({capTriKy.winRate.toFixed(0)}%)
-                </div>
-              </>
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="text-xs font-black text-white truncate max-w-[65%]" title={`${capTriKy.player1Name} & ${capTriKy.player2Name}`}>
+                  {capTriKy.player1Name} & {capTriKy.player2Name}
+                </h3>
+                <span className="text-[9px] text-white/40 font-bold shrink-0 tabular-nums">
+                  {capTriKy.wins}W-{capTriKy.losses}L ({capTriKy.winRate.toFixed(0)}%)
+                </span>
+              </div>
             ) : (
-              <p className="text-white/30 text-sm mt-3 italic">Chưa xác định</p>
+              <p className="text-white/30 text-[10px] italic">Chưa xác định</p>
             )}
-            <p className="text-[10px] text-white/30 mt-4 leading-relaxed font-bold uppercase tracking-wide">
-              Cặp đôi kề vai sát cánh, chơi cùng nhau nhiều trận nhất mùa giải.
-            </p>
           </div>
         </div>
 
-        <div className="relative p-[1.5px] rounded-[2.5rem] bg-gradient-to-r from-blue-500/20 via-cyan-500/40 to-blue-500/20 overflow-hidden shadow-2xl">
-          <div className="relative bg-slate-950/95 backdrop-blur-md rounded-[2.4rem] p-6 flex flex-col h-full items-center text-center">
-            <div className="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-3">
-              <Shield className="w-6 h-6 text-blue-400" />
+        {/* Card 3 */}
+        <div className="relative p-[1px] rounded-xl bg-gradient-to-r from-blue-500/20 via-cyan-500/40 to-blue-500/20 overflow-hidden shadow-xl">
+          <div className="relative bg-slate-950/95 backdrop-blur-md rounded-[11px] p-2.5 flex flex-col justify-center h-full">
+            <div className="flex items-center gap-1.5 mb-1.5 border-b border-white/5 pb-1.5">
+              <Shield className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span className="text-[10px] font-black text-blue-400 uppercase tracking-wider">Lá Chắn Thép</span>
+              {laChanThep && (
+                <span className="text-xs font-black text-primary ml-auto italic tabular-nums">{laChanThep.avgConceded.toFixed(1)}đ/trận</span>
+              )}
             </div>
-            <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">🛡️ Lá Chắn Thép</span>
             {laChanThep ? (
-              <>
-                <h3 className="mt-2 text-lg font-black text-white">{laChanThep.player1Name} & {laChanThep.player2Name}</h3>
-                <div className="text-2xl font-black text-primary mt-2 italic">{laChanThep.avgConceded.toFixed(1)}đ/trận</div>
-                <div className="text-xs text-white/40 mt-1 font-bold">
-                  Tổng lọt lưới: {laChanThep.pointsConceded} điểm / {laChanThep.total} trận
-                </div>
-              </>
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="text-xs font-black text-white truncate max-w-[65%]" title={`${laChanThep.player1Name} & ${laChanThep.player2Name}`}>
+                  {laChanThep.player1Name} & {laChanThep.player2Name}
+                </h3>
+                <span className="text-[9px] text-white/40 font-bold shrink-0 tabular-nums">
+                  Lọt: {laChanThep.pointsConceded}đ / {laChanThep.total}tr
+                </span>
+              </div>
             ) : (
-              <p className="text-white/30 text-sm mt-3 italic">Chưa xác định</p>
+              <p className="text-white/30 text-[10px] italic">Chưa xác định</p>
             )}
-            <p className="text-[10px] text-white/30 mt-4 leading-relaxed font-bold uppercase tracking-wide">
-              Cặp đôi phòng thủ kiên cường, giữ đối thủ ghi ít điểm trung bình nhất.
-            </p>
           </div>
         </div>
       </div>
@@ -1143,7 +1149,7 @@ function PairZone({
                   <div className="group relative inline-flex items-center justify-center gap-1 cursor-help w-full">
                     <span>Hạng</span>
                     <HelpCircle className="w-3 h-3 text-white/30 hover:text-white/60" />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-40 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-bold text-white/70 normal-case text-center">
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover:block w-40 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-bold text-white/70 normal-case text-center">
                       Thứ hạng cặp đôi trong mùa giải này.
                     </div>
                   </div>
@@ -1153,7 +1159,7 @@ function PairZone({
                   <div className="group relative inline-flex items-center justify-center gap-1 cursor-help w-full">
                     <span>Số trận</span>
                     <HelpCircle className="w-3 h-3 text-white/30 hover:text-white/60" />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-40 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-bold text-white/70 normal-case text-center">
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover:block w-40 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-bold text-white/70 normal-case text-center">
                       Tổng số trận thi đấu chung (tối thiểu 3 trận).
                     </div>
                   </div>
@@ -1162,7 +1168,7 @@ function PairZone({
                   <div className="group relative inline-flex items-center justify-center gap-1 cursor-help w-full">
                     <span>Hiệu số</span>
                     <HelpCircle className="w-3 h-3 text-white/30 hover:text-white/60" />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-40 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-bold text-white/70 normal-case text-center">
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover:block w-40 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-bold text-white/70 normal-case text-center">
                       Số trận thắng trừ số trận thua của cặp đôi.
                     </div>
                   </div>
@@ -1171,7 +1177,7 @@ function PairZone({
                   <div className="group relative inline-flex items-center justify-center gap-1 cursor-help w-full">
                     <span>Tỷ lệ thắng</span>
                     <HelpCircle className="w-3 h-3 text-white/30 hover:text-white/60" />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-bold text-white/70 normal-case text-center">
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover:block w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-bold text-white/70 normal-case text-center font-normal">
                       Tỉ lệ phần trăm chiến thắng khi đi chung sân.
                     </div>
                   </div>
@@ -1180,7 +1186,7 @@ function PairZone({
                   <div className="group relative inline-flex items-center justify-center gap-1 cursor-help w-full">
                     <span>Trung bình Công/Thủ</span>
                     <HelpCircle className="w-3 h-3 text-white/30 hover:text-white/60" />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-56 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-bold text-white/70 normal-case text-center">
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover:block w-56 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-bold text-white/70 normal-case text-center font-normal">
                       <strong>Công:</strong> Điểm ghi được trung bình.<br/><strong>Thủ:</strong> Điểm lọt lưới trung bình.
                     </div>
                   </div>
@@ -1189,7 +1195,7 @@ function PairZone({
                   <div className="group relative inline-flex items-center justify-end gap-1 cursor-help w-full">
                     <span>Điểm tích lũy</span>
                     <HelpCircle className="w-3 h-3 text-white/30 hover:text-white/60" />
-                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-56 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-bold text-white/70 normal-case text-center">
+                    <div className="absolute top-full right-0 mt-2 hidden group-hover:block w-56 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-bold text-white/70 normal-case text-center font-normal">
                       Tính điểm xếp hạng cặp đôi:<br/><code>(Thắng - Thua) x 15 + Tỷ lệ thắng (%)</code>.
                     </div>
                   </div>
@@ -1266,60 +1272,61 @@ function PairZone({
                               <div className="p-3 sm:p-4 bg-slate-900/40 rounded-xl border border-white/[0.03] m-1 animate-in fade-in slide-in-from-top-4 duration-300">
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
                                   
-                                  {/* CỘT 1: ĐỘ ĂN Ý ELO */}
                                   <div className="space-y-3">
                                     <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05]">
                                       <Users className="w-4 h-4 text-primary" />
                                       <h4 className="text-xs font-black text-white uppercase tracking-wider">Hợp tác ELO</h4>
-                                      
-                                      <div className="group relative ml-auto">
-                                        <HelpCircle className="w-3.5 h-3.5 text-white/30 hover:text-white/60 cursor-help" />
-                                        <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-950 border border-white/10 p-3 rounded-xl shadow-2xl z-50 text-[10px] text-white/70 leading-relaxed font-normal normal-case text-left">
-                                          <p className="font-bold text-primary mb-1 uppercase">HỢP TÁC ELO</p>
-                                          Phân tích sự phối hợp dựa trên trình độ ELO hiện tại.
-                                          <ul className="list-disc list-inside mt-1 space-y-1">
-                                            <li><strong>Song kiếm hợp bích:</strong> Chênh lệch ELO &lt; 150.</li>
-                                            <li><strong>Gánh tạ vượt khó:</strong> Chênh lệch ELO &ge; 150.</li>
-                                            <li><strong>Hiệu suất cộng thêm:</strong> Sự thay đổi năng lực thực tế khi cặp đôi này đứng chung so với khi thi đấu lẻ.</li>
-                                          </ul>
-                                        </div>
-                                      </div>
                                     </div>
 
                                     <div className="space-y-1 text-[10px]">
                                       <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02]">
                                         <span className="text-white/60 font-bold truncate max-w-[120px] sm:max-w-none">{pair.player1Name}</span>
-                                        <div className="flex items-center gap-2 font-mono">
+                                        <div className="flex items-center gap-2 font-mono relative group">
                                           <span className="text-white">{Math.round(synergy.elo1)} ELO</span>
                                           <span className={cn(
-                                            "font-black px-1.5 py-0.5 rounded text-[8px] tracking-tight",
-                                            synergy.impact1 > 0 ? "bg-green-500/10 text-green-400 border border-green-500/20" : 
-                                            synergy.impact1 < 0 ? "bg-red-500/10 text-red-400 border border-red-500/20" : 
-                                            "bg-white/5 text-white/40 border border-white/10"
+                                            "font-black px-1.5 py-0.5 rounded text-[8px] tracking-tight cursor-help border select-none",
+                                            synergy.impact1 > 0 ? "bg-green-500/10 text-green-400 border-green-500/20" : 
+                                            synergy.impact1 < 0 ? "bg-red-500/10 text-red-400 border-red-500/20" : 
+                                            "bg-white/5 text-white/40 border-white/10"
                                           )}>
                                             {synergy.impact1 > 0 ? `+${synergy.impact1}%` : synergy.impact1 < 0 ? `${synergy.impact1}%` : 'Ổn định'}
                                           </span>
+                                          <div className="absolute right-0 bottom-full mb-1.5 hidden group-hover:block w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-normal text-white/70 normal-case leading-relaxed text-center">
+                                            <p className="font-bold text-primary mb-0.5 uppercase">Hiệu suất cộng thêm</p>
+                                            Thể hiện năng lực của <strong>{pair.player1Name}</strong> tăng/giảm bao nhiêu % khi đánh cùng đồng đội này so với điểm phong độ trung bình.
+                                          </div>
                                         </div>
                                       </div>
 
                                       <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02]">
                                         <span className="text-white/60 font-bold truncate max-w-[120px] sm:max-w-none">{pair.player2Name}</span>
-                                        <div className="flex items-center gap-2 font-mono">
+                                        <div className="flex items-center gap-2 font-mono relative group">
                                           <span className="text-white">{Math.round(synergy.elo2)} ELO</span>
                                           <span className={cn(
-                                            "font-black px-1.5 py-0.5 rounded text-[8px] tracking-tight",
-                                            synergy.impact2 > 0 ? "bg-green-500/10 text-green-400 border border-green-500/20" : 
-                                            synergy.impact2 < 0 ? "bg-red-500/10 text-red-400 border border-red-500/20" : 
-                                            "bg-white/5 text-white/40 border border-white/10"
+                                            "font-black px-1.5 py-0.5 rounded text-[8px] tracking-tight cursor-help border select-none",
+                                            synergy.impact2 > 0 ? "bg-green-500/10 text-green-400 border-green-500/20" : 
+                                            synergy.impact2 < 0 ? "bg-red-500/10 text-red-400 border-red-500/20" : 
+                                            "bg-white/5 text-white/40 border-white/10"
                                           )}>
                                             {synergy.impact2 > 0 ? `+${synergy.impact2}%` : synergy.impact2 < 0 ? `${synergy.impact2}%` : 'Ổn định'}
                                           </span>
+                                          <div className="absolute right-0 bottom-full mb-1.5 hidden group-hover:block w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-normal text-white/70 normal-case leading-relaxed text-center">
+                                            <p className="font-bold text-primary mb-0.5 uppercase">Hiệu suất cộng thêm</p>
+                                            Thể hiện năng lực của <strong>{pair.player2Name}</strong> tăng/giảm bao nhiêu % khi đánh cùng đồng đội này so với điểm phong độ trung bình.
+                                          </div>
                                         </div>
                                       </div>
 
-                                      <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02]">
+                                      <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02] relative group">
                                         <span className="text-white/40 font-bold uppercase tracking-wider">Tương quan</span>
-                                        <span className="text-primary font-black uppercase tracking-wider">{synergy.relationshipLabel}</span>
+                                        <span className="text-primary font-black uppercase tracking-wider cursor-help border-b border-dashed border-primary/40 pb-0.5 select-none">{synergy.relationshipLabel}</span>
+                                        <div className="absolute left-0 bottom-full mb-1.5 hidden group-hover:block w-56 bg-slate-950 border border-white/10 p-2.5 rounded-lg shadow-2xl z-50 text-[9px] font-normal text-white/70 normal-case leading-relaxed text-left">
+                                          <p className="font-bold text-primary mb-1 uppercase">{synergy.relationshipLabel}</p>
+                                          {synergy.relationshipDesc}
+                                          <div className="mt-1 text-[8px] text-white/40 border-t border-white/5 pt-1 font-bold">
+                                            * Song kiếm: lệch ELO &lt; 150. Gánh tạ: lệch ELO &ge; 150.
+                                          </div>
+                                        </div>
                                       </div>
 
                                       <div className="flex justify-between items-center py-1.5">
@@ -1329,26 +1336,21 @@ function PairZone({
                                     </div>
                                   </div>
 
-                                  {/* CỘT 2: PHONG CÁCH CẶP ĐÔI */}
                                   <div className="space-y-3">
-                                    <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05]">
+                                    <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05] relative group">
                                       <span className="text-sm shrink-0">{chem.icon}</span>
-                                      <h4 className="text-xs font-black text-white uppercase tracking-wider truncate">
+                                      <h4 className="text-xs font-black text-white uppercase tracking-wider truncate cursor-help border-b border-dashed border-white/20 pb-0.5 select-none">
                                         Phong cách: <span className={cn("normal-case ml-1 font-bold", chem.colorClass.split(" ")[0])}>{chem.label}</span>
                                       </h4>
-                                      
-                                      <div className="group relative ml-auto">
-                                        <HelpCircle className="w-3.5 h-3.5 text-white/30 hover:text-white/60 cursor-help" />
-                                        <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-950 border border-white/10 p-3 rounded-xl shadow-2xl z-50 text-[10px] text-white/70 leading-relaxed font-normal normal-case text-left">
-                                          <p className="font-bold text-primary mb-1 uppercase">PHONG CÁCH CHIẾN THUẬT</p>
-                                          Phân loại lối chơi của cặp đôi dựa trên điểm số thực tế:
-                                          <ul className="list-disc list-inside mt-1 space-y-1">
-                                            <li><strong>⚡ Hủy diệt:</strong> Tấn công mạnh mẽ, trung bình ghi &ge; 9.8 điểm.</li>
-                                            <li><strong>🛡️ Lá chắn Thép:</strong> Phòng ngự vững chãi, chỉ lọt &le; 6.8 điểm.</li>
-                                            <li><strong>🔥 Kịch tính:</strong> Trận sát nút (&le; 2 điểm) &ge; 40%.</li>
-                                            <li><strong>⚔️ Vua Giằng co:</strong> Từng kéo đối thủ vào chạm deuce (&gt; 11).</li>
-                                          </ul>
-                                        </div>
+                                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-64 bg-slate-950 border border-white/10 p-2.5 rounded-lg shadow-2xl z-50 text-[9px] font-normal text-white/70 normal-case leading-relaxed text-left">
+                                        <p className="font-bold text-primary mb-1 uppercase">PHONG CÁCH CHIẾN THUẬT</p>
+                                        Phân loại lối chơi của cặp đôi dựa trên điểm số thực tế:
+                                        <ul className="list-disc list-inside mt-1 space-y-1">
+                                          <li><strong>⚡ Hủy diệt:</strong> Tấn công mạnh mẽ, trung bình ghi &ge; 9.8 điểm.</li>
+                                          <li><strong>🛡️ Lá chắn Thép:</strong> Phòng ngự vững chãi, chỉ lọt &le; 6.8 điểm.</li>
+                                          <li><strong>🔥 Kịch tính:</strong> Trận sát nút (&le; 2 điểm) &ge; 40%.</li>
+                                          <li><strong>⚔️ Vua Giằng co:</strong> Từng kéo đối thủ vào chạm deuce (&gt; 11).</li>
+                                        </ul>
                                       </div>
                                     </div>
 
@@ -1359,7 +1361,6 @@ function PairZone({
                                     </div>
                                   </div>
 
-                                  {/* CỘT 3: HÀNH TRÌNH GẦN ĐÂY */}
                                   <div className="space-y-3">
                                     <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05]">
                                       <History className="w-4 h-4 text-primary" />
