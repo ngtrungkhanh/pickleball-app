@@ -1542,16 +1542,16 @@ function PairZone({
 
                 {/* Dòng 2: Thông số phụ */}
                 <div 
-                  className="flex items-center justify-between mt-2 pt-2 border-t border-white/[0.02] text-[10px] text-white/40 font-bold cursor-pointer"
+                  className="flex items-center justify-between mt-2 pt-2 border-t border-white/[0.02] text-[10px] text-white/40 font-bold cursor-pointer flex-wrap gap-y-1"
                   onClick={() => setExpandedPairKey(isExpanded ? null : pairKey)}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <span>Trận: <strong className="text-white/70 tabular-nums">{pair.total}</strong></span>
-                    <span>Hiệu số: <strong className={cn("tabular-nums", diff > 0 ? "text-emerald-400" : diff < 0 ? "text-red-400" : "text-white/45")}>{diff > 0 ? `+${diff}` : diff}</strong></span>
-                    <span>Thắng: <strong className="text-white/70 tabular-nums">{pair.winRate.toFixed(0)}%</strong></span>
+                  <div className="flex items-center gap-x-2.5 flex-wrap">
+                    <span className="whitespace-nowrap">Trận: <strong className="text-white/70 tabular-nums">{pair.total}</strong></span>
+                    <span className="whitespace-nowrap">Hiệu số: <strong className={cn("tabular-nums", diff > 0 ? "text-emerald-400" : diff < 0 ? "text-red-400" : "text-white/45")}>{diff > 0 ? `+${diff}` : diff}</strong></span>
+                    <span className="whitespace-nowrap">Thắng: <strong className="text-white/70 tabular-nums">{pair.winRate.toFixed(0)}%</strong></span>
                   </div>
-                  <div>
-                    <span>Công: <strong className="text-white/70 tabular-nums">{pair.avgPointsFor.toFixed(1)}đ</strong> | Thủ: <strong className="text-white/70 tabular-nums">{pair.avgConceded.toFixed(1)}đ</strong></span>
+                  <div className="whitespace-nowrap shrink-0">
+                    <span>Công/Thủ: <strong className="text-white/70 tabular-nums">{pair.avgPointsFor.toFixed(1)}</strong> - <strong className="text-white/70 tabular-nums">{pair.avgConceded.toFixed(1)}</strong></span>
                   </div>
                 </div>
 
