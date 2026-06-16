@@ -1179,8 +1179,8 @@ function PairZone({
       </div>
 
       <BentoCard title="Bảng xếp hạng Cặp Đôi (Tối thiểu 3 trận chung)" icon={Users}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[650px] lg:min-w-full">
+        <div className="overflow-x-auto" onTouchStart={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
+          <table className="w-full text-left border-collapse min-w-full">
             <thead>
               <tr className="border-b border-white/5 text-[10px] font-black text-white/35 uppercase tracking-widest font-bold select-none">
                 <th className="py-3 px-4 w-16 text-center">
@@ -1202,7 +1202,7 @@ function PairZone({
                     </div>
                   </div>
                 </th>
-                <th className="py-3 px-4 text-center">
+                <th className="py-3 px-4 text-center hidden sm:table-cell">
                   <div className="group relative inline-flex items-center justify-center gap-1 cursor-help w-full">
                     <span>Hiệu số</span>
                     <HelpCircle className="w-3 h-3 text-white/30 hover:text-white/60" />
@@ -1220,7 +1220,7 @@ function PairZone({
                     </div>
                   </div>
                 </th>
-                <th className="py-3 px-4 text-center">
+                <th className="py-3 px-4 text-center hidden sm:table-cell">
                   <div className="group relative inline-flex items-center justify-center gap-1 cursor-help w-full">
                     <span>Trung bình Công/Thủ</span>
                     <HelpCircle className="w-3 h-3 text-white/30 hover:text-white/60" />
@@ -1282,7 +1282,7 @@ function PairZone({
                         </div>
                       </td>
                       <td className="py-4 px-4 text-center font-bold text-white/80 tabular-nums">{pair.total}</td>
-                      <td className="py-4 px-4 text-center tabular-nums">
+                      <td className="py-4 px-4 text-center tabular-nums hidden sm:table-cell">
                         <span className={cn(
                           "text-xs font-black px-2 py-1 rounded-lg",
                           diff > 0 ? "bg-emerald-500/10 text-emerald-400" : diff < 0 ? "bg-red-500/10 text-red-400" : "bg-white/5 text-white/45"
@@ -1291,7 +1291,7 @@ function PairZone({
                         </span>
                       </td>
                       <td className="py-4 px-4 text-center font-black text-white/80 tabular-nums">{pair.winRate.toFixed(1)}%</td>
-                      <td className="py-4 px-4 text-center text-[10px] font-bold text-white/40 leading-snug">
+                      <td className="py-4 px-4 text-center text-[10px] font-bold text-white/40 leading-snug hidden sm:table-cell">
                         Công: {pair.avgPointsFor.toFixed(1)}đ <br />
                         Thủ: {pair.avgConceded.toFixed(1)}đ
                       </td>
