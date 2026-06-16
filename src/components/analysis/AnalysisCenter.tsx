@@ -1263,12 +1263,12 @@ function PairZone({
                             const recent5 = pair.matches.slice(0, 5);
 
                             return (
-                              <div className="p-4 sm:p-6 bg-slate-900/40 rounded-2xl border border-white/[0.03] m-2 animate-in fade-in slide-in-from-top-4 duration-300">
-                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                              <div className="p-3 sm:p-4 bg-slate-900/40 rounded-xl border border-white/[0.03] m-1 animate-in fade-in slide-in-from-top-4 duration-300">
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
                                   
                                   {/* CỘT 1: ĐỘ ĂN Ý ELO */}
-                                  <div className="space-y-4">
-                                    <div className="flex items-center gap-2 pb-2 border-b border-white/[0.05]">
+                                  <div className="space-y-3">
+                                    <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05]">
                                       <Users className="w-4 h-4 text-primary" />
                                       <h4 className="text-xs font-black text-white uppercase tracking-wider">Hợp tác ELO</h4>
                                       
@@ -1286,53 +1286,56 @@ function PairZone({
                                       </div>
                                     </div>
 
-                                    <div className="space-y-3">
-                                      <div className="bg-slate-950/30 p-3 rounded-xl border border-white/[0.02]">
-                                        <div className="flex justify-between items-center mb-1">
-                                          <span className="text-[10px] font-black text-white/40 uppercase">Tương quan ELO</span>
-                                          <span className="text-xs font-black text-primary uppercase">{synergy.relationshipLabel}</span>
-                                        </div>
-                                        <p className="text-[10px] text-white/50 leading-relaxed">{synergy.relationshipDesc}</p>
-                                      </div>
-
-                                      <div className="space-y-2">
-                                        <div className="flex justify-between text-[10px] font-bold text-white/40 uppercase">
-                                          <span>{pair.player1Name}</span>
-                                          <span>{synergy.elo1} ELO</span>
-                                        </div>
-                                        <div className="flex justify-between text-[10px] font-bold text-white/40 uppercase">
-                                          <span>{pair.player2Name}</span>
-                                          <span>{synergy.elo2} ELO</span>
-                                        </div>
-                                        <div className="flex justify-between text-[10px] font-bold text-white/40 uppercase border-t border-white/[0.03] pt-1.5">
-                                          <span>ELO Trung bình</span>
-                                          <span className="font-black text-white">{Math.round(synergy.avgElo)} ELO</span>
-                                        </div>
-                                      </div>
-
-                                      <div className="space-y-2 bg-slate-950/20 p-3 rounded-xl border border-white/[0.02] text-[10px]">
-                                        <div className="text-white/40 font-bold uppercase tracking-wider mb-1">Ảnh hưởng khi đánh chung:</div>
-                                        <div className="flex justify-between">
-                                          <span className="text-white/60">{pair.player1Name}:</span>
-                                          <span className={cn("font-bold", synergy.impact1 > 0 ? "text-green-400" : synergy.impact1 < 0 ? "text-red-400" : "text-white/45")}>
+                                    <div className="space-y-1 text-[10px]">
+                                      <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02]">
+                                        <span className="text-white/60 font-bold truncate max-w-[120px] sm:max-w-none">{pair.player1Name}</span>
+                                        <div className="flex items-center gap-2 font-mono">
+                                          <span className="text-white">{Math.round(synergy.elo1)} ELO</span>
+                                          <span className={cn(
+                                            "font-black px-1.5 py-0.5 rounded text-[8px] tracking-tight",
+                                            synergy.impact1 > 0 ? "bg-green-500/10 text-green-400 border border-green-500/20" : 
+                                            synergy.impact1 < 0 ? "bg-red-500/10 text-red-400 border border-red-500/20" : 
+                                            "bg-white/5 text-white/40 border border-white/10"
+                                          )}>
                                             {synergy.impact1 > 0 ? `+${synergy.impact1}%` : synergy.impact1 < 0 ? `${synergy.impact1}%` : 'Ổn định'}
                                           </span>
                                         </div>
-                                        <div className="flex justify-between">
-                                          <span className="text-white/60">{pair.player2Name}:</span>
-                                          <span className={cn("font-bold", synergy.impact2 > 0 ? "text-green-400" : synergy.impact2 < 0 ? "text-red-400" : "text-white/45")}>
+                                      </div>
+
+                                      <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02]">
+                                        <span className="text-white/60 font-bold truncate max-w-[120px] sm:max-w-none">{pair.player2Name}</span>
+                                        <div className="flex items-center gap-2 font-mono">
+                                          <span className="text-white">{Math.round(synergy.elo2)} ELO</span>
+                                          <span className={cn(
+                                            "font-black px-1.5 py-0.5 rounded text-[8px] tracking-tight",
+                                            synergy.impact2 > 0 ? "bg-green-500/10 text-green-400 border border-green-500/20" : 
+                                            synergy.impact2 < 0 ? "bg-red-500/10 text-red-400 border border-red-500/20" : 
+                                            "bg-white/5 text-white/40 border border-white/10"
+                                          )}>
                                             {synergy.impact2 > 0 ? `+${synergy.impact2}%` : synergy.impact2 < 0 ? `${synergy.impact2}%` : 'Ổn định'}
                                           </span>
                                         </div>
+                                      </div>
+
+                                      <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02]">
+                                        <span className="text-white/40 font-bold uppercase tracking-wider">Tương quan</span>
+                                        <span className="text-primary font-black uppercase tracking-wider">{synergy.relationshipLabel}</span>
+                                      </div>
+
+                                      <div className="flex justify-between items-center py-1.5">
+                                        <span className="text-white/40 font-bold uppercase tracking-wider">ELO Trung bình</span>
+                                        <span className="text-white font-black">{Math.round(synergy.avgElo)} ELO</span>
                                       </div>
                                     </div>
                                   </div>
 
                                   {/* CỘT 2: PHONG CÁCH CẶP ĐÔI */}
-                                  <div className="space-y-4">
-                                    <div className="flex items-center gap-2 pb-2 border-b border-white/[0.05]">
-                                      <Target className="w-4 h-4 text-primary" />
-                                      <h4 className="text-xs font-black text-white uppercase tracking-wider">Phong cách chiến thuật</h4>
+                                  <div className="space-y-3">
+                                    <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05]">
+                                      <span className="text-sm shrink-0">{chem.icon}</span>
+                                      <h4 className="text-xs font-black text-white uppercase tracking-wider truncate">
+                                        Phong cách: <span className={cn("normal-case ml-1 font-bold", chem.colorClass.split(" ")[0])}>{chem.label}</span>
+                                      </h4>
                                       
                                       <div className="group relative ml-auto">
                                         <HelpCircle className="w-3.5 h-3.5 text-white/30 hover:text-white/60 cursor-help" />
@@ -1349,25 +1352,21 @@ function PairZone({
                                       </div>
                                     </div>
 
-                                    <div className="bg-slate-950/20 p-4 rounded-xl border border-white/[0.02] flex flex-col items-center text-center h-full justify-center min-h-[160px]">
-                                      <span className="text-4xl mb-2">{chem.icon}</span>
-                                      <div className={cn("text-xs font-black px-3 py-1 rounded-full border mb-3 font-bold uppercase", chem.colorClass)}>
-                                        {chem.label}
-                                      </div>
-                                      <p className="text-[10px] text-white/60 leading-relaxed max-w-[240px]">
+                                    <div className="pt-0.5">
+                                      <p className="text-[10px] text-white/60 leading-relaxed bg-white/[0.02] p-3 rounded-xl border border-white/[0.03] min-h-[76px] flex items-center">
                                         {chem.desc}
                                       </p>
                                     </div>
                                   </div>
 
                                   {/* CỘT 3: HÀNH TRÌNH GẦN ĐÂY */}
-                                  <div className="space-y-4">
-                                    <div className="flex items-center gap-2 pb-2 border-b border-white/[0.05]">
+                                  <div className="space-y-3">
+                                    <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05]">
                                       <History className="w-4 h-4 text-primary" />
                                       <h4 className="text-xs font-black text-white uppercase tracking-wider">5 trận chung gần nhất</h4>
                                     </div>
 
-                                    <div className="space-y-2">
+                                    <div className="space-y-1">
                                       {recent5.length > 0 ? (
                                         recent5.map((match, idx) => {
                                           const isWin = [match.win_1, match.win_2].includes(pair.player1Id) || [match.win_1, match.win_2].includes(pair.player2Id);
@@ -1391,7 +1390,7 @@ function PairZone({
                                           const opponentsStr = opponents.join(' & ');
 
                                           return (
-                                            <div key={idx} className="flex items-center justify-between text-[10px] py-1.5 border-b border-white/[0.02] last:border-0">
+                                            <div key={idx} className="flex items-center justify-between text-[10px] py-1 border-b border-white/[0.02] last:border-0">
                                               <div className="flex items-center gap-2 min-w-0">
                                                 <span className={cn(
                                                   "w-4.5 h-4.5 inline-flex items-center justify-center rounded text-[8px] font-black shrink-0",
@@ -1411,7 +1410,7 @@ function PairZone({
                                           );
                                         })
                                       ) : (
-                                        <div className="text-center text-white/30 text-[10px] py-6 italic">Chưa có trận nào được ghi nhận.</div>
+                                        <div className="text-center text-white/30 text-[10px] py-4 italic">Chưa có trận nào được ghi nhận.</div>
                                       )}
                                     </div>
                                   </div>
