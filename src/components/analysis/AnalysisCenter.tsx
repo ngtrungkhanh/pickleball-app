@@ -897,6 +897,44 @@ function getEloSynergy(
   };
 }
 
+function ResponsivePlayerName({ fullName, players, className }: { fullName: string; players: Player[]; className?: string }) {
+  const getTinyName = (name: string) => {
+    if (!name) return '--';
+    const parts = name.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    const givenName = parts[parts.length - 1] || name;
+    
+    const normalizedGiven = givenName.toLocaleLowerCase('vi-VN');
+    const hasDuplicateGivenName = players.some(player =>
+      (player?.name || '').replace(/\s+/g, ' ').trim() !== name &&
+      (player?.name || '').split(' ').filter(Boolean).slice(-1)[0]?.toLocaleLowerCase('vi-VN') === normalizedGiven
+    );
+
+    if (!hasDuplicateGivenName) {
+      const chars = Array.from(givenName);
+      return chars.length <= 7 ? givenName : `${chars.slice(0, 4).join('')}...`;
+    }
+
+    const initials = parts
+      .slice(0, -1)
+      .slice(0, 2)
+      .map(part => Array.from(part)[0]?.toLocaleUpperCase('vi-VN'))
+      .filter(Boolean)
+      .join('.');
+
+    const combined = initials ? `${initials}.${givenName}` : givenName;
+    const chars = Array.from(combined);
+    return chars.length <= 9 ? combined : `${chars.slice(0, 6).join('')}...`;
+  };
+
+  const tinyName = getTinyName(fullName);
+  return (
+    <span className={className} title={fullName}>
+      <span className="hidden sm:inline">{fullName}</span>
+      <span className="inline sm:hidden">{tinyName}</span>
+    </span>
+  );
+}
+
 function PairZone({ 
   matches, 
   players, 
@@ -1028,7 +1066,7 @@ function PairZone({
             {capBaiTrung ? (
               <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-sm font-black text-white truncate max-w-[65%]" title={`${capBaiTrung.player1Name} & ${capBaiTrung.player2Name}`}>
-                  {capBaiTrung.player1Name} & {capBaiTrung.player2Name}
+                  <ResponsivePlayerName fullName={capBaiTrung.player1Name} players={players} /> & <ResponsivePlayerName fullName={capBaiTrung.player2Name} players={players} />
                 </h3>
                 <span className="text-[10px] text-white/40 font-bold shrink-0 tabular-nums">
                   {capBaiTrung.wins}W-{capBaiTrung.losses}L ({capBaiTrung.winRate.toFixed(0)}%)
@@ -1053,7 +1091,7 @@ function PairZone({
             {capTriKy ? (
               <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-sm font-black text-white truncate max-w-[65%]" title={`${capTriKy.player1Name} & ${capTriKy.player2Name}`}>
-                  {capTriKy.player1Name} & {capTriKy.player2Name}
+                  <ResponsivePlayerName fullName={capTriKy.player1Name} players={players} /> & <ResponsivePlayerName fullName={capTriKy.player2Name} players={players} />
                 </h3>
                 <span className="text-[10px] text-white/40 font-bold shrink-0 tabular-nums">
                   {capTriKy.wins}W-{capTriKy.losses}L ({capTriKy.winRate.toFixed(0)}%)
@@ -1078,7 +1116,7 @@ function PairZone({
             {laChanThep ? (
               <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-sm font-black text-white truncate max-w-[65%]" title={`${laChanThep.player1Name} & ${laChanThep.player2Name}`}>
-                  {laChanThep.player1Name} & {laChanThep.player2Name}
+                  <ResponsivePlayerName fullName={laChanThep.player1Name} players={players} /> & <ResponsivePlayerName fullName={laChanThep.player2Name} players={players} />
                 </h3>
                 <span className="text-[10px] text-white/40 font-bold shrink-0 tabular-nums">
                   Lọt: {laChanThep.pointsConceded}đ/{laChanThep.total}tr
@@ -1236,8 +1274,12 @@ function PairZone({
                         </div>
                       </td>
                       <td className="py-4 px-4 font-bold">
-                        <div className="text-sm font-black text-white leading-snug">{pair.player1Name}</div>
-                        <div className="text-sm font-black text-white leading-snug">{pair.player2Name}</div>
+                        <div className="text-sm font-black text-white leading-snug truncate max-w-[120px] sm:max-w-none">
+                          <ResponsivePlayerName fullName={pair.player1Name} players={players} />
+                        </div>
+                        <div className="text-sm font-black text-white leading-snug truncate max-w-[120px] sm:max-w-none">
+                          <ResponsivePlayerName fullName={pair.player2Name} players={players} />
+                        </div>
                       </td>
                       <td className="py-4 px-4 text-center font-bold text-white/80 tabular-nums">{pair.total}</td>
                       <td className="py-4 px-4 text-center tabular-nums">
@@ -1280,7 +1322,9 @@ function PairZone({
 
                                     <div className="space-y-1 text-xs">
                                       <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02]">
-                                        <span className="text-white/60 font-bold truncate max-w-[120px] sm:max-w-none">{pair.player1Name}</span>
+                                        <span className="text-white/60 font-bold truncate max-w-[100px] sm:max-w-none">
+                                          <ResponsivePlayerName fullName={pair.player1Name} players={players} />
+                                        </span>
                                         <div className="flex items-center gap-2 font-mono relative group">
                                           <span className="text-white">{Math.round(synergy.elo1)} ELO</span>
                                           <span className={cn(
@@ -1299,7 +1343,9 @@ function PairZone({
                                       </div>
 
                                       <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02]">
-                                        <span className="text-white/60 font-bold truncate max-w-[120px] sm:max-w-none">{pair.player2Name}</span>
+                                        <span className="text-white/60 font-bold truncate max-w-[100px] sm:max-w-none">
+                                          <ResponsivePlayerName fullName={pair.player2Name} players={players} />
+                                        </span>
                                         <div className="flex items-center gap-2 font-mono relative group">
                                           <span className="text-white">{Math.round(synergy.elo2)} ELO</span>
                                           <span className={cn(
