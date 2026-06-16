@@ -18,7 +18,6 @@ import { getGlobalSelectedSeason, setGlobalSelectedSeason, isGlobalSeasonSet } f
 import { PreviousChampionTitleLine } from '@/components/PreviousChampionTitleLine';
 import { buildHallOfFameEntries, formatHallDate, getLatestHallOfFameEntry } from '@/lib/hall-of-fame';
 import { deleteMatchAction } from '@/app/actions';
-import { Logo } from '@/components/Logo';
 
 const INSIGHT_SELECTION_STATE_KEY = 'pickleball.analysis.insightSelection.v1';
 
@@ -651,20 +650,17 @@ export default function Dashboard({
             }
           `}</style>
           <div className="mx-auto grid max-w-[1680px] grid-cols-[minmax(210px,auto)_minmax(0,1fr)_auto] items-center gap-4 px-4 py-2.5">
-            <div className="min-w-0 flex items-center gap-2.5">
-              <Logo className="w-8 h-8 text-primary animate-pulse-subtle shrink-0" />
-              <div className="min-w-0">
-                <div className="flex items-baseline gap-2">
-                  <h1 className="truncate !text-xl xl:!text-2xl !leading-none font-black tracking-tight text-white drop-shadow-[0_0_18px_rgba(34,197,94,0.20)]">
-                    Pickleball <span className="text-primary">Ranking</span>
-                  </h1>
-                  <span className="hidden rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-primary xl:inline-block">
-                    live
-                  </span>
-                </div>
-                <div className="mt-1 truncate text-[10px] font-bold uppercase tracking-[0.24em] text-white/35">
-                  {seasonLabel} · {viewedMatches.length} trận
-                </div>
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-2">
+                <h1 className="truncate !text-xl xl:!text-2xl !leading-none font-black tracking-tight text-white drop-shadow-[0_0_18px_rgba(34,197,94,0.20)]">
+                  Pickleball <span className="text-primary">Ranking</span>
+                </h1>
+                <span className="hidden rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-primary xl:inline-block">
+                  live
+                </span>
+              </div>
+              <div className="mt-1 truncate text-[10px] font-bold uppercase tracking-[0.24em] text-white/35">
+                {seasonLabel} · {viewedMatches.length} trận
               </div>
             </div>
 
