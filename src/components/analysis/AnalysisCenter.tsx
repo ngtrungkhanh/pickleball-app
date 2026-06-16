@@ -946,13 +946,14 @@ function ChemistryStylePanel({
   metrics: Map<string, PlayerMetrics>; 
   partnerEdges: AnalysisEdge[]; 
 }) {
+  const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
   const getPlayerName = (id: string) => players.find(p => p.id === id)?.name || id;
   const chem = getChemistryStyle(pair.avgPointsFor, pair.avgConceded, pair.total, pair.matches);
   const synergy = getEloSynergy(pair.player1Id, pair.player2Id, metrics, partnerEdges);
   const recent5 = pair.matches.slice(0, 5);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6" onClick={() => setActiveTooltip(null)}>
       {/* Cột 1: Hợp tác ELO */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05]">
@@ -967,15 +968,24 @@ function ChemistryStylePanel({
             </span>
             <div className="flex items-center gap-2 font-mono relative group">
               <span className="text-white">{Math.round(synergy.elo1)} ELO</span>
-              <span className={cn(
-                "font-black px-1.5 py-0.5 rounded text-[10px] tracking-tight cursor-help border select-none",
-                synergy.impact1 > 0 ? "bg-green-500/10 text-green-400 border-green-500/20" : 
-                synergy.impact1 < 0 ? "bg-red-500/10 text-red-400 border-red-500/20" : 
-                "bg-white/5 text-white/40 border-white/10"
-              )}>
+              <span 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveTooltip(activeTooltip === 'elo1' ? null : 'elo1');
+                }}
+                className={cn(
+                  "font-black px-1.5 py-0.5 rounded text-[10px] tracking-tight cursor-help border select-none",
+                  synergy.impact1 > 0 ? "bg-green-500/10 text-green-400 border-green-500/20" : 
+                  synergy.impact1 < 0 ? "bg-red-500/10 text-red-400 border-red-500/20" : 
+                  "bg-white/5 text-white/40 border-white/10"
+                )}
+              >
                 {synergy.impact1 > 0 ? `+${synergy.impact1}%` : synergy.impact1 < 0 ? `${synergy.impact1}%` : 'Ổn định'}
               </span>
-              <div className="absolute right-0 bottom-full mb-1.5 hidden group-hover:block w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-center">
+              <div className={cn(
+                "absolute right-0 bottom-full mb-1.5 w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-center",
+                activeTooltip === 'elo1' ? "block" : "hidden group-hover:block"
+              )}>
                 <p className="font-bold text-primary mb-0.5 uppercase">Hiệu suất cộng thêm</p>
                 Thể hiện năng lực của <strong>{pair.player1Name}</strong> tăng/giảm bao nhiêu % khi đánh cùng đồng đội này so với điểm phong độ trung bình.
               </div>
@@ -988,25 +998,43 @@ function ChemistryStylePanel({
             </span>
             <div className="flex items-center gap-2 font-mono relative group">
               <span className="text-white">{Math.round(synergy.elo2)} ELO</span>
-              <span className={cn(
-                "font-black px-1.5 py-0.5 rounded text-[10px] tracking-tight cursor-help border select-none",
-                synergy.impact2 > 0 ? "bg-green-500/10 text-green-400 border-green-500/20" : 
-                synergy.impact2 < 0 ? "bg-red-500/10 text-red-400 border-red-500/20" : 
-                "bg-white/5 text-white/40 border-white/10"
-              )}>
+              <span 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveTooltip(activeTooltip === 'elo2' ? null : 'elo2');
+                }}
+                className={cn(
+                  "font-black px-1.5 py-0.5 rounded text-[10px] tracking-tight cursor-help border select-none",
+                  synergy.impact2 > 0 ? "bg-green-500/10 text-green-400 border-green-500/20" : 
+                  synergy.impact2 < 0 ? "bg-red-500/10 text-red-400 border-red-500/20" : 
+                  "bg-white/5 text-white/40 border-white/10"
+                )}
+              >
                 {synergy.impact2 > 0 ? `+${synergy.impact2}%` : synergy.impact2 < 0 ? `${synergy.impact2}%` : 'Ổn định'}
               </span>
-              <div className="absolute right-0 bottom-full mb-1.5 hidden group-hover:block w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-center">
+              <div className={cn(
+                "absolute right-0 bottom-full mb-1.5 w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-center",
+                activeTooltip === 'elo2' ? "block" : "hidden group-hover:block"
+              )}>
                 <p className="font-bold text-primary mb-0.5 uppercase">Hiệu suất cộng thêm</p>
                 Thể hiện năng lực của <strong>{pair.player2Name}</strong> tăng/giảm bao nhiêu % khi đánh cùng đồng đội này so với điểm phong độ trung bình.
               </div>
             </div>
           </div>
 
-          <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02] relative group">
+          <div 
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveTooltip(activeTooltip === 'synergy' ? null : 'synergy');
+            }}
+            className="flex justify-between items-center py-1.5 border-b border-white/[0.02] relative group cursor-pointer"
+          >
             <span className="text-white/40 font-bold uppercase tracking-wider">Tương quan</span>
             <span className="text-primary font-black uppercase tracking-wider cursor-help border-b border-dashed border-primary/40 pb-0.5 select-none">{synergy.relationshipLabel}</span>
-            <div className="absolute left-0 bottom-full mb-1.5 hidden group-hover:block w-56 bg-slate-950 border border-white/10 p-2.5 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-left">
+            <div className={cn(
+              "absolute left-0 bottom-full mb-1.5 w-56 bg-slate-950 border border-white/10 p-2.5 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-left",
+              activeTooltip === 'synergy' ? "block" : "hidden group-hover:block"
+            )}>
               <p className="font-bold text-primary mb-1 uppercase">{synergy.relationshipLabel}</p>
               {synergy.relationshipDesc}
               <div className="mt-1 text-[9px] text-white/40 border-t border-white/5 pt-1 font-bold">
@@ -1024,12 +1052,21 @@ function ChemistryStylePanel({
 
       {/* Cột 2: Phong cách chiến thuật */}
       <div className="space-y-3">
-        <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05] relative group">
+        <div 
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveTooltip(activeTooltip === 'tactics' ? null : 'tactics');
+          }}
+          className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05] relative group cursor-pointer"
+        >
           <span className="text-sm shrink-0">{chem.icon}</span>
           <h4 className="text-xs font-black text-white uppercase tracking-wider truncate cursor-help border-b border-dashed border-white/20 pb-0.5 select-none">
             Phong cách: <span className={cn("normal-case ml-1 font-bold", chem.colorClass.split(" ")[0])}>{chem.label}</span>
           </h4>
-          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-64 bg-slate-950 border border-white/10 p-2.5 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-left">
+          <div className={cn(
+            "absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 w-64 bg-slate-950 border border-white/10 p-2.5 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-left",
+            activeTooltip === 'tactics' ? "block" : "hidden group-hover:block"
+          )}>
             <p className="font-bold text-primary mb-1 uppercase">PHONG CÁCH CHIẾN THUẬT</p>
             Phân loại lối chơi của cặp đôi dựa trên điểm số thực tế:
             <ul className="list-disc list-inside mt-1 space-y-1">
@@ -1076,7 +1113,6 @@ function ChemistryStylePanel({
                 opponents = [getPlayerName(w1)];
                 if (w2 && !isGuestId(w2)) opponents.push(getPlayerName(w2));
               }
-              const opponentsStr = opponents.join(' & ');
 
               return (
                 <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-white/[0.02] last:border-0">
@@ -1088,7 +1124,18 @@ function ChemistryStylePanel({
                       {isWin ? 'W' : 'L'}
                     </span>
                     <span className="text-white font-bold tabular-nums shrink-0">{scoreStr}</span>
-                    <span className="text-white/45 truncate">vs {opponentsStr}</span>
+                    <span className="text-white/45 truncate flex items-center gap-1">
+                      vs{' '}
+                      <span className="truncate">
+                        <ResponsivePlayerName fullName={opponents[0]} players={players} />
+                        {opponents[1] && (
+                          <>
+                            {' & '}
+                            <ResponsivePlayerName fullName={opponents[1]} players={players} />
+                          </>
+                        )}
+                      </span>
+                    </span>
                   </div>
                   {match.date && (
                     <span className="text-[9px] text-white/20 shrink-0 ml-2 font-mono">
