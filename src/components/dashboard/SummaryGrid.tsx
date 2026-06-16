@@ -45,14 +45,14 @@ export function SummaryGrid({
   ];
 
   return (
-    <div className={`grid grid-cols-2 ${compact ? '' : 'lg:grid-cols-4'} gap-2 sm:gap-3 w-full`}>
+    <div className={`grid grid-cols-2 ${compact ? '' : 'lg:grid-cols-4'} gap-2 sm:gap-3 w-full pt-1.5 pb-1`}>
       {cards.map(({ Icon, color, label, big, unit }, i) => (
         <div
           key={i}
-          className={`relative group overflow-hidden rounded-xl bg-[#192844]/95 border border-slate-400/25 px-3 py-3 ${compact ? '' : 'sm:px-4 sm:py-3'} shadow-[0_10px_28px_rgba(0,0,0,0.20)] hover-glow-card`}
+          className={`relative group rounded-xl bg-[#192844]/95 border border-slate-400/25 px-3 py-3 ${compact ? '' : 'sm:px-4 sm:py-3'} shadow-[0_10px_28px_rgba(0,0,0,0.20)] hover-glow-card`}
         >
           <div
-            className="absolute inset-0 opacity-[0.12] pointer-events-none transition-opacity group-hover:opacity-[0.18]"
+            className="absolute inset-0 opacity-[0.12] pointer-events-none transition-opacity group-hover:opacity-[0.18] rounded-xl overflow-hidden"
             style={{ background: `radial-gradient(circle at 50% 0%, ${color}, transparent 80%)` }}
           />
 

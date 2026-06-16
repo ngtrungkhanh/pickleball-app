@@ -530,11 +530,11 @@ export function Leaderboard({
                       exp || closing 
                         ? 'bg-emerald-400/[0.075]' 
                         : i === 0 
-                          ? 'rank-1-row shimmer-row' 
+                          ? 'rank-1-row' 
                           : 'bg-[#17243a]/55 hover:bg-slate-700/65',
                     )}
                   >
-                    <td className="py-3 px-4 text-center"><RankBadge i={i} /></td>
+                    <td className={cn("py-3 px-4 text-center", i === 0 && "rank-1-first-td")}><RankBadge i={i} /></td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
                         <span className={cn('font-black text-base 2xl:text-lg truncate transition-all', i === 0 ? 'text-amber-400' : exp ? 'text-primary' : 'text-white group-hover:text-white')}>

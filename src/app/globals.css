@@ -321,23 +321,46 @@ select option {
   z-index: 2;
 }
 
-.rank-1-row {
-  position: relative;
-  background: linear-gradient(90deg, rgba(251, 191, 36, 0.06) 0%, rgba(251, 191, 36, 0.02) 100%) !important;
+@keyframes shimmer-bg-sweep {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
-.rank-1-row::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: #fbbf24;
-  box-shadow: 0 0 8px rgba(251, 191, 36, 0.7);
+.rank-1-row {
+  background: linear-gradient(
+    90deg,
+    rgba(251, 191, 36, 0.07) 0%,
+    rgba(251, 191, 36, 0.02) 25%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(251, 191, 36, 0.02) 75%,
+    rgba(251, 191, 36, 0.07) 100%
+  ) !important;
+  background-size: 200% 200% !important;
+  animation: shimmer-bg-sweep 7s ease infinite !important;
 }
 
 .rank-1-row:hover {
-  background: linear-gradient(90deg, rgba(251, 191, 36, 0.1) 0%, rgba(251, 191, 36, 0.04) 100%) !important;
+  background: linear-gradient(
+    90deg,
+    rgba(251, 191, 36, 0.1) 0%,
+    rgba(251, 191, 36, 0.03) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(251, 191, 36, 0.03) 75%,
+    rgba(251, 191, 36, 0.1) 100%
+  ) !important;
+  background-size: 200% 200% !important;
+  animation: shimmer-bg-sweep 4s ease infinite !important;
+}
+
+.rank-1-first-td {
+  border-left: 3px solid #fbbf24 !important;
+  box-shadow: inset 4px 0 8px -4px rgba(251, 191, 36, 0.4) !important;
 }
 
