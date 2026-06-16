@@ -935,6 +935,178 @@ function ResponsivePlayerName({ fullName, players, className }: { fullName: stri
   );
 }
 
+function ChemistryStylePanel({ 
+  pair, 
+  players, 
+  metrics, 
+  partnerEdges 
+}: { 
+  pair: any; 
+  players: Player[]; 
+  metrics: Map<string, PlayerMetrics>; 
+  partnerEdges: AnalysisEdge[]; 
+}) {
+  const getPlayerName = (id: string) => players.find(p => p.id === id)?.name || id;
+  const chem = getChemistryStyle(pair.avgPointsFor, pair.avgConceded, pair.total, pair.matches);
+  const synergy = getEloSynergy(pair.player1Id, pair.player2Id, metrics, partnerEdges);
+  const recent5 = pair.matches.slice(0, 5);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+      {/* Cột 1: Hợp tác ELO */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05]">
+          <Users className="w-4 h-4 text-primary" />
+          <h4 className="text-xs font-black text-white uppercase tracking-wider">Hợp tác ELO</h4>
+        </div>
+
+        <div className="space-y-1 text-xs">
+          <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02]">
+            <span className="text-white/60 font-bold truncate max-w-[100px] sm:max-w-none">
+              <ResponsivePlayerName fullName={pair.player1Name} players={players} />
+            </span>
+            <div className="flex items-center gap-2 font-mono relative group">
+              <span className="text-white">{Math.round(synergy.elo1)} ELO</span>
+              <span className={cn(
+                "font-black px-1.5 py-0.5 rounded text-[10px] tracking-tight cursor-help border select-none",
+                synergy.impact1 > 0 ? "bg-green-500/10 text-green-400 border-green-500/20" : 
+                synergy.impact1 < 0 ? "bg-red-500/10 text-red-400 border-red-500/20" : 
+                "bg-white/5 text-white/40 border-white/10"
+              )}>
+                {synergy.impact1 > 0 ? `+${synergy.impact1}%` : synergy.impact1 < 0 ? `${synergy.impact1}%` : 'Ổn định'}
+              </span>
+              <div className="absolute right-0 bottom-full mb-1.5 hidden group-hover:block w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-center">
+                <p className="font-bold text-primary mb-0.5 uppercase">Hiệu suất cộng thêm</p>
+                Thể hiện năng lực của <strong>{pair.player1Name}</strong> tăng/giảm bao nhiêu % khi đánh cùng đồng đội này so với điểm phong độ trung bình.
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02]">
+            <span className="text-white/60 font-bold truncate max-w-[100px] sm:max-w-none">
+              <ResponsivePlayerName fullName={pair.player2Name} players={players} />
+            </span>
+            <div className="flex items-center gap-2 font-mono relative group">
+              <span className="text-white">{Math.round(synergy.elo2)} ELO</span>
+              <span className={cn(
+                "font-black px-1.5 py-0.5 rounded text-[10px] tracking-tight cursor-help border select-none",
+                synergy.impact2 > 0 ? "bg-green-500/10 text-green-400 border-green-500/20" : 
+                synergy.impact2 < 0 ? "bg-red-500/10 text-red-400 border-red-500/20" : 
+                "bg-white/5 text-white/40 border-white/10"
+              )}>
+                {synergy.impact2 > 0 ? `+${synergy.impact2}%` : synergy.impact2 < 0 ? `${synergy.impact2}%` : 'Ổn định'}
+              </span>
+              <div className="absolute right-0 bottom-full mb-1.5 hidden group-hover:block w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-center">
+                <p className="font-bold text-primary mb-0.5 uppercase">Hiệu suất cộng thêm</p>
+                Thể hiện năng lực của <strong>{pair.player2Name}</strong> tăng/giảm bao nhiêu % khi đánh cùng đồng đội này so với điểm phong độ trung bình.
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02] relative group">
+            <span className="text-white/40 font-bold uppercase tracking-wider">Tương quan</span>
+            <span className="text-primary font-black uppercase tracking-wider cursor-help border-b border-dashed border-primary/40 pb-0.5 select-none">{synergy.relationshipLabel}</span>
+            <div className="absolute left-0 bottom-full mb-1.5 hidden group-hover:block w-56 bg-slate-950 border border-white/10 p-2.5 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-left">
+              <p className="font-bold text-primary mb-1 uppercase">{synergy.relationshipLabel}</p>
+              {synergy.relationshipDesc}
+              <div className="mt-1 text-[9px] text-white/40 border-t border-white/5 pt-1 font-bold">
+                * Song kiếm: lệch ELO &lt; 150. Gánh tạ: lệch ELO &ge; 150.
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center py-1.5">
+            <span className="text-white/40 font-bold uppercase tracking-wider">ELO Trung bình</span>
+            <span className="text-white font-black">{Math.round(synergy.avgElo)} ELO</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Cột 2: Phong cách chiến thuật */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05] relative group">
+          <span className="text-sm shrink-0">{chem.icon}</span>
+          <h4 className="text-xs font-black text-white uppercase tracking-wider truncate cursor-help border-b border-dashed border-white/20 pb-0.5 select-none">
+            Phong cách: <span className={cn("normal-case ml-1 font-bold", chem.colorClass.split(" ")[0])}>{chem.label}</span>
+          </h4>
+          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-64 bg-slate-950 border border-white/10 p-2.5 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-left">
+            <p className="font-bold text-primary mb-1 uppercase">PHONG CÁCH CHIẾN THUẬT</p>
+            Phân loại lối chơi của cặp đôi dựa trên điểm số thực tế:
+            <ul className="list-disc list-inside mt-1 space-y-1">
+              <li><strong>⚡ Hủy diệt:</strong> Tấn công mạnh mẽ, trung bình ghi &ge; 9.8 điểm.</li>
+              <li><strong>🛡️ Lá chắn Thép:</strong> Phòng ngự vững chãi, chỉ lọt &le; 6.8 điểm.</li>
+              <li><strong>🔥 Kịch tính:</strong> Trận sát nút (&le; 2 điểm) &ge; 40%.</li>
+              <li><strong>⚔️ Vua Giằng co:</strong> Từng kéo đối thủ vào chạm deuce (&gt; 11).</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="pt-0.5">
+          <p className="text-xs text-white/60 leading-relaxed bg-white/[0.02] p-3 rounded-xl border border-white/[0.03] min-h-[76px] flex items-center">
+            {chem.desc}
+          </p>
+        </div>
+      </div>
+
+      {/* Cột 3: 5 trận chung gần nhất */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05]">
+          <History className="w-4 h-4 text-primary" />
+          <h4 className="text-xs font-black text-white uppercase tracking-wider">5 trận chung gần nhất</h4>
+        </div>
+
+        <div className="space-y-1">
+          {recent5.length > 0 ? (
+            recent5.map((match: Match, idx: number) => {
+              const isWin = [match.win_1, match.win_2].includes(pair.player1Id) || [match.win_1, match.win_2].includes(pair.player2Id);
+              const scoreStr = isWin 
+                ? `${match.win_score}-${match.lose_score}` 
+                : `${match.lose_score}-${match.win_score}`;
+              
+              const w1 = match.win_1 || '';
+              const w2 = match.win_2 || '';
+              const l1 = match.lose_1 || '';
+              const l2 = match.lose_2 || '';
+              
+              let opponents: string[] = [];
+              if (isWin) {
+                opponents = [getPlayerName(l1)];
+                if (l2 && !isGuestId(l2)) opponents.push(getPlayerName(l2));
+              } else {
+                opponents = [getPlayerName(w1)];
+                if (w2 && !isGuestId(w2)) opponents.push(getPlayerName(w2));
+              }
+              const opponentsStr = opponents.join(' & ');
+
+              return (
+                <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-white/[0.02] last:border-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={cn(
+                      "w-4.5 h-4.5 inline-flex items-center justify-center rounded text-[9px] font-black shrink-0",
+                      isWin ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                    )}>
+                      {isWin ? 'W' : 'L'}
+                    </span>
+                    <span className="text-white font-bold tabular-nums shrink-0">{scoreStr}</span>
+                    <span className="text-white/45 truncate">vs {opponentsStr}</span>
+                  </div>
+                  {match.date && (
+                    <span className="text-[9px] text-white/20 shrink-0 ml-2 font-mono">
+                      {new Date(match.date).toLocaleDateString('vi-VN', { month: '2-digit', day: '2-digit' })}
+                    </span>
+                  )}
+                </div>
+              );
+            })
+          ) : (
+            <div className="text-center text-white/30 text-xs py-4 italic">Chưa có trận nào được ghi nhận.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PairZone({ 
   matches, 
   players, 
@@ -1179,7 +1351,8 @@ function PairZone({
       </div>
 
       <BentoCard title="Bảng xếp hạng Cặp Đôi (Tối thiểu 3 trận chung)" icon={Users}>
-        <div className="overflow-x-auto" onTouchStart={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
+        {/* Bản Desktop */}
+        <div className="hidden sm:block overflow-x-auto" onTouchStart={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
           <table className="w-full text-left border-collapse min-w-full">
             <thead>
               <tr className="border-b border-white/5 text-[10px] font-black text-white/35 uppercase tracking-widest font-bold select-none">
@@ -1216,7 +1389,7 @@ function PairZone({
                     <span>Tỷ lệ thắng</span>
                     <HelpCircle className="w-3 h-3 text-white/30 hover:text-white/60" />
                     <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover:block w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[9px] font-bold text-white/70 normal-case text-center font-normal">
-                      Tỉ lệ phần trăm chiến thắng khi đi chung sân.
+                      Tỉ lệ phần centrum chiến thắng khi đi chung sân.
                     </div>
                   </div>
                 </th>
@@ -1305,167 +1478,14 @@ function PairZone({
                     {isExpanded && (
                       <tr className="border-b border-white/5 bg-slate-950/25">
                         <td colSpan={7} className="p-0">
-                          {(() => {
-                            const chem = getChemistryStyle(pair.avgPointsFor, pair.avgConceded, pair.total, pair.matches);
-                            const synergy = getEloSynergy(pair.player1Id, pair.player2Id, metrics, partnerEdges);
-                            const recent5 = pair.matches.slice(0, 5);
-
-                            return (
-                              <div className="p-3 sm:p-4 bg-slate-900/40 rounded-xl border border-white/[0.03] m-1 animate-in fade-in slide-in-from-top-4 duration-300">
-                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
-                                  
-                                  <div className="space-y-3">
-                                    <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05]">
-                                      <Users className="w-4 h-4 text-primary" />
-                                      <h4 className="text-xs font-black text-white uppercase tracking-wider">Hợp tác ELO</h4>
-                                    </div>
-
-                                    <div className="space-y-1 text-xs">
-                                      <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02]">
-                                        <span className="text-white/60 font-bold truncate max-w-[100px] sm:max-w-none">
-                                          <ResponsivePlayerName fullName={pair.player1Name} players={players} />
-                                        </span>
-                                        <div className="flex items-center gap-2 font-mono relative group">
-                                          <span className="text-white">{Math.round(synergy.elo1)} ELO</span>
-                                          <span className={cn(
-                                            "font-black px-1.5 py-0.5 rounded text-[10px] tracking-tight cursor-help border select-none",
-                                            synergy.impact1 > 0 ? "bg-green-500/10 text-green-400 border-green-500/20" : 
-                                            synergy.impact1 < 0 ? "bg-red-500/10 text-red-400 border-red-500/20" : 
-                                            "bg-white/5 text-white/40 border-white/10"
-                                          )}>
-                                            {synergy.impact1 > 0 ? `+${synergy.impact1}%` : synergy.impact1 < 0 ? `${synergy.impact1}%` : 'Ổn định'}
-                                          </span>
-                                          <div className="absolute right-0 bottom-full mb-1.5 hidden group-hover:block w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-center">
-                                            <p className="font-bold text-primary mb-0.5 uppercase">Hiệu suất cộng thêm</p>
-                                            Thể hiện năng lực của <strong>{pair.player1Name}</strong> tăng/giảm bao nhiêu % khi đánh cùng đồng đội này so với điểm phong độ trung bình.
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02]">
-                                        <span className="text-white/60 font-bold truncate max-w-[100px] sm:max-w-none">
-                                          <ResponsivePlayerName fullName={pair.player2Name} players={players} />
-                                        </span>
-                                        <div className="flex items-center gap-2 font-mono relative group">
-                                          <span className="text-white">{Math.round(synergy.elo2)} ELO</span>
-                                          <span className={cn(
-                                            "font-black px-1.5 py-0.5 rounded text-[10px] tracking-tight cursor-help border select-none",
-                                            synergy.impact2 > 0 ? "bg-green-500/10 text-green-400 border-green-500/20" : 
-                                            synergy.impact2 < 0 ? "bg-red-500/10 text-red-400 border-red-500/20" : 
-                                            "bg-white/5 text-white/40 border-white/10"
-                                          )}>
-                                            {synergy.impact2 > 0 ? `+${synergy.impact2}%` : synergy.impact2 < 0 ? `${synergy.impact2}%` : 'Ổn định'}
-                                          </span>
-                                          <div className="absolute right-0 bottom-full mb-1.5 hidden group-hover:block w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-center">
-                                            <p className="font-bold text-primary mb-0.5 uppercase">Hiệu suất cộng thêm</p>
-                                            Thể hiện năng lực của <strong>{pair.player2Name}</strong> tăng/giảm bao nhiêu % khi đánh cùng đồng đội này so với điểm phong độ trung bình.
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02] relative group">
-                                        <span className="text-white/40 font-bold uppercase tracking-wider">Tương quan</span>
-                                        <span className="text-primary font-black uppercase tracking-wider cursor-help border-b border-dashed border-primary/40 pb-0.5 select-none">{synergy.relationshipLabel}</span>
-                                        <div className="absolute left-0 bottom-full mb-1.5 hidden group-hover:block w-56 bg-slate-950 border border-white/10 p-2.5 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-left">
-                                          <p className="font-bold text-primary mb-1 uppercase">{synergy.relationshipLabel}</p>
-                                          {synergy.relationshipDesc}
-                                          <div className="mt-1 text-[9px] text-white/40 border-t border-white/5 pt-1 font-bold">
-                                            * Song kiếm: lệch ELO &lt; 150. Gánh tạ: lệch ELO &ge; 150.
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      <div className="flex justify-between items-center py-1.5">
-                                        <span className="text-white/40 font-bold uppercase tracking-wider">ELO Trung bình</span>
-                                        <span className="text-white font-black">{Math.round(synergy.avgElo)} ELO</span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="space-y-3">
-                                    <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05] relative group">
-                                      <span className="text-sm shrink-0">{chem.icon}</span>
-                                      <h4 className="text-xs font-black text-white uppercase tracking-wider truncate cursor-help border-b border-dashed border-white/20 pb-0.5 select-none">
-                                        Phong cách: <span className={cn("normal-case ml-1 font-bold", chem.colorClass.split(" ")[0])}>{chem.label}</span>
-                                      </h4>
-                                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-64 bg-slate-950 border border-white/10 p-2.5 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-left">
-                                        <p className="font-bold text-primary mb-1 uppercase">PHONG CÁCH CHIẾN THUẬT</p>
-                                        Phân loại lối chơi của cặp đôi dựa trên điểm số thực tế:
-                                        <ul className="list-disc list-inside mt-1 space-y-1">
-                                          <li><strong>⚡ Hủy diệt:</strong> Tấn công mạnh mẽ, trung bình ghi &ge; 9.8 điểm.</li>
-                                          <li><strong>🛡️ Lá chắn Thép:</strong> Phòng ngự vững chãi, chỉ lọt &le; 6.8 điểm.</li>
-                                          <li><strong>🔥 Kịch tính:</strong> Trận sát nút (&le; 2 điểm) &ge; 40%.</li>
-                                          <li><strong>⚔️ Vua Giằng co:</strong> Từng kéo đối thủ vào chạm deuce (&gt; 11).</li>
-                                        </ul>
-                                      </div>
-                                    </div>
-
-                                    <div className="pt-0.5">
-                                      <p className="text-xs text-white/60 leading-relaxed bg-white/[0.02] p-3 rounded-xl border border-white/[0.03] min-h-[76px] flex items-center">
-                                        {chem.desc}
-                                      </p>
-                                    </div>
-                                  </div>
-
-                                  <div className="space-y-3">
-                                    <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05]">
-                                      <History className="w-4 h-4 text-primary" />
-                                      <h4 className="text-xs font-black text-white uppercase tracking-wider">5 trận chung gần nhất</h4>
-                                    </div>
-
-                                    <div className="space-y-1">
-                                      {recent5.length > 0 ? (
-                                        recent5.map((match, idx) => {
-                                          const isWin = [match.win_1, match.win_2].includes(pair.player1Id) || [match.win_1, match.win_2].includes(pair.player2Id);
-                                          const scoreStr = isWin 
-                                            ? `${match.win_score}-${match.lose_score}` 
-                                            : `${match.lose_score}-${match.win_score}`;
-                                          
-                                          const w1 = match.win_1 || '';
-                                          const w2 = match.win_2 || '';
-                                          const l1 = match.lose_1 || '';
-                                          const l2 = match.lose_2 || '';
-                                          
-                                          let opponents: string[] = [];
-                                          if (isWin) {
-                                            opponents = [getPlayerName(l1)];
-                                            if (l2 && !isGuestId(l2)) opponents.push(getPlayerName(l2));
-                                          } else {
-                                            opponents = [getPlayerName(w1)];
-                                            if (w2 && !isGuestId(w2)) opponents.push(getPlayerName(w2));
-                                          }
-                                          const opponentsStr = opponents.join(' & ');
-
-                                          return (
-                                            <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-white/[0.02] last:border-0">
-                                              <div className="flex items-center gap-2 min-w-0">
-                                                <span className={cn(
-                                                  "w-4.5 h-4.5 inline-flex items-center justify-center rounded text-[9px] font-black shrink-0",
-                                                  isWin ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
-                                                )}>
-                                                  {isWin ? 'W' : 'L'}
-                                                </span>
-                                                <span className="text-white font-bold tabular-nums shrink-0">{scoreStr}</span>
-                                                <span className="text-white/45 truncate">vs {opponentsStr}</span>
-                                              </div>
-                                              {match.date && (
-                                                <span className="text-[9px] text-white/20 shrink-0 ml-2 font-mono">
-                                                  {new Date(match.date).toLocaleDateString('vi-VN', { month: '2-digit', day: '2-digit' })}
-                                                </span>
-                                              )}
-                                            </div>
-                                          );
-                                        })
-                                      ) : (
-                                        <div className="text-center text-white/30 text-xs py-4 italic">Chưa có trận nào được ghi nhận.</div>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                </div>
-                              </div>
-                            );
-                          })()}
+                          <div className="p-3 sm:p-4 bg-slate-900/40 rounded-xl border border-white/[0.03] m-1 animate-in fade-in slide-in-from-top-4 duration-300">
+                            <ChemistryStylePanel
+                              pair={pair}
+                              players={players}
+                              metrics={metrics}
+                              partnerEdges={partnerEdges}
+                            />
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -1474,6 +1494,81 @@ function PairZone({
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Bản Mobile */}
+        <div className="block sm:hidden space-y-3" onTouchStart={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
+          {rankedPairs.map((pair, index) => {
+            const diff = pair.wins - pair.losses;
+            const pairKey = `${pair.player1Id}_${pair.player2Id}`;
+            const isExpanded = expandedPairKey === pairKey;
+            return (
+              <div
+                key={pairKey}
+                className={cn(
+                  "border border-white/5 rounded-xl bg-slate-900/40 p-3 transition-all duration-200 select-none",
+                  isExpanded && "bg-white/[0.015]"
+                )}
+              >
+                {/* Dòng 1: Hạng + Tên và Mũi tên bên trái; Điểm tích lũy bên phải */}
+                <div 
+                  className="flex items-center justify-between cursor-pointer"
+                  onClick={() => setExpandedPairKey(isExpanded ? null : pairKey)}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={cn(
+                      "text-[8px] transition-transform duration-200 text-white/20 shrink-0",
+                      isExpanded && "rotate-90 text-primary"
+                    )}>
+                      ▶
+                    </span>
+                    <span className={cn(
+                      "w-5 h-5 rounded-full inline-flex items-center justify-center text-[10px] font-black shrink-0",
+                      index === 0 ? "bg-amber-500/20 text-amber-400" :
+                      index === 1 ? "bg-slate-400/20 text-slate-300" :
+                      index === 2 ? "bg-orange-600/20 text-orange-400" :
+                      "bg-white/5 text-white/40"
+                    )}>
+                      {index + 1}
+                    </span>
+                    <span className="text-xs font-black text-white truncate max-w-[170px]">
+                      <ResponsivePlayerName fullName={pair.player1Name} players={players} /> & <ResponsivePlayerName fullName={pair.player2Name} players={players} />
+                    </span>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-xs font-black text-primary italic tabular-nums">{pair.points}đ</span>
+                  </div>
+                </div>
+
+                {/* Dòng 2: Thông số phụ */}
+                <div 
+                  className="flex items-center justify-between mt-2 pt-2 border-t border-white/[0.02] text-[10px] text-white/40 font-bold cursor-pointer"
+                  onClick={() => setExpandedPairKey(isExpanded ? null : pairKey)}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span>Trận: <strong className="text-white/70 tabular-nums">{pair.total}</strong></span>
+                    <span>Hiệu số: <strong className={cn("tabular-nums", diff > 0 ? "text-emerald-400" : diff < 0 ? "text-red-400" : "text-white/45")}>{diff > 0 ? `+${diff}` : diff}</strong></span>
+                    <span>Thắng: <strong className="text-white/70 tabular-nums">{pair.winRate.toFixed(0)}%</strong></span>
+                  </div>
+                  <div>
+                    <span>Công: <strong className="text-white/70 tabular-nums">{pair.avgPointsFor.toFixed(1)}đ</strong> | Thủ: <strong className="text-white/70 tabular-nums">{pair.avgConceded.toFixed(1)}đ</strong></span>
+                  </div>
+                </div>
+
+                {/* Panel mở rộng */}
+                {isExpanded && (
+                  <div className="mt-3 pt-3 border-t border-white/5 bg-slate-950/25 p-2 rounded-lg animate-in fade-in slide-in-from-top-4 duration-300">
+                    <ChemistryStylePanel 
+                      pair={pair} 
+                      players={players} 
+                      metrics={metrics} 
+                      partnerEdges={partnerEdges} 
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </BentoCard>
     </div>
