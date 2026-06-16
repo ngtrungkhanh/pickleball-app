@@ -49,7 +49,7 @@ export function SummaryGrid({
       {cards.map(({ Icon, color, label, big, unit }, i) => (
         <div
           key={i}
-          className={`relative group overflow-hidden rounded-xl bg-[#192844]/95 border border-slate-400/25 px-3 py-3 ${compact ? '' : 'sm:px-4 sm:py-3'} shadow-[0_10px_28px_rgba(0,0,0,0.20)] transition-all hover:-translate-y-0.5 hover:bg-[#1d2d4b] hover:border-slate-300/35 hover:shadow-xl`}
+          className={`relative group overflow-hidden rounded-xl bg-[#192844]/95 border border-slate-400/25 px-3 py-3 ${compact ? '' : 'sm:px-4 sm:py-3'} shadow-[0_10px_28px_rgba(0,0,0,0.20)] hover-glow-card`}
         >
           <div
             className="absolute inset-0 opacity-[0.12] pointer-events-none transition-opacity group-hover:opacity-[0.18]"
@@ -58,7 +58,7 @@ export function SummaryGrid({
 
           <div className={`relative z-10 flex flex-col items-start justify-between gap-3 ${compact ? 'min-h-[72px]' : 'min-h-[82px] 3xl:min-h-[68px] 3xl:flex-row 3xl:items-center'}`}>
             <div className={`flex items-center gap-2 min-w-0 w-full ${compact ? '' : '3xl:w-auto'}`}>
-              <div className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.08] border border-white/[0.12]">
+              <div className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.08] border border-white/[0.12] transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6">
                 <Icon className="w-3.5 h-3.5" style={{ color }} />
               </div>
               <span className={`min-w-0 truncate text-[10px] ${compact ? 'tracking-wide' : 'min-[380px]:text-xs sm:text-sm tracking-wide 3xl:tracking-widest'} font-black text-slate-300 uppercase`}>

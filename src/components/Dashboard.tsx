@@ -18,6 +18,7 @@ import { getGlobalSelectedSeason, setGlobalSelectedSeason, isGlobalSeasonSet } f
 import { PreviousChampionTitleLine } from '@/components/PreviousChampionTitleLine';
 import { buildHallOfFameEntries, formatHallDate, getLatestHallOfFameEntry } from '@/lib/hall-of-fame';
 import { deleteMatchAction } from '@/app/actions';
+import { Logo } from '@/components/Logo';
 
 const INSIGHT_SELECTION_STATE_KEY = 'pickleball.analysis.insightSelection.v1';
 
@@ -650,17 +651,20 @@ export default function Dashboard({
             }
           `}</style>
           <div className="mx-auto grid max-w-[1680px] grid-cols-[minmax(210px,auto)_minmax(0,1fr)_auto] items-center gap-4 px-4 py-2.5">
-            <div className="min-w-0">
-              <div className="flex items-baseline gap-2">
-                <h1 className="truncate !text-xl xl:!text-2xl !leading-none font-black tracking-tight text-white drop-shadow-[0_0_18px_rgba(34,197,94,0.20)]">
-                  Pickleball <span className="text-primary">Ranking</span>
-                </h1>
-                <span className="hidden rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-primary xl:inline-block">
-                  live
-                </span>
-              </div>
-              <div className="mt-1 truncate text-[10px] font-bold uppercase tracking-[0.24em] text-white/35">
-                {seasonLabel} · {viewedMatches.length} trận
+            <div className="min-w-0 flex items-center gap-2.5">
+              <Logo className="w-8 h-8 text-primary animate-pulse-subtle shrink-0" />
+              <div className="min-w-0">
+                <div className="flex items-baseline gap-2">
+                  <h1 className="truncate !text-xl xl:!text-2xl !leading-none font-black tracking-tight text-white drop-shadow-[0_0_18px_rgba(34,197,94,0.20)]">
+                    Pickleball <span className="text-primary">Ranking</span>
+                  </h1>
+                  <span className="hidden rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-primary xl:inline-block">
+                    live
+                  </span>
+                </div>
+                <div className="mt-1 truncate text-[10px] font-bold uppercase tracking-[0.24em] text-white/35">
+                  {seasonLabel} · {viewedMatches.length} trận
+                </div>
               </div>
             </div>
 
@@ -755,7 +759,7 @@ export default function Dashboard({
             {previousChampion && (
               <Link
                 href="/analysis?zone=hall"
-                className="group block overflow-hidden rounded-2xl border border-amber-300/24 bg-slate-950/35 p-3 shadow-[0_14px_38px_rgba(0,0,0,0.20)] transition hover:border-amber-200/45 hover:bg-amber-300/[0.07]"
+                className="group block overflow-hidden rounded-2xl border border-amber-300/24 bg-slate-950/35 p-3 shadow-[0_14px_38px_rgba(0,0,0,0.20)] champion-glow-card"
               >
                 <div className="grid grid-cols-[82px_minmax(0,1fr)] gap-3">
                   <div className="relative aspect-[3/4] overflow-hidden rounded-xl border border-amber-200/35 bg-slate-950/85 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">

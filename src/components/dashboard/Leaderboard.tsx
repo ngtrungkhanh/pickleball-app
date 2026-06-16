@@ -497,7 +497,11 @@ export function Leaderboard({
                     onClick={() => toggle(p.id)}
                     className={cn(
                       'border-t border-slate-500/18 cursor-pointer transition-all group',
-                      exp || closing ? 'bg-emerald-400/[0.075]' : 'bg-[#17243a]/55 hover:bg-slate-700/65',
+                      exp || closing 
+                        ? 'bg-emerald-400/[0.075]' 
+                        : i === 0 
+                          ? 'rank-1-row' 
+                          : 'bg-[#17243a]/55 hover:bg-slate-700/65',
                     )}
                   >
                     <td className="py-3 px-4 text-center"><RankBadge i={i} /></td>
@@ -544,7 +548,14 @@ export function Leaderboard({
             <div key={p.id} className="border-t border-slate-500/20 first:border-t-0">
               <button
                 onClick={() => toggle(p.id)}
-                className={cn('w-full flex items-center gap-3 px-4 py-4 text-left transition-all', exp || closing ? 'bg-primary/[0.09]' : 'active:bg-white/[0.05]')}
+                className={cn(
+                  'w-full flex items-center gap-3 px-4 py-4 text-left transition-all',
+                  exp || closing 
+                    ? 'bg-primary/[0.09]' 
+                    : i === 0 
+                      ? 'bg-gradient-to-r from-amber-400/[0.06] to-transparent' 
+                      : 'active:bg-white/[0.05]'
+                )}
               >
                 <div className="w-8 shrink-0 flex justify-center"><RankBadge i={i} /></div>
                 <div className="flex-1 min-w-0">
