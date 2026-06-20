@@ -150,15 +150,15 @@ export function AnalysisCenter({
   const config = Object.keys(sharedData.config).length > 0 ? sharedData.config : initialConfig;
   const currentActiveSeason = config.active_season || activeSeason;
   const [activeNav, setActiveNav] = useState(navItems[0].id);
-  const [prevNav, setPrevNav] = useState(navItems[0].id);
   const [direction, setDirection] = useState(0);
 
-  if (activeNav !== prevNav) {
-    const prevIdx = navItems.findIndex(i => i.id === prevNav);
-    const activeIdx = navItems.findIndex(i => i.id === activeNav);
+  const handleTabChange = (newTabId: string) => {
+    if (newTabId === activeNav) return;
+    const prevIdx = navItems.findIndex(i => i.id === activeNav);
+    const activeIdx = navItems.findIndex(i => i.id === newTabId);
     setDirection(activeIdx > prevIdx ? 1 : -1);
-    setPrevNav(activeNav);
-  }
+    setActiveNav(newTabId);
+  };
   const [matrixTab, setMatrixTab] = useState('partner');
   const [insightSeed, setInsightSeed] = useState<number | null>(null);
   const [insightSelectionState, setInsightSelectionState] = useState<InsightSelectionState | null>(null);
@@ -277,11 +277,12 @@ export function AnalysisCenter({
     const id = window.setTimeout(() => {
       const zone = new URLSearchParams(window.location.search).get('zone');
       if (zone && navItems.some(item => item.id === zone)) {
-        setActiveNav(zone);
+        handleTabChange(zone);
       }
     }, 0);
 
     return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -313,11 +314,11 @@ export function AnalysisCenter({
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
       const idx = navItems.findIndex(i => i.id === activeNav);
-      if (idx !== -1 && idx < navItems.length - 1) setActiveNav(navItems[idx + 1].id);
+      if (idx !== -1 && idx < navItems.length - 1) handleTabChange(navItems[idx + 1].id);
     },
     onSwipedRight: () => {
       const idx = navItems.findIndex(i => i.id === activeNav);
-      if (idx > 0) setActiveNav(navItems[idx - 1].id);
+      if (idx > 0) handleTabChange(navItems[idx - 1].id);
     },
     preventScrollOnSwipe: false,
     trackMouse: false
@@ -364,7 +365,7 @@ export function AnalysisCenter({
 
               <select
                 value={activeNav}
-                onChange={e => setActiveNav(e.target.value)}
+                onChange={e => handleTabChange(e.target.value)}
                 className="h-8 w-full rounded-lg bg-slate-900 border border-white/[0.08] px-3 text-sm font-black uppercase tracking-widest text-white/70 md:hidden"
               >
                 {navItems.map(item => (
@@ -381,7 +382,7 @@ export function AnalysisCenter({
                       whileTap={{ scale: 0.95 }}
                       key={item.id}
                       type="button"
-                      onClick={() => setActiveNav(item.id)}
+                      onClick={() => handleTabChange(item.id)}
                       className={cn(
                         "inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[11px] font-black uppercase tracking-widest transition-all",
                         isActive

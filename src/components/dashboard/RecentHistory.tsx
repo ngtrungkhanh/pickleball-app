@@ -171,65 +171,76 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
   const currentDragOffsetRef = useRef(0);
   const [isDraggedClose, setIsDraggedClose] = useState(false);
 
-  // Mouse drag handlers (PC)
-  const handleWindowMouseMove = (e: MouseEvent) => {
-    if (!isDraggingRef.current) return;
-    const currentY = e.clientY;
-    const deltaY = currentY - dragStartYRef.current;
-    const offset = Math.max(0, deltaY);
-    currentDragOffsetRef.current = offset;
+  // Refs to hold stable event listener references to prevent memory leaks during re-renders
+  const mouseMoveListenerRef = useRef<(e: MouseEvent) => void>(undefined);
+  const mouseUpListenerRef = useRef<() => void>(undefined);
 
-    const progress = Math.max(0, 1 - offset / 350);
-    const blurVal = 12 * progress;
+  // Assign fresh handlers to refs after render has completed to comply with react-hooks/refs rule
+  useEffect(() => {
+    mouseMoveListenerRef.current = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const currentY = e.clientY;
+      const deltaY = currentY - dragStartYRef.current;
+      const offset = Math.max(0, deltaY);
+      currentDragOffsetRef.current = offset;
 
-    if (panelRef.current) {
-      panelRef.current.style.transform = `translate3d(0, ${offset}px, 0)`;
-    }
-    if (backdropRef.current) {
-      backdropRef.current.style.opacity = progress.toString();
-      backdropRef.current.style.setProperty('backdrop-filter', `blur(${blurVal}px)`);
-      backdropRef.current.style.setProperty('-webkit-backdrop-filter', `blur(${blurVal}px)`);
-    }
-  };
+      const progress = Math.max(0, 1 - offset / 350);
+      const blurVal = 12 * progress;
 
-  const handleWindowMouseUp = () => {
-    if (!isDraggingRef.current) return;
-    isDraggingRef.current = false;
-    window.removeEventListener('mousemove', handleWindowMouseMove);
-    window.removeEventListener('mouseup', handleWindowMouseUp);
-
-    const threshold = 80;
-    const offset = currentDragOffsetRef.current;
-
-    if (offset > threshold) {
-      setIsClosing(true);
-      setIsDraggedClose(true);
       if (panelRef.current) {
-        panelRef.current.style.transition = 'transform 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
-        panelRef.current.style.transform = 'translate3d(0, 100vh, 0)';
+        panelRef.current.style.transform = `translate3d(0, ${offset}px, 0)`;
       }
       if (backdropRef.current) {
-        backdropRef.current.style.transition = 'opacity 240ms cubic-bezier(0.32, 0.94, 0.6, 1), backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1), -webkit-backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
-        backdropRef.current.style.opacity = '0';
-        backdropRef.current.style.setProperty('backdrop-filter', 'blur(0px)');
-        backdropRef.current.style.setProperty('-webkit-backdrop-filter', 'blur(0px)');
+        backdropRef.current.style.opacity = progress.toString();
+        backdropRef.current.style.setProperty('backdrop-filter', `blur(${blurVal}px)`);
+        backdropRef.current.style.setProperty('-webkit-backdrop-filter', `blur(${blurVal}px)`);
       }
-      window.setTimeout(() => {
-        onClose();
-      }, 240);
-    } else {
-      if (panelRef.current) {
-        panelRef.current.style.transition = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)';
-        panelRef.current.style.transform = 'translate3d(0, 0, 0)';
+    };
+
+    mouseUpListenerRef.current = () => {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      
+      if (mouseMoveListenerRef.current) {
+        window.removeEventListener('mousemove', mouseMoveListenerRef.current);
       }
-      if (backdropRef.current) {
-        backdropRef.current.style.transition = 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1), backdrop-filter 300ms cubic-bezier(0.16, 1, 0.3, 1), -webkit-backdrop-filter 300ms cubic-bezier(0.16, 1, 0.3, 1)';
-        backdropRef.current.style.opacity = '1';
-        backdropRef.current.style.setProperty('backdrop-filter', 'blur(12px)');
-        backdropRef.current.style.setProperty('-webkit-backdrop-filter', 'blur(12px)');
+      if (mouseUpListenerRef.current) {
+        window.removeEventListener('mouseup', mouseUpListenerRef.current);
       }
-    }
-  };
+
+      const threshold = 80;
+      const offset = currentDragOffsetRef.current;
+
+      if (offset > threshold) {
+        setIsClosing(true);
+        setIsDraggedClose(true);
+        if (panelRef.current) {
+          panelRef.current.style.transition = 'transform 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+          panelRef.current.style.transform = 'translate3d(0, 100vh, 0)';
+        }
+        if (backdropRef.current) {
+          backdropRef.current.style.transition = 'opacity 240ms cubic-bezier(0.32, 0.94, 0.6, 1), backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1), -webkit-backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+          backdropRef.current.style.opacity = '0';
+          backdropRef.current.style.setProperty('backdrop-filter', 'blur(0px)');
+          backdropRef.current.style.setProperty('-webkit-backdrop-filter', 'blur(0px)');
+        }
+        window.setTimeout(() => {
+          onClose();
+        }, 240);
+      } else {
+        if (panelRef.current) {
+          panelRef.current.style.transition = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+          panelRef.current.style.transform = 'translate3d(0, 0, 0)';
+        }
+        if (backdropRef.current) {
+          backdropRef.current.style.transition = 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1), backdrop-filter 300ms cubic-bezier(0.16, 1, 0.3, 1), -webkit-backdrop-filter 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+          backdropRef.current.style.opacity = '1';
+          backdropRef.current.style.setProperty('backdrop-filter', 'blur(12px)');
+          backdropRef.current.style.setProperty('-webkit-backdrop-filter', 'blur(12px)');
+        }
+      }
+    };
+  });
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -249,8 +260,10 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
       backdropRef.current.style.transition = 'none';
     }
 
-    window.addEventListener('mousemove', handleWindowMouseMove);
-    window.addEventListener('mouseup', handleWindowMouseUp);
+    if (mouseMoveListenerRef.current && mouseUpListenerRef.current) {
+      window.addEventListener('mousemove', mouseMoveListenerRef.current);
+      window.addEventListener('mouseup', mouseUpListenerRef.current);
+    }
   };
 
   // Touch drag handlers (Mobile)
@@ -335,10 +348,13 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
 
   useEffect(() => {
     return () => {
-      window.removeEventListener('mousemove', handleWindowMouseMove);
-      window.removeEventListener('mouseup', handleWindowMouseUp);
+      if (mouseMoveListenerRef.current) {
+        window.removeEventListener('mousemove', mouseMoveListenerRef.current);
+      }
+      if (mouseUpListenerRef.current) {
+        window.removeEventListener('mouseup', mouseUpListenerRef.current);
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const playerOptions = players.filter(p => p.active !== false && !p.deleted_at);
