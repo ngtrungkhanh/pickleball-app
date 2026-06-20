@@ -4,6 +4,8 @@ File này chỉ giữ các thay đổi đáng chú ý. Chi tiết theo commit xe
 
 ## Chưa phát hành
 
+- Tối ưu hóa cử chỉ kéo vuốt modal lịch sử trận đấu (giảm ngưỡng kéo xuống 80px, hỗ trợ kéo chuột trên PC, làm mờ dần backdrop động tương ứng với khoảng cách kéo).
+- Tích hợp hiệu ứng trượt ngang (slide-x & fade) mượt mà khi chuyển đổi các tab ở trang Phân tích (/analysis).
 - Gom tài liệu về một entrypoint `AGENTS.md` và hai tài liệu chuyên sâu.
 - Bỏ prompt bàn giao, context snapshot, kế hoạch cũ và bảng insight trùng code.
 - Chuyển danh sách loại insight cho audit script sang nguồn sự thật trong
