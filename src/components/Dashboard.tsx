@@ -755,7 +755,7 @@ export default function Dashboard({
             {previousChampion && (
               <Link
                 href="/analysis?zone=hall"
-                className="group block overflow-hidden rounded-2xl border border-amber-300/24 bg-slate-950/35 p-3 shadow-[0_14px_38px_rgba(0,0,0,0.20)] transition hover:border-amber-200/45 hover:bg-amber-300/[0.07]"
+                className="group block overflow-hidden rounded-2xl border border-amber-300/24 bg-slate-950/35 p-3 shadow-[0_14px_38px_rgba(0,0,0,0.20)] champion-glow-card"
               >
                 <div className="grid grid-cols-[82px_minmax(0,1fr)] gap-3">
                   <div className="relative aspect-[3/4] overflow-hidden rounded-xl border border-amber-200/35 bg-slate-950/85 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">

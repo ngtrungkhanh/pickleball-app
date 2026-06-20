@@ -4,6 +4,30 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Handshake, ShieldCheck, Skull, Sparkles, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { calculateLeaderboard, getPlayerAdvancedStats } from '@/lib/stats';
+import { motion } from 'framer-motion';
+
+const containerVariants = {
+  hidden: { opacity: 1 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.04,
+    },
+  },
+};
+
+const rowVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: 'spring' as const,
+      damping: 25,
+      stiffness: 220,
+    },
+  },
+};
 
 type Player = {
   id: string;
@@ -483,7 +507,12 @@ export function Leaderboard({
               <th className="py-3 px-4 text-right text-xs 2xl:text-sm font-black uppercase tracking-widest text-amber-300 pr-8">Phạt</th>
             </tr>
           </thead>
-          <tbody>
+          <motion.tbody
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            key={currentSeason ?? 'all'}
+          >
             {board.map((p, i) => {
               const exp = expandedId === p.id;
               const closing = closingIds.has(p.id);
@@ -493,14 +522,19 @@ export function Leaderboard({
 
               return (
                 <React.Fragment key={p.id}>
-                  <tr
+                  <motion.tr
+                    variants={rowVariants}
                     onClick={() => toggle(p.id)}
                     className={cn(
                       'border-t border-slate-500/18 cursor-pointer transition-all group',
-                      exp || closing ? 'bg-emerald-400/[0.075]' : 'bg-[#17243a]/55 hover:bg-slate-700/65',
+                      exp || closing 
+                        ? 'bg-emerald-400/[0.075]' 
+                        : i === 0 
+                          ? 'rank-1-row' 
+                          : 'bg-[#17243a]/55 hover:bg-slate-700/65',
                     )}
                   >
-                    <td className="py-3 px-4 text-center"><RankBadge i={i} /></td>
+                    <td className={cn("py-3 px-4 text-center", i === 0 && "rank-1-first-td")}><RankBadge i={i} /></td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
                         <span className={cn('font-black text-base 2xl:text-lg truncate transition-all', i === 0 ? 'text-amber-400' : exp ? 'text-primary' : 'text-white group-hover:text-white')}>
@@ -516,7 +550,7 @@ export function Leaderboard({
                     <td className="py-3 px-4 text-right pr-8 font-black text-lg text-amber-400 tabular-nums">
                       {formatMoney(p.money)}
                     </td>
-                  </tr>
+                  </motion.tr>
                   {showDetail && (
                     <tr key={`${p.id}-detail`} className="bg-[#101c2f]">
                       <td colSpan={7} className="p-0 border-t border-slate-500/20">
@@ -527,11 +561,17 @@ export function Leaderboard({
                 </React.Fragment>
               );
             })}
-          </tbody>
+          </motion.tbody>
         </table>
       </div>
 
-      <div className="sm:hidden">
+      <motion.div 
+        className="sm:hidden"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        key={(currentSeason ?? 'all') + '-mobile'}
+      >
         {board.map((p, i) => {
           const exp = expandedId === p.id;
           const closing = closingIds.has(p.id);
@@ -541,10 +581,21 @@ export function Leaderboard({
           const rateColor = rate >= 60 ? '#22c55e' : rate >= 40 ? '#94a3b8' : '#f87171';
 
           return (
-            <div key={p.id} className="border-t border-slate-500/20 first:border-t-0">
+            <motion.div 
+              variants={rowVariants}
+              key={p.id} 
+              className="border-t border-slate-500/20 first:border-t-0"
+            >
               <button
                 onClick={() => toggle(p.id)}
-                className={cn('w-full flex items-center gap-3 px-4 py-4 text-left transition-all', exp || closing ? 'bg-primary/[0.09]' : 'active:bg-white/[0.05]')}
+                className={cn(
+                  'w-full flex items-center gap-3 px-4 py-4 text-left transition-all',
+                  exp || closing 
+                    ? 'bg-primary/[0.09]' 
+                    : i === 0 
+                      ? 'bg-gradient-to-r from-amber-400/[0.06] to-transparent shimmer-row' 
+                      : 'active:bg-white/[0.05]'
+                )}
               >
                 <div className="w-8 shrink-0 flex justify-center"><RankBadge i={i} /></div>
                 <div className="flex-1 min-w-0">
@@ -563,10 +614,10 @@ export function Leaderboard({
                 </div>
               </button>
               {showDetail && <DetailPanel adv={adv} closing={closing} />}
-            </div>
+            </motion.div>
           );
         })}
-      </div>
+      </motion.div>
     </div>
   );
 }

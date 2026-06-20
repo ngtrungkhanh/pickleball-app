@@ -45,36 +45,36 @@ export function SummaryGrid({
   ];
 
   return (
-    <div className={`grid grid-cols-2 ${compact ? '' : 'lg:grid-cols-4'} gap-2 sm:gap-3 w-full`}>
+    <div className={`grid grid-cols-2 ${compact ? '' : 'lg:grid-cols-4'} gap-2 sm:gap-3 w-full pt-1.5 pb-1`}>
       {cards.map(({ Icon, color, label, subLabel, big, unit }, i) => {
         const hasSubLabel = Boolean(subLabel);
 
         return (
-        <div
-          key={i}
-          className={`relative group overflow-hidden rounded-xl bg-[#192844]/95 border border-slate-400/25 px-3 py-3 ${compact ? '' : 'sm:px-4 sm:py-3'} shadow-[0_10px_28px_rgba(0,0,0,0.20)] transition-all hover:-translate-y-0.5 hover:bg-[#1d2d4b] hover:border-slate-300/35 hover:shadow-xl`}
-        >
           <div
-            className="absolute inset-0 opacity-[0.12] pointer-events-none transition-opacity group-hover:opacity-[0.18]"
-            style={{ background: `radial-gradient(circle at 50% 0%, ${color}, transparent 80%)` }}
-          />
+            key={i}
+            className={`relative group rounded-xl bg-[#192844]/95 border border-slate-400/25 px-3 py-3 ${compact ? '' : 'sm:px-4 sm:py-3'} shadow-[0_10px_28px_rgba(0,0,0,0.20)] hover-glow-card`}
+          >
+            <div
+              className="absolute inset-0 opacity-[0.12] pointer-events-none transition-opacity group-hover:opacity-[0.18] rounded-xl overflow-hidden"
+              style={{ background: `radial-gradient(circle at 50% 0%, ${color}, transparent 80%)` }}
+            />
 
-          <div className={`relative z-10 flex flex-col items-start justify-between ${hasSubLabel ? 'gap-2' : 'gap-3'} ${compact ? 'min-h-[72px]' : hasSubLabel ? 'min-h-[88px]' : 'min-h-[82px] 3xl:min-h-[68px] 3xl:flex-row 3xl:items-center'}`}>
-            <div className={`flex items-center gap-2 min-w-0 w-full ${compact ? '' : '3xl:w-auto'}`}>
-              <div className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.08] border border-white/[0.12]">
-                <Icon className="w-3.5 h-3.5" style={{ color }} />
-              </div>
-              <div className="min-w-0">
-                <span className={`block min-w-0 truncate text-[10px] ${compact ? 'tracking-wide' : 'min-[380px]:text-xs sm:text-sm tracking-wide 3xl:tracking-widest'} font-black text-slate-300 uppercase`}>
-                  {label}
-                </span>
-                {subLabel && (
-                  <span className="mt-0.5 block min-w-0 truncate text-[11px] font-bold text-slate-400 sm:text-xs">
-                    {subLabel}
+            <div className={`relative z-10 flex flex-col items-start justify-between ${hasSubLabel ? 'gap-2' : 'gap-3'} ${compact ? 'min-h-[72px]' : hasSubLabel ? 'min-h-[88px]' : 'min-h-[82px] 3xl:min-h-[68px] 3xl:flex-row 3xl:items-center'}`}>
+              <div className={`flex items-center gap-2 min-w-0 w-full ${compact ? '' : '3xl:w-auto'}`}>
+                <div className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.08] border border-white/[0.12] transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6">
+                  <Icon className="w-3.5 h-3.5" style={{ color }} />
+                </div>
+                <div className="min-w-0">
+                  <span className={`block min-w-0 truncate text-[10px] ${compact ? 'tracking-wide' : 'min-[380px]:text-xs sm:text-sm tracking-wide 3xl:tracking-widest'} font-black text-slate-300 uppercase`}>
+                    {label}
                   </span>
-                )}
+                  {subLabel && (
+                    <span className="mt-0.5 block min-w-0 truncate text-[11px] font-bold text-slate-400 sm:text-xs">
+                      {subLabel}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
 
               <div className={`flex items-baseline justify-start gap-1.5 shrink-0 min-w-0 w-full ${compact ? '' : '3xl:justify-end 3xl:w-auto'}`}>
                 <span className={`min-w-0 break-words ${compact ? 'text-2xl' : 'text-xl min-[380px]:text-2xl sm:text-3xl lg:text-3xl 2xl:text-4xl'} font-black text-white leading-none`}>

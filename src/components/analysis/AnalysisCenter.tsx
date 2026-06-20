@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, Fragment, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, RefreshCw, Database,
@@ -150,6 +150,15 @@ export function AnalysisCenter({
   const config = Object.keys(sharedData.config).length > 0 ? sharedData.config : initialConfig;
   const currentActiveSeason = config.active_season || activeSeason;
   const [activeNav, setActiveNav] = useState(navItems[0].id);
+  const [direction, setDirection] = useState(0);
+
+  const handleTabChange = (newTabId: string) => {
+    if (newTabId === activeNav) return;
+    const prevIdx = navItems.findIndex(i => i.id === activeNav);
+    const activeIdx = navItems.findIndex(i => i.id === newTabId);
+    setDirection(activeIdx > prevIdx ? 1 : -1);
+    setActiveNav(newTabId);
+  };
   const [matrixTab, setMatrixTab] = useState('partner');
   const [insightSeed, setInsightSeed] = useState<number | null>(null);
   const [insightSelectionState, setInsightSelectionState] = useState<InsightSelectionState | null>(null);
@@ -268,11 +277,12 @@ export function AnalysisCenter({
     const id = window.setTimeout(() => {
       const zone = new URLSearchParams(window.location.search).get('zone');
       if (zone && navItems.some(item => item.id === zone)) {
-        setActiveNav(zone);
+        handleTabChange(zone);
       }
     }, 0);
 
     return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -304,11 +314,11 @@ export function AnalysisCenter({
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
       const idx = navItems.findIndex(i => i.id === activeNav);
-      if (idx !== -1 && idx < navItems.length - 1) setActiveNav(navItems[idx + 1].id);
+      if (idx !== -1 && idx < navItems.length - 1) handleTabChange(navItems[idx + 1].id);
     },
     onSwipedRight: () => {
       const idx = navItems.findIndex(i => i.id === activeNav);
-      if (idx > 0) setActiveNav(navItems[idx - 1].id);
+      if (idx > 0) handleTabChange(navItems[idx - 1].id);
     },
     preventScrollOnSwipe: false,
     trackMouse: false
@@ -355,7 +365,7 @@ export function AnalysisCenter({
 
               <select
                 value={activeNav}
-                onChange={e => setActiveNav(e.target.value)}
+                onChange={e => handleTabChange(e.target.value)}
                 className="h-8 w-full rounded-lg bg-slate-900 border border-white/[0.08] px-3 text-sm font-black uppercase tracking-widest text-white/70 md:hidden"
               >
                 {navItems.map(item => (
@@ -372,7 +382,7 @@ export function AnalysisCenter({
                       whileTap={{ scale: 0.95 }}
                       key={item.id}
                       type="button"
-                      onClick={() => setActiveNav(item.id)}
+                      onClick={() => handleTabChange(item.id)}
                       className={cn(
                         "inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[11px] font-black uppercase tracking-widest transition-all",
                         isActive
@@ -409,13 +419,29 @@ export function AnalysisCenter({
           </div>
         )}
         
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="wait" custom={direction}>
           <motion.div
             key={activeNav}
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -15 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
+            custom={direction}
+            variants={{
+              enter: (dir: number) => ({
+                x: dir > 0 ? 45 : dir < 0 ? -45 : 0,
+                opacity: 0
+              }),
+              center: {
+                x: 0,
+                opacity: 1
+              },
+              exit: (dir: number) => ({
+                x: dir > 0 ? -45 : dir < 0 ? 45 : 0,
+                opacity: 0
+              })
+            }}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="w-full"
           >
             {/* ZONE 1: Hub (Tổng quan) */}
             {sharedData.hasLocalCache && activeNav === 'hub' && (
@@ -444,6 +470,8 @@ export function AnalysisCenter({
           <PairZone
             matches={rankingMatches}
             players={visiblePlayers}
+            metrics={analysisSnapshot.metrics}
+            partnerEdges={analysisSnapshot.partnerEdges}
           />
         )}
 
@@ -782,8 +810,390 @@ function HubZone({
   );
 }
 
-function PairZone({ matches, players }: { matches: Match[]; players: Player[] }) {
+function getChemistryStyle(avgPointsFor: number, avgConceded: number, total: number, matches: Match[]) {
+  if (total < 4) {
+    return {
+      style: 'Under Construction',
+      label: 'Đang thử nghiệm',
+      icon: '🔧',
+      colorClass: 'text-slate-400 bg-slate-500/10 border-slate-500/20',
+      desc: 'Cặp đôi mới thi đấu ít trận, cần thêm mẫu để phân tích phong cách rõ ràng.'
+    };
+  }
+
+  let closeGames = 0;
+  let deuceGames = 0;
+  matches.forEach(m => {
+    const scoreDiff = Math.abs(Number(m.win_score || 0) - Number(m.lose_score || 0));
+    if (scoreDiff <= 2) closeGames++;
+    if (Math.max(Number(m.win_score || 0), Number(m.lose_score || 0)) > 11) deuceGames++;
+  });
+
+  const closeRate = closeGames / total;
+
+  if (avgPointsFor >= 9.8) {
+    return {
+      style: 'Demolition Duo',
+      label: 'Cặp đôi Hủy diệt',
+      icon: '⚡',
+      colorClass: 'text-amber-400 bg-amber-500/10 border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.15)]',
+      desc: 'Lối chơi siêu tấn công rực lửa. Trung bình ghi điểm cực cao mỗi trận, dồn ép đối thủ liên tục.'
+    };
+  }
+  
+  if (avgConceded <= 6.8) {
+    return {
+      style: 'Iron Wall',
+      label: 'Lá chắn Thép',
+      icon: '🛡️',
+      colorClass: 'text-blue-400 bg-blue-500/10 border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.15)]',
+      desc: 'Lối chơi phòng thủ vững như bàn thạch. Giữ đối thủ ở mức ghi điểm cực thấp, phòng thủ kiên cường.'
+    };
+  }
+
+  if (closeRate >= 0.4) {
+    return {
+      style: 'Drama Kings',
+      label: 'Kịch tính Nghẹt thở',
+      icon: '🔥',
+      colorClass: 'text-red-400 bg-red-500/10 border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.15)]',
+      desc: 'Chuyên gia của các trận đấu nghẹt thở. Hầu hết các trận đấu đều bám đuổi sát nút và giằng co kịch tính.'
+    };
+  }
+
+  if (deuceGames > 0) {
+    return {
+      style: 'Deuce Masters',
+      label: 'Vua Giằng co',
+      icon: '⚔️',
+      colorClass: 'text-purple-400 bg-purple-500/10 border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.15)]',
+      desc: 'Rất có duyên với loạt chạm điểm phụ (deuce). Thường thi đấu bền bỉ và vượt qua áp lực ở thời điểm quyết định.'
+    };
+  }
+
+  return {
+    style: 'Harmonious Combo',
+    label: 'Cân bằng Hài hòa',
+    icon: '⚖️',
+    colorClass: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.15)]',
+    desc: 'Lối chơi công thủ toàn diện, phân phối sức và phối hợp đồng đều ở mọi góc sân.'
+  };
+}
+
+function getEloSynergy(
+  player1Id: string, 
+  player2Id: string, 
+  metrics: Map<string, PlayerMetrics>, 
+  partnerEdges: AnalysisEdge[]
+) {
+  const p1Metric = metrics.get(player1Id);
+  const p2Metric = metrics.get(player2Id);
+  
+  const elo1 = p1Metric?.rating ?? 1200;
+  const elo2 = p2Metric?.rating ?? 1200;
+  
+  const gap = Math.abs(elo1 - elo2);
+  const avgElo = (elo1 + elo2) / 2;
+  
+  const isCarry = gap >= 150;
+  const relationshipLabel = isCarry ? 'Gánh tạ vượt khó' : 'Song kiếm hợp bích';
+  const relationshipDesc = isCarry 
+    ? 'Chênh lệch ELO lớn. Một người sắm vai chủ lực gánh vác, người kia hỗ trợ đắc lực.' 
+    : 'Trình độ ELO tương đồng. Phối hợp nhịp nhàng, chia sẻ nhiệm vụ đồng đều trên sân.';
+
+  // Tìm impact hai chiều từ partnerEdges
+  const edge1_2 = partnerEdges.find(e => e.playerId === player1Id && e.otherId === player2Id);
+  const edge2_1 = partnerEdges.find(e => e.playerId === player2Id && e.otherId === player1Id);
+
+  const impact1 = edge1_2?.impact ?? 0;
+  const impact2 = edge2_1?.impact ?? 0;
+
+  return {
+    elo1,
+    elo2,
+    gap,
+    avgElo,
+    isCarry,
+    relationshipLabel,
+    relationshipDesc,
+    impact1,
+    impact2,
+    p1Name: p1Metric?.name ?? player1Id,
+    p2Name: p2Metric?.name ?? player2Id,
+  };
+}
+
+function ResponsivePlayerName({ fullName, players, className }: { fullName: string; players: Player[]; className?: string }) {
+  const getTinyName = (name: string) => {
+    if (!name) return '--';
+    const parts = name.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    const givenName = parts[parts.length - 1] || name;
+    
+    const normalizedGiven = givenName.toLocaleLowerCase('vi-VN');
+    const hasDuplicateGivenName = players.some(player =>
+      (player?.name || '').replace(/\s+/g, ' ').trim() !== name &&
+      (player?.name || '').split(' ').filter(Boolean).slice(-1)[0]?.toLocaleLowerCase('vi-VN') === normalizedGiven
+    );
+
+    if (!hasDuplicateGivenName) {
+      const chars = Array.from(givenName);
+      return chars.length <= 7 ? givenName : `${chars.slice(0, 4).join('')}...`;
+    }
+
+    const initials = parts
+      .slice(0, -1)
+      .slice(0, 2)
+      .map(part => Array.from(part)[0]?.toLocaleUpperCase('vi-VN'))
+      .filter(Boolean)
+      .join('.');
+
+    const combined = initials ? `${initials}.${givenName}` : givenName;
+    const chars = Array.from(combined);
+    return chars.length <= 9 ? combined : `${chars.slice(0, 6).join('')}...`;
+  };
+
+  const tinyName = getTinyName(fullName);
+  return (
+    <span className={className} title={fullName}>
+      <span className="hidden sm:inline">{fullName}</span>
+      <span className="inline sm:hidden">{tinyName}</span>
+    </span>
+  );
+}
+
+function ChemistryStylePanel({ 
+  pair, 
+  players, 
+  metrics, 
+  partnerEdges 
+}: { 
+  pair: any; 
+  players: Player[]; 
+  metrics: Map<string, PlayerMetrics>; 
+  partnerEdges: AnalysisEdge[]; 
+}) {
+  const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
+  const getPlayerName = (id: string) => players.find(p => p.id === id)?.name || id;
+  const chem = getChemistryStyle(pair.avgPointsFor, pair.avgConceded, pair.total, pair.matches);
+  const synergy = getEloSynergy(pair.player1Id, pair.player2Id, metrics, partnerEdges);
+  const recent5 = pair.matches.slice(0, 5);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6" onClick={() => setActiveTooltip(null)}>
+      {/* Cột 1: Hợp tác ELO */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05]">
+          <Users className="w-4 h-4 text-primary" />
+          <h4 className="text-xs font-black text-white uppercase tracking-wider">Hợp tác ELO</h4>
+        </div>
+
+        <div className="space-y-1 text-xs">
+          <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02]">
+            <span className="text-white/60 font-bold truncate max-w-[100px] sm:max-w-none">
+              <ResponsivePlayerName fullName={pair.player1Name} players={players} />
+            </span>
+            <div className="flex items-center gap-2 font-mono relative group">
+              <span className="text-white">{Math.round(synergy.elo1)} ELO</span>
+              <span 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveTooltip(activeTooltip === 'elo1' ? null : 'elo1');
+                }}
+                className={cn(
+                  "font-black px-1.5 py-0.5 rounded text-[10px] tracking-tight cursor-help border select-none",
+                  synergy.impact1 > 0 ? "bg-green-500/10 text-green-400 border-green-500/20" : 
+                  synergy.impact1 < 0 ? "bg-red-500/10 text-red-400 border-red-500/20" : 
+                  "bg-white/5 text-white/40 border-white/10"
+                )}
+              >
+                {synergy.impact1 > 0 ? `+${synergy.impact1}%` : synergy.impact1 < 0 ? `${synergy.impact1}%` : 'Ổn định'}
+              </span>
+              <div className={cn(
+                "absolute right-0 bottom-full mb-1.5 w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-center",
+                activeTooltip === 'elo1' ? "block" : "hidden group-hover:block"
+              )}>
+                <p className="font-bold text-primary mb-0.5 uppercase">Hiệu suất cộng thêm</p>
+                Thể hiện năng lực của <strong>{pair.player1Name}</strong> tăng/giảm bao nhiêu % khi đánh cùng đồng đội này so với điểm phong độ trung bình.
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center py-1.5 border-b border-white/[0.02]">
+            <span className="text-white/60 font-bold truncate max-w-[100px] sm:max-w-none">
+              <ResponsivePlayerName fullName={pair.player2Name} players={players} />
+            </span>
+            <div className="flex items-center gap-2 font-mono relative group">
+              <span className="text-white">{Math.round(synergy.elo2)} ELO</span>
+              <span 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveTooltip(activeTooltip === 'elo2' ? null : 'elo2');
+                }}
+                className={cn(
+                  "font-black px-1.5 py-0.5 rounded text-[10px] tracking-tight cursor-help border select-none",
+                  synergy.impact2 > 0 ? "bg-green-500/10 text-green-400 border-green-500/20" : 
+                  synergy.impact2 < 0 ? "bg-red-500/10 text-red-400 border-red-500/20" : 
+                  "bg-white/5 text-white/40 border-white/10"
+                )}
+              >
+                {synergy.impact2 > 0 ? `+${synergy.impact2}%` : synergy.impact2 < 0 ? `${synergy.impact2}%` : 'Ổn định'}
+              </span>
+              <div className={cn(
+                "absolute right-0 bottom-full mb-1.5 w-48 bg-slate-950 border border-white/10 p-2 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-center",
+                activeTooltip === 'elo2' ? "block" : "hidden group-hover:block"
+              )}>
+                <p className="font-bold text-primary mb-0.5 uppercase">Hiệu suất cộng thêm</p>
+                Thể hiện năng lực của <strong>{pair.player2Name}</strong> tăng/giảm bao nhiêu % khi đánh cùng đồng đội này so với điểm phong độ trung bình.
+              </div>
+            </div>
+          </div>
+
+          <div 
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveTooltip(activeTooltip === 'synergy' ? null : 'synergy');
+            }}
+            className="flex justify-between items-center py-1.5 border-b border-white/[0.02] relative group cursor-pointer"
+          >
+            <span className="text-white/40 font-bold uppercase tracking-wider">Tương quan</span>
+            <span className="text-primary font-black uppercase tracking-wider cursor-help border-b border-dashed border-primary/40 pb-0.5 select-none">{synergy.relationshipLabel}</span>
+            <div className={cn(
+              "absolute left-0 bottom-full mb-1.5 w-56 bg-slate-950 border border-white/10 p-2.5 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-left",
+              activeTooltip === 'synergy' ? "block" : "hidden group-hover:block"
+            )}>
+              <p className="font-bold text-primary mb-1 uppercase">{synergy.relationshipLabel}</p>
+              {synergy.relationshipDesc}
+              <div className="mt-1 text-[9px] text-white/40 border-t border-white/5 pt-1 font-bold">
+                * Song kiếm: lệch ELO &lt; 150. Gánh tạ: lệch ELO &ge; 150.
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center py-1.5">
+            <span className="text-white/40 font-bold uppercase tracking-wider">ELO Trung bình</span>
+            <span className="text-white font-black">{Math.round(synergy.avgElo)} ELO</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Cột 2: Phong cách chiến thuật */}
+      <div className="space-y-3">
+        <div 
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveTooltip(activeTooltip === 'tactics' ? null : 'tactics');
+          }}
+          className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05] relative group cursor-pointer"
+        >
+          <span className="text-sm shrink-0">{chem.icon}</span>
+          <h4 className="text-xs font-black text-white uppercase tracking-wider truncate cursor-help border-b border-dashed border-white/20 pb-0.5 select-none">
+            Phong cách: <span className={cn("normal-case ml-1 font-bold", chem.colorClass.split(" ")[0])}>{chem.label}</span>
+          </h4>
+          <div className={cn(
+            "absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 w-64 bg-slate-950 border border-white/10 p-2.5 rounded-lg shadow-2xl z-50 text-[10px] font-normal text-white/70 normal-case leading-relaxed text-left",
+            activeTooltip === 'tactics' ? "block" : "hidden group-hover:block"
+          )}>
+            <p className="font-bold text-primary mb-1 uppercase">PHONG CÁCH CHIẾN THUẬT</p>
+            Phân loại lối chơi của cặp đôi dựa trên điểm số thực tế:
+            <ul className="list-disc list-inside mt-1 space-y-1">
+              <li><strong>⚡ Hủy diệt:</strong> Tấn công mạnh mẽ, trung bình ghi &ge; 9.8 điểm.</li>
+              <li><strong>🛡️ Lá chắn Thép:</strong> Phòng ngự vững chãi, chỉ lọt &le; 6.8 điểm.</li>
+              <li><strong>🔥 Kịch tính:</strong> Trận sát nút (&le; 2 điểm) &ge; 40%.</li>
+              <li><strong>⚔️ Vua Giằng co:</strong> Từng kéo đối thủ vào chạm deuce (&gt; 11).</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="pt-0.5">
+          <p className="text-xs text-white/60 leading-relaxed bg-white/[0.02] p-3 rounded-xl border border-white/[0.03] min-h-[76px] flex items-center">
+            {chem.desc}
+          </p>
+        </div>
+      </div>
+
+      {/* Cột 3: 5 trận chung gần nhất */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.05]">
+          <History className="w-4 h-4 text-primary" />
+          <h4 className="text-xs font-black text-white uppercase tracking-wider">5 trận chung gần nhất</h4>
+        </div>
+
+        <div className="space-y-1">
+          {recent5.length > 0 ? (
+            recent5.map((match: Match, idx: number) => {
+              const isWin = [match.win_1, match.win_2].includes(pair.player1Id) || [match.win_1, match.win_2].includes(pair.player2Id);
+              const scoreStr = isWin 
+                ? `${match.win_score}-${match.lose_score}` 
+                : `${match.lose_score}-${match.win_score}`;
+              
+              const w1 = match.win_1 || '';
+              const w2 = match.win_2 || '';
+              const l1 = match.lose_1 || '';
+              const l2 = match.lose_2 || '';
+              
+              let opponents: string[] = [];
+              if (isWin) {
+                opponents = [getPlayerName(l1)];
+                if (l2 && !isGuestId(l2)) opponents.push(getPlayerName(l2));
+              } else {
+                opponents = [getPlayerName(w1)];
+                if (w2 && !isGuestId(w2)) opponents.push(getPlayerName(w2));
+              }
+
+              return (
+                <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-white/[0.02] last:border-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={cn(
+                      "w-4.5 h-4.5 inline-flex items-center justify-center rounded text-[9px] font-black shrink-0",
+                      isWin ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                    )}>
+                      {isWin ? 'W' : 'L'}
+                    </span>
+                    <span className="text-white font-bold tabular-nums shrink-0">{scoreStr}</span>
+                    <span className="text-white/45 truncate flex items-center gap-1">
+                      vs{' '}
+                      <span className="truncate">
+                        <ResponsivePlayerName fullName={opponents[0]} players={players} />
+                        {opponents[1] && (
+                          <>
+                            {' & '}
+                            <ResponsivePlayerName fullName={opponents[1]} players={players} />
+                          </>
+                        )}
+                      </span>
+                    </span>
+                  </div>
+                  {match.date && (
+                    <span className="text-[9px] text-white/20 shrink-0 ml-2 font-mono">
+                      {new Date(match.date).toLocaleDateString('vi-VN', { month: '2-digit', day: '2-digit' })}
+                    </span>
+                  )}
+                </div>
+              );
+            })
+          ) : (
+            <div className="text-center text-white/30 text-xs py-4 italic">Chưa có trận nào được ghi nhận.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PairZone({ 
+  matches, 
+  players, 
+  metrics, 
+  partnerEdges 
+}: { 
+  matches: Match[]; 
+  players: Player[]; 
+  metrics: Map<string, PlayerMetrics>;
+  partnerEdges: AnalysisEdge[];
+}) {
   const [isPairsExplainerOpen, setIsPairsExplainerOpen] = useState(false);
+  const [expandedPairKey, setExpandedPairKey] = useState<string | null>(null);
+  
   const pairMap = new Map<string, {
     player1Id: string;
     player1Name: string;
@@ -793,6 +1203,7 @@ function PairZone({ matches, players }: { matches: Match[]; players: Player[] })
     losses: number;
     pointsFor: number;
     pointsConceded: number;
+    matches: Match[];
   }>();
 
   const getPlayerName = (id: string) => players.find(p => p.id === id)?.name || id;
@@ -816,10 +1227,12 @@ function PairZone({ matches, players }: { matches: Match[]; players: Player[] })
       losses: 0,
       pointsFor: 0,
       pointsConceded: 0,
+      matches: [],
     };
     winStat.wins++;
     winStat.pointsFor += Number(m.win_score || 0);
     winStat.pointsConceded += Number(m.lose_score || 0);
+    winStat.matches.push(m);
     pairMap.set(winKey, winStat);
 
     const losePair = [l1, l2].sort();
@@ -833,10 +1246,12 @@ function PairZone({ matches, players }: { matches: Match[]; players: Player[] })
       losses: 0,
       pointsFor: 0,
       pointsConceded: 0,
+      matches: [],
     };
     loseStat.losses++;
     loseStat.pointsFor += Number(m.lose_score || 0);
     loseStat.pointsConceded += Number(m.win_score || 0);
+    loseStat.matches.push(m);
     pairMap.set(loseKey, loseStat);
   });
 
@@ -861,6 +1276,7 @@ function PairZone({ matches, players }: { matches: Match[]; players: Player[] })
         pointsConceded: p.pointsConceded,
         avgPointsFor,
         avgConceded,
+        matches: p.matches,
       };
     })
     .filter(p => p.total >= 3);
@@ -871,197 +1287,450 @@ function PairZone({ matches, players }: { matches: Match[]; players: Player[] })
 
   const rankedPairs = [...pairs].sort((a, b) => b.points - a.points || b.total - a.total).slice(0, 10);
 
-  if (pairs.length === 0) {
-    return (
-      <div className="glass p-20 rounded-[2.5rem] text-center border border-white/5">
-        <p className="text-white/20 font-black uppercase tracking-[0.4em] text-sm">Chưa có đủ cặp đôi thi đấu từ 3 trận trở lên</p>
-      </div>
-    );
-  }
+  const sidebarVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.08
+      }
+    }
+  };
+
+  const cardVariants = {
+    hidden: { opacity: 0, y: 15 },
+    show: { 
+      opacity: 1, 
+      y: 0,
+      transition: {
+        type: "spring" as const,
+        stiffness: 100,
+        damping: 15
+      }
+    }
+  };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="relative p-[1.5px] rounded-[2.5rem] bg-gradient-to-r from-amber-500/20 via-yellow-500/40 to-amber-500/20 overflow-hidden shadow-2xl">
-          <div className="relative bg-slate-950/95 backdrop-blur-md rounded-[2.4rem] p-6 flex flex-col h-full items-center text-center">
-            <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-3">
-              <Trophy className="w-6 h-6 text-amber-400" />
-            </div>
-            <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest">🏆 Cặp Bài Trùng</span>
-            {capBaiTrung ? (
-              <>
-                <h3 className="mt-2 text-lg font-black text-white">{capBaiTrung.player1Name} & {capBaiTrung.player2Name}</h3>
-                <div className="text-2xl font-black text-primary mt-2 italic">{capBaiTrung.points}đ</div>
-                <div className="text-xs text-white/40 mt-1 font-bold">
-                  Thành tích: {capBaiTrung.wins}W - {capBaiTrung.losses}L ({capBaiTrung.winRate.toFixed(0)}%)
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* SIDEBAR: Top 3 Cards & Hướng dẫn (Hiển thị TRƯỚC trên Mobile, bên PHẢI trên Desktop) */}
+        <div className="order-1 lg:order-2 lg:col-span-4 3xl:col-span-3 flex flex-col gap-6 lg:sticky lg:top-[74px]">
+          
+          {/* Top 3 Cards - Xếp dọc trên Desktop, Xếp ngang trên Mobile */}
+          <motion.div 
+            variants={sidebarVariants}
+            initial="hidden"
+            animate="show"
+            className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-4"
+          >
+            {/* Card 1 */}
+            <motion.div 
+              variants={cardVariants}
+              className="relative rounded-xl border border-white/[0.06] bg-slate-900/40 backdrop-blur-sm p-4 sm:p-5 flex flex-col justify-between min-h-[120px] transition-all duration-300 hover:border-amber-500/25 group shadow-lg"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-amber-500/[0.03] via-transparent to-transparent pointer-events-none rounded-xl" />
+              
+              <div className="flex items-center justify-between border-b border-white/[0.05] pb-2">
+                <div className="flex items-center gap-1.5">
+                  <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="text-[10px] font-semibold text-amber-400/90 uppercase tracking-wider">Cặp Bài Trùng</span>
                 </div>
-              </>
-            ) : (
-              <p className="text-white/30 text-sm mt-3 italic">Chưa xác định</p>
+                {capBaiTrung && (
+                  <span className="text-[9px] font-semibold text-amber-400/95 bg-amber-500/10 px-2 py-0.5 rounded-full select-none">
+                    Top ELO
+                  </span>
+                )}
+              </div>
+
+              <div className="my-3.5 min-w-0">
+                {capBaiTrung ? (
+                  <h3 className="text-sm sm:text-base font-bold text-white truncate group-hover:text-amber-400/90 transition-colors" title={`${capBaiTrung.player1Name} & ${capBaiTrung.player2Name}`}>
+                    <ResponsivePlayerName fullName={capBaiTrung.player1Name} players={players} />
+                    <span className="text-white/35 font-normal mx-1">&</span>
+                    <ResponsivePlayerName fullName={capBaiTrung.player2Name} players={players} />
+                  </h3>
+                ) : (
+                  <p className="text-white/30 text-xs italic">Chưa xác định</p>
+                )}
+              </div>
+
+              {capBaiTrung && (
+                <div className="flex items-end justify-between border-t border-white/[0.03] pt-2">
+                  <div>
+                    <span className="text-[9px] text-white/40 uppercase tracking-wider block font-medium">Điểm tích lũy</span>
+                    <span className="text-base font-bold text-primary tabular-nums">{capBaiTrung.points}đ</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] text-white/40 uppercase tracking-wider block font-medium">Thành tích</span>
+                    <span className="text-xs font-semibold text-white/70 tabular-nums">
+                      {capBaiTrung.wins}W-{capBaiTrung.losses}L ({capBaiTrung.winRate.toFixed(0)}%)
+                    </span>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+
+            {/* Card 2 */}
+            <motion.div 
+              variants={cardVariants}
+              className="relative rounded-xl border border-white/[0.06] bg-slate-900/40 backdrop-blur-sm p-4 sm:p-5 flex flex-col justify-between min-h-[120px] transition-all duration-300 hover:border-pink-500/25 group shadow-lg"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-pink-500/[0.03] via-transparent to-transparent pointer-events-none rounded-xl" />
+              
+              <div className="flex items-center justify-between border-b border-white/[0.05] pb-2">
+                <div className="flex items-center gap-1.5">
+                  <Heart className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                  <span className="text-[10px] font-semibold text-pink-400/90 uppercase tracking-wider">Cặp Tri Kỷ</span>
+                </div>
+                {capTriKy && (
+                  <span className="text-[9px] font-semibold text-pink-400/95 bg-pink-500/10 px-2 py-0.5 rounded-full select-none">
+                    Bền bỉ
+                  </span>
+                )}
+              </div>
+
+              <div className="my-3.5 min-w-0">
+                {capTriKy ? (
+                  <h3 className="text-sm sm:text-base font-bold text-white truncate group-hover:text-pink-400/90 transition-colors" title={`${capTriKy.player1Name} & ${capTriKy.player2Name}`}>
+                    <ResponsivePlayerName fullName={capTriKy.player1Name} players={players} />
+                    <span className="text-white/35 font-normal mx-1">&</span>
+                    <ResponsivePlayerName fullName={capTriKy.player2Name} players={players} />
+                  </h3>
+                ) : (
+                  <p className="text-white/30 text-xs italic">Chưa xác định</p>
+                )}
+              </div>
+
+              {capTriKy && (
+                <div className="flex items-end justify-between border-t border-white/[0.03] pt-2">
+                  <div>
+                    <span className="text-[9px] text-white/40 uppercase tracking-wider block font-medium">Số trận chung</span>
+                    <span className="text-base font-bold text-pink-400 tabular-nums">{capTriKy.total} trận</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] text-white/40 uppercase tracking-wider block font-medium">Thành tích</span>
+                    <span className="text-xs font-semibold text-white/70 tabular-nums">
+                      {capTriKy.wins}W-{capTriKy.losses}L ({capTriKy.winRate.toFixed(0)}%)
+                    </span>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+
+            {/* Card 3 */}
+            <motion.div 
+              variants={cardVariants}
+              className="relative rounded-xl border border-white/[0.06] bg-slate-900/40 backdrop-blur-sm p-4 sm:p-5 flex flex-col justify-between min-h-[120px] transition-all duration-300 hover:border-blue-500/25 group shadow-lg"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.03] via-transparent to-transparent pointer-events-none rounded-xl" />
+              
+              <div className="flex items-center justify-between border-b border-white/[0.05] pb-2">
+                <div className="flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                  <span className="text-[10px] font-semibold text-blue-400/90 uppercase tracking-wider">Lá Chắn Thép</span>
+                </div>
+                {laChanThep && (
+                  <span className="text-[9px] font-semibold text-blue-400/95 bg-blue-500/10 px-2 py-0.5 rounded-full select-none">
+                    Thủ vững
+                  </span>
+                )}
+              </div>
+
+              <div className="my-3.5 min-w-0">
+                {laChanThep ? (
+                  <h3 className="text-sm sm:text-base font-bold text-white truncate group-hover:text-blue-400/90 transition-colors" title={`${laChanThep.player1Name} & ${laChanThep.player2Name}`}>
+                    <ResponsivePlayerName fullName={laChanThep.player1Name} players={players} />
+                    <span className="text-white/35 font-normal mx-1">&</span>
+                    <ResponsivePlayerName fullName={laChanThep.player2Name} players={players} />
+                  </h3>
+                ) : (
+                  <p className="text-white/30 text-xs italic">Chưa xác định</p>
+                )}
+              </div>
+
+              {laChanThep && (
+                <div className="flex items-end justify-between border-t border-white/[0.03] pt-2">
+                  <div>
+                    <span className="text-[9px] text-white/40 uppercase tracking-wider block font-medium">Trung bình thủ</span>
+                    <span className="text-base font-bold text-blue-400 tabular-nums">{laChanThep.avgConceded.toFixed(1)}đ/trận</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] text-white/40 uppercase tracking-wider block font-medium">Lọt lưới</span>
+                    <span className="text-xs font-semibold text-white/70 tabular-nums">
+                      {laChanThep.pointsConceded}đ/{laChanThep.total} trận
+                    </span>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+
+          {/* Pairs Accordion explanation */}
+          <div className="rounded-xl border border-white/5 bg-slate-950/20 overflow-hidden transition-all">
+            <button
+              onClick={() => setIsPairsExplainerOpen(!isPairsExplainerOpen)}
+              className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/[0.02] transition-colors text-left"
+            >
+              <div className="flex items-center gap-2">
+                <HelpCircle className="w-4 h-4 text-primary" />
+                <span className="text-xs font-semibold text-white/60 uppercase tracking-wider">Cách tính điểm & xếp hạng</span>
+              </div>
+              <span className={cn("text-xs text-white/30 font-bold transition-transform duration-300", isPairsExplainerOpen && "rotate-180")}>
+                ▼
+              </span>
+            </button>
+
+            {isPairsExplainerOpen && (
+              <div className="px-4 pb-4 border-t border-white/[0.03] pt-3 text-xs text-white/65 space-y-3 leading-relaxed animate-in slide-in-from-top-2 duration-200">
+                <div>
+                  <p>Điểm xếp hạng cặp đôi được tính tự động dựa trên hiệu số trận thắng-thua và tỷ lệ thắng thực tế khi cùng đứng chung sân:</p>
+                  <div className="bg-slate-950/40 p-2.5 rounded-lg border border-white/[0.03] font-mono text-center text-xs font-semibold text-primary my-2 italic">
+                    Điểm tích lũy = (Thắng - Thua) x 15 + Tỷ lệ thắng (%)
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[11px] text-white/60">
+                  <div className="space-y-1">
+                    <h5 className="font-bold text-white/80">1. Quy tắc tính điểm:</h5>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      <li>Hiệu số thắng-thua đóng vai trò chủ đạo (mỗi trận thắng mang lại <strong>15 điểm</strong>).</li>
+                      <li>Tỷ lệ thắng dùng làm điểm phụ để phân thứ hạng khi các cặp bằng điểm.</li>
+                    </ul>
+                  </div>
+                  <div className="space-y-1">
+                    <h5 className="font-bold text-white/80">2. Điều kiện & Vinh danh:</h5>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      <li>Yêu cầu thi đấu <strong>tối thiểu 3 trận chung</strong> trong mùa giải hiện tại.</li>
+                      <li>Cặp dẫn đầu bảng xếp hạng điểm tích lũy được vinh danh là <strong>Cặp Bài Trùng</strong>.</li>
+                    </ul>
+                  </div>
+                </div>
+                <div className="border-t border-white/[0.04] pt-2 text-[11px] text-white/50">
+                  <span className="font-semibold text-white/70">Ví dụ:</span> Cặp đôi đấu chung 6 trận, thắng 4, thua 2 (tỷ lệ thắng 66.7%). Điểm tích lũy = <code className="text-primary font-semibold">(4 - 2) x 15 + 66.7 = 96.7 điểm</code>.
+                </div>
+              </div>
             )}
-            <p className="text-[10px] text-white/30 mt-4 leading-relaxed font-bold uppercase tracking-wide">
-              Cặp song kiếm hợp bích, có điểm tích lũy xếp hạng cao nhất giải.
-            </p>
           </div>
         </div>
 
-        <div className="relative p-[1.5px] rounded-[2.5rem] bg-gradient-to-r from-purple-500/20 via-pink-500/40 to-purple-500/20 overflow-hidden shadow-2xl">
-          <div className="relative bg-slate-950/95 backdrop-blur-md rounded-[2.4rem] p-6 flex flex-col h-full items-center text-center">
-            <div className="w-12 h-12 rounded-full bg-pink-500/10 border border-pink-500/20 flex items-center justify-center mb-3">
-              <Heart className="w-6 h-6 text-pink-400" />
-            </div>
-            <span className="text-[10px] font-black text-pink-400 uppercase tracking-widest">🤝 Cặp Tri Kỷ</span>
-            {capTriKy ? (
-              <>
-                <h3 className="mt-2 text-lg font-black text-white">{capTriKy.player1Name} & {capTriKy.player2Name}</h3>
-                <div className="text-2xl font-black text-primary mt-2 italic">{capTriKy.total} trận</div>
-                <div className="text-xs text-white/40 mt-1 font-bold">
-                  Thành tích: {capTriKy.wins}W - {capTriKy.losses}L ({capTriKy.winRate.toFixed(0)}%)
+        {/* CỘT CHÍNH: Bảng xếp hạng (Hiển thị SAU trên Mobile, bên TRÁI trên Desktop) */}
+        <div className="order-2 lg:order-1 lg:col-span-8 3xl:col-span-9 space-y-6">
+          <BentoCard title="Bảng xếp hạng Cặp Đôi (Tối thiểu 3 trận chung)" icon={Users}>
+            {/* Bản Desktop */}
+            <div className="hidden sm:block" onTouchStart={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 text-[10px] font-semibold text-white/40 uppercase tracking-wider select-none">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <span className="w-10 text-center shrink-0">Hạng</span>
+                  <span>Cặp đôi</span>
                 </div>
-              </>
-            ) : (
-              <p className="text-white/30 text-sm mt-3 italic">Chưa xác định</p>
-            )}
-            <p className="text-[10px] text-white/30 mt-4 leading-relaxed font-bold uppercase tracking-wide">
-              Cặp đôi kề vai sát cánh, chơi cùng nhau nhiều trận nhất mùa giải.
-            </p>
-          </div>
-        </div>
-
-        <div className="relative p-[1.5px] rounded-[2.5rem] bg-gradient-to-r from-blue-500/20 via-cyan-500/40 to-blue-500/20 overflow-hidden shadow-2xl">
-          <div className="relative bg-slate-950/95 backdrop-blur-md rounded-[2.4rem] p-6 flex flex-col h-full items-center text-center">
-            <div className="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-3">
-              <Shield className="w-6 h-6 text-blue-400" />
-            </div>
-            <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">🛡️ Lá Chắn Thép</span>
-            {laChanThep ? (
-              <>
-                <h3 className="mt-2 text-lg font-black text-white">{laChanThep.player1Name} & {laChanThep.player2Name}</h3>
-                <div className="text-2xl font-black text-primary mt-2 italic">{laChanThep.avgConceded.toFixed(1)}đ/trận</div>
-                <div className="text-xs text-white/40 mt-1 font-bold">
-                  Tổng lọt lưới: {laChanThep.pointsConceded} điểm / {laChanThep.total} trận
+                <div className="flex items-center gap-8 text-center shrink-0 mx-8">
+                  <span className="w-16">Số trận</span>
+                  <span className="w-20">Kết quả (W-L)</span>
+                  <span className="w-16">Hiệu số</span>
                 </div>
-              </>
-            ) : (
-              <p className="text-white/30 text-sm mt-3 italic">Chưa xác định</p>
-            )}
-            <p className="text-[10px] text-white/30 mt-4 leading-relaxed font-bold uppercase tracking-wide">
-              Cặp đôi phòng thủ kiên cường, giữ đối thủ ghi ít điểm trung bình nhất.
-            </p>
-          </div>
-        </div>
-      </div>
+                <div className="flex items-center gap-8 text-right shrink-0">
+                  <span className="w-20">Tỷ lệ thắng</span>
+                  <span className="w-24 text-right">Điểm tích lũy</span>
+                </div>
+              </div>
+              
+              {/* Body */}
+              <div className="divide-y divide-white/5">
+                {rankedPairs.map((pair, index) => {
+                  const diff = pair.wins - pair.losses;
+                  const pairKey = `${pair.player1Id}_${pair.player2Id}`;
+                  const isExpanded = expandedPairKey === pairKey;
+                  return (
+                    <Fragment key={pairKey}>
+                      <div
+                        onClick={() => setExpandedPairKey(isExpanded ? null : pairKey)}
+                        className={cn(
+                          "flex items-center justify-between px-4 py-3.5 hover:bg-white/[0.02] cursor-pointer transition-all duration-200 select-none",
+                          isExpanded && "bg-white/[0.015]"
+                        )}
+                      >
+                        {/* Cột Trái: Expand + Rank + Tên */}
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <svg
+                            className={cn(
+                              "w-3 h-3 text-white/30 transition-transform duration-200 shrink-0",
+                              isExpanded && "rotate-90 text-primary"
+                            )}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2.5}
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                          </svg>
+                          <span className={cn(
+                            "w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold shrink-0",
+                            index === 0 ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
+                            index === 1 ? "bg-slate-400/10 text-slate-300 border border-slate-400/20" :
+                            index === 2 ? "bg-orange-600/10 text-orange-400 border border-orange-600/20" :
+                            "bg-white/5 text-white/40"
+                          )}>
+                            {index + 1}
+                          </span>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-sm font-semibold text-white/90 truncate leading-snug">
+                              <ResponsivePlayerName fullName={pair.player1Name} players={players} />
+                            </span>
+                            <span className="text-sm font-semibold text-white/90 truncate leading-snug">
+                              <ResponsivePlayerName fullName={pair.player2Name} players={players} />
+                            </span>
+                          </div>
+                        </div>
 
-      {/* Pairs Accordion explanation */}
-      <div className="rounded-2xl border border-white/5 bg-slate-900/60 overflow-hidden transition-all">
-        <button
-          onClick={() => setIsPairsExplainerOpen(!isPairsExplainerOpen)}
-          className="w-full px-5 py-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors text-left"
-        >
-          <div className="flex items-center gap-2">
-            <HelpCircle className="w-4 h-4 text-primary" />
-            <span className="text-xs font-black text-white/70 uppercase tracking-widest">👉 Hướng dẫn cơ chế tính điểm & Xếp hạng Cặp đôi</span>
-          </div>
-          <span className={cn("text-xs text-white/30 font-bold transition-transform duration-300", isPairsExplainerOpen && "rotate-180")}>
-            ▼
-          </span>
-        </button>
+                        {/* Cột Giữa: Trận, W-L, Hiệu số */}
+                        <div className="flex items-center gap-8 text-center shrink-0 mx-8 text-xs font-semibold text-white/70 tabular-nums">
+                          <span className="w-16">{pair.total}</span>
+                          <span className="w-20 text-white/45">{pair.wins}W - {pair.losses}L</span>
+                          <div className="w-16 flex justify-center">
+                            <span className={cn(
+                              "text-[10px] font-bold px-2 py-0.5 rounded-lg",
+                              diff > 0 ? "bg-emerald-500/10 text-emerald-400" :
+                              diff < 0 ? "bg-red-500/10 text-red-400" :
+                              "bg-white/5 text-white/40"
+                            )}>
+                              {diff > 0 ? `+${diff}` : diff}
+                            </span>
+                          </div>
+                        </div>
 
-        {isPairsExplainerOpen && (
-          <div className="px-5 pb-5 border-t border-white/[0.03] pt-4 text-xs text-white/60 space-y-4 leading-relaxed animate-in slide-in-from-top-2 duration-200">
-            <div>
-              <h4 className="font-black text-white/90 text-sm mb-1 uppercase tracking-tight text-primary">📈 CÔNG THỨC TÍNH ĐIỂM TÍCH LŨY CẶP ĐÔI</h4>
-              <p>Điểm xếp hạng cặp đôi được tính tự động dựa trên hiệu số trận thắng-thua và tỷ lệ thắng thực tế khi hai người cùng đứng chung sân:</p>
-              <div className="bg-slate-950/40 p-3 rounded-xl border border-white/[0.03] font-mono text-center text-sm font-black text-primary my-2 italic">
-                Điểm tích lũy = (Thắng - Thua) x 15 + Tỷ lệ thắng (%)
+                        {/* Cột Phải: Win Rate + Điểm tích lũy */}
+                        <div className="flex items-center gap-8 shrink-0 text-right tabular-nums">
+                          <span className="w-20 text-xs font-semibold text-white/60">{pair.winRate.toFixed(1)}%</span>
+                          <div className="w-24 text-right flex flex-col justify-center">
+                            <span className="text-sm font-bold text-primary italic">{pair.points}đ</span>
+                            <span className="text-[9px] text-white/20 font-medium leading-none mt-0.5">
+                              ({diff} x 15) + {pair.winRate.toFixed(0)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Expanded Panel with Framer Motion Collapsible */}
+                      <AnimatePresence initial={false}>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.25, ease: "easeInOut" }}
+                            className="overflow-hidden bg-slate-950/20 border-y border-white/5"
+                          >
+                            <div className="px-4 py-4">
+                              <ChemistryStylePanel
+                                pair={pair}
+                                players={players}
+                                metrics={metrics}
+                                partnerEdges={partnerEdges}
+                              />
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </Fragment>
+                  );
+                })}
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <h5 className="font-bold text-white/80">1. Quy tắc tính điểm:</h5>
-                <ul className="list-disc list-inside space-y-1">
-                  <li><strong>Hiệu số thắng-thua</strong> đóng vai trò chủ đạo (mỗi trận thắng chênh lệch mang lại <strong>15 điểm</strong>), khuyến khích các cặp đôi thi đấu nhiều trận.</li>
-                  <li><strong>Tỷ lệ thắng</strong> đóng vai trò làm điểm phụ để phân thứ hạng khi các cặp đôi có cùng hiệu số trận đấu.</li>
-                </ul>
-              </div>
-              <div className="space-y-1.5">
-                <h5 className="font-bold text-white/80">2. Điều kiện xếp hạng & Vinh danh:</h5>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>Cặp đôi phải thi đấu <strong>tối thiểu 3 trận chung</strong> cùng nhau trong mùa giải hiện tại để được đưa vào danh sách xếp hạng.</li>
-                  <li>Cặp dẫn đầu BXH điểm tích lũy sẽ nhận cúp vinh danh <strong>🏆 Cặp Bài Trùng</strong> trên bục vinh quang.</li>
-                </ul>
-              </div>
-            </div>
-            <div className="border-t border-white/5 pt-3">
-              <span className="font-bold text-white/80">Ví dụ cụ thể:</span> Cặp đôi X và Y đánh chung 6 trận, thắng 4 trận, thua 2 trận (tỷ lệ thắng 66.7%).
-              <br />
-              Điểm tích lũy = <code className="text-primary font-bold">(4 - 2) x 15 + 66.7 = 30 + 66.7 = 96.7 điểm</code>.
-            </div>
-          </div>
-        )}
-      </div>
 
-      <BentoCard title="Bảng xếp hạng Cặp Đôi (Tối thiểu 3 trận chung)" icon={Users}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-white/5 text-[10px] font-black text-white/35 uppercase tracking-widest font-bold">
-                <th className="py-3 px-4 w-12 text-center">Hạng</th>
-                <th className="py-3 px-4">Cặp đôi</th>
-                <th className="py-3 px-4 text-center">Số trận</th>
-                <th className="py-3 px-4 text-center">Hiệu số</th>
-                <th className="py-3 px-4 text-center">Tỷ lệ thắng</th>
-                <th className="py-3 px-4 text-center">Trung bình Công/Thủ</th>
-                <th className="py-3 px-4 text-right">Điểm tích lũy</th>
-              </tr>
-            </thead>
-            <tbody>
+            {/* Bản Mobile */}
+            <div className="block sm:hidden space-y-2.5" onTouchStart={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
               {rankedPairs.map((pair, index) => {
                 const diff = pair.wins - pair.losses;
+                const pairKey = `${pair.player1Id}_${pair.player2Id}`;
+                const isExpanded = expandedPairKey === pairKey;
                 return (
-                  <tr key={`${pair.player1Id}_${pair.player2Id}`} className="border-b border-white/5 last:border-0 hover:bg-white/[0.01] transition-colors">
-                    <td className="py-4 px-4 text-center">
-                      <span className={cn(
-                        "w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-black",
-                        index === 0 ? "bg-amber-500/20 text-amber-400" :
-                        index === 1 ? "bg-slate-400/20 text-slate-300" :
-                        index === 2 ? "bg-orange-600/20 text-orange-400" :
-                        "text-white/40"
-                      )}>
-                        {index + 1}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 font-bold">
-                      <div className="text-sm font-black text-white leading-snug">{pair.player1Name}</div>
-                      <div className="text-sm font-black text-white leading-snug">{pair.player2Name}</div>
-                    </td>
-                    <td className="py-4 px-4 text-center font-bold text-white/80 tabular-nums">{pair.total}</td>
-                    <td className="py-4 px-4 text-center tabular-nums">
-                      <span className={cn(
-                        "text-xs font-black px-2 py-1 rounded-lg",
-                        diff > 0 ? "bg-emerald-500/10 text-emerald-400" : diff < 0 ? "bg-red-500/10 text-red-400" : "bg-white/5 text-white/45"
-                      )}>
-                        {diff > 0 ? `+${diff}` : diff}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-center font-black text-white/80 tabular-nums">{pair.winRate.toFixed(1)}%</td>
-                    <td className="py-4 px-4 text-center text-[10px] font-bold text-white/40 leading-snug">
-                      Công: {pair.avgPointsFor.toFixed(1)}đ <br />
-                      Thủ: {pair.avgConceded.toFixed(1)}đ
-                    </td>
-                    <td className="py-4 px-4 text-right">
-                      <span className="text-sm font-black text-primary italic tabular-nums">{pair.points}đ</span>
-                      <div className="text-[8px] text-white/20 font-bold uppercase tracking-tighter mt-0.5">
-                        ({diff} x 15) + {pair.winRate.toFixed(0)}
+                  <div
+                    key={pairKey}
+                    className={cn(
+                      "border border-white/5 rounded-xl bg-slate-900/40 transition-all duration-200 overflow-hidden select-none",
+                      isExpanded && "bg-white/[0.015]"
+                    )}
+                  >
+                    {/* Dòng 1: Hạng + Tên và Mũi tên bên trái; Điểm tích lũy bên phải */}
+                    <div 
+                      className="flex items-center justify-between p-3.5 cursor-pointer hover:bg-white/[0.01] active:bg-white/[0.02]"
+                      onClick={() => setExpandedPairKey(isExpanded ? null : pairKey)}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
+                        <svg
+                          className={cn(
+                            "w-3 h-3 text-white/30 transition-transform duration-200 shrink-0",
+                            isExpanded && "rotate-90 text-primary"
+                          )}
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2.5}
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                        <span className={cn(
+                          "w-5 h-5 rounded-full inline-flex items-center justify-center text-[10px] font-bold shrink-0",
+                          index === 0 ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
+                          index === 1 ? "bg-slate-400/10 text-slate-300 border border-slate-400/20" :
+                          index === 2 ? "bg-orange-600/10 text-orange-400 border border-orange-600/20" :
+                          "bg-white/5 text-white/40"
+                        )}>
+                          {index + 1}
+                        </span>
+                        <span className="text-xs font-semibold text-white/90 truncate min-w-0">
+                          <ResponsivePlayerName fullName={pair.player1Name} players={players} />
+                          <span className="text-white/35 font-normal mx-1">&</span>
+                          <ResponsivePlayerName fullName={pair.player2Name} players={players} />
+                        </span>
                       </div>
-                    </td>
-                  </tr>
+                      <div className="text-right shrink-0 flex flex-col justify-center">
+                        <span className="text-xs font-bold text-primary italic tabular-nums">{pair.points}đ</span>
+                      </div>
+                    </div>
+
+                    {/* Dòng 2: Thông số phụ */}
+                    <div 
+                      className="flex items-center justify-between px-3.5 pb-3 text-[10px] text-white/40 font-semibold cursor-pointer border-t border-white/[0.02] pt-2"
+                      onClick={() => setExpandedPairKey(isExpanded ? null : pairKey)}
+                    >
+                      <div className="flex items-center gap-x-3 flex-wrap">
+                        <span className="whitespace-nowrap">Trận: <strong className="text-white/70 font-bold tabular-nums">{pair.total}</strong></span>
+                        <span className="whitespace-nowrap">Hiệu số: <strong className={cn("font-bold tabular-nums", diff > 0 ? "text-emerald-400" : diff < 0 ? "text-red-400" : "text-white/45")}>{diff > 0 ? `+${diff}` : diff}</strong></span>
+                        <span className="whitespace-nowrap">Thắng: <strong className="text-white/70 font-bold tabular-nums">{pair.winRate.toFixed(0)}%</strong></span>
+                      </div>
+                    </div>
+
+                    {/* Panel mở rộng with Framer Motion Collapsible */}
+                    <AnimatePresence initial={false}>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.25, ease: "easeInOut" }}
+                          className="overflow-hidden border-t border-white/5 bg-slate-950/20"
+                        >
+                          <div className="p-3">
+                            <ChemistryStylePanel 
+                              pair={pair} 
+                              players={players} 
+                              metrics={metrics} 
+                              partnerEdges={partnerEdges} 
+                            />
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          </BentoCard>
         </div>
-      </BentoCard>
+
+      </div>
     </div>
   );
 }

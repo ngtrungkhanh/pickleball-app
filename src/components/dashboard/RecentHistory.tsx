@@ -1,5 +1,5 @@
 'use client';
-import { useState, useTransition, type ReactNode } from 'react';
+import { useState, useTransition, useRef, useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { History, X, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
@@ -163,6 +163,200 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
   const [result, setResult] = useState<'-' | 'win' | 'loss'>('-');
   const [, start] = useTransition();
 
+  // Drag states and refs
+  const panelRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+  const dragStartYRef = useRef(0);
+  const currentDragOffsetRef = useRef(0);
+  const [isDraggedClose, setIsDraggedClose] = useState(false);
+
+  // Refs to hold stable event listener references to prevent memory leaks during re-renders
+  const mouseMoveListenerRef = useRef<(e: MouseEvent) => void>(undefined);
+  const mouseUpListenerRef = useRef<() => void>(undefined);
+
+  // Assign fresh handlers to refs after render has completed to comply with react-hooks/refs rule
+  useEffect(() => {
+    mouseMoveListenerRef.current = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const currentY = e.clientY;
+      const deltaY = currentY - dragStartYRef.current;
+      const offset = Math.max(0, deltaY);
+      currentDragOffsetRef.current = offset;
+
+      const progress = Math.max(0, 1 - offset / 350);
+      const blurVal = 12 * progress;
+
+      if (panelRef.current) {
+        panelRef.current.style.transform = `translate3d(0, ${offset}px, 0)`;
+      }
+      if (backdropRef.current) {
+        backdropRef.current.style.opacity = progress.toString();
+        backdropRef.current.style.setProperty('backdrop-filter', `blur(${blurVal}px)`);
+        backdropRef.current.style.setProperty('-webkit-backdrop-filter', `blur(${blurVal}px)`);
+      }
+    };
+
+    mouseUpListenerRef.current = () => {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      
+      if (mouseMoveListenerRef.current) {
+        window.removeEventListener('mousemove', mouseMoveListenerRef.current);
+      }
+      if (mouseUpListenerRef.current) {
+        window.removeEventListener('mouseup', mouseUpListenerRef.current);
+      }
+
+      const threshold = 80;
+      const offset = currentDragOffsetRef.current;
+
+      if (offset > threshold) {
+        setIsClosing(true);
+        setIsDraggedClose(true);
+        if (panelRef.current) {
+          panelRef.current.style.transition = 'transform 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+          panelRef.current.style.transform = 'translate3d(0, 100vh, 0)';
+        }
+        if (backdropRef.current) {
+          backdropRef.current.style.transition = 'opacity 240ms cubic-bezier(0.32, 0.94, 0.6, 1), backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1), -webkit-backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+          backdropRef.current.style.opacity = '0';
+          backdropRef.current.style.setProperty('backdrop-filter', 'blur(0px)');
+          backdropRef.current.style.setProperty('-webkit-backdrop-filter', 'blur(0px)');
+        }
+        window.setTimeout(() => {
+          onClose();
+        }, 240);
+      } else {
+        if (panelRef.current) {
+          panelRef.current.style.transition = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+          panelRef.current.style.transform = 'translate3d(0, 0, 0)';
+        }
+        if (backdropRef.current) {
+          backdropRef.current.style.transition = 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1), backdrop-filter 300ms cubic-bezier(0.16, 1, 0.3, 1), -webkit-backdrop-filter 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+          backdropRef.current.style.opacity = '1';
+          backdropRef.current.style.setProperty('backdrop-filter', 'blur(12px)');
+          backdropRef.current.style.setProperty('-webkit-backdrop-filter', 'blur(12px)');
+        }
+      }
+    };
+  });
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('select') || target.closest('option') || target.closest('input')) {
+      return;
+    }
+
+    isDraggingRef.current = true;
+    dragStartYRef.current = e.clientY;
+    currentDragOffsetRef.current = 0;
+
+    if (panelRef.current) {
+      panelRef.current.style.transition = 'none';
+      panelRef.current.style.animation = 'none';
+    }
+    if (backdropRef.current) {
+      backdropRef.current.style.transition = 'none';
+    }
+
+    if (mouseMoveListenerRef.current && mouseUpListenerRef.current) {
+      window.addEventListener('mousemove', mouseMoveListenerRef.current);
+      window.addEventListener('mouseup', mouseUpListenerRef.current);
+    }
+  };
+
+  // Touch drag handlers (Mobile)
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (window.innerWidth >= 640) return;
+
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('select') || target.closest('option') || target.closest('input')) {
+      return;
+    }
+
+    isDraggingRef.current = true;
+    dragStartYRef.current = e.touches[0].clientY;
+    currentDragOffsetRef.current = 0;
+
+    if (panelRef.current) {
+      panelRef.current.style.transition = 'none';
+      panelRef.current.style.animation = 'none';
+    }
+    if (backdropRef.current) {
+      backdropRef.current.style.transition = 'none';
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    const currentY = e.touches[0].clientY;
+    const deltaY = currentY - dragStartYRef.current;
+
+    const offset = Math.max(0, deltaY);
+    currentDragOffsetRef.current = offset;
+
+    const progress = Math.max(0, 1 - offset / 350);
+    const blurVal = 12 * progress;
+
+    if (panelRef.current) {
+      panelRef.current.style.transform = `translate3d(0, ${offset}px, 0)`;
+    }
+    if (backdropRef.current) {
+      backdropRef.current.style.opacity = progress.toString();
+      backdropRef.current.style.setProperty('backdrop-filter', `blur(${blurVal}px)`);
+      backdropRef.current.style.setProperty('-webkit-backdrop-filter', `blur(${blurVal}px)`);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+
+    const threshold = 80;
+    const offset = currentDragOffsetRef.current;
+
+    if (offset > threshold) {
+      setIsClosing(true);
+      setIsDraggedClose(true);
+      if (panelRef.current) {
+        panelRef.current.style.transition = 'transform 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+        panelRef.current.style.transform = 'translate3d(0, 100vh, 0)';
+      }
+      if (backdropRef.current) {
+        backdropRef.current.style.transition = 'opacity 240ms cubic-bezier(0.32, 0.94, 0.6, 1), backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1), -webkit-backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+        backdropRef.current.style.opacity = '0';
+        backdropRef.current.style.setProperty('backdrop-filter', 'blur(0px)');
+        backdropRef.current.style.setProperty('-webkit-backdrop-filter', 'blur(0px)');
+      }
+      window.setTimeout(() => {
+        onClose();
+      }, 240);
+    } else {
+      if (panelRef.current) {
+        panelRef.current.style.transition = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+        panelRef.current.style.transform = 'translate3d(0, 0, 0)';
+      }
+      if (backdropRef.current) {
+        backdropRef.current.style.transition = 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1), backdrop-filter 300ms cubic-bezier(0.16, 1, 0.3, 1), -webkit-backdrop-filter 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+        backdropRef.current.style.opacity = '1';
+        backdropRef.current.style.setProperty('backdrop-filter', 'blur(12px)');
+        backdropRef.current.style.setProperty('-webkit-backdrop-filter', 'blur(12px)');
+      }
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (mouseMoveListenerRef.current) {
+        window.removeEventListener('mousemove', mouseMoveListenerRef.current);
+      }
+      if (mouseUpListenerRef.current) {
+        window.removeEventListener('mouseup', mouseUpListenerRef.current);
+      }
+    };
+  }, []);
+
   const playerOptions = players.filter(p => p.active !== false && !p.deleted_at);
   const ids = (m: any) => [m.win_1, m.win_2, m.lose_1, m.lose_2].filter(Boolean);
   const team = (m: any, id: string) => ([m.win_1, m.win_2].includes(id) ? 'win' : [m.lose_1, m.lose_2].includes(id) ? 'loss' : null);
@@ -206,21 +400,30 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
 
   const grouped: Record<string, any[]> = {};
   filteredMatches.forEach(m => { (grouped[m.season ?? 'Season 1'] ??= []).push(m); });
+  
   const requestClose = () => {
     if (isClosing) return;
     setIsClosing(true);
-    window.setTimeout(onClose, 190);
+    if (backdropRef.current) {
+      backdropRef.current.style.transition = 'opacity 240ms cubic-bezier(0.32, 0.94, 0.6, 1), backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1), -webkit-backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+      backdropRef.current.style.opacity = '0';
+      backdropRef.current.style.setProperty('backdrop-filter', 'blur(0px)');
+      backdropRef.current.style.setProperty('-webkit-backdrop-filter', 'blur(0px)');
+    }
+    if (panelRef.current) {
+      panelRef.current.style.transition = 'transform 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+      panelRef.current.style.transform = 'translate3d(0, 100vh, 0)';
+    }
+    window.setTimeout(onClose, 240); // Khớp với duration 250ms của animation đóng
   };
-
-  const swipeHandlers = useSwipeable({
-    onSwipedDown: requestClose,
-    preventScrollOnSwipe: false,
-    trackMouse: true
-  });
 
   return (
     <div className={cn("fixed inset-0 z-[1100] flex items-end justify-center p-0 sm:items-center sm:p-4", isClosing && "pointer-events-none")}>
-      <div className={cn("history-modal-backdrop absolute inset-0 bg-black/65 backdrop-blur-md", isClosing && "history-modal-backdrop-out")} onClick={requestClose} />
+      <div 
+        ref={backdropRef} 
+        className="history-modal-backdrop absolute inset-0 bg-black/65 backdrop-blur-md" 
+        onClick={requestClose} 
+      />
       {deleteTarget && (
         <ConfirmDelete
           onCancel={() => setDeleteTarget(null)}
@@ -235,20 +438,35 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
           }}
         />
       )}
-      <div {...swipeHandlers} className={cn("history-modal-panel relative flex h-[92vh] w-full flex-col overflow-hidden rounded-t-[2.5rem] border border-slate-800/80 bg-[#0b1329]/98 shadow-[0_28px_90px_rgba(0,0,0,0.42)] backdrop-blur-2xl sm:h-auto sm:max-h-[88vh] sm:max-w-[1100px] sm:rounded-[2rem] xl:max-w-[1180px]", isClosing && "history-modal-panel-out")}>
-        <div className="flex items-center justify-between px-6 py-5 sm:px-8 sm:py-6 border-b border-slate-800/80 bg-[#0f1b32]/90 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <History className="w-5 h-5 text-primary" />
+      <div 
+        ref={panelRef} 
+        className={cn(
+          "history-modal-panel relative flex h-[92vh] w-full flex-col overflow-hidden rounded-t-[2.5rem] border border-slate-800/80 bg-[#0b1329]/98 shadow-[0_28px_90px_rgba(0,0,0,0.42)] backdrop-blur-2xl sm:h-auto sm:max-h-[88vh] sm:max-w-[1100px] sm:rounded-[2rem] xl:max-w-[1180px]", 
+          isClosing && !isDraggedClose && "history-modal-panel-out"
+        )}
+      >
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onMouseDown={handleMouseDown}
+          className="flex flex-col shrink-0 select-none cursor-grab active:cursor-grabbing"
+        >
+          <div className="mx-auto my-3 h-1.5 w-12 rounded-full bg-slate-700/50 sm:hidden" />
+          <div className="flex items-center justify-between px-6 pb-5 sm:px-8 sm:py-6 border-b border-slate-800/80 bg-[#0f1b32]/90 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+                <History className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="font-black text-xl sm:text-2xl text-white tracking-tight">Lịch sử trận đấu</h2>
+                <p className="text-[10px] sm:text-[11px] text-slate-400/80 font-bold uppercase tracking-widest mt-0.5">{matches.length} trận đấu được ghi lại</p>
+              </div>
             </div>
-            <div>
-              <h2 className="font-black text-xl sm:text-2xl text-white tracking-tight">Lịch sử trận đấu</h2>
-              <p className="text-[10px] sm:text-[11px] text-slate-400/80 font-bold uppercase tracking-widest mt-0.5">{matches.length} trận đấu được ghi lại</p>
-            </div>
+            <button onClick={requestClose} className="w-11 h-11 rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center transition-all active:scale-90">
+              <X className="w-5 h-5 text-slate-200/70" />
+            </button>
           </div>
-          <button onClick={requestClose} className="w-11 h-11 rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center transition-all active:scale-90">
-            <X className="w-5 h-5 text-slate-200/70" />
-          </button>
         </div>
         <div className="border-b border-slate-800/80 bg-[#0d1627]/80 px-4 sm:px-8 py-4 space-y-3">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

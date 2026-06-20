@@ -172,27 +172,39 @@ function ScoreStepper({ label, value, onChange, compact = false }: { label: stri
     <div className={cn("flex flex-col items-center", compact ? "gap-1" : "gap-2")}>
       <span className={cn("font-black text-slate-300/75 uppercase", compact ? "text-[9px] tracking-[0.18em]" : "text-[10px] sm:text-xs tracking-[0.22em]")}>{label}</span>
       <div className={cn("flex items-center", compact ? "gap-1.5" : "gap-2 sm:gap-4")}>
-        <button type="button"
+        <motion.button type="button"
+          whileTap={{ scale: 0.82 }}
+          whileHover={{ scale: 1.08 }}
           onClick={() => onChange(Math.max(0, value - 1))}
-          className={cn(compact ? "flex h-8 w-8" : "flex sm:hidden w-9 h-9", "rounded-xl bg-white/5 border border-white/10 items-center justify-center text-slate-300/70 active:scale-90 transition-all shrink-0")}>
+          className={cn(compact ? "flex h-8 w-8" : "flex sm:hidden w-9 h-9", "rounded-xl bg-white/5 border border-white/10 items-center justify-center text-slate-300/70 transition-all shrink-0 cursor-pointer")}>
           <Minus className="w-4 h-4" />
-        </button>
+        </motion.button>
 
-        <input
-          ref={ref}
-          type="text" inputMode="numeric" pattern="[0-9]*"
-          value={value}
-          onChange={e => { const n = parseInt(e.target.value, 10); if (!isNaN(n) && n >= 0) onChange(n); else if (e.target.value === '') onChange(0); }}
-          onFocus={() => setTimeout(() => ref.current?.select(), 0)}
-          className={cn("text-center bg-transparent border-0 border-b-4 border-white/10 focus:border-primary/50 outline-none font-black text-white transition-all py-1 tabular-nums", compact ? "w-12 text-3xl" : "w-14 sm:w-20 text-4xl sm:text-5xl md:text-6xl")}
-          style={{ lineHeight: 1 }}
-        />
+        <motion.div
+          key={value}
+          initial={{ scale: 0.85, opacity: 0.85 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 380, damping: 14 }}
+          className="relative"
+        >
+          <input
+            ref={ref}
+            type="text" inputMode="numeric" pattern="[0-9]*"
+            value={value}
+            onChange={e => { const n = parseInt(e.target.value, 10); if (!isNaN(n) && n >= 0) onChange(n); else if (e.target.value === '') onChange(0); }}
+            onFocus={() => setTimeout(() => ref.current?.select(), 0)}
+            className={cn("text-center bg-transparent border-0 border-b-4 border-white/10 focus:border-primary/50 outline-none font-black text-white transition-all py-1 tabular-nums", compact ? "w-12 text-3xl" : "w-14 sm:w-20 text-4xl sm:text-5xl md:text-6xl")}
+            style={{ lineHeight: 1 }}
+          />
+        </motion.div>
 
-        <button type="button"
+        <motion.button type="button"
+          whileTap={{ scale: 0.82 }}
+          whileHover={{ scale: 1.08 }}
           onClick={() => onChange(value + 1)}
-          className={cn(compact ? "flex h-8 w-8" : "flex sm:hidden w-9 h-9", "rounded-xl bg-primary/10 border border-primary/20 items-center justify-center text-primary active:scale-90 transition-all shrink-0")}>
+          className={cn(compact ? "flex h-8 w-8" : "flex sm:hidden w-9 h-9", "rounded-xl bg-primary/10 border border-primary/20 items-center justify-center text-primary transition-all shrink-0 cursor-pointer")}>
           <Plus className="w-4 h-4" />
-        </button>
+        </motion.button>
       </div>
     </div>
   );
