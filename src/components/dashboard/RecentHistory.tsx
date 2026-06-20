@@ -180,12 +180,15 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
     currentDragOffsetRef.current = offset;
 
     const progress = Math.max(0, 1 - offset / 350);
+    const blurVal = 12 * progress;
 
     if (panelRef.current) {
       panelRef.current.style.transform = `translate3d(0, ${offset}px, 0)`;
     }
     if (backdropRef.current) {
       backdropRef.current.style.opacity = progress.toString();
+      backdropRef.current.style.setProperty('backdrop-filter', `blur(${blurVal}px)`);
+      backdropRef.current.style.setProperty('-webkit-backdrop-filter', `blur(${blurVal}px)`);
     }
   };
 
@@ -206,8 +209,10 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
         panelRef.current.style.transform = 'translate3d(0, 100vh, 0)';
       }
       if (backdropRef.current) {
-        backdropRef.current.style.transition = 'opacity 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+        backdropRef.current.style.transition = 'opacity 240ms cubic-bezier(0.32, 0.94, 0.6, 1), backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1), -webkit-backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
         backdropRef.current.style.opacity = '0';
+        backdropRef.current.style.setProperty('backdrop-filter', 'blur(0px)');
+        backdropRef.current.style.setProperty('-webkit-backdrop-filter', 'blur(0px)');
       }
       window.setTimeout(() => {
         onClose();
@@ -218,8 +223,10 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
         panelRef.current.style.transform = 'translate3d(0, 0, 0)';
       }
       if (backdropRef.current) {
-        backdropRef.current.style.transition = 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+        backdropRef.current.style.transition = 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1), backdrop-filter 300ms cubic-bezier(0.16, 1, 0.3, 1), -webkit-backdrop-filter 300ms cubic-bezier(0.16, 1, 0.3, 1)';
         backdropRef.current.style.opacity = '1';
+        backdropRef.current.style.setProperty('backdrop-filter', 'blur(12px)');
+        backdropRef.current.style.setProperty('-webkit-backdrop-filter', 'blur(12px)');
       }
     }
   };
@@ -277,12 +284,15 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
     currentDragOffsetRef.current = offset;
 
     const progress = Math.max(0, 1 - offset / 350);
+    const blurVal = 12 * progress;
 
     if (panelRef.current) {
       panelRef.current.style.transform = `translate3d(0, ${offset}px, 0)`;
     }
     if (backdropRef.current) {
       backdropRef.current.style.opacity = progress.toString();
+      backdropRef.current.style.setProperty('backdrop-filter', `blur(${blurVal}px)`);
+      backdropRef.current.style.setProperty('-webkit-backdrop-filter', `blur(${blurVal}px)`);
     }
   };
 
@@ -301,8 +311,10 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
         panelRef.current.style.transform = 'translate3d(0, 100vh, 0)';
       }
       if (backdropRef.current) {
-        backdropRef.current.style.transition = 'opacity 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+        backdropRef.current.style.transition = 'opacity 240ms cubic-bezier(0.32, 0.94, 0.6, 1), backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1), -webkit-backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
         backdropRef.current.style.opacity = '0';
+        backdropRef.current.style.setProperty('backdrop-filter', 'blur(0px)');
+        backdropRef.current.style.setProperty('-webkit-backdrop-filter', 'blur(0px)');
       }
       window.setTimeout(() => {
         onClose();
@@ -313,8 +325,10 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
         panelRef.current.style.transform = 'translate3d(0, 0, 0)';
       }
       if (backdropRef.current) {
-        backdropRef.current.style.transition = 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+        backdropRef.current.style.transition = 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1), backdrop-filter 300ms cubic-bezier(0.16, 1, 0.3, 1), -webkit-backdrop-filter 300ms cubic-bezier(0.16, 1, 0.3, 1)';
         backdropRef.current.style.opacity = '1';
+        backdropRef.current.style.setProperty('backdrop-filter', 'blur(12px)');
+        backdropRef.current.style.setProperty('-webkit-backdrop-filter', 'blur(12px)');
       }
     }
   };
@@ -375,8 +389,10 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
     if (isClosing) return;
     setIsClosing(true);
     if (backdropRef.current) {
-      backdropRef.current.style.transition = 'opacity 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+      backdropRef.current.style.transition = 'opacity 240ms cubic-bezier(0.32, 0.94, 0.6, 1), backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1), -webkit-backdrop-filter 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
       backdropRef.current.style.opacity = '0';
+      backdropRef.current.style.setProperty('backdrop-filter', 'blur(0px)');
+      backdropRef.current.style.setProperty('-webkit-backdrop-filter', 'blur(0px)');
     }
     if (panelRef.current) {
       panelRef.current.style.transition = 'transform 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
