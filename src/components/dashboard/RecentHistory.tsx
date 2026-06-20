@@ -165,6 +165,7 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
 
   // Drag states and refs
   const panelRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const dragStartYRef = useRef(0);
   const currentDragOffsetRef = useRef(0);
@@ -178,8 +179,13 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
     const offset = Math.max(0, deltaY);
     currentDragOffsetRef.current = offset;
 
+    const progress = Math.max(0, 1 - offset / 350);
+
     if (panelRef.current) {
       panelRef.current.style.transform = `translate3d(0, ${offset}px, 0)`;
+    }
+    if (backdropRef.current) {
+      backdropRef.current.style.opacity = progress.toString();
     }
   };
 
@@ -199,6 +205,10 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
         panelRef.current.style.transition = 'transform 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
         panelRef.current.style.transform = 'translate3d(0, 100vh, 0)';
       }
+      if (backdropRef.current) {
+        backdropRef.current.style.transition = 'opacity 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+        backdropRef.current.style.opacity = '0';
+      }
       window.setTimeout(() => {
         onClose();
       }, 240);
@@ -206,6 +216,10 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
       if (panelRef.current) {
         panelRef.current.style.transition = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)';
         panelRef.current.style.transform = 'translate3d(0, 0, 0)';
+      }
+      if (backdropRef.current) {
+        backdropRef.current.style.transition = 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+        backdropRef.current.style.opacity = '1';
       }
     }
   };
@@ -223,6 +237,9 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
     if (panelRef.current) {
       panelRef.current.style.transition = 'none';
       panelRef.current.style.animation = 'none';
+    }
+    if (backdropRef.current) {
+      backdropRef.current.style.transition = 'none';
     }
 
     window.addEventListener('mousemove', handleWindowMouseMove);
@@ -246,6 +263,9 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
       panelRef.current.style.transition = 'none';
       panelRef.current.style.animation = 'none';
     }
+    if (backdropRef.current) {
+      backdropRef.current.style.transition = 'none';
+    }
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -256,8 +276,13 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
     const offset = Math.max(0, deltaY);
     currentDragOffsetRef.current = offset;
 
+    const progress = Math.max(0, 1 - offset / 350);
+
     if (panelRef.current) {
       panelRef.current.style.transform = `translate3d(0, ${offset}px, 0)`;
+    }
+    if (backdropRef.current) {
+      backdropRef.current.style.opacity = progress.toString();
     }
   };
 
@@ -275,6 +300,10 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
         panelRef.current.style.transition = 'transform 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
         panelRef.current.style.transform = 'translate3d(0, 100vh, 0)';
       }
+      if (backdropRef.current) {
+        backdropRef.current.style.transition = 'opacity 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+        backdropRef.current.style.opacity = '0';
+      }
       window.setTimeout(() => {
         onClose();
       }, 240);
@@ -282,6 +311,10 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
       if (panelRef.current) {
         panelRef.current.style.transition = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)';
         panelRef.current.style.transform = 'translate3d(0, 0, 0)';
+      }
+      if (backdropRef.current) {
+        backdropRef.current.style.transition = 'opacity 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+        backdropRef.current.style.opacity = '1';
       }
     }
   };
@@ -341,12 +374,24 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
   const requestClose = () => {
     if (isClosing) return;
     setIsClosing(true);
+    if (backdropRef.current) {
+      backdropRef.current.style.transition = 'opacity 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+      backdropRef.current.style.opacity = '0';
+    }
+    if (panelRef.current) {
+      panelRef.current.style.transition = 'transform 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+      panelRef.current.style.transform = 'translate3d(0, 100vh, 0)';
+    }
     window.setTimeout(onClose, 240); // Khớp với duration 250ms của animation đóng
   };
 
   return (
     <div className={cn("fixed inset-0 z-[1100] flex items-end justify-center p-0 sm:items-center sm:p-4", isClosing && "pointer-events-none")}>
-      <div className={cn("history-modal-backdrop absolute inset-0 bg-black/65 backdrop-blur-md", isClosing && "history-modal-backdrop-out")} onClick={requestClose} />
+      <div 
+        ref={backdropRef} 
+        className="history-modal-backdrop absolute inset-0 bg-black/65 backdrop-blur-md" 
+        onClick={requestClose} 
+      />
       {deleteTarget && (
         <ConfirmDelete
           onCancel={() => setDeleteTarget(null)}
