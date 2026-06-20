@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getAppDataDeltaAction, getAppDataManifestAction, getAppDataPartsAction } from '@/app/actions';
 import {
+  APP_CACHE_BROADCAST_CHANNEL,
+  APP_CACHE_CHANGE_EVENT,
+  APP_CACHE_SIGNAL_KEY,
   applyMatchChangesLocal,
   getAppCacheSnapshot,
   hasUsableAppCache,
@@ -265,9 +268,12 @@ export function useSharedAppData({
         if (!isCurrentRun()) return;
         snapshot = await getAppCacheSnapshot();
       } else if (!hadStaleParts) {
+        const checkedPartVersions = options?.parts && options.parts.length > 0
+          ? pickPartVersions(manifest.parts, options.parts)
+          : manifest.parts;
         await seedAppCache({
           dataVersion: manifest.globalVersion,
-          partVersions: manifest.parts,
+          partVersions: checkedPartVersions,
           manifestCheckedAt: manifest.checkedAt,
         });
       }
@@ -310,9 +316,44 @@ export function useSharedAppData({
     const onCacheChange = () => {
       void loadLocalSnapshot();
     };
-    window.addEventListener('pickleball-cache-change', onCacheChange);
-    return () => window.removeEventListener('pickleball-cache-change', onCacheChange);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === APP_CACHE_SIGNAL_KEY) onCacheChange();
+    };
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      if ('BroadcastChannel' in window) {
+        channel = new BroadcastChannel(APP_CACHE_BROADCAST_CHANNEL);
+        channel.onmessage = (event) => {
+          if (event.data?.type === APP_CACHE_CHANGE_EVENT) onCacheChange();
+        };
+      }
+    } catch {}
+
+    window.addEventListener(APP_CACHE_CHANGE_EVENT, onCacheChange);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(APP_CACHE_CHANGE_EVENT, onCacheChange);
+      window.removeEventListener('storage', onStorage);
+      channel?.close();
+    };
   }, [loadLocalSnapshot]);
+
+  useEffect(() => {
+    if (localOnly) return;
+
+    const refreshVisibleTab = () => {
+      if (document.visibilityState && document.visibilityState !== 'visible') return;
+      void checkManifestAndRefresh({ force: true, parts: syncParts });
+    };
+
+    document.addEventListener('visibilitychange', refreshVisibleTab);
+    window.addEventListener('focus', refreshVisibleTab);
+    return () => {
+      document.removeEventListener('visibilitychange', refreshVisibleTab);
+      window.removeEventListener('focus', refreshVisibleTab);
+    };
+  }, [checkManifestAndRefresh, localOnly, syncParts]);
 
   return {
     ...data,

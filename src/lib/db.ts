@@ -85,6 +85,10 @@ type MetaEntry = {
   value: unknown;
 };
 
+export const APP_CACHE_CHANGE_EVENT = 'pickleball-cache-change';
+export const APP_CACHE_BROADCAST_CHANNEL = 'pickleball-cache';
+export const APP_CACHE_SIGNAL_KEY = 'pickleball_cache_signal';
+
 export type AppCacheInput = {
   players?: StoredPlayer[];
   matches?: StoredMatch[];
@@ -135,7 +139,20 @@ function entriesToConfig(entries: ConfigEntry[]) {
 
 function emitCacheChange() {
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new Event('pickleball-cache-change'));
+    const payload = { type: APP_CACHE_CHANGE_EVENT, at: Date.now(), token: Math.random().toString(36).slice(2) };
+    window.dispatchEvent(new CustomEvent(APP_CACHE_CHANGE_EVENT, { detail: payload }));
+
+    try {
+      if ('BroadcastChannel' in window) {
+        const channel = new BroadcastChannel(APP_CACHE_BROADCAST_CHANNEL);
+        channel.postMessage(payload);
+        channel.close();
+      }
+    } catch {}
+
+    try {
+      window.localStorage.setItem(APP_CACHE_SIGNAL_KEY, JSON.stringify(payload));
+    } catch {}
   }
 }
 
@@ -161,7 +178,7 @@ function normalizePartVersions(input: unknown, fallbackVersion = 0): AppCachePar
   return versions;
 }
 
-function mergePartVersions(current: unknown, updates: Partial<AppCachePartVersions> | undefined, fallbackVersion = 0): AppCachePartVersions {
+export function mergeAppCachePartVersions(current: unknown, updates: Partial<AppCachePartVersions> | undefined, fallbackVersion = 0): AppCachePartVersions {
   if (updates && Object.keys(updates).length > 0) {
     return normalizePartVersions({
       ...normalizePartVersions(current, 0),
@@ -169,6 +186,10 @@ function mergePartVersions(current: unknown, updates: Partial<AppCachePartVersio
     }, 0);
   }
   return normalizePartVersions(current, fallbackVersion);
+}
+
+function hasCompletePartVersions(input: Partial<AppCachePartVersions>) {
+  return APP_CACHE_PARTS.every((part) => typeof input[part] === 'number');
 }
 
 export async function openDB(): Promise<IDBDatabase> {
@@ -276,7 +297,7 @@ export async function removeMatchesLocal(matchIds: string[], dataVersion?: numbe
   matchIds.forEach((id) => store.delete(id));
   if (typeof dataVersion === 'number') {
     tx.objectStore(STORES.syncMeta).put({ key: 'dataVersion', value: dataVersion });
-    tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: mergePartVersions(currentPartVersions, partVersions || { matches: dataVersion }, dataVersion) });
+    tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: mergeAppCachePartVersions(currentPartVersions, partVersions || { matches: dataVersion }, dataVersion) });
   }
   await new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve(true);
@@ -296,7 +317,7 @@ export async function replaceOptimisticMatchLocal(tempId: string, match: StoredM
   matchStore.put(match);
   if (typeof dataVersion === 'number') {
     tx.objectStore(STORES.syncMeta).put({ key: 'dataVersion', value: dataVersion });
-    tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: mergePartVersions(currentPartVersions, partVersions || { matches: dataVersion }, dataVersion) });
+    tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: mergeAppCachePartVersions(currentPartVersions, partVersions || { matches: dataVersion }, dataVersion) });
   }
   await new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve(true);
@@ -330,7 +351,7 @@ export async function applyMatchChangesLocal(
   metaStore.put({ key: 'dataVersion', value: dataVersion });
   metaStore.put({
     key: 'partVersions',
-    value: mergePartVersions(currentPartVersions, partVersions, dataVersion),
+    value: mergeAppCachePartVersions(currentPartVersions, partVersions, dataVersion),
   });
   metaStore.put({ key: 'lastManifestCheck', value: manifestCheckedAt });
 
@@ -365,9 +386,10 @@ export async function seedAppCache(input: AppCacheInput) {
     metaWrites.push(setMetaValue('dataVersion', input.dataVersion));
   }
   if (input.partVersions) {
-    metaWrites.push(setMetaValue('partVersions', normalizePartVersions(input.partVersions, 0)));
-  } else if (typeof input.dataVersion === 'number') {
-    metaWrites.push(setMetaValue('partVersions', normalizePartVersions(null, input.dataVersion)));
+    const nextPartVersions = hasCompletePartVersions(input.partVersions)
+      ? normalizePartVersions(input.partVersions, 0)
+      : mergeAppCachePartVersions(await getMetaValue<unknown>('partVersions', null), input.partVersions, 0);
+    metaWrites.push(setMetaValue('partVersions', nextPartVersions));
   }
   if (typeof input.manifestCheckedAt === 'number') {
     metaWrites.push(setMetaValue('lastManifestCheck', input.manifestCheckedAt));
