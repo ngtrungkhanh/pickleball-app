@@ -150,6 +150,15 @@ export function AnalysisCenter({
   const config = Object.keys(sharedData.config).length > 0 ? sharedData.config : initialConfig;
   const currentActiveSeason = config.active_season || activeSeason;
   const [activeNav, setActiveNav] = useState(navItems[0].id);
+  const [prevNav, setPrevNav] = useState(navItems[0].id);
+  const [direction, setDirection] = useState(0);
+
+  if (activeNav !== prevNav) {
+    const prevIdx = navItems.findIndex(i => i.id === prevNav);
+    const activeIdx = navItems.findIndex(i => i.id === activeNav);
+    setDirection(activeIdx > prevIdx ? 1 : -1);
+    setPrevNav(activeNav);
+  }
   const [matrixTab, setMatrixTab] = useState('partner');
   const [insightSeed, setInsightSeed] = useState<number | null>(null);
   const [insightSelectionState, setInsightSelectionState] = useState<InsightSelectionState | null>(null);
@@ -409,13 +418,29 @@ export function AnalysisCenter({
           </div>
         )}
         
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="wait" custom={direction}>
           <motion.div
             key={activeNav}
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -15 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
+            custom={direction}
+            variants={{
+              enter: (dir: number) => ({
+                x: dir > 0 ? 45 : dir < 0 ? -45 : 0,
+                opacity: 0
+              }),
+              center: {
+                x: 0,
+                opacity: 1
+              },
+              exit: (dir: number) => ({
+                x: dir > 0 ? -45 : dir < 0 ? 45 : 0,
+                opacity: 0
+              })
+            }}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="w-full"
           >
             {/* ZONE 1: Hub (Tổng quan) */}
             {sharedData.hasLocalCache && activeNav === 'hub' && (
