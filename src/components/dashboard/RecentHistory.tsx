@@ -1,5 +1,5 @@
 'use client';
-import { useState, useTransition, useRef, type ReactNode } from 'react';
+import { useState, useTransition, useRef, useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { History, X, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
@@ -170,6 +170,130 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
   const currentDragOffsetRef = useRef(0);
   const [isDraggedClose, setIsDraggedClose] = useState(false);
 
+  // Mouse drag handlers (PC)
+  const handleWindowMouseMove = (e: MouseEvent) => {
+    if (!isDraggingRef.current) return;
+    const currentY = e.clientY;
+    const deltaY = currentY - dragStartYRef.current;
+    const offset = Math.max(0, deltaY);
+    currentDragOffsetRef.current = offset;
+
+    if (panelRef.current) {
+      panelRef.current.style.transform = `translate3d(0, ${offset}px, 0)`;
+    }
+  };
+
+  const handleWindowMouseUp = () => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    window.removeEventListener('mousemove', handleWindowMouseMove);
+    window.removeEventListener('mouseup', handleWindowMouseUp);
+
+    const threshold = 80;
+    const offset = currentDragOffsetRef.current;
+
+    if (offset > threshold) {
+      setIsClosing(true);
+      setIsDraggedClose(true);
+      if (panelRef.current) {
+        panelRef.current.style.transition = 'transform 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+        panelRef.current.style.transform = 'translate3d(0, 100vh, 0)';
+      }
+      window.setTimeout(() => {
+        onClose();
+      }, 240);
+    } else {
+      if (panelRef.current) {
+        panelRef.current.style.transition = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+        panelRef.current.style.transform = 'translate3d(0, 0, 0)';
+      }
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('select') || target.closest('option') || target.closest('input')) {
+      return;
+    }
+
+    isDraggingRef.current = true;
+    dragStartYRef.current = e.clientY;
+    currentDragOffsetRef.current = 0;
+
+    if (panelRef.current) {
+      panelRef.current.style.transition = 'none';
+      panelRef.current.style.animation = 'none';
+    }
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+  };
+
+  // Touch drag handlers (Mobile)
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (window.innerWidth >= 640) return;
+
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('select') || target.closest('option') || target.closest('input')) {
+      return;
+    }
+
+    isDraggingRef.current = true;
+    dragStartYRef.current = e.touches[0].clientY;
+    currentDragOffsetRef.current = 0;
+
+    if (panelRef.current) {
+      panelRef.current.style.transition = 'none';
+      panelRef.current.style.animation = 'none';
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    const currentY = e.touches[0].clientY;
+    const deltaY = currentY - dragStartYRef.current;
+
+    const offset = Math.max(0, deltaY);
+    currentDragOffsetRef.current = offset;
+
+    if (panelRef.current) {
+      panelRef.current.style.transform = `translate3d(0, ${offset}px, 0)`;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+
+    const threshold = 80;
+    const offset = currentDragOffsetRef.current;
+
+    if (offset > threshold) {
+      setIsClosing(true);
+      setIsDraggedClose(true);
+      if (panelRef.current) {
+        panelRef.current.style.transition = 'transform 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
+        panelRef.current.style.transform = 'translate3d(0, 100vh, 0)';
+      }
+      window.setTimeout(() => {
+        onClose();
+      }, 240);
+    } else {
+      if (panelRef.current) {
+        panelRef.current.style.transition = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+        panelRef.current.style.transform = 'translate3d(0, 0, 0)';
+      }
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const playerOptions = players.filter(p => p.active !== false && !p.deleted_at);
   const ids = (m: any) => [m.win_1, m.win_2, m.lose_1, m.lose_2].filter(Boolean);
   const team = (m: any, id: string) => ([m.win_1, m.win_2].includes(id) ? 'win' : [m.lose_1, m.lose_2].includes(id) ? 'loss' : null);
@@ -220,62 +344,6 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
     window.setTimeout(onClose, 240); // Khớp với duration 250ms của animation đóng
   };
 
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (window.innerWidth >= 640) return;
-
-    const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('select') || target.closest('option') || target.closest('input')) {
-      return;
-    }
-
-    isDraggingRef.current = true;
-    dragStartYRef.current = e.touches[0].clientY;
-    currentDragOffsetRef.current = 0;
-
-    if (panelRef.current) {
-      panelRef.current.style.transition = 'none';
-      panelRef.current.style.animation = 'none';
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current) return;
-    const currentY = e.touches[0].clientY;
-    const deltaY = currentY - dragStartYRef.current;
-
-    const offset = Math.max(0, deltaY);
-    currentDragOffsetRef.current = offset;
-
-    if (panelRef.current) {
-      panelRef.current.style.transform = `translate3d(0, ${offset}px, 0)`;
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (!isDraggingRef.current) return;
-    isDraggingRef.current = false;
-
-    const threshold = 120;
-    const offset = currentDragOffsetRef.current;
-
-    if (offset > threshold) {
-      setIsClosing(true);
-      setIsDraggedClose(true);
-      if (panelRef.current) {
-        panelRef.current.style.transition = 'transform 240ms cubic-bezier(0.32, 0.94, 0.6, 1)';
-        panelRef.current.style.transform = 'translate3d(0, 100%, 0)';
-      }
-      window.setTimeout(() => {
-        onClose();
-      }, 240);
-    } else {
-      if (panelRef.current) {
-        panelRef.current.style.transition = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)';
-        panelRef.current.style.transform = 'translate3d(0, 0, 0)';
-      }
-    }
-  };
-
   return (
     <div className={cn("fixed inset-0 z-[1100] flex items-end justify-center p-0 sm:items-center sm:p-4", isClosing && "pointer-events-none")}>
       <div className={cn("history-modal-backdrop absolute inset-0 bg-black/65 backdrop-blur-md", isClosing && "history-modal-backdrop-out")} onClick={requestClose} />
@@ -304,7 +372,8 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          className="flex flex-col shrink-0 select-none cursor-grab active:cursor-grabbing sm:touch-none"
+          onMouseDown={handleMouseDown}
+          className="flex flex-col shrink-0 select-none cursor-grab active:cursor-grabbing"
         >
           <div className="mx-auto my-3 h-1.5 w-12 rounded-full bg-slate-700/50 sm:hidden" />
           <div className="flex items-center justify-between px-6 pb-5 sm:px-8 sm:py-6 border-b border-slate-800/80 bg-[#0f1b32]/90 shrink-0">
