@@ -200,9 +200,6 @@ function DetailPanel({ adv, closing = false }: { adv: AdvancedStats; closing?: b
                 <span className="text-xs sm:text-sm font-bold text-white/45">Chưa đủ dữ liệu</span>
               )}
             </div>
-            <div className="min-w-0 w-full text-xs font-extrabold text-slate-300/80 leading-snug break-words">
-              {adv.formTrend || 'Chờ thêm trận'}
-            </div>
           </div>
 
           <div className={cn(
@@ -228,15 +225,11 @@ function DetailPanel({ adv, closing = false }: { adv: AdvancedStats; closing?: b
                 )}>
                   {Math.round(adv.bestPartner.rate)}% thắng • {adv.bestPartner.wins}/{adv.bestPartner.total}
                 </div>
-                <div className="min-w-0 w-full text-xs font-extrabold text-slate-300/80 leading-snug break-words">
-                  {adv.bestPartner.note || 'Cặp này khá ổn'}
-                </div>
               </>
             ) : (
               <>
                 <div className="min-w-0 w-full text-sm sm:text-base font-black text-white/60 leading-snug break-words">{partnerFallback.main}</div>
                 <div className="min-w-0 w-full text-xs font-bold text-slate-300/75 leading-snug break-words">{partnerFallback.metric}</div>
-                <div className="min-w-0 w-full text-xs font-extrabold text-slate-300/70 leading-snug break-words">{partnerFallback.note}</div>
               </>
             )}
           </div>
@@ -253,15 +246,11 @@ function DetailPanel({ adv, closing = false }: { adv: AdvancedStats; closing?: b
                 <div className="min-w-0 w-full text-xs font-extrabold text-red-200/90 leading-snug break-words">
                   {Math.round(adv.toughestRival.lossRate)}% thua • {adv.toughestRival.losses}/{adv.toughestRival.total}
                 </div>
-                <div className="min-w-0 w-full text-xs font-extrabold text-slate-300/80 leading-snug break-words">
-                  {adv.toughestRival.note || 'Kèo này hơi mệt'}
-                </div>
               </>
             ) : (
               <>
                 <div className="min-w-0 w-full text-sm sm:text-base font-black text-white/60 leading-snug break-words">{toughFallback.main}</div>
                 <div className="min-w-0 w-full text-xs font-bold text-slate-300/75 leading-snug break-words">{toughFallback.metric}</div>
-                <div className="min-w-0 w-full text-xs font-extrabold text-slate-300/70 leading-snug break-words">{toughFallback.note}</div>
               </>
             )}
           </div>
@@ -278,15 +267,11 @@ function DetailPanel({ adv, closing = false }: { adv: AdvancedStats; closing?: b
                 <div className="min-w-0 w-full text-xs font-extrabold text-sky-100/90 leading-snug break-words">
                   {Math.round(adv.easiestRival.winRate)}% thắng • {adv.easiestRival.wins}/{adv.easiestRival.total}
                 </div>
-                <div className="min-w-0 w-full text-xs font-extrabold text-slate-300/80 leading-snug break-words">
-                  {adv.easiestRival.note || 'Cửa sáng hơn chút'}
-                </div>
               </>
             ) : (
               <>
                 <div className="min-w-0 w-full text-sm sm:text-base font-black text-white/60 leading-snug break-words">{easyFallback.main}</div>
                 <div className="min-w-0 w-full text-xs font-bold text-slate-300/75 leading-snug break-words">{easyFallback.metric}</div>
-                <div className="min-w-0 w-full text-xs font-extrabold text-slate-300/70 leading-snug break-words">{easyFallback.note}</div>
               </>
             )}
           </div>
