@@ -562,7 +562,16 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
                     </div>
                     <div className={cn('space-y-2 border-l-2 pl-3.5', day.isToday ? 'border-primary/35' : 'border-white/[0.07]')}>
                       {day.matches.map((m: any) => (
-                        <MatchCard key={m.id} m={m} players={players} canEdit={canEdit} isDeleting={isDeletingId === m.id} onDelete={() => setDeleteTarget(m.id)} matchExpected={matchExpected} />
+                        <MatchCard
+                          key={m.id}
+                          m={m}
+                          players={players}
+                          canEdit={canEdit}
+                          isDeleting={isDeletingId === m.id}
+                          onDelete={() => setDeleteTarget(m.id)}
+                          matchExpected={matchExpected}
+                          highlightedPlayerIds={[member1, member2].filter(id => id.length > 0)}
+                        />
                       ))}
                     </div>
                   </div>
@@ -578,8 +587,9 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
 }
 
 // ─── Shared match card (used in modal) ───────────────────────────────────────
-function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }: { m: any; players: any[]; onDelete: () => void; canEdit: boolean; isDeleting?: boolean; matchExpected?: any }) {
+function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected, highlightedPlayerIds = [] }: { m: any; players: any[]; onDelete: () => void; canEdit: boolean; isDeleting?: boolean; matchExpected?: any; highlightedPlayerIds?: string[] }) {
   const name = (id: string, mode: PlayerNameMode = 'full') => playerName(players, id, mode);
+  const playerTone = (id: string) => highlightedPlayerIds.includes(id) ? 'text-amber-300' : 'text-white/90';
   const d = new Date(m.date);
   const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
@@ -610,12 +620,12 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
         )}
         <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-5" data-mobile-match-row>
           <div className="min-w-0 space-y-0.5 text-right">
-            <MobilePlayerName players={players} id={m.win_1} className="truncate text-sm font-black text-white/90" />
-            <div className="hidden truncate text-base font-black text-white/90 sm:block">{name(m.win_1)}</div>
+            <MobilePlayerName players={players} id={m.win_1} className={cn('truncate text-sm font-black', playerTone(m.win_1))} />
+            <div className={cn('hidden truncate text-base font-black sm:block', playerTone(m.win_1))}>{name(m.win_1)}</div>
             {m.win_2 && (
               <>
-                <MobilePlayerName players={players} id={m.win_2} className="truncate text-sm font-black text-white/90" />
-                <div className="hidden truncate text-base font-black text-white/90 sm:block">{name(m.win_2)}</div>
+                <MobilePlayerName players={players} id={m.win_2} className={cn('truncate text-sm font-black', playerTone(m.win_2))} />
+                <div className={cn('hidden truncate text-base font-black sm:block', playerTone(m.win_2))}>{name(m.win_2)}</div>
               </>
             )}
           </div>
@@ -634,12 +644,12 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected }:
             )}
           </div>
           <div className="min-w-0 space-y-0.5 text-left">
-            <MobilePlayerName players={players} id={m.lose_1} className="truncate text-sm font-black text-white/90" />
-            <div className="hidden truncate text-base font-black text-white/90 sm:block">{name(m.lose_1)}</div>
+            <MobilePlayerName players={players} id={m.lose_1} className={cn('truncate text-sm font-black', playerTone(m.lose_1))} />
+            <div className={cn('hidden truncate text-base font-black sm:block', playerTone(m.lose_1))}>{name(m.lose_1)}</div>
             {m.lose_2 && (
               <>
-                <MobilePlayerName players={players} id={m.lose_2} className="truncate text-sm font-black text-white/90" />
-                <div className="hidden truncate text-base font-black text-white/90 sm:block">{name(m.lose_2)}</div>
+                <MobilePlayerName players={players} id={m.lose_2} className={cn('truncate text-sm font-black', playerTone(m.lose_2))} />
+                <div className={cn('hidden truncate text-base font-black sm:block', playerTone(m.lose_2))}>{name(m.lose_2)}</div>
               </>
             )}
           </div>
