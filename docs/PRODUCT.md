@@ -107,6 +107,8 @@ trong backup không được tự xuất hiện lại sau restore.
 
 - Dashboard hiển thị 5 trận gần nhất.
 - Full history mở bằng modal, nhóm theo season/ngày và có filter.
+- Khi lọc theo thành viên trong full history, tên các thành viên đang chọn được
+  đổi màu nổi bật trong từng trận trên cả mobile và desktop.
 - Chỉ edit mode mới được xóa trận.
 - Layout mobile ưu tiên date/time rail gọn và nội dung hai đội dễ đọc.
 

@@ -181,7 +181,6 @@ function ScoreStepper({ label, value, onChange, compact = false }: { label: stri
         </motion.button>
 
         <motion.div
-          key={value}
           initial={{ scale: 0.85, opacity: 0.85 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 380, damping: 14 }}
@@ -190,9 +189,11 @@ function ScoreStepper({ label, value, onChange, compact = false }: { label: stri
           <input
             ref={ref}
             type="text" inputMode="numeric" pattern="[0-9]*"
+            aria-label={`Tỷ số ${label.toLocaleLowerCase('vi-VN')}`}
             value={value}
             onChange={e => { const n = parseInt(e.target.value, 10); if (!isNaN(n) && n >= 0) onChange(n); else if (e.target.value === '') onChange(0); }}
             onFocus={() => setTimeout(() => ref.current?.select(), 0)}
+            onClick={e => e.currentTarget.select()}
             className={cn("text-center bg-transparent border-0 border-b-4 border-white/10 focus:border-primary/50 outline-none font-black text-white transition-all py-1 tabular-nums", compact ? "w-12 text-3xl" : "w-14 sm:w-20 text-4xl sm:text-5xl md:text-6xl")}
             style={{ lineHeight: 1 }}
           />
