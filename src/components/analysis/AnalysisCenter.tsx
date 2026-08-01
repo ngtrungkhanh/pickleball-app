@@ -1951,7 +1951,7 @@ function ChampionGalleryCard({
             )}
             <span className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200/75">{entry.season}</span>
           </div>
-          <div className="mt-2 break-words py-1 text-xl font-black uppercase leading-[1.35] text-white">
+          <div lang="vi" className="mt-3 max-w-full break-words pr-1 text-lg font-black leading-[1.55] tracking-normal text-white sm:text-xl">
             {entry.playerName}
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold text-white/45">
@@ -1977,7 +1977,7 @@ function HallDetailPanel({ entry }: { entry: HallOfFameEntry | null }) {
                   <Crown className="h-3.5 w-3.5" />
                   {entry.season} · Nhà vô địch
                 </div>
-                <div className="break-words py-1 text-2xl font-black uppercase leading-[1.3] tracking-[0.03em] text-white sm:text-4xl">
+                <div lang="vi" className="break-words py-1 text-2xl font-black leading-[1.45] tracking-normal text-white sm:text-4xl">
                   {entry.playerName}
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-[0.12em] text-white/45">
