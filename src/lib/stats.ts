@@ -9,7 +9,7 @@ type StatPlayer = {
   [key: string]: unknown;
 };
 
-type StatMatch = {
+export type StatMatch = {
   id?: unknown;
   win_1?: unknown;
   win_2?: unknown;
@@ -191,8 +191,49 @@ export function getSeasonSummaryStats(matches: StatMatch[], loseMoney: number = 
     : totalLoseCount * loseMoney;
 
   const matchDates = rankingMatches.map(m => new Date(String(m.date || '')).getTime()).sort((a, b) => a - b);
-  const startDate = matchDates.length > 0 ? new Date(matchDates[0]) : null;
-  const seasonDays = startDate ? Math.max(1, Math.floor((Date.now() - startDate.getTime()) / DAY_MS) + 1) : 0;
+  const seasonNames = Array.from(new Set(rankingMatches.map(m => String(m.season || 'Season 1'))));
+  const isSingleSeason = seasonNames.length === 1;
+  const singleSeasonName = isSingleSeason ? seasonNames[0] : null;
+  const seasonsList = fineRules.seasons || [];
+  const seasonInfo = singleSeasonName ? seasonsList.find(s => s.name === singleSeasonName) : null;
+
+  const toValidTime = (value?: string | null) => {
+    if (!value) return null;
+    const time = new Date(value).getTime();
+    return Number.isFinite(time) && time > 0 ? time : null;
+  };
+
+  let startDateMs: number | null = matchDates.length > 0 ? matchDates[0] : null;
+  const seasonStartMs = toValidTime(seasonInfo?.start_date);
+  if (seasonStartMs !== null) {
+    startDateMs = startDateMs !== null ? Math.min(startDateMs, seasonStartMs) : seasonStartMs;
+  }
+
+  let endDateMs: number = Date.now();
+  if (isSingleSeason && seasonInfo) {
+    if (seasonInfo.active === false) {
+      const storedEndMs = toValidTime(seasonInfo.end_date);
+      const nextSeasonStartMs = seasonStartMs === null
+        ? null
+        : seasonsList
+          .map(season => toValidTime(season.start_date))
+          .filter((time): time is number => time !== null && time > seasonStartMs)
+          .sort((a, b) => a - b)[0] ?? null;
+      const inferredEndMs = storedEndMs ?? (nextSeasonStartMs !== null ? nextSeasonStartMs - 1 : null);
+      if (inferredEndMs !== null) {
+        endDateMs = matchDates.length > 0 ? Math.max(inferredEndMs, matchDates[matchDates.length - 1]) : inferredEndMs;
+      } else if (matchDates.length > 0) {
+        endDateMs = matchDates[matchDates.length - 1];
+      }
+    }
+  } else if (isSingleSeason && !seasonInfo && seasonsList.length > 0) {
+    const hasActiveSeason = seasonsList.some(s => s.active);
+    if (hasActiveSeason && matchDates.length > 0) {
+      endDateMs = matchDates[matchDates.length - 1];
+    }
+  }
+
+  const seasonDays = startDateMs !== null ? Math.max(1, Math.floor((endDateMs - startDateMs) / DAY_MS) + 1) : 0;
 
   const now = new Date();
   const startOfDay = getVietnamStartOfDayUtcMs(now);

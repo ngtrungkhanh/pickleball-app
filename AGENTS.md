@@ -71,6 +71,17 @@ npx tsc --noEmit
 npm run build
 ```
 
+- `npm run test` và `npm run build` đã có khóa tài nguyên dùng chung, giới hạn
+  heap và số worker. Không gọi trực tiếp `vitest`, `next build` hoặc bỏ qua
+  wrapper trong `scripts/run-resource-guard.mjs`.
+- Build được cố định ở Webpack vì Turbopack từng kẹt tại bước compile và làm cạn
+  pagefile trên máy local. Wrapper phải giữ timeout 2 phút và watchdog Windows
+  dừng cây tiến trình khi tổng private memory của Node vượt 1,8 GB.
+- Luôn chạy test, ESLint, TypeScript và build **tuần tự**. Không chạy song song
+  các lệnh kiểm tra nặng; đặc biệt không chạy test đồng thời với build.
+- Test logic mặc định dùng môi trường Node. Chỉ file test component thật sự cần
+  DOM mới được khai báo `// @vitest-environment jsdom` tại chính file đó.
+
 - Hệ thống dùng Vitest để tự động hóa test. Khi sửa đổi logic cốt lõi (ELO, Ranking) hoặc thêm tính năng xử lý dữ liệu phức tạp (như xử lý text nhận diện giọng nói), BẮT BUỘC phải viết test vào thư mục `src/lib/__tests__/`.
 - Repo có thể còn lint debt cũ; ưu tiên ESLint đúng các file đã sửa.
 - Với lịch sử trận đấu, có thể dùng `npm run visual:test:history`.

@@ -53,6 +53,7 @@ export type StoredSeason = {
   name: string;
   active?: boolean;
   start_date?: string;
+  end_date?: string | null;
   lose_money?: number;
   [key: string]: unknown;
 };

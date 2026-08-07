@@ -745,13 +745,14 @@ export async function endSeasonAction() {
     }
 
     // Deactivate all
+    await sql`UPDATE seasons SET active = false, end_date = NOW() WHERE active = true`;
     await sql`UPDATE seasons SET active = false`;
     
     // Create new
     await sql`
       INSERT INTO seasons (id, name, start_date, active)
       VALUES (${nextName}, ${nextName}, NOW(), true)
-      ON CONFLICT (id) DO UPDATE SET active = true, archived = false
+      ON CONFLICT (id) DO UPDATE SET active = true, archived = false, end_date = NULL
     `;
     
     await setConfigValue('active_season', nextName);
@@ -774,11 +775,12 @@ export async function createSeasonAction(formData: FormData) {
     const name = String(formData.get('name') || '').trim();
     if (!name) return { error: 'Tên Season không hợp lệ' };
 
+    await sql`UPDATE seasons SET active = false, end_date = NOW() WHERE active = true`;
     await sql`UPDATE seasons SET active = false WHERE active = true`;
     await sql`
       INSERT INTO seasons (id, name, start_date, active)
       VALUES (${name}, ${name}, NOW(), true)
-      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, active = true, archived = false
+      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, active = true, archived = false, end_date = NULL
     `;
     await setConfigValue('active_season', name);
     await bumpDataVersions(['seasons', 'config', 'admin']);
@@ -799,11 +801,12 @@ export async function setActiveSeasonAction(formData: FormData) {
     const name = String(formData.get('name') || '').trim();
     if (!name) return { error: 'Season không hợp lệ' };
 
+    await sql`UPDATE seasons SET active = false, end_date = NOW() WHERE active = true`;
     await sql`UPDATE seasons SET active = false`;
     await sql`
       INSERT INTO seasons (id, name, active)
       VALUES (${name}, ${name}, true)
-      ON CONFLICT (id) DO UPDATE SET active = true, archived = false
+      ON CONFLICT (id) DO UPDATE SET active = true, archived = false, end_date = NULL
     `;
     await setConfigValue('active_season', name);
     await bumpDataVersions(['seasons', 'config', 'admin']);
@@ -1124,6 +1127,7 @@ function normalizeSeasonRows(rows: any[]) {
     name: String(row.name),
     active: Boolean(row.active),
     start_date: row.start_date ? String(row.start_date) : undefined,
+    end_date: row.end_date ? String(row.end_date) : undefined,
     champion_image_url: row.champion_image_url ? String(row.champion_image_url) : null,
     champion_image_path: row.champion_image_path ? String(row.champion_image_path) : null,
     champion_image_updated_at: row.champion_image_updated_at ? String(row.champion_image_updated_at) : null,
@@ -1215,7 +1219,7 @@ export async function getAppDataPartsAction(parts?: string[]) {
     }
     if (requestedParts.includes('seasons')) {
       queries.push(
-        sql`SELECT id, name, active, start_date, champion_image_url, champion_image_path, champion_image_updated_at, lose_money FROM seasons WHERE archived = false ORDER BY start_date DESC`
+        sql`SELECT id, name, active, start_date, end_date, champion_image_url, champion_image_path, champion_image_updated_at, lose_money FROM seasons WHERE archived = false ORDER BY start_date DESC`
           .catch(() => sql`SELECT * FROM seasons ORDER BY start_date DESC`)
           .then((result) => { response.seasons = normalizeSeasonRows(result.rows); })
           .catch((error) => {
