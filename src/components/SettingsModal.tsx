@@ -46,6 +46,7 @@ type Season = {
   name: string;
   active?: boolean;
   start_date?: string;
+  end_date?: string | null;
   champion_image_url?: string | null;
   champion_image_path?: string | null;
   champion_image_updated_at?: string | null;

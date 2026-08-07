@@ -1,0 +1,185 @@
+import { createHash } from 'node:crypto';
+import { open, readFile, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+
+const mode = process.argv[2];
+const forwardedArgs = process.argv.slice(3);
+const root = process.cwd();
+
+const commands = {
+  test: {
+    entry: path.join(root, 'node_modules', 'vitest', 'vitest.mjs'),
+    args: ['run', ...forwardedArgs],
+    memoryMb: 768,
+    timeoutMs: 5 * 60 * 1000,
+    totalNodePrivateLimitMb: 1024,
+  },
+  'test:watch': {
+    entry: path.join(root, 'node_modules', 'vitest', 'vitest.mjs'),
+    args: [...forwardedArgs],
+    memoryMb: 768,
+    timeoutMs: null,
+    totalNodePrivateLimitMb: 1024,
+  },
+  build: {
+    entry: path.join(root, 'node_modules', 'next', 'dist', 'bin', 'next'),
+    args: ['build', '--webpack', ...forwardedArgs],
+    memoryMb: 1024,
+    timeoutMs: 2 * 60 * 1000,
+    totalNodePrivateLimitMb: 1800,
+  },
+};
+
+const command = commands[mode];
+if (!command) {
+  console.error(`Chế độ không hợp lệ: ${mode || '(trống)'}`);
+  process.exit(2);
+}
+
+const lockId = createHash('sha256').update(path.resolve(root).toLowerCase()).digest('hex').slice(0, 16);
+const lockPath = path.join(tmpdir(), `pickleball-resource-${lockId}.lock`);
+
+function isProcessAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
+}
+
+async function acquireLock() {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const handle = await open(lockPath, 'wx');
+      await handle.writeFile(JSON.stringify({ pid: process.pid, mode, startedAt: new Date().toISOString() }));
+      await handle.close();
+      return;
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error;
+
+      let current = null;
+      try {
+        current = JSON.parse(await readFile(lockPath, 'utf8'));
+      } catch {
+        // Lock hỏng được xem như lock cũ và sẽ bị thay thế.
+      }
+
+      if (current && isProcessAlive(Number(current.pid))) {
+        console.error(
+          `Đã có tác vụ nặng "${current.mode}" chạy (PID ${current.pid}, từ ${current.startedAt}). `
+          + `Không khởi động "${mode}" đồng thời.`
+        );
+        process.exit(3);
+      }
+
+      await unlink(lockPath).catch(() => {});
+    }
+  }
+
+  throw new Error('Không thể tạo khóa tài nguyên sau khi dọn lock cũ.');
+}
+
+function withMemoryLimit(existing, memoryMb) {
+  const cleaned = String(existing || '')
+    .replace(/--max-old-space-size(?:=|\s+)\d+/g, '')
+    .trim();
+  return [cleaned, `--max-old-space-size=${memoryMb}`].filter(Boolean).join(' ');
+}
+
+await acquireLock();
+
+let child;
+let memoryWatchdog;
+let timedOut = false;
+let memoryExceeded = false;
+
+function stopChildTree(signal = 'SIGTERM') {
+  if (!child || child.exitCode !== null) return;
+  if (process.platform === 'win32') {
+    spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+  } else {
+    child.kill(signal);
+  }
+}
+
+function startWindowsMemoryWatchdog(limitMb) {
+  if (process.platform !== 'win32' || !limitMb) return null;
+
+  const limitBytes = limitMb * 1024 * 1024;
+  const script = [
+    `$limit = ${limitBytes}`,
+    'while ($true) {',
+    "  $total = (Get-Process -Name node -ErrorAction SilentlyContinue | Measure-Object -Property PrivateMemorySize64 -Sum).Sum",
+    '  if ($total -gt $limit) { exit 42 }',
+    '  Start-Sleep -Milliseconds 1000',
+    '}',
+  ].join('\n');
+
+  return spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], {
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+}
+
+process.once('SIGINT', () => stopChildTree('SIGINT'));
+process.once('SIGTERM', () => stopChildTree('SIGTERM'));
+
+try {
+  child = spawn(process.execPath, [command.entry, ...command.args], {
+    cwd: root,
+    env: {
+      ...process.env,
+      NODE_OPTIONS: withMemoryLimit(process.env.NODE_OPTIONS, command.memoryMb),
+    },
+    stdio: 'inherit',
+    windowsHide: true,
+  });
+
+  memoryWatchdog = startWindowsMemoryWatchdog(command.totalNodePrivateLimitMb);
+  memoryWatchdog?.once('exit', code => {
+    if (code !== 42 || !child || child.exitCode !== null) return;
+    memoryExceeded = true;
+    console.error(
+      `Tổng private memory của các tiến trình Node vượt ${command.totalNodePrivateLimitMb} MB; `
+      + `tác vụ "${mode}" đã bị dừng để bảo vệ hệ thống.`
+    );
+    stopChildTree();
+  });
+
+  const timeout = command.timeoutMs
+    ? setTimeout(() => {
+      timedOut = true;
+      console.error(`Tác vụ "${mode}" vượt quá ${Math.round(command.timeoutMs / 60000)} phút và đã bị dừng.`);
+      stopChildTree();
+    }, command.timeoutMs)
+    : null;
+
+  const result = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (code, signal) => resolve({ code, signal }));
+  });
+
+  if (timeout) clearTimeout(timeout);
+  if (memoryWatchdog?.exitCode === null) memoryWatchdog.kill();
+
+  if (memoryExceeded) {
+    process.exitCode = 125;
+  } else if (timedOut) {
+    process.exitCode = 124;
+  } else if (result.signal) {
+    console.error(`Tác vụ "${mode}" dừng bởi tín hiệu ${result.signal}.`);
+    process.exitCode = 1;
+  } else {
+    process.exitCode = result.code ?? 1;
+  }
+} finally {
+  if (memoryWatchdog?.exitCode === null) memoryWatchdog.kill();
+  await unlink(lockPath).catch(() => {});
+}

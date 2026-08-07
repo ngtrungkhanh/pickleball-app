@@ -14,6 +14,9 @@ export type FineMatch = {
 export type FineSeason = {
   name: string;
   lose_money?: number;
+  start_date?: string;
+  end_date?: string | null;
+  active?: boolean;
 };
 
 export type FinePlayerSeasonSetting = {

@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/run-resource-guard.mjs build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest",
+    "test": "node scripts/run-resource-guard.mjs test",
+    "test:watch": "node scripts/run-resource-guard.mjs test:watch",
     "audit:insights": "node scripts/audit-insight-selection.mjs",
     "visual:test:history": "node scripts/visual-test-history.mjs"
   },
