@@ -75,8 +75,9 @@ npm run build
   heap và số worker. Không gọi trực tiếp `vitest`, `next build` hoặc bỏ qua
   wrapper trong `scripts/run-resource-guard.mjs`.
 - Build được cố định ở Webpack vì Turbopack từng kẹt tại bước compile và làm cạn
-  pagefile trên máy local. Wrapper phải giữ timeout 2 phút và watchdog Windows
-  dừng cây tiến trình khi tổng private memory của Node vượt 1,8 GB.
+  pagefile trên máy local. Wrapper phải giữ timeout 2 phút; watchdog Windows chỉ
+  đo cây tiến trình của tác vụ, dừng test ở 640 MB và build ở 1,2 GB private
+  memory. Test phải dùng một worker-thread để tránh nhân đôi heap.
 - Luôn chạy test, ESLint, TypeScript và build **tuần tự**. Không chạy song song
   các lệnh kiểm tra nặng; đặc biệt không chạy test đồng thời với build.
 - Test logic mặc định dùng môi trường Node. Chỉ file test component thật sự cần

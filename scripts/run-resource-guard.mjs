@@ -12,23 +12,23 @@ const commands = {
   test: {
     entry: path.join(root, 'node_modules', 'vitest', 'vitest.mjs'),
     args: ['run', ...forwardedArgs],
-    memoryMb: 768,
+    memoryMb: 384,
     timeoutMs: 5 * 60 * 1000,
-    totalNodePrivateLimitMb: 1024,
+    totalNodePrivateLimitMb: 640,
   },
   'test:watch': {
     entry: path.join(root, 'node_modules', 'vitest', 'vitest.mjs'),
     args: [...forwardedArgs],
-    memoryMb: 768,
+    memoryMb: 384,
     timeoutMs: null,
-    totalNodePrivateLimitMb: 1024,
+    totalNodePrivateLimitMb: 640,
   },
   build: {
     entry: path.join(root, 'node_modules', 'next', 'dist', 'bin', 'next'),
     args: ['build', '--webpack', ...forwardedArgs],
-    memoryMb: 1024,
+    memoryMb: 768,
     timeoutMs: 2 * 60 * 1000,
-    totalNodePrivateLimitMb: 1800,
+    totalNodePrivateLimitMb: 1200,
   },
 };
 
@@ -109,16 +109,30 @@ function stopChildTree(signal = 'SIGTERM') {
   }
 }
 
-function startWindowsMemoryWatchdog(limitMb) {
-  if (process.platform !== 'win32' || !limitMb) return null;
+function startWindowsMemoryWatchdog(limitMb, rootPid) {
+  if (process.platform !== 'win32' || !limitMb || !rootPid) return null;
 
   const limitBytes = limitMb * 1024 * 1024;
   const script = [
+    '$ErrorActionPreference = "SilentlyContinue"',
     `$limit = ${limitBytes}`,
+    `$rootProcessId = ${rootPid}`,
     'while ($true) {',
-    "  $total = (Get-Process -Name node -ErrorAction SilentlyContinue | Measure-Object -Property PrivateMemorySize64 -Sum).Sum",
+    "  $nodes = @(Get-CimInstance Win32_Process -Filter \"Name = 'node.exe'\" | Select-Object ProcessId, ParentProcessId, PrivatePageCount)",
+    '  $ids = [System.Collections.Generic.HashSet[int]]::new()',
+    '  [void]$ids.Add([int]$rootProcessId)',
+    '  do {',
+    '    $added = $false',
+    '    foreach ($node in $nodes) {',
+    '      if ($ids.Contains([int]$node.ParentProcessId) -and $ids.Add([int]$node.ProcessId)) { $added = $true }',
+    '    }',
+    '  } while ($added)',
+    '  [long]$total = 0',
+    '  foreach ($node in $nodes) {',
+    '    if ($ids.Contains([int]$node.ProcessId)) { $total += [long]$node.PrivatePageCount }',
+    '  }',
     '  if ($total -gt $limit) { exit 42 }',
-    '  Start-Sleep -Milliseconds 1000',
+    '  Start-Sleep -Milliseconds 500',
     '}',
   ].join('\n');
 
@@ -142,7 +156,7 @@ try {
     windowsHide: true,
   });
 
-  memoryWatchdog = startWindowsMemoryWatchdog(command.totalNodePrivateLimitMb);
+  memoryWatchdog = startWindowsMemoryWatchdog(command.totalNodePrivateLimitMb, child.pid);
   memoryWatchdog?.once('exit', code => {
     if (code !== 42 || !child || child.exitCode !== null) return;
     memoryExceeded = true;
