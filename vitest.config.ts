@@ -8,6 +8,7 @@ export default defineConfig({
     globals: true,
     setupFiles: [],
     include: ['src/**/*.test.{ts,tsx}'],
+    pool: 'threads',
     maxWorkers: 1,
     fileParallelism: false,
   },

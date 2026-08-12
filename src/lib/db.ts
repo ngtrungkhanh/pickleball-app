@@ -5,6 +5,21 @@
 
 const DB_NAME = 'PickleballDB';
 const DB_VERSION = 4;
+const DB_OPERATION_TIMEOUT_MS = 5_000;
+
+let databasePromise: Promise<IDBDatabase> | null = null;
+
+export class AppCacheUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AppCacheUnavailableError';
+  }
+}
+
+export function isAppCacheUnavailableError(error: unknown) {
+  return error instanceof AppCacheUnavailableError
+    || (typeof DOMException !== 'undefined' && error instanceof DOMException);
+}
 
 const STORES = {
   matches: 'matches',
@@ -193,9 +208,23 @@ function hasCompletePartVersions(input: Partial<AppCachePartVersions>) {
   return APP_CACHE_PARTS.every((part) => typeof input[part] === 'number');
 }
 
-export async function openDB(): Promise<IDBDatabase> {
+function createDatabaseConnection(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
+    let settled = false;
+    const timeout = globalThis.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new AppCacheUnavailableError('IndexedDB không phản hồi.'));
+    }, DB_OPERATION_TIMEOUT_MS);
+
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timeout);
+      reject(error instanceof Error ? error : new AppCacheUnavailableError('Không thể mở IndexedDB.'));
+    };
+
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORES.matches)) {
@@ -220,8 +249,67 @@ export async function openDB(): Promise<IDBDatabase> {
         db.createObjectStore(STORES.playerSeasonSettings, { keyPath: 'id' });
       }
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onblocked = () => {
+      fail(new AppCacheUnavailableError('IndexedDB đang bị một tab Chrome khác khóa.'));
+    };
+    request.onsuccess = () => {
+      const db = request.result;
+      if (settled) {
+        db.close();
+        return;
+      }
+      settled = true;
+      globalThis.clearTimeout(timeout);
+      db.onversionchange = () => {
+        db.close();
+        databasePromise = null;
+      };
+      db.onclose = () => {
+        databasePromise = null;
+      };
+      resolve(db);
+    };
+    request.onerror = () => {
+      fail(request.error || new AppCacheUnavailableError('Không thể mở IndexedDB.'));
+    };
+  });
+}
+
+export async function openDB(): Promise<IDBDatabase> {
+  const pending = databasePromise || createDatabaseConnection();
+  databasePromise = pending;
+  try {
+    return await pending;
+  } catch (error) {
+    if (databasePromise === pending) databasePromise = null;
+    throw error;
+  }
+}
+
+function waitForTransaction(tx: IDBTransaction) {
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const timeout = globalThis.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { tx.abort(); } catch {}
+      reject(new AppCacheUnavailableError('IndexedDB không hoàn tất thao tác đúng hạn.'));
+    }, DB_OPERATION_TIMEOUT_MS);
+
+    const finish = (error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timeout);
+      if (error) {
+        reject(error instanceof Error ? error : new AppCacheUnavailableError('Thao tác IndexedDB thất bại.'));
+      } else {
+        resolve();
+      }
+    };
+
+    tx.oncomplete = () => finish();
+    tx.onerror = () => finish(tx.error || new AppCacheUnavailableError('Thao tác IndexedDB thất bại.'));
+    tx.onabort = () => finish(tx.error || new AppCacheUnavailableError('Thao tác IndexedDB bị hủy.'));
   });
 }
 
@@ -231,10 +319,8 @@ async function replaceStore<T extends Record<string, unknown>>(storeName: string
   const store = tx.objectStore(storeName);
   store.clear();
   records.forEach((record) => store.put(record));
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve(true);
-    tx.onerror = () => reject(tx.error);
-  });
+  await waitForTransaction(tx);
+  return true;
 }
 
 async function putStore<T extends Record<string, unknown>>(storeName: string, records: T[]) {
@@ -242,10 +328,8 @@ async function putStore<T extends Record<string, unknown>>(storeName: string, re
   const tx = db.transaction(storeName, 'readwrite');
   const store = tx.objectStore(storeName);
   records.forEach((record) => store.put(record));
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve(true);
-    tx.onerror = () => reject(tx.error);
-  });
+  await waitForTransaction(tx);
+  return true;
 }
 
 async function getAllFromStore<T>(storeName: string): Promise<T[]> {
@@ -253,10 +337,12 @@ async function getAllFromStore<T>(storeName: string): Promise<T[]> {
   const tx = db.transaction(storeName, 'readonly');
   const store = tx.objectStore(storeName);
   const request = store.getAll();
-  return new Promise((resolve, reject) => {
+  const resultPromise = new Promise<T[]>((resolve, reject) => {
     request.onsuccess = () => resolve((request.result || []) as T[]);
-    request.onerror = () => reject(request.error);
+    request.onerror = () => reject(request.error || new AppCacheUnavailableError('Không thể đọc IndexedDB.'));
   });
+  const [result] = await Promise.all([resultPromise, waitForTransaction(tx)]);
+  return result;
 }
 
 async function setMetaValue(key: string, value: unknown) {
@@ -268,13 +354,15 @@ async function getMetaValue<T>(key: string, fallback: T): Promise<T> {
   const tx = db.transaction(STORES.syncMeta, 'readonly');
   const store = tx.objectStore(STORES.syncMeta);
   const request = store.get(key);
-  return new Promise((resolve) => {
+  const resultPromise = new Promise<T>((resolve, reject) => {
     request.onsuccess = () => {
       const entry = request.result as MetaEntry | undefined;
       resolve((entry?.value as T | undefined) ?? fallback);
     };
-    request.onerror = () => resolve(fallback);
+    request.onerror = () => reject(request.error || new AppCacheUnavailableError('Không thể đọc metadata IndexedDB.'));
   });
+  const [result] = await Promise.all([resultPromise, waitForTransaction(tx)]);
+  return result;
 }
 
 export async function saveMatchesLocal(matches: StoredMatch[]) {
@@ -300,10 +388,7 @@ export async function removeMatchesLocal(matchIds: string[], dataVersion?: numbe
     tx.objectStore(STORES.syncMeta).put({ key: 'dataVersion', value: dataVersion });
     tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: mergeAppCachePartVersions(currentPartVersions, partVersions || { matches: dataVersion }, dataVersion) });
   }
-  await new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve(true);
-    tx.onerror = () => reject(tx.error);
-  });
+  await waitForTransaction(tx);
   emitCacheChange();
 }
 
@@ -320,10 +405,7 @@ export async function replaceOptimisticMatchLocal(tempId: string, match: StoredM
     tx.objectStore(STORES.syncMeta).put({ key: 'dataVersion', value: dataVersion });
     tx.objectStore(STORES.syncMeta).put({ key: 'partVersions', value: mergeAppCachePartVersions(currentPartVersions, partVersions || { matches: dataVersion }, dataVersion) });
   }
-  await new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve(true);
-    tx.onerror = () => reject(tx.error);
-  });
+  await waitForTransaction(tx);
   emitCacheChange();
 }
 
@@ -356,10 +438,7 @@ export async function applyMatchChangesLocal(
   });
   metaStore.put({ key: 'lastManifestCheck', value: manifestCheckedAt });
 
-  await new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve(true);
-    tx.onerror = () => reject(tx.error);
-  });
+  await waitForTransaction(tx);
   emitCacheChange();
 }
 
@@ -465,10 +544,16 @@ export async function getHallImageLocal(season: string): Promise<StoredHallImage
   const tx = db.transaction(STORES.hallImages, 'readonly');
   const store = tx.objectStore(STORES.hallImages);
   const request = store.get(season);
-  return new Promise((resolve) => {
+  const resultPromise = new Promise<StoredHallImage | null>((resolve, reject) => {
     request.onsuccess = () => resolve((request.result as StoredHallImage | undefined) || null);
-    request.onerror = () => resolve(null);
+    request.onerror = () => reject(request.error || new AppCacheUnavailableError('Không thể đọc ảnh từ IndexedDB.'));
   });
+  try {
+    const [result] = await Promise.all([resultPromise, waitForTransaction(tx)]);
+    return result;
+  } catch {
+    return null;
+  }
 }
 
 export async function saveHallImageLocal(record: StoredHallImage) {
@@ -480,8 +565,5 @@ export async function removeHallImageLocal(season: string) {
   const tx = db.transaction(STORES.hallImages, 'readwrite');
   const store = tx.objectStore(STORES.hallImages);
   store.delete(season);
-  await new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve(true);
-    tx.onerror = () => reject(tx.error);
-  });
+  await waitForTransaction(tx);
 }

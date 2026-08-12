@@ -32,6 +32,7 @@ import Link from 'next/link';
 import {
   getAppCacheSnapshot,
   hasUsableAppCache,
+  isAppCacheUnavailableError,
   replaceAppCacheParts,
   saveMatchesLocal,
   seedAppCache,
@@ -163,6 +164,12 @@ export default function AdminPage() {
     setMatches(snapshot.matches || []);
   }, []);
 
+  const applyServerData = useCallback((appData: NonNullable<Awaited<ReturnType<typeof getAppDataPartsAction>>>) => {
+    setPlayers(appData.players || []);
+    setSeasons(appData.seasons || []);
+    setMatches(appData.matches || []);
+  }, []);
+
   const loadSystemData = useCallback(async () => {
     try {
       const [l, a] = await Promise.all([
@@ -215,10 +222,24 @@ export default function AdminPage() {
       applySnapshot(snapshot);
     } catch (err) {
       console.error('Admin Load Failed:', err);
-      setMsg({ type: 'error', text: 'Không thể tải dữ liệu từ server.' });
+      try {
+        const appData = await getAppDataPartsAction(CORE_PARTS);
+        if (!appData) throw new Error('app data unavailable');
+        applyServerData(appData);
+        setMsg({
+          type: 'error',
+          text: isAppCacheUnavailableError(err)
+            ? 'Cache Chrome đang bị khóa. Admin đang dùng dữ liệu trực tiếp từ server.'
+            : 'Không cập nhật được cache. Admin đang dùng dữ liệu trực tiếp từ server.',
+        });
+      } catch (fallbackError) {
+        console.error('Admin server fallback failed:', fallbackError);
+        setMsg({ type: 'error', text: 'Không thể tải dữ liệu từ server.' });
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, [applySnapshot]);
+  }, [applyServerData, applySnapshot]);
 
   useEffect(() => {
     try {
@@ -693,7 +714,7 @@ export default function AdminPage() {
                 a.download = `voice_logs_${new Date().toISOString().split('T')[0]}.json`;
                 a.click();
                 URL.revokeObjectURL(url);
-              } catch (e) {
+              } catch {
                 alert('Không thể xuất file logs');
               }
             }} disabled={isBusy} className="px-5 py-3 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all disabled:opacity-40 disabled:pointer-events-none">

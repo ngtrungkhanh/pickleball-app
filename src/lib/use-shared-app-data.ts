@@ -9,6 +9,7 @@ import {
   applyMatchChangesLocal,
   getAppCacheSnapshot,
   hasUsableAppCache,
+  isAppCacheUnavailableError,
   replaceAppCacheParts,
   seedAppCache,
   type AppCachePart,
@@ -133,15 +134,45 @@ export function useSharedAppData({
   const [cacheLoaded, setCacheLoaded] = useState(false);
   const runIdRef = useRef(0);
   const lastManifestCheckRef = useRef(0);
+  const cacheUnavailableRef = useRef(false);
 
   const loadLocalSnapshot = useCallback(async () => {
-    const snapshot = await getAppCacheSnapshot();
-    const usable = hasUsableAppCache(snapshot);
-    setHasLocalCache(usable);
-    setCacheLoaded(true);
-    setData(snapshotToData(snapshot, initialData));
-    return snapshot;
+    try {
+      const snapshot = await getAppCacheSnapshot();
+      cacheUnavailableRef.current = false;
+      const usable = hasUsableAppCache(snapshot);
+      setHasLocalCache(usable);
+      setCacheLoaded(true);
+      setData(snapshotToData(snapshot, initialData));
+      return snapshot;
+    } catch (error) {
+      console.error('Local app cache unavailable:', error);
+      cacheUnavailableRef.current = true;
+      setHasLocalCache(false);
+      setCacheLoaded(true);
+      return null;
+    }
   }, [initialData]);
+
+  const fetchServerFallback = useCallback(async (parts?: AppCachePart[]) => {
+    const requestedParts = parts && parts.length > 0 ? parts : APP_DATA_PARTS;
+    setSyncState('syncing');
+    setSyncMessage('Cache Chrome lỗi, đang tải trực tiếp từ server...');
+
+    const appData = await getAppDataPartsAction(requestedParts);
+    if (!appData) return false;
+
+    setData((current) => ({
+      players: appData.players as StoredPlayer[] | undefined ?? current.players,
+      matches: appData.matches as StoredMatch[] | undefined ?? current.matches,
+      seasons: appData.seasons as StoredSeason[] | undefined ?? current.seasons,
+      config: appData.config ?? current.config,
+      playerSeasonSettings: appData.playerSeasonSettings as StoredPlayerSeasonSetting[] | undefined ?? current.playerSeasonSettings,
+    }));
+    setHasLocalCache(false);
+    setCacheLoaded(true);
+    return true;
+  }, []);
 
   const fetchParts = useCallback(async (parts: AppCachePart[], message: string) => {
     if (parts.length === 0) return;
@@ -237,6 +268,15 @@ export function useSharedAppData({
       setSyncState('checking');
       setSyncMessage('');
 
+      if (cacheUnavailableRef.current) {
+        const fallbackApplied = await fetchServerFallback(options?.parts);
+        if (!fallbackApplied) throw new Error('server fallback unavailable');
+        if (!isCurrentRun()) return;
+        setSyncState('idle');
+        setSyncMessage('');
+        return;
+      }
+
       let snapshot = await getAppCacheSnapshot();
       if (!isCurrentRun()) return;
 
@@ -287,11 +327,25 @@ export function useSharedAppData({
     } catch (error) {
       console.error('Shared app data refresh failed:', error);
       if (!isCurrentRun()) return;
+      if (isAppCacheUnavailableError(error)) cacheUnavailableRef.current = true;
+      if (!localOnly) {
+        try {
+          const fallbackApplied = await fetchServerFallback(options?.parts);
+          if (!isCurrentRun()) return;
+          if (fallbackApplied) {
+            setSyncState('idle');
+            setSyncMessage('');
+            return;
+          }
+        } catch (fallbackError) {
+          console.error('Shared app data server fallback failed:', fallbackError);
+        }
+      }
       setSyncState('error');
       setSyncMessage('Không đồng bộ được dữ liệu mới');
       setCacheLoaded(true);
     }
-  }, [applyMatchDelta, fetchParts, initialData, localOnly, seedRoutePreloadIfPresent]);
+  }, [applyMatchDelta, fetchParts, fetchServerFallback, initialData, localOnly, seedRoutePreloadIfPresent]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -300,12 +354,12 @@ export function useSharedAppData({
         if (localOnly) {
           return;
         }
-        if (syncOnMount === 'empty-only' && hasUsableAppCache(snapshot)) return;
+        if (snapshot && syncOnMount === 'empty-only' && hasUsableAppCache(snapshot)) return;
         if (syncOnMount === 'always') {
           await checkManifestAndRefresh({ force: true, parts: syncParts });
           return;
         }
-        if (hasUsableAppCache(snapshot) && recentlyChecked(snapshot)) return;
+        if (snapshot && hasUsableAppCache(snapshot) && recentlyChecked(snapshot)) return;
         await checkManifestAndRefresh({ force: true, parts: syncParts });
       })();
     }, 0);
