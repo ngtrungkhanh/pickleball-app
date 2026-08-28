@@ -4,6 +4,8 @@ File này chỉ giữ các thay đổi đáng chú ý. Chi tiết theo commit xe
 
 ## Chưa phát hành
 
+- Giảm peak memory của Webpack và nâng resource guard Windows sang kiểm tra
+  RAM/commit headroom toàn hệ thống, dừng sớm trước khi máy rơi vào paging nặng.
 - Đóng băng ELO Hall of Fame tại thời điểm kết thúc season, đồng thời hiển thị
   khoảng thời gian mùa đã chốt theo `end_date` với fallback cho dữ liệu cũ.
 - Mở Analysis trực tiếp từ cache dùng chung thay vì ghi đè lại toàn bộ

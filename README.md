@@ -32,9 +32,11 @@ npm run audit:insights -- pickleball_backup_2026-06-08.json --seeds 1000
 Chạy các lệnh kiểm tra tuần tự. `npm run test` và `npm run build` dùng chung
 khóa tài nguyên, giới hạn worker/heap và sẽ từ chối khởi động nếu tác vụ nặng
 còn lại đang chạy. Không gọi trực tiếp `vitest` hoặc `next build` để tránh bỏ
-qua lớp bảo vệ này. Build dùng Webpack có timeout thay vì Turbopack để tránh
-compiler bị kẹt và giữ RAM vô hạn trên máy local. Trên Windows, watchdog sẽ
-dừng tác vụ nếu tổng private memory của Node vượt ngưỡng an toàn.
+qua lớp bảo vệ này. Build dùng Webpack có tối ưu bộ nhớ và timeout thay vì
+Turbopack để tránh compiler bị kẹt và giữ RAM vô hạn trên máy local. Trên
+Windows, wrapper kiểm tra RAM/commit headroom trước khi chạy và watchdog sẽ dừng
+sớm nếu toàn hệ thống tiến gần vùng paging nặng hoặc cây Node vượt ngưỡng an
+toàn.
 
 `npm run lint` có thể báo lint debt cũ của toàn repo; với thay đổi nhỏ, ưu tiên
 ESLint đúng các file đã sửa.

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { open, readFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const mode = process.argv[2];
 const forwardedArgs = process.argv.slice(3);
@@ -15,6 +15,12 @@ const commands = {
     memoryMb: 384,
     timeoutMs: 5 * 60 * 1000,
     totalNodePrivateLimitMb: 640,
+    hostGuard: {
+      startAvailableMb: 1536,
+      startCommitHeadroomMb: 2048,
+      runtimeAvailableMb: 1024,
+      runtimeCommitHeadroomMb: 1536,
+    },
   },
   'test:watch': {
     entry: path.join(root, 'node_modules', 'vitest', 'vitest.mjs'),
@@ -22,13 +28,25 @@ const commands = {
     memoryMb: 384,
     timeoutMs: null,
     totalNodePrivateLimitMb: 640,
+    hostGuard: {
+      startAvailableMb: 1536,
+      startCommitHeadroomMb: 2048,
+      runtimeAvailableMb: 1024,
+      runtimeCommitHeadroomMb: 1536,
+    },
   },
   build: {
     entry: path.join(root, 'node_modules', 'next', 'dist', 'bin', 'next'),
     args: ['build', '--webpack', ...forwardedArgs],
-    memoryMb: 768,
+    memoryMb: 1024,
     timeoutMs: 2 * 60 * 1000,
-    totalNodePrivateLimitMb: 1200,
+    totalNodePrivateLimitMb: 1800,
+    hostGuard: {
+      startAvailableMb: 4096,
+      startCommitHeadroomMb: 4096,
+      runtimeAvailableMb: 2048,
+      runtimeCommitHeadroomMb: 2560,
+    },
   },
 };
 
@@ -90,12 +108,60 @@ function withMemoryLimit(existing, memoryMb) {
   return [cleaned, `--max-old-space-size=${memoryMb}`].filter(Boolean).join(' ');
 }
 
+function readWindowsHostMemory() {
+  if (process.platform !== 'win32') return null;
+
+  const script = [
+    '$ErrorActionPreference = "Stop"',
+    '$os = Get-CimInstance Win32_OperatingSystem',
+    'Write-Output "$($os.FreePhysicalMemory)|$($os.FreeVirtualMemory)"',
+  ].join('\n');
+  const result = spawnSync(
+    'powershell.exe',
+    ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
+    { encoding: 'utf8', windowsHide: true, timeout: 10_000 }
+  );
+
+  if (result.status !== 0 || !result.stdout) return null;
+  const [availableKb, commitHeadroomKb] = result.stdout.trim().split('|').map(Number);
+  if (!Number.isFinite(availableKb) || !Number.isFinite(commitHeadroomKb)) return null;
+
+  return {
+    availableMb: Math.round(availableKb / 1024),
+    commitHeadroomMb: Math.round(commitHeadroomKb / 1024),
+  };
+}
+
+function assertWindowsHostCapacity(hostGuard) {
+  if (process.platform !== 'win32' || !hostGuard) return;
+
+  const memory = readWindowsHostMemory();
+  if (!memory) {
+    console.warn('Không đọc được áp lực bộ nhớ Windows; tiếp tục với watchdog runtime.');
+    return;
+  }
+
+  if (
+    memory.availableMb < hostGuard.startAvailableMb
+    || memory.commitHeadroomMb < hostGuard.startCommitHeadroomMb
+  ) {
+    console.error(
+      `Không khởi động "${mode}": Windows chỉ còn ${memory.availableMb} MB RAM khả dụng `
+      + `và ${memory.commitHeadroomMb} MB commit headroom. `
+      + `Cần tối thiểu ${hostGuard.startAvailableMb}/${hostGuard.startCommitHeadroomMb} MB.`
+    );
+    process.exit(4);
+  }
+}
+
+assertWindowsHostCapacity(command.hostGuard);
 await acquireLock();
 
 let child;
 let memoryWatchdog;
 let timedOut = false;
 let memoryExceeded = false;
+let hostPressureExceeded = false;
 
 function stopChildTree(signal = 'SIGTERM') {
   if (!child || child.exitCode !== null) return;
@@ -109,10 +175,12 @@ function stopChildTree(signal = 'SIGTERM') {
   }
 }
 
-function startWindowsMemoryWatchdog(limitMb, rootPid) {
+function startWindowsMemoryWatchdog(limitMb, rootPid, hostGuard) {
   if (process.platform !== 'win32' || !limitMb || !rootPid) return null;
 
   const limitBytes = limitMb * 1024 * 1024;
+  const availableLimitKb = (hostGuard?.runtimeAvailableMb || 0) * 1024;
+  const commitHeadroomLimitKb = (hostGuard?.runtimeCommitHeadroomMb || 0) * 1024;
   const script = [
     '$ErrorActionPreference = "SilentlyContinue"',
     `$limit = ${limitBytes}`,
@@ -132,6 +200,9 @@ function startWindowsMemoryWatchdog(limitMb, rootPid) {
     '    if ($ids.Contains([int]$node.ProcessId)) { $total += [long]$node.PrivatePageCount }',
     '  }',
     '  if ($total -gt $limit) { exit 42 }',
+    '  $os = Get-CimInstance Win32_OperatingSystem',
+    `  if ([long]$os.FreePhysicalMemory -lt ${availableLimitKb}) { exit 43 }`,
+    `  if ([long]$os.FreeVirtualMemory -lt ${commitHeadroomLimitKb}) { exit 44 }`,
     '  Start-Sleep -Milliseconds 500',
     '}',
   ].join('\n');
@@ -156,14 +227,24 @@ try {
     windowsHide: true,
   });
 
-  memoryWatchdog = startWindowsMemoryWatchdog(command.totalNodePrivateLimitMb, child.pid);
+  memoryWatchdog = startWindowsMemoryWatchdog(
+    command.totalNodePrivateLimitMb,
+    child.pid,
+    command.hostGuard
+  );
   memoryWatchdog?.once('exit', code => {
-    if (code !== 42 || !child || child.exitCode !== null) return;
-    memoryExceeded = true;
-    console.error(
-      `Tổng private memory của các tiến trình Node vượt ${command.totalNodePrivateLimitMb} MB; `
-      + `tác vụ "${mode}" đã bị dừng để bảo vệ hệ thống.`
-    );
+    if (![42, 43, 44].includes(code) || !child || child.exitCode !== null) return;
+    if (code === 42) {
+      memoryExceeded = true;
+      console.error(
+        `Tổng private memory của các tiến trình Node vượt ${command.totalNodePrivateLimitMb} MB; `
+        + `tác vụ "${mode}" đã bị dừng để bảo vệ hệ thống.`
+      );
+    } else {
+      hostPressureExceeded = true;
+      const reason = code === 43 ? 'RAM vật lý khả dụng xuống thấp' : 'commit headroom xuống thấp';
+      console.error(`Windows ${reason}; tác vụ "${mode}" đã bị dừng sớm trước khi máy bắt đầu paging nặng.`);
+    }
     stopChildTree();
   });
 
@@ -185,6 +266,8 @@ try {
 
   if (memoryExceeded) {
     process.exitCode = 125;
+  } else if (hostPressureExceeded) {
+    process.exitCode = 126;
   } else if (timedOut) {
     process.exitCode = 124;
   } else if (result.signal) {
