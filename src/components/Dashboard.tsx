@@ -10,7 +10,7 @@ import { RecentHistory } from './dashboard/RecentHistory';
 import { ScoreForm } from './ScoreForm';
 import { SettingsModal } from './SettingsModal';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
-import { removeMatchesLocal, saveMatchesLocal, seedAppCache, type StoredPlayerSeasonSetting } from '@/lib/db';
+import { removeMatchesLocal, saveMatchesLocal, type StoredPlayerSeasonSetting } from '@/lib/db';
 import { isGuestId } from '@/lib/guest';
 import { buildAnalysisSnapshot } from '@/lib/analysis-core';
 import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
@@ -18,6 +18,8 @@ import { getGlobalSelectedSeason, setGlobalSelectedSeason, isGlobalSeasonSet } f
 import { PreviousChampionTitleLine } from '@/components/PreviousChampionTitleLine';
 import { buildHallOfFameEntries, formatHallDate, getLatestHallOfFameEntry } from '@/lib/hall-of-fame';
 import { deleteMatchAction } from '@/app/actions';
+import { navigateToAnalysis } from '@/lib/analysis-navigation';
+import { getSeasonTimeText } from '@/lib/season-display';
 
 const INSIGHT_SELECTION_STATE_KEY = 'pickleball.analysis.insightSelection.v1';
 
@@ -49,6 +51,7 @@ type Season = {
   name: string;
   active?: boolean;
   start_date?: string;
+  end_date?: string | null;
   champion_image_url?: string | null;
   champion_image_path?: string | null;
   champion_image_updated_at?: string | null;
@@ -57,13 +60,6 @@ type Season = {
 const EDIT_EVENT = 'pickleball-edit-mode-change';
 const DESKTOP_PANEL_WIDTH = 'mx-auto w-full lg:w-[85%]';
 const TICKER_PIXELS_PER_SECOND = 60;
-
-function formatShortDate(value?: string | null) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
-}
 
 function formatCurrency(value: number) {
   return `${value.toLocaleString('vi-VN')}d`;
@@ -77,11 +73,6 @@ function isMissingMatchError(value: unknown) {
   const text = String(value || '').toLocaleLowerCase('vi-VN');
   const ascii = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   return ascii.includes('khong tim thay tran') || /kh.{0,6}ng.*t.{0,6}m.*tr/i.test(text);
-}
-
-function matchTime(match: Match) {
-  const value = new Date(String(match.date || '')).getTime();
-  return Number.isFinite(value) ? value : 0;
 }
 
 function useTickerMarquee<TContainer extends HTMLElement = HTMLDivElement, TMarquee extends HTMLElement = HTMLDivElement>({
@@ -592,23 +583,8 @@ export default function Dashboard({
     window.dispatchEvent(new Event(EDIT_EVENT));
   };
 
-  const openAnalysisFromLocalCache = async (event: MouseEvent<HTMLAnchorElement>) => {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    event.preventDefault();
-
-    try {
-      await seedAppCache({
-        players,
-        matches,
-        seasons,
-        config,
-        playerSeasonSettings: sharedData.playerSeasonSettings,
-      });
-    } catch (error) {
-      console.error('Failed to prepare analysis cache:', error);
-    }
-
-    router.push('/analysis');
+  const openAnalysis = (event: MouseEvent<HTMLAnchorElement>) => {
+    navigateToAnalysis(event, href => router.push(href));
   };
 
   const seasonOptions = useMemo(() => Array.from(new Set([
@@ -621,21 +597,12 @@ export default function Dashboard({
   const seasonStatus = selectedSeason === null
     ? `${seasonOptions.length} mùa`
     : (selectedSeasonInfo?.active === true || selectedSeason === activeSeason ? 'Đang chạy' : 'Đã chốt');
-  const seasonTimeText = useMemo(() => {
-    const times = viewedMatches.map(matchTime).filter(Boolean).sort((a, b) => a - b);
-    const firstMatchDate = times[0] ? formatShortDate(new Date(times[0]).toISOString()) : '';
-    const lastMatchDate = times.length > 0 ? formatShortDate(new Date(times[times.length - 1]).toISOString()) : '';
-    const seasonStartDate = formatShortDate(selectedSeasonInfo?.start_date || null);
-
-    if (selectedSeason === null) {
-      if (firstMatchDate && lastMatchDate && firstMatchDate !== lastMatchDate) return `${firstMatchDate} - ${lastMatchDate}`;
-      return firstMatchDate || 'Chưa có dữ liệu';
-    }
-
-    const start = seasonStartDate || firstMatchDate;
-    if (start && lastMatchDate && start !== lastMatchDate) return `${start} - ${lastMatchDate}`;
-    return start || lastMatchDate || 'Chưa có dữ liệu';
-  }, [selectedSeason, selectedSeasonInfo?.start_date, viewedMatches]);
+  const seasonTimeText = useMemo(() => getSeasonTimeText({
+    selectedSeason,
+    activeSeason,
+    season: selectedSeasonInfo,
+    matchDates: viewedMatches.map(match => match.date),
+  }), [selectedSeason, activeSeason, selectedSeasonInfo, viewedMatches]);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="w-full">
@@ -705,7 +672,7 @@ export default function Dashboard({
                   <span className="min-w-0 truncate">{sharedData.syncMessage}</span>
                 </div>
               ) : null}
-              <Link href="/analysis" onClick={openAnalysisFromLocalCache} className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary active:scale-95">
+              <Link href="/analysis" onClick={openAnalysis} className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary active:scale-95">
                 <BarChart3 className="h-4 w-4" />
                 <span className="hidden xl:inline">Phân tích</span>
               </Link>
@@ -892,7 +859,7 @@ export default function Dashboard({
           </div>
         ) : null}
         <div className="ml-auto flex items-center justify-end gap-2">
-          <Link href="/analysis" onClick={openAnalysisFromLocalCache} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors active:scale-95">
+          <Link href="/analysis" onClick={openAnalysis} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors active:scale-95">
             <BarChart3 className="w-4 h-4" />
             Trung tâm phân tích
           </Link>
