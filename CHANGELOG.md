@@ -4,6 +4,10 @@ File này chỉ giữ các thay đổi đáng chú ý. Chi tiết theo commit xe
 
 ## Chưa phát hành
 
+- Đóng băng ELO Hall of Fame tại thời điểm kết thúc season, đồng thời hiển thị
+  khoảng thời gian mùa đã chốt theo `end_date` với fallback cho dữ liệu cũ.
+- Mở Analysis trực tiếp từ cache dùng chung thay vì ghi đè lại toàn bộ
+  IndexedDB khi người dùng chuyển từ Dashboard.
 - Tối ưu hóa cử chỉ kéo vuốt modal lịch sử trận đấu (giảm ngưỡng kéo xuống 80px, hỗ trợ kéo chuột trên PC, làm mờ dần backdrop động tương ứng với khoảng cách kéo).
 - Tích hợp hiệu ứng trượt ngang (slide-x & fade) mượt mà khi chuyển đổi các tab ở trang Phân tích (/analysis).
 - Gom tài liệu về một entrypoint `AGENTS.md` và hai tài liệu chuyên sâu.

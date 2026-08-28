@@ -59,6 +59,9 @@ Chính sách route:
 - Dashboard luôn là điểm reconciliation chính khi mount/F5.
 - Analysis đọc local trước, dùng cooldown manifest 60 giây và chỉ bootstrap
   online khi cache trống/không dùng được.
+- Điều hướng Dashboard sang Analysis không seed/ghi đè lại toàn bộ IndexedDB.
+  Match optimistic và canonical đã được lưu theo write flow; Analysis đọc cache
+  dùng chung và tự bootstrap nếu cache không dùng được.
 - Admin là luồng quản lý luôn-online.
 - Không polling nền.
 
@@ -114,6 +117,9 @@ production nếu chưa được phê duyệt.
 
 ## Hall of Fame image flow
 
+- Season hoàn thành lưu `end_date`; Hall of Fame tính ELO đến mốc này. Dữ liệu
+  cũ thiếu `end_date` dùng trận xếp hạng cuối cùng để kết quả không đổi theo
+  ngày người dùng mở trang.
 - Ảnh thuộc champion record của season, không thuộc profile người chơi.
 - Client validate JPG/PNG/WebP, crop 3:4, chuyển WebP và giới hạn kích thước.
 - Server upload Blob, xóa blob cũ khi thay ảnh và lưu URL/path/update time.

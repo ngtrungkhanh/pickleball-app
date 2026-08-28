@@ -77,6 +77,8 @@ hoặc rival khi confidence/sample cho kết quả hợp lý hơn.
 - `Tong hop` là chế độ xem tất cả season.
 - Selector phải giữ cả season chưa có trận.
 - Season bắt đầu dựa trên dữ liệu trận khi có thể.
+- Dashboard hiển thị mùa đang chạy từ ngày bắt đầu đến trận mới nhất. Mùa đã
+  chốt ưu tiên `end_date`, fallback về trận cuối nếu dữ liệu cũ thiếu mốc này.
 - Guest id là `__GUEST__`, có thể xuất hiện trong lịch sử nhưng không tính
   ranking/analytics.
 - Tiền phạt vẫn tính cho người thật ở đội thua trong trận có Guest.
@@ -125,6 +127,8 @@ Hall of Fame độc lập với season filter:
 
 - chỉ season hoàn thành mới có champion;
 - active season hiển thị trạng thái đang diễn ra;
+- ELO champion được chốt tại `end_date` của season, fallback về trận xếp hạng
+  cuối cùng với season cũ thiếu ngày kết thúc;
 - card ngang, ảnh 3:4 bên trái, thông tin bên phải;
 - 2 cột ở Full HD thông thường, 3 cột chỉ ở viewport rất rộng;
 - click card mở detail panel theo hàng, không dùng modal trên mobile.
