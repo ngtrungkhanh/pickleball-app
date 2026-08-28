@@ -29,6 +29,7 @@ export type HallOfFameSeason = {
   name: string;
   active?: boolean;
   start_date?: string;
+  end_date?: string | null;
   champion_image_url?: string | null;
   champion_image_path?: string | null;
   champion_image_updated_at?: string | null;
@@ -56,6 +57,16 @@ function isFullDoublesHallMatch(match: HallOfFameMatch) {
 
 function matchTimeValue(match: HallOfFameMatch) {
   return new Date(String(match.date || '')).getTime() || 0;
+}
+
+function hallEloCutoff(season: HallOfFameSeason | undefined, lastMatch: HallOfFameMatch | undefined) {
+  const lastMatchTime = lastMatch ? matchTimeValue(lastMatch) : 0;
+  const storedEndTime = new Date(String(season?.end_date || '')).getTime();
+  const cutoffTime = Number.isFinite(storedEndTime) && storedEndTime > 0
+    ? Math.max(storedEndTime, lastMatchTime)
+    : lastMatchTime;
+
+  return new Date(cutoffTime);
 }
 
 export function formatHallDate(date: string) {
@@ -100,10 +111,14 @@ export function buildHallOfFameEntries(
       if (!champion) return null;
 
       const rankingMatches = seasonMatches.filter(match => isRankingMatch(match) && isFullDoublesHallMatch(match));
-      const rating = buildAnalysisElo(eligiblePlayers, rankingMatches).rating.get(champion.id) ?? 1500;
       const lastMatch = [...rankingMatches].sort((a, b) => matchTimeValue(b) - matchTimeValue(a))[0];
-
       const imageMeta = seasonMeta.get(seasonName);
+      const rating = buildAnalysisElo(
+        eligiblePlayers,
+        rankingMatches,
+        hallEloCutoff(imageMeta, lastMatch),
+      ).rating.get(champion.id) ?? 1500;
+
       const entry: HallOfFameEntry = {
         season: seasonName,
         playerId: champion.id,
