@@ -4,7 +4,6 @@ import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { History, X, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import { isGuestId } from '@/lib/guest';
-import { useSwipeable } from 'react-swipeable';
 import { motion } from 'framer-motion';
 
 type PlayerNameMode = 'full' | 'tiny';
@@ -598,17 +597,8 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected, h
   const syncFailed = m.pending && m.sync_status === 'error';
   const syncLabel = syncConflict ? 'Nghi trùng' : syncFailed ? 'Lưu lỗi' : 'Đang lưu...';
   const syncClass = syncFailed ? 'text-red-300/90' : 'text-amber-300/80';
-  const swipeHandlers = useSwipeable({
-    onSwipedLeft: () => {
-      if (canEdit && !isDeleting) {
-        onDelete();
-      }
-    },
-    preventScrollOnSwipe: false,
-    trackMouse: true
-  });
   return (
-    <div {...swipeHandlers} className="group relative flex overflow-hidden rounded-2xl border border-slate-800/80 bg-[#0f172a]/90 shadow-[0_10px_28px_rgba(0,0,0,0.12)] transition-all hover:bg-[#15233c]/90">
+    <div className="group relative flex overflow-hidden rounded-2xl border border-slate-800/80 bg-[#0f172a]/90 shadow-[0_10px_28px_rgba(0,0,0,0.12)] transition-all hover:bg-[#15233c]/90">
       <div className="flex w-[64px] shrink-0 flex-col items-center justify-center gap-1 border-r border-slate-800/80 bg-white/[0.015] px-2 py-3 sm:w-24">
         <span className="text-[15px] font-black leading-none text-slate-200/85 tabular-nums sm:text-[17px]">{time}</span>
         <span className="text-[10px] font-bold text-slate-400/75 tabular-nums sm:text-[11px]">{date}</span>
@@ -658,15 +648,6 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected, h
       </div>
     </div>
   );
-}
-
-function SwipeableCompactRow({ children, onSwipeLeft }: { children: ReactNode; onSwipeLeft: () => void }) {
-  const handlers = useSwipeable({
-    onSwipedLeft: onSwipeLeft,
-    preventScrollOnSwipe: false,
-    trackMouse: true
-  });
-  return <div {...handlers} className="recent-history-compact-row relative min-h-[72px]" data-mobile-match-row>{children}</div>;
 }
 
 // ─── Main RecentHistory ───────────────────────────────────────────────────────
@@ -780,7 +761,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
               </div>
 
               {/* ── COMPACT ─────────────────────────────────────────────── */}
-              <SwipeableCompactRow onSwipeLeft={() => { if (canEdit && isDeletingId !== m.id) setDeleteTarget(m.id); }}>
+              <div className="recent-history-compact-row relative min-h-[72px]" data-mobile-match-row>
                 <div className="flex">
                   <div className="flex w-[64px] shrink-0 flex-col items-center justify-center gap-1 border-r border-white/[0.05] bg-white/[0.015] px-2 py-3">
                     <span className="text-[15px] font-black leading-none text-white/75 tabular-nums">{time}</span>
@@ -822,7 +803,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                     </div>
                   </div>
                 </div>
-              </SwipeableCompactRow>
+              </div>
 
             </div>
           );
