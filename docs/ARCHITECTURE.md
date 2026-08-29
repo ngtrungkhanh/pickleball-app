@@ -83,6 +83,13 @@ tối ưu payload, full snapshot luôn là fallback correctness.
 8. Nếu lỗi, optimistic row bị xử lý theo trạng thái retry và pending draft
    không bị mất.
 
+Pending add không tự hết hạn hoặc bị giới hạn số lượng. Khi khởi động, client
+phục hồi cả pending cũ từ các row `TMP-*` còn trong IndexedDB, rồi retry khi
+online, focus hoặc trở lại foreground. Retry dùng nguyên `client_request_id` để
+server replay an toàn. Nếu server có trận khác request nhưng cùng season, đội và
+tỷ số gần thời điểm local, row được giữ ở trạng thái conflict để người dùng xóa
+temp hoặc xác nhận đây là trận khác.
+
 Form chỉ khóa rất ngắn để tránh double-tap, sau đó reset cho trận tiếp theo mà
 không chờ audit log hoặc revalidation. Trạng thái sync/error vẫn chạy độc lập.
 
@@ -94,8 +101,10 @@ Guest match không tăng win/loss ranking. Tiền phạt cho người thật ở
 Khi chỉnh trận, server update bản ghi `matches`, ghi match delta, audit và bump version.
 Client tính lại thống kê từ dữ liệu match đã patch.
 
-Delete dữ liệu có dependency phải ưu tiên soft-delete và archive. Không update
-trận theo cách làm lệch leaderboard hoặc tiền phạt.
+Delete dữ liệu có dependency phải ưu tiên soft-delete và archive. Xóa trận là
+local-first; client lưu pending delete tombstone trước khi gửi server và tự retry
+khi kết nối trở lại. Xóa row `TMP-*` chỉ dọn row local và pending add tương ứng.
+Không update trận theo cách làm lệch leaderboard hoặc tiền phạt.
 
 JSON restore:
 
@@ -104,6 +113,8 @@ JSON restore:
 - phục hồi config, seasons và player-season settings khi có;
 - tạo season thiếu từ match nếu cần;
 - refresh shared IndexedDB sau restore để dữ liệu cũ không quay lại.
+- backup trận phải lấy snapshot canonical trực tiếp từ server; restore bỏ qua
+  `TMP-*` hoặc row mang trạng thái pending/sync local.
 
 XLSX import:
 
@@ -132,6 +143,7 @@ Các key hiện hành:
 
 - `pickleball_edit_unlocked`
 - `pickleball_pending_match`
+- `pickleball_pending_match_deletes`
 - `pickleball_recent_matches`
 - `pickleball_client_id`
 - `pickleball_client_nickname`

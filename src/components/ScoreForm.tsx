@@ -7,9 +7,15 @@ import { Minus, Plus, Trophy, Ghost, Send, RefreshCw, AlertCircle, CheckCircle2,
 import { parseVoiceInput } from '@/lib/voice-input';
 import { cn } from '@/lib/utils';
 import { isGuestId } from '@/lib/guest';
-import { removeMatchesLocal, replaceAppCacheParts, replaceOptimisticMatchLocal, saveMatchesLocal, type AppCachePart, type StoredPlayer, type StoredPlayerSeasonSetting, type StoredSeason } from '@/lib/db';
+import { getLocalMatches, removeMatchesLocal, replaceAppCacheParts, replaceOptimisticMatchLocal, saveMatchesLocal, type AppCachePart, type StoredPlayer, type StoredPlayerSeasonSetting, type StoredSeason } from '@/lib/db';
+import {
+  patchPendingMatchSave,
+  readPendingMatchSaves,
+  recoverPendingMatchSavesFromLocal,
+  removePendingMatchSave,
+  upsertPendingMatchSave,
+} from '@/lib/pending-match-sync';
 
-const PENDING_KEY = 'pickleball_pending_match';
 const RECENT_KEY = 'pickleball_recent_matches';
 
 type MatchSlots = {
@@ -89,51 +95,6 @@ function saveRecentLocal(slots: MatchSlots) {
     const prev = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') as RecentLocalMatch[];
     localStorage.setItem(RECENT_KEY, JSON.stringify([{ key, timestamp: Date.now() }, ...prev].slice(0, 8)));
   } catch {}
-}
-
-type PendingSave = {
-  requestId: string;
-  match: Record<string, unknown>;
-  timestamp: number;
-};
-
-function readPendingSaves(): PendingSave[] {
-  try {
-    const raw = localStorage.getItem(PENDING_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as { matches?: PendingSave[]; match?: Record<string, unknown>; timestamp?: number };
-    if (Array.isArray(parsed?.matches)) {
-      return parsed.matches.filter(item => item?.requestId && item.match);
-    }
-    if (parsed?.match) {
-      const requestId = String(parsed.match.client_request_id || parsed.match.temp_id || `LEGACY-${parsed.timestamp || Date.now()}`);
-      return [{ requestId, match: parsed.match, timestamp: parsed.timestamp || Date.now() }];
-    }
-  } catch {}
-  return [];
-}
-
-function writePendingSaves(matches: PendingSave[]) {
-  try {
-    if (matches.length === 0) localStorage.removeItem(PENDING_KEY);
-    else localStorage.setItem(PENDING_KEY, JSON.stringify({ matches }));
-  } catch {}
-}
-
-function savePending(data: Record<string, unknown>) {
-  const requestId = String(data.client_request_id || data.temp_id || '');
-  if (!requestId) return;
-  const next = readPendingSaves().filter(item => item.requestId !== requestId);
-  next.push({ requestId, match: data, timestamp: Date.now() });
-  writePendingSaves(next.slice(-12));
-}
-
-function clearPending(requestId?: string) {
-  if (!requestId) {
-    writePendingSaves([]);
-    return;
-  }
-  writePendingSaves(readPendingSaves().filter(item => item.requestId !== requestId));
 }
 
 function runAfterNextPaint(task: () => void) {
@@ -425,7 +386,7 @@ export function ScoreForm({
   const [syncError, setSyncError] = useState('');
   const [pendingFd, setPendingFd] = useState<FormData | null>(null);
   const inFlightRequestIds = useRef(new Set<string>());
-  const recoveredPendingOnce = useRef(false);
+  const retryPendingRef = useRef<() => void>(() => {});
 
   const [win1, setWin1] = useState('');
   const [win2, setWin2] = useState('');
@@ -575,7 +536,7 @@ export function ScoreForm({
             missingPlayers,
           });
           localStorage.setItem('pickleball_voice_logs', JSON.stringify(logs));
-        } catch (e) {}
+        } catch {}
 
         if (missingPlayers.length === 0) {
           recognition.stop();
@@ -614,7 +575,7 @@ export function ScoreForm({
     onFailMatch?.(tempId, error);
     void saveMatchesLocal([{
       id: tempId,
-      date: new Date().toISOString(),
+      date: String(fd.get('played_at') || new Date().toISOString()),
       win_1: String(fd.get('win_1') || ''),
       win_2: String(fd.get('win_2') || '') || null,
       lose_1: String(fd.get('lose_1') || ''),
@@ -625,7 +586,7 @@ export function ScoreForm({
       created_by: String(fd.get('created_by') || 'SYSTEM'),
       client_request_id: String(fd.get('client_request_id') || ''),
       pending: true,
-      sync_status: 'error',
+      sync_status: error?.includes('giống trên database') ? 'conflict' : 'error',
       sync_error: error || 'Lưu server thất bại',
     }]);
   }, [activeSeason, onFailMatch]);
@@ -652,7 +613,6 @@ export function ScoreForm({
     const tempId = String(fd.get('temp_id') || '');
     const requestId = String(fd.get('client_request_id') || tempId);
     if (r?.success) {
-      clearPending(requestId);
       if (r.match) {
         onConfirmMatch?.(tempId, r.match);
         await replaceOptimisticMatchLocal(tempId, r.match, r.dataVersion, r.partVersions);
@@ -660,6 +620,7 @@ export function ScoreForm({
         onRejectMatch?.(tempId);
         await removeMatchesLocal([tempId]);
       }
+      removePendingMatchSave(requestId);
       saveRecentLocal({
         win1: String(fd.get('win_1') || ''),
         win2: String(fd.get('win_2') || ''),
@@ -675,14 +636,19 @@ export function ScoreForm({
       return;
     }
     if (r?.duplicateConflict) {
-      removeOptimisticMatch(fd);
+      const duplicateMessage = 'Có một trận giống trên database. Chọn trận temp trong lịch sử để xóa nếu đây là cùng một trận.';
       if (silent) {
-        clearPending(requestId);
-        setSync('idle');
+        patchPendingMatchSave(requestId, {
+          status: 'conflict',
+          lastError: duplicateMessage,
+          duplicateMatch: r.duplicateMatch,
+        });
+        markOptimisticMatchError(fd, duplicateMessage);
+        setPendingFd(fd);
+        setSyncError(duplicateMessage);
+        setSync('error');
         return;
       }
-      setSync('idle');
-      setSyncError('');
       const duplicateDate = r.duplicateMatch?.date ? new Date(String(r.duplicateMatch.date)) : null;
       const duplicateTime = duplicateDate && !Number.isNaN(duplicateDate.getTime())
         ? duplicateDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
@@ -690,8 +656,9 @@ export function ScoreForm({
       const confirmed = window.confirm(`Trận này đã được máy khác ghi lúc ${duplicateTime}. Có muốn ghi thêm trận trùng không?`);
       if (confirmed) {
         fd.set('duplicate_confirmed', 'true');
+        fd.set('pending_retry', 'true');
         setSync('syncing');
-        savePending(Object.fromEntries(fd.entries()));
+        upsertPendingMatchSave(Object.fromEntries(fd.entries()), { status: 'syncing' });
         inFlightRequestIds.current.add(requestId);
         start(async () => {
           try {
@@ -702,12 +669,20 @@ export function ScoreForm({
           }
         });
       } else {
-        clearPending(requestId);
+        patchPendingMatchSave(requestId, {
+          status: 'conflict',
+          lastError: duplicateMessage,
+          duplicateMatch: r.duplicateMatch,
+        });
+        markOptimisticMatchError(fd, duplicateMessage);
+        setPendingFd(fd);
+        setSyncError(duplicateMessage);
+        setSync('error');
       }
       return;
     }
     if (r?.skippedDuplicate) {
-      clearPending(requestId);
+      removePendingMatchSave(requestId);
       removeOptimisticMatch(fd);
       if (!silent) {
         setSync('idle');
@@ -716,7 +691,7 @@ export function ScoreForm({
       return;
     }
     if (!r?.error) {
-      clearPending(requestId);
+      removePendingMatchSave(requestId);
       removeOptimisticMatch(fd);
       if (!silent) {
         setSyncError('');
@@ -725,6 +700,10 @@ export function ScoreForm({
       }
       return;
     }
+    patchPendingMatchSave(requestId, {
+      status: 'error',
+      lastError: r.error || r.debug || 'Lưu server thất bại',
+    });
     markOptimisticMatchError(fd, r.error || r.debug);
     if (r.staleClientData) {
       try {
@@ -742,40 +721,80 @@ export function ScoreForm({
     setPendingFd(fd);
   };
 
-  useEffect(() => {
-    if (recoveredPendingOnce.current) return;
-    recoveredPendingOnce.current = true;
-    try {
-      const pending = readPendingSaves();
-      pending.forEach(({ match, timestamp, requestId }) => {
-        if (!timestamp || (Date.now() - timestamp) / 60000 >= 60) {
-          clearPending(requestId);
-          return;
-        }
-        if (inFlightRequestIds.current.has(requestId)) return;
-        const fd = new FormData();
-        Object.entries(match).forEach(([k, v]) => { if (v) fd.append(k, String(v)); });
-        if (!fd.get('created_by')) fd.append('created_by', fullIdentity);
-        if (!fd.get('client_request_id')) fd.append('client_request_id', requestId);
-        inFlightRequestIds.current.add(requestId);
-        start(async () => {
-          try {
-            const r = await addMatchAction(fd);
-            await handleServerResult(r, fd, { silent: true });
-          } catch (error) {
-            console.error('Pending match retry failed:', error);
-            setSyncError(error instanceof Error ? error.message : String(error));
-            markOptimisticMatchError(fd, error instanceof Error ? error.message : String(error));
-            setSync('idle');
-          } finally {
-            inFlightRequestIds.current.delete(requestId);
-          }
-        });
+  const retryPendingSaves = () => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    const pending = readPendingMatchSaves().filter(item => item.status !== 'conflict');
+    pending.forEach(({ match, requestId, attemptCount = 0 }) => {
+      if (inFlightRequestIds.current.has(requestId)) return;
+      const fd = new FormData();
+      Object.entries(match).forEach(([k, v]) => {
+        if (v !== null && v !== undefined) fd.append(k, String(v));
       });
-    } catch {}
-    // Pending recovery is intentionally one-shot; in-flight guards handle retries.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fullIdentity]);
+      if (!fd.get('created_by')) fd.append('created_by', fullIdentity);
+      if (!fd.get('client_request_id')) fd.append('client_request_id', requestId);
+      if (!fd.get('played_at')) fd.append('played_at', new Date().toISOString());
+      fd.set('pending_retry', 'true');
+      patchPendingMatchSave(requestId, { status: 'syncing', attemptCount: attemptCount + 1 });
+      inFlightRequestIds.current.add(requestId);
+      start(async () => {
+        try {
+          const r = await addMatchAction(fd);
+          await handleServerResult(r, fd, { silent: true });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error('Pending match retry failed:', error);
+          patchPendingMatchSave(requestId, { status: 'error', lastError: message });
+          setSyncError(message);
+          markOptimisticMatchError(fd, message);
+          setSync('error');
+        } finally {
+          inFlightRequestIds.current.delete(requestId);
+        }
+      });
+    });
+  };
+
+  useEffect(() => {
+    retryPendingRef.current = retryPendingSaves;
+  });
+
+  useEffect(() => {
+    const retry = () => retryPendingRef.current();
+    const recoverAndRetry = async () => {
+      let recovered = readPendingMatchSaves();
+      try {
+        const localMatches = await getLocalMatches();
+        recovered = recoverPendingMatchSavesFromLocal(localMatches);
+      } catch (error) {
+        console.error('Pending match recovery failed:', error);
+      }
+      const conflict = recovered.find(item => item.status === 'conflict');
+      if (conflict) {
+        const fd = new FormData();
+        Object.entries(conflict.match).forEach(([key, value]) => {
+          if (value !== null && value !== undefined) fd.append(key, String(value));
+        });
+        if (!fd.get('client_request_id')) fd.append('client_request_id', conflict.requestId);
+        setPendingFd(fd);
+        setSyncError(conflict.lastError || 'Có trận temp nghi trùng với dữ liệu trên server.');
+        setSync('error');
+      }
+      retry();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') retry();
+    };
+    const timer = window.setTimeout(() => { void recoverAndRetry(); }, 0);
+    window.addEventListener('online', retry);
+    window.addEventListener('focus', retry);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('online', retry);
+      window.removeEventListener('focus', retry);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
 
   const doSync = (fd: FormData) => {
     const requestId = String(fd.get('client_request_id') || fd.get('temp_id') || '');
@@ -783,15 +802,17 @@ export function ScoreForm({
     if (requestId) inFlightRequestIds.current.add(requestId);
     setSyncError('');
     setSync('syncing');
-    savePending(Object.fromEntries(fd.entries()));
+    upsertPendingMatchSave(Object.fromEntries(fd.entries()), { status: 'syncing' });
     start(async () => {
       try {
         const r = await addMatchAction(fd);
         await handleServerResult(r, fd);
       } catch (error) {
         console.error('Match sync failed:', error);
-        setSyncError(error instanceof Error ? error.message : String(error));
-        markOptimisticMatchError(fd, error instanceof Error ? error.message : String(error));
+        const message = error instanceof Error ? error.message : String(error);
+        patchPendingMatchSave(requestId, { status: 'error', lastError: message });
+        setSyncError(message);
+        markOptimisticMatchError(fd, message);
         setSync('error');
         setPendingFd(fd);
       } finally {
@@ -813,7 +834,8 @@ export function ScoreForm({
 
     const requestId = makeRequestId();
     const tempId = 'TMP-' + requestId;
-    const optimisticMatch = { id: tempId, date: new Date().toISOString(), win_1: win1, win_2: win2 || null, lose_1: lose1, lose_2: lose2 || null, win_score: ws, lose_score: ls, season: activeSeason, created_by: fullIdentity, client_request_id: requestId, pending: true, sync_status: 'syncing' };
+    const playedAt = new Date().toISOString();
+    const optimisticMatch = { id: tempId, date: playedAt, win_1: win1, win_2: win2 || null, lose_1: lose1, lose_2: lose2 || null, win_score: ws, lose_score: ls, season: activeSeason, created_by: fullIdentity, client_request_id: requestId, pending: true, sync_status: 'syncing', local_created_at: Date.now() };
     setUi('saved');
     setTimeout(() => { reset(); setUi('idle'); }, 1000);
 
@@ -832,6 +854,7 @@ export function ScoreForm({
       fd.append('created_by', fullIdentity);
       fd.append('temp_id', tempId);
       fd.append('client_request_id', requestId);
+      fd.append('played_at', playedAt);
       if (duplicateConfirmed) fd.append('duplicate_confirmed', 'true');
       doSync(fd);
     });
@@ -839,7 +862,7 @@ export function ScoreForm({
 
   return (
     <>
-      <SyncBadge state={sync} message={syncError} onRetry={() => { if (pendingFd) { doSync(pendingFd); setPendingFd(null); } }} />
+      <SyncBadge state={sync} message={syncError} onRetry={() => { if (pendingFd) { pendingFd.set('pending_retry', 'true'); doSync(pendingFd); setPendingFd(null); } }} />
       <form onSubmit={handleSubmit} className={cn("space-y-4", compact ? "p-3" : "p-3 sm:p-4", ui === 'saved' && "pointer-events-none opacity-80")}>
         <div className={cn("grid grid-cols-1 items-stretch", compact ? "gap-2.5" : "md:grid-cols-[minmax(0,0.78fr)_18rem_minmax(0,0.78fr)] gap-3 md:gap-4")}>
 
@@ -908,7 +931,7 @@ export function ScoreForm({
                   missingPlayers,
                 });
                 localStorage.setItem('pickleball_voice_logs', JSON.stringify(logs));
-              } catch (e) {}
+              } catch {}
 
               if (missingPlayers.length === 0) {
                 hiddenInputRef.current?.blur();

@@ -317,15 +317,19 @@ export default function AdminPage() {
 
   const onBackup = async () => {
     const appData = await getAppDataAction();
+    if (!appData?.matches || !appData.players || !appData.seasons) {
+      setMsg({ type: 'error', text: 'Không tải được snapshot server nên chưa thể tạo backup an toàn.' });
+      return;
+    }
     const data = {
       schemaVersion: 2,
-      players: players.length > 0 ? players : appData?.players || [],
-      matches: matches.length > 0 ? matches : appData?.matches || [],
+      players: appData.players,
+      matches: appData.matches,
       logs,
       archives,
-      seasons: seasons.length > 0 ? seasons : appData?.seasons || [],
-      config: appData?.config || {},
-      playerSeasonSettings: appData?.playerSeasonSettings || [],
+      seasons: appData.seasons,
+      config: appData.config || {},
+      playerSeasonSettings: appData.playerSeasonSettings || [],
       timestamp: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -413,7 +417,13 @@ export default function AdminPage() {
             manifestCheckedAt: Date.now(),
           });
         }
-        setMsg({ type: 'success', text: `Khôi phục dữ liệu thành công!` });
+        const ignoredTemporaryMatches = Number(json?.ignoredTemporaryMatches || 0);
+        setMsg({
+          type: 'success',
+          text: ignoredTemporaryMatches > 0
+            ? `Khôi phục thành công; đã bỏ qua ${ignoredTemporaryMatches} trận temp chưa đồng bộ.`
+            : 'Khôi phục dữ liệu thành công!',
+        });
         await loadData();
       }
     } catch {

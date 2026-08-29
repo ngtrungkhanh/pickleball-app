@@ -44,6 +44,12 @@ nghìn trận:
 - Khi nghi trùng, client hỏi xác nhận và server kiểm tra lại.
 - UI thêm optimistic match, lưu pending draft và hiển thị trạng thái
   saving/saved/error.
+- Trận chưa được server xác nhận vẫn hiện local và tự thử lại khi mở app, trở
+  lại tab hoặc có mạng. Pending không tự hết hạn; người dùng có thể xóa trận
+  temp như một trận bình thường.
+- Nếu retry gặp một trận khác request nhưng giống season, đội và tỷ số, app
+  giữ bản temp ở trạng thái nghi trùng để người dùng quyết định, không tự tạo
+  thêm hoặc tự xóa.
 - Form reset gần như ngay sau optimistic save để có thể nhập trận tiếp theo;
   không cần chờ server hoàn thành audit/revalidation.
 - Trận mới luôn dùng active season.
@@ -112,6 +118,8 @@ trong backup không được tự xuất hiện lại sau restore.
 - Khi lọc theo thành viên trong full history, tên các thành viên đang chọn được
   đổi màu nổi bật trong từng trận trên cả mobile và desktop.
 - Chỉ edit mode mới được xóa trận.
+- Xóa phản ánh local ngay; nếu server chưa nhận được, app giữ dấu vết xóa và tự
+  gửi lại khi có mạng.
 - Layout mobile ưu tiên date/time rail gọn và nội dung hai đội dễ đọc.
 
 ## Analysis

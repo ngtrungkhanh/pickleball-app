@@ -10,7 +10,7 @@ import { RecentHistory } from './dashboard/RecentHistory';
 import { ScoreForm } from './ScoreForm';
 import { SettingsModal } from './SettingsModal';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
-import { removeMatchesLocal, saveMatchesLocal, type StoredPlayerSeasonSetting } from '@/lib/db';
+import { removeMatchesLocal, type StoredPlayerSeasonSetting } from '@/lib/db';
 import { isGuestId } from '@/lib/guest';
 import { buildAnalysisSnapshot } from '@/lib/analysis-core';
 import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
@@ -20,6 +20,14 @@ import { buildHallOfFameEntries, formatHallDate, getLatestHallOfFameEntry } from
 import { deleteMatchAction } from '@/app/actions';
 import { navigateToAnalysis } from '@/lib/analysis-navigation';
 import { getSeasonTimeText } from '@/lib/season-display';
+import {
+  patchPendingMatchDelete,
+  readPendingMatchDeletes,
+  removePendingMatchDelete,
+  removePendingMatchForTempId,
+  upsertPendingMatchDelete,
+  type PendingMatchDelete,
+} from '@/lib/pending-match-sync';
 
 const INSIGHT_SELECTION_STATE_KEY = 'pickleball.analysis.insightSelection.v1';
 
@@ -220,6 +228,8 @@ export default function Dashboard({
   // Use local state for matches to ensure instant updates that persist 
   // until the server-side ISR revalidation completes in the background.
   const [matches, setMatches] = useState(initialMatches);
+  const [pendingDeleteCount, setPendingDeleteCount] = useState(0);
+  const deleteSyncInFlightRef = useRef(new Set<string>());
 
   // Ticker open/close state stored in sessionStorage
   const [tickerOpen, setTickerOpen] = useState(() => {
@@ -272,24 +282,77 @@ export default function Dashboard({
         : m
     )));
   };
+  const syncPendingDelete = useCallback(async (pending: PendingMatchDelete, notifyOnError = false) => {
+    if (deleteSyncInFlightRef.current.has(pending.matchId)) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    deleteSyncInFlightRef.current.add(pending.matchId);
+    try {
+      const result = await deleteMatchAction(pending.matchId);
+      if (result && 'error' in result) {
+        if (!isMissingMatchError(result.error)) {
+          const message = String(result.error || 'Xóa trên server thất bại');
+          patchPendingMatchDelete(pending.matchId, {
+            attemptCount: pending.attemptCount + 1,
+            lastError: message,
+          });
+          if (notifyOnError) alert(`${message}. Trận đã được xóa trên máy và sẽ tự thử lại khi có mạng.`);
+          return;
+        }
+        removePendingMatchDelete(pending.matchId);
+        await removeMatchesLocal([pending.matchId]);
+        return;
+      }
+      removePendingMatchDelete(pending.matchId);
+      await removeMatchesLocal([pending.matchId], result?.dataVersion, result?.partVersions);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      patchPendingMatchDelete(pending.matchId, {
+        attemptCount: pending.attemptCount + 1,
+        lastError: message,
+      });
+      if (notifyOnError) alert('Trận đã được xóa trên máy và sẽ tự thử lại khi có mạng.');
+    } finally {
+      deleteSyncInFlightRef.current.delete(pending.matchId);
+      setPendingDeleteCount(readPendingMatchDeletes().length);
+    }
+  }, []);
+
+  useEffect(() => {
+    const retry = () => {
+      const pending = readPendingMatchDeletes();
+      setPendingDeleteCount(pending.length);
+      pending.forEach(item => { void syncPendingDelete(item); });
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') retry();
+    };
+    const timer = window.setTimeout(retry, 0);
+    window.addEventListener('online', retry);
+    window.addEventListener('focus', retry);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('online', retry);
+      window.removeEventListener('focus', retry);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [syncPendingDelete]);
+
   const deleteLocalMatch = useCallback(async (matchId: string) => {
     const match = matches.find(m => String(m.id || '') === matchId);
     if (!match) return;
     setMatches(prev => prev.filter(m => String(m.id || '') !== matchId));
     await removeMatchesLocal([matchId]);
-    const result = await deleteMatchAction(matchId);
-    if (result && 'error' in result) {
-      if (isMissingMatchError(result.error)) {
-        await removeMatchesLocal([matchId]);
-        return;
-      }
-      setMatches(prev => [match, ...prev.filter(m => String(m.id || '') !== matchId)]);
-      await saveMatchesLocal([match]);
-      alert(String(result.error || 'Xóa trận thất bại. Đã khôi phục lại dữ liệu local.'));
+
+    if (matchId.startsWith('TMP-')) {
+      removePendingMatchForTempId(matchId);
       return;
     }
-    await removeMatchesLocal([matchId], result?.dataVersion, result?.partVersions);
-  }, [matches]);
+
+    const pending = upsertPendingMatchDelete(matchId);
+    setPendingDeleteCount(readPendingMatchDeletes().length);
+    await syncPendingDelete(pending, true);
+  }, [matches, syncPendingDelete]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const canEdit = useSyncExternalStore(subscribeEditMode, getEditModeSnapshot, () => false);
@@ -1026,6 +1089,11 @@ export default function Dashboard({
       </div>
 
     </div>
+      {pendingDeleteCount > 0 && (
+        <div className="fixed bottom-4 left-1/2 z-[720] -translate-x-1/2 rounded-xl border border-amber-400/30 bg-[#161d2b]/95 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-amber-300 shadow-2xl backdrop-blur-xl">
+          {pendingDeleteCount} lượt xóa đang chờ đồng bộ
+        </div>
+      )}
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}

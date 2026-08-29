@@ -4,7 +4,6 @@ import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { History, X, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import { isGuestId } from '@/lib/guest';
-import { useSwipeable } from 'react-swipeable';
 import { motion } from 'framer-motion';
 
 type PlayerNameMode = 'full' | 'tiny';
@@ -594,26 +593,18 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected, h
   const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
   const expected = matchExpected?.get(m.id);
+  const syncConflict = m.pending && m.sync_status === 'conflict';
   const syncFailed = m.pending && m.sync_status === 'error';
-  const syncLabel = syncFailed ? 'Lưu lỗi' : 'Đang lưu...';
+  const syncLabel = syncConflict ? 'Nghi trùng' : syncFailed ? 'Lưu lỗi' : 'Đang lưu...';
   const syncClass = syncFailed ? 'text-red-300/90' : 'text-amber-300/80';
-  const swipeHandlers = useSwipeable({
-    onSwipedLeft: () => {
-      if (canEdit && !m.pending && !isDeleting) {
-        onDelete();
-      }
-    },
-    preventScrollOnSwipe: false,
-    trackMouse: true
-  });
   return (
-    <div {...swipeHandlers} className="group relative flex overflow-hidden rounded-2xl border border-slate-800/80 bg-[#0f172a]/90 shadow-[0_10px_28px_rgba(0,0,0,0.12)] transition-all hover:bg-[#15233c]/90">
+    <div className="group relative flex overflow-hidden rounded-2xl border border-slate-800/80 bg-[#0f172a]/90 shadow-[0_10px_28px_rgba(0,0,0,0.12)] transition-all hover:bg-[#15233c]/90">
       <div className="flex w-[64px] shrink-0 flex-col items-center justify-center gap-1 border-r border-slate-800/80 bg-white/[0.015] px-2 py-3 sm:w-24">
         <span className="text-[15px] font-black leading-none text-slate-200/85 tabular-nums sm:text-[17px]">{time}</span>
         <span className="text-[10px] font-bold text-slate-400/75 tabular-nums sm:text-[11px]">{date}</span>
       </div>
       <div className={cn("min-w-0 flex-1 px-3 py-3 sm:px-5 sm:py-4", canEdit && "pr-9 sm:pr-11")}>
-        {canEdit && !m.pending && (
+        {canEdit && (
           <motion.button whileTap={{ scale: 0.85 }} disabled={isDeleting} onClick={onDelete} className={cn("absolute right-2 top-2 rounded-lg p-1.5 text-white/25 transition-all hover:bg-red-500/10 hover:text-red-400 active:scale-90", isDeleting && "pointer-events-none opacity-50")}>
             {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
           </motion.button>
@@ -657,15 +648,6 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected, h
       </div>
     </div>
   );
-}
-
-function SwipeableCompactRow({ children, onSwipeLeft }: { children: ReactNode; onSwipeLeft: () => void }) {
-  const handlers = useSwipeable({
-    onSwipedLeft: onSwipeLeft,
-    preventScrollOnSwipe: false,
-    trackMouse: true
-  });
-  return <div {...handlers} className="recent-history-compact-row relative min-h-[72px]" data-mobile-match-row>{children}</div>;
 }
 
 // ─── Main RecentHistory ───────────────────────────────────────────────────────
@@ -727,8 +709,9 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
           const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
           const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
           const isDouble = m.win_2 || m.lose_2;
+          const syncConflict = m.pending && m.sync_status === 'conflict';
           const syncFailed = m.pending && m.sync_status === 'error';
-          const syncLabel = syncFailed ? 'Lưu lỗi' : 'Đang lưu...';
+          const syncLabel = syncConflict ? 'Nghi trùng' : syncFailed ? 'Lưu lỗi' : 'Đang lưu...';
           const syncClass = syncFailed ? 'text-red-300/90' : 'text-amber-300/80';
 
           return (
@@ -768,7 +751,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                 </div>
 
                 <div className="shrink-0 flex items-center justify-center w-12">
-                  {canEdit && !m.pending && (
+                  {canEdit && (
                     <motion.button whileTap={{ scale: 0.85 }} disabled={isDeletingId === m.id} onClick={() => setDeleteTarget(m.id)}
                       className={cn("p-2 text-white/15 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors", isDeletingId === m.id && "opacity-50 pointer-events-none")}>
                       {isDeletingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
@@ -778,7 +761,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
               </div>
 
               {/* ── COMPACT ─────────────────────────────────────────────── */}
-              <SwipeableCompactRow onSwipeLeft={() => { if (canEdit && !m.pending && isDeletingId !== m.id) setDeleteTarget(m.id); }}>
+              <div className="recent-history-compact-row relative min-h-[72px]" data-mobile-match-row>
                 <div className="flex">
                   <div className="flex w-[64px] shrink-0 flex-col items-center justify-center gap-1 border-r border-white/[0.05] bg-white/[0.015] px-2 py-3">
                     <span className="text-[15px] font-black leading-none text-white/75 tabular-nums">{time}</span>
@@ -786,7 +769,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                   </div>
 
                   <div className={cn("min-w-0 flex-1 px-3 py-3", canEdit && "pr-9")}>
-                    {canEdit && !m.pending && (
+                    {canEdit && (
                       <motion.button whileTap={{ scale: 0.85 }} disabled={isDeletingId === m.id} onClick={() => setDeleteTarget(m.id)}
                         className={cn("absolute right-2 top-2 rounded-lg p-1.5 text-white/15 transition-colors hover:bg-red-500/10 hover:text-red-400", isDeletingId === m.id && "pointer-events-none opacity-50")}>
                         {isDeletingId === m.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
@@ -804,7 +787,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                           <span data-mobile-score>{m.win_score}–{m.lose_score}</span>
                         </div>
                         {m.pending && (
-                          <span className={cn('mt-1 text-[8px] font-black uppercase tracking-widest', syncClass)}>{syncFailed ? 'Lưu lỗi' : 'Đang lưu'}</span>
+                          <span className={cn('mt-1 text-[8px] font-black uppercase tracking-widest', syncClass)}>{syncLabel}</span>
                         )}
                         {matchExpected?.get(m.id) && (
                           <span className="mt-1 block whitespace-nowrap text-[8px] font-bold tracking-tight text-white/30">
@@ -820,7 +803,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
                     </div>
                   </div>
                 </div>
-              </SwipeableCompactRow>
+              </div>
 
             </div>
           );
