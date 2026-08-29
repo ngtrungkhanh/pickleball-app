@@ -9,6 +9,18 @@ type BackupMatch = {
   id?: string;
   date?: string;
   season?: string;
+  win_1?: string;
+  win_2?: string | null;
+  lose_1?: string;
+  lose_2?: string | null;
+  win_score?: number;
+  lose_score?: number;
+  created_by?: string;
+  client_request_id?: string | null;
+  deleted_at?: string | null;
+  delete_group_id?: string | null;
+  pending?: boolean;
+  sync_status?: string;
   [key: string]: unknown;
 };
 
@@ -103,13 +115,23 @@ export async function POST(request: Request) {
 
     const {
       players = [],
-      matches = [],
+      matches: rawMatches = [],
       logs = [],
       archives = [],
       seasons = [],
       config = {},
       playerSeasonSettings = [],
     } = data;
+
+    const matches: BackupMatch[] = Array.isArray(rawMatches)
+      ? rawMatches.filter((match) => (
+          match
+          && !String(match.id || '').startsWith('TMP-')
+          && match.pending !== true
+          && !match.sync_status
+        ))
+      : [];
+    const ignoredTemporaryMatches = Array.isArray(rawMatches) ? rawMatches.length - matches.length : 0;
 
     await ensureRestoreColumns();
 
@@ -225,7 +247,7 @@ export async function POST(request: Request) {
     revalidatePath('/admin');
     revalidatePath('/analysis');
 
-    return NextResponse.json({ success: true }, { status: 200 });
+    return NextResponse.json({ success: true, ignoredTemporaryMatches }, { status: 200 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('JSON Restore error:', error);

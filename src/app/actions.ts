@@ -328,6 +328,7 @@ function matchDeltaPayload(match: Record<string, unknown>) {
     lose_score: Number(match.lose_score || 0),
     season: String(match.season || 'Season 1'),
     created_by: String(match.created_by || 'SYSTEM'),
+    client_request_id: match.client_request_id ? String(match.client_request_id) : null,
   };
 }
 
@@ -345,8 +346,17 @@ export async function addMatchAction(formData: FormData) {
   const season = (formData.get('season') as string) || await getConfigValue('active_season', 'Season 1');
   const created_by = (formData.get('created_by') as string) || 'SYSTEM';
   const duplicate_confirmed = String(formData.get('duplicate_confirmed') || '').toLowerCase() === 'true';
+  const pending_retry = String(formData.get('pending_retry') || '').toLowerCase() === 'true';
   const rawClientRequestId = String(formData.get('client_request_id') || formData.get('temp_id') || '').trim();
   const client_request_id = rawClientRequestId ? rawClientRequestId.slice(0, 120) : null;
+  const rawPlayedAt = String(formData.get('played_at') || '').trim();
+  const parsedPlayedAt = rawPlayedAt ? new Date(rawPlayedAt) : null;
+  const now = Date.now();
+  const playedAt = parsedPlayedAt
+    && Number.isFinite(parsedPlayedAt.getTime())
+    && parsedPlayedAt.getTime() <= now + 5 * 60_000
+    ? parsedPlayedAt
+    : null;
 
   if (!win_1 || !win_2 || !lose_1 || !lose_2) {
     return { error: 'Thiếu người chơi. Cần đủ 4 người.' };
@@ -397,19 +407,32 @@ export async function addMatchAction(formData: FormData) {
 
       stage = 'duplicate check';
       await client.sql`SELECT pg_advisory_xact_lock(hashtext(${duplicateLockKey}))`;
-      const { rows: recent } = await client.sql`
-        SELECT * FROM matches
-        WHERE date > NOW() - INTERVAL '15 minutes'
-          AND season = ${season}
-          AND deleted_at IS NULL
-        ORDER BY date DESC
-        LIMIT 20
-      `;
+      const { rows: recent } = pending_retry && playedAt
+        ? await client.sql`
+            SELECT * FROM matches
+            WHERE date BETWEEN ${new Date(playedAt.getTime() - 24 * 60 * 60_000).toISOString()}
+              AND ${new Date(playedAt.getTime() + 24 * 60 * 60_000).toISOString()}
+              AND season = ${season}
+              AND deleted_at IS NULL
+            ORDER BY date DESC
+            LIMIT 100
+          `
+        : await client.sql`
+            SELECT * FROM matches
+            WHERE date > NOW() - INTERVAL '15 minutes'
+              AND season = ${season}
+              AND deleted_at IS NULL
+            ORDER BY date DESC
+            LIMIT 20
+          `;
 
       const duplicate = recent.find((m: any) => {
         const winTeam = normalizeTeam(String(m.win_1 || ''), String(m.win_2 || ''));
         const loseTeam = normalizeTeam(String(m.lose_1 || ''), String(m.lose_2 || ''));
-        return winTeam === currentWinTeam && loseTeam === currentLoseTeam;
+        const sameTeams = winTeam === currentWinTeam && loseTeam === currentLoseTeam;
+        if (!sameTeams) return false;
+        if (!pending_retry) return true;
+        return Number(m.win_score || 0) === win_score && Number(m.lose_score || 0) === lose_score;
       });
 
       if (duplicate && !duplicate_confirmed) {
@@ -423,7 +446,7 @@ export async function addMatchAction(formData: FormData) {
       stage = 'insert match';
       const { rows: insertedRows } = await client.sql`
         INSERT INTO matches (id, date, win_1, win_2, lose_1, lose_2, win_score, lose_score, season, created_by, client_request_id)
-        VALUES (${id}, NOW(), ${win_1}, ${win_2}, ${lose_1}, ${lose_2}, ${win_score}, ${lose_score}, ${season}, ${created_by}, ${client_request_id})
+        VALUES (${id}, ${playedAt ? playedAt.toISOString() : new Date().toISOString()}, ${win_1}, ${win_2}, ${lose_1}, ${lose_2}, ${win_score}, ${lose_score}, ${season}, ${created_by}, ${client_request_id})
         RETURNING *
       `;
       const inserted = insertedRows[0];

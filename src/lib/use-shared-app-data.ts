@@ -20,6 +20,7 @@ import {
   type StoredPlayerSeasonSetting,
   type StoredSeason,
 } from '@/lib/db';
+import { readPendingMatchDeletes } from '@/lib/pending-match-sync';
 
 type SharedConfig = Record<string, string>;
 
@@ -42,9 +43,11 @@ function dataVersionFromConfig(config: SharedConfig) {
 }
 
 function snapshotToData(snapshot: AppCacheSnapshot, fallback: SharedData): SharedData {
+  const pendingDeleteIds = new Set(readPendingMatchDeletes().map(item => item.matchId));
+  const matches = snapshot.matches.length > 0 ? snapshot.matches : fallback.matches;
   return {
     players: snapshot.players.length > 0 ? snapshot.players : fallback.players,
-    matches: snapshot.matches.length > 0 ? snapshot.matches : fallback.matches,
+    matches: matches.filter(match => !pendingDeleteIds.has(String(match.id || ''))),
     seasons: snapshot.seasons.length > 0 ? snapshot.seasons : fallback.seasons,
     config: Object.keys(snapshot.config).length > 0 ? snapshot.config : fallback.config,
     playerSeasonSettings: snapshot.playerSeasonSettings.length > 0 ? snapshot.playerSeasonSettings : fallback.playerSeasonSettings,
@@ -161,10 +164,12 @@ export function useSharedAppData({
 
     const appData = await getAppDataPartsAction(requestedParts);
     if (!appData) return false;
+    const pendingDeleteIds = new Set(readPendingMatchDeletes().map(item => item.matchId));
 
     setData((current) => ({
       players: appData.players as StoredPlayer[] | undefined ?? current.players,
-      matches: appData.matches as StoredMatch[] | undefined ?? current.matches,
+      matches: (appData.matches as StoredMatch[] | undefined ?? current.matches)
+        .filter(match => !pendingDeleteIds.has(String(match.id || ''))),
       seasons: appData.seasons as StoredSeason[] | undefined ?? current.seasons,
       config: appData.config ?? current.config,
       playerSeasonSettings: appData.playerSeasonSettings as StoredPlayerSeasonSetting[] | undefined ?? current.playerSeasonSettings,
