@@ -58,7 +58,14 @@ nghìn trận:
 
 Ranking chỉ tính trận doubles hợp lệ, không có Guest.
 
-Thứ tự xếp:
+Người chơi đủ điều kiện khi có ít nhất 25% số trận trung bình của những người
+còn lại trên BXH hoặc đã đánh ít nhất 15 trận. Ngưỡng làm tròn lên, tối thiểu
+1 trận; tính trên toàn bộ người chơi được hiển thị trước giới hạn 20 người,
+theo mùa đang chọn (hoặc toàn bộ trận khi xem Tổng hợp).
+Người chưa đủ điều kiện nằm dưới nhóm đủ điều kiện, có nhãn `Chưa đủ trận`
+và dấu `—` thay thứ hạng. Không trao biểu tượng dẫn đầu cho người chưa đủ trận.
+
+Thứ tự xếp trong mỗi nhóm:
 
 1. win rate giảm dần;
 2. số trận thắng giảm dần;
