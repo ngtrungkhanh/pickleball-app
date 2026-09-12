@@ -102,8 +102,8 @@ Settings hỗ trợ:
 - upload/xóa ảnh Hall of Fame theo champion của season.
 
 Trong active season, thành viên Active phải xuất hiện ở form nhập tỷ số và BXH.
-Tùy chọn `Ẩn BXH` chỉ loại thành viên khỏi BXH/analytics hiển thị, không loại họ
-khỏi danh sách nhập tỷ số.
+Tùy chọn `Ẩn BXH` loại thành viên khỏi BXH/analytics hiển thị và khỏi danh sách
+nhập tỷ số của season đó.
 
 Admin hỗ trợ:
 

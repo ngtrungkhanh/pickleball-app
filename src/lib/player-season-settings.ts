@@ -37,7 +37,7 @@ export function selectScorePlayers<T extends SeasonAwarePlayer>(
   settings: readonly StoredPlayerSeasonSetting[],
 ) {
   return applyPlayerSeasonSettings(players, season, settings)
-    .filter((player) => player.active && !player.deleted_at);
+    .filter((player) => player.active && !player.hidden && !player.deleted_at);
 }
 
 export function selectLeaderboardPlayers<T extends SeasonAwarePlayer>(
