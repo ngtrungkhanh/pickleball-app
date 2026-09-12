@@ -21,7 +21,7 @@ describe('player season settings', () => {
     expect(result.map((player) => player.id)).toEqual(['HA', 'AN']);
   });
 
-  it('keeps a hidden active player in score entry but removes them from the leaderboard', () => {
+  it('removes a hidden active player from score entry and the leaderboard', () => {
     const settings = [{
       id: 'HA_Season 2',
       player_id: 'HA',
@@ -31,7 +31,7 @@ describe('player season settings', () => {
       hidden: true,
     }];
 
-    expect(selectScorePlayers(players, 'Season 2', settings).map((player) => player.id)).toContain('HA');
+    expect(selectScorePlayers(players, 'Season 2', settings).map((player) => player.id)).not.toContain('HA');
     expect(selectLeaderboardPlayers(players, 'Season 2', settings).map((player) => player.id)).not.toContain('HA');
   });
 
