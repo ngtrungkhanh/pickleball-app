@@ -428,9 +428,6 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                   <div className="text-xs font-black uppercase tracking-widest text-primary">
                     Cấu hình riêng theo season
                   </div>
-                  <div className="mt-1 text-[10px] font-bold leading-relaxed text-slate-300/65">
-                    Active: hiện ở nhập tỷ số và BXH · Ẩn BXH: vẫn chọn được khi nhập tỷ số
-                  </div>
                 </div>
                 <select
                   value={selectedConfigSeason}
