@@ -94,10 +94,16 @@ hoặc rival khi confidence/sample cho kết quả hợp lý hơn.
 Settings hỗ trợ:
 
 - mở/khóa edit mode;
-- thêm, đổi tên, active/inactive và xóa thành viên;
+- thêm, đổi tên, active/inactive, ẩn khỏi BXH và xóa thành viên;
+- chọn season cần cấu hình; trạng thái active, phạt tiền và ẩn BXH được lưu
+  riêng cho từng season;
 - tạo, kích hoạt, kết thúc hoặc xóa season;
 - chỉnh tiền phạt;
 - upload/xóa ảnh Hall of Fame theo champion của season.
+
+Trong active season, thành viên Active phải xuất hiện ở form nhập tỷ số và BXH.
+Tùy chọn `Ẩn BXH` chỉ loại thành viên khỏi BXH/analytics hiển thị, không loại họ
+khỏi danh sách nhập tỷ số.
 
 Admin hỗ trợ:
 

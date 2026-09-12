@@ -423,9 +423,14 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
           <div className="flex-1 overflow-y-auto p-4 sm:p-10 space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
             {/* Season Selector for Configuration */}
             {canEdit && (activeTab === 'players' || activeTab === 'money') && (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-500/20 pb-4 shrink-0">
-                <div className="text-xs font-black text-slate-300 uppercase tracking-widest">
-                  Mùa giải đang cấu hình
+              <div className="flex shrink-0 flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/[0.06] p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-widest text-primary">
+                    Cấu hình riêng theo season
+                  </div>
+                  <div className="mt-1 text-[10px] font-bold leading-relaxed text-slate-300/65">
+                    Active: hiện ở nhập tỷ số và BXH · Ẩn BXH: vẫn chọn được khi nhập tỷ số
+                  </div>
                 </div>
                 <select
                   value={selectedConfigSeason}

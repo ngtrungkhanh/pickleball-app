@@ -405,7 +405,7 @@ export function ScoreForm({
   const submitButtonRef = useRef<HTMLButtonElement>(null);
 
   const active: ScorePlayer[] = players
-    .filter(p => p.active && !p.deleted_at && p.id && p.name && p.hidden !== true)
+    .filter(p => p.active && !p.deleted_at && p.id && p.name)
     .map(p => ({
       id: String(p.id),
       name: String(p.name),
