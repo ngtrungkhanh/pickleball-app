@@ -20,6 +20,7 @@ import { buildHallOfFameEntries, formatHallDate, getLatestHallOfFameEntry } from
 import { deleteMatchAction } from '@/app/actions';
 import { navigateToAnalysis } from '@/lib/analysis-navigation';
 import { getSeasonTimeText } from '@/lib/season-display';
+import { selectLeaderboardPlayers, selectScorePlayers } from '@/lib/player-season-settings';
 import {
   patchPendingMatchDelete,
   readPendingMatchDeletes,
@@ -419,33 +420,19 @@ export default function Dashboard({
 
   const leaderboardPlayers = useMemo(() => {
     const seasonForSettings = selectedSeason || activeSeason;
-    return players
-      .map(p => {
-        const settings = getPlayerSetting(p.id, seasonForSettings);
-        return {
-          ...p,
-          active: settings.active,
-          pay_fine: settings.pay_fine,
-          hidden: settings.hidden,
-        };
-      })
-      .filter(p => !p.hidden);
-  }, [players, getPlayerSetting, selectedSeason, activeSeason]);
+    return selectLeaderboardPlayers(players, seasonForSettings, sharedData.playerSeasonSettings);
+  }, [players, selectedSeason, activeSeason, sharedData.playerSeasonSettings]);
 
   const visiblePlayers = useMemo(() => {
     const seasonForSettings = selectedSeason || activeSeason;
-    return players
-      .map(p => {
-        const settings = getPlayerSetting(p.id, seasonForSettings);
-        return {
-          ...p,
-          active: settings.active,
-          pay_fine: settings.pay_fine,
-          hidden: settings.hidden,
-        };
-      })
-      .filter(p => p.active && !p.hidden && !isGuestId(p.id));
-  }, [players, getPlayerSetting, selectedSeason, activeSeason]);
+    return selectLeaderboardPlayers(players, seasonForSettings, sharedData.playerSeasonSettings)
+      .filter(p => !isGuestId(p.id));
+  }, [players, selectedSeason, activeSeason, sharedData.playerSeasonSettings]);
+
+  const scorePlayers = useMemo(
+    () => selectScorePlayers(players, activeSeason, sharedData.playerSeasonSettings),
+    [players, activeSeason, sharedData.playerSeasonSettings],
+  );
 
   const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(
     visiblePlayers as Parameters<typeof buildAnalysisSnapshot>[0],
@@ -881,7 +868,7 @@ export default function Dashboard({
                   <h2 className="min-w-0 truncate text-[10px] font-black uppercase tracking-[0.2em] text-white/55">Nhập trận nhanh</h2>
                 </div>
                 <ScoreForm
-                  players={players}
+                  players={scorePlayers}
                   onAddMatch={addLocalMatch}
                   onConfirmMatch={confirmLocalMatch}
                   onRejectMatch={rejectLocalMatch}
@@ -1072,7 +1059,7 @@ export default function Dashboard({
           </div>
           <div className="relative z-[100] rounded-2xl border border-slate-500/25 bg-[#142034]/95 overflow-visible">
             <ScoreForm
-              players={players}
+              players={scorePlayers}
               onAddMatch={addLocalMatch}
               onConfirmMatch={confirmLocalMatch}
               onRejectMatch={rejectLocalMatch}

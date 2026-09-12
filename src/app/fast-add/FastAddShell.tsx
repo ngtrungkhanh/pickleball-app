@@ -1,21 +1,27 @@
 'use client';
 import { ScoreForm } from '@/components/ScoreForm';
+import { selectScorePlayers } from '@/lib/player-season-settings';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Share, MoreVertical, PlusSquare } from 'lucide-react';
+
+function subscribeBrowserSnapshot() {
+  return () => {};
+}
+
+function getIsIOSSnapshot() {
+  const ua = window.navigator.userAgent;
+  const webkit = /WebKit/i.test(ua);
+  const isIOSSafari = /iPad|iPhone/i.test(ua);
+  return isIOSSafari && webkit && !/CriOS/i.test(ua);
+}
 
 function PwaInstallGuide() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isIOS, setIsIOS] = useState(false);
+  const isIOS = useSyncExternalStore(subscribeBrowserSnapshot, getIsIOSSnapshot, () => false);
 
   useEffect(() => {
-    // Detect iOS
-    const ua = window.navigator.userAgent;
-    const webkit = !!ua.match(/WebKit/i);
-    const isIOSSafari = !!ua.match(/iPad/i) || !!ua.match(/iPhone/i);
-    setIsIOS(isIOSSafari && webkit && !ua.match(/CriOS/i));
-
     // Capture install prompt on Android
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
@@ -76,10 +82,15 @@ export function FastAddShell({ previewWritesBlocked }: { previewWritesBlocked: b
     initialSeasons: [],
     initialPlayerSeasonSettings: [],
     routeKey: 'fast-add',
-    syncParts: ['players', 'config'],
+    syncParts: ['players', 'config', 'playerSeasonSettings'],
   });
 
   const activeSeason = sharedData.config.active_season || 'Season 1';
+  const scorePlayers = selectScorePlayers(
+    sharedData.players,
+    activeSeason,
+    sharedData.playerSeasonSettings,
+  );
 
   if (!sharedData.cacheLoaded) {
     return <div className="text-center p-8">Đang tải dữ liệu...</div>;
@@ -87,10 +98,16 @@ export function FastAddShell({ previewWritesBlocked }: { previewWritesBlocked: b
 
   return (
     <div className="flex flex-col gap-6">
-      <ScoreForm 
-        players={sharedData.players}
-        activeSeason={activeSeason}
-      />
+      {previewWritesBlocked ? (
+        <div className="rounded-xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm font-bold text-amber-200">
+          Preview đang khóa thao tác ghi để bảo vệ dữ liệu production.
+        </div>
+      ) : (
+        <ScoreForm
+          players={scorePlayers}
+          activeSeason={activeSeason}
+        />
+      )}
       
       <PwaInstallGuide />
 
