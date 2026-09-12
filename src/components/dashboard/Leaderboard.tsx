@@ -139,6 +139,18 @@ function WinRatePill({ rate }: { rate: number }) {
   );
 }
 
+function ParticipationNote({ total, required }: { total: number; required: number }) {
+  return (
+    <div className="@container mt-1 w-full text-left" title={`Chưa đủ trận: đã đánh ${total}/${required} trận cần để được xếp hạng. Mốc cập nhật theo số trận của nhóm, tối đa 15 trận.`}>
+      <div className="flex flex-wrap items-baseline gap-x-1 text-[10px] leading-4 font-medium text-amber-200/65" aria-label={`Chưa đủ trận: ${total}/${required} trận`}>
+        <span className="@[200px]:hidden">Chưa đủ</span>
+        <span className="hidden @[200px]:inline">Chưa đủ trận</span>
+        <span className="whitespace-nowrap tabular-nums">· {total}/{required} trận</span>
+      </div>
+    </div>
+  );
+}
+
 function DetailTitle({
   children,
   icon,
@@ -523,14 +535,14 @@ export function Leaderboard({
                     )}
                   >
                     <td className={cn("py-3 px-4 text-center", i === 0 && p.isEligible && "rank-1-first-td")}><RankBadge i={i} eligible={p.isEligible} /></td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 text-left">
                       <div className="flex items-center gap-3">
                         <span className={cn('font-black text-base 2xl:text-lg truncate transition-all', i === 0 && p.isEligible ? 'text-amber-400' : exp ? 'text-primary' : 'text-white group-hover:text-white')}>
                           {p.name}
                         </span>
                         <div className={cn('w-1.5 h-1.5 rounded-full bg-primary opacity-0 transition-all scale-0', (exp || closing) && 'opacity-100 scale-100')} />
                       </div>
-                      {!p.isEligible && <span className="mt-1 inline-block rounded bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200" title={`Cần ít nhất ${p.requiredMatches} trận: đủ 25% trung bình người còn lại hoặc 15 trận.`}>Chưa đủ trận</span>}
+                      {!p.isEligible && <ParticipationNote total={p.total} required={p.requiredMatches} />}
                     </td>
                     <td className="py-3 px-4 text-center font-black text-base 2xl:text-lg text-slate-100 tabular-nums">{p.total}</td>
                     <td className="py-3 px-4 text-center font-black text-base 2xl:text-lg text-green-300 tabular-nums">{p.wins}</td>
@@ -591,7 +603,7 @@ export function Leaderboard({
                   <div className={cn('font-black text-lg truncate mb-1', exp ? 'text-primary' : 'text-white/90')}>
                     {p.name}
                   </div>
-                  {!p.isEligible && <span className="mb-1 inline-block rounded bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200" title={`Cần ít nhất ${p.requiredMatches} trận: đủ 25% trung bình người còn lại hoặc 15 trận.`}>Chưa đủ trận</span>}
+                  {!p.isEligible && <ParticipationNote total={p.total} required={p.requiredMatches} />}
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
                     <span className="text-slate-300/65">{p.total}T</span>
                     <span className="text-green-300/75">{p.wins}W</span>

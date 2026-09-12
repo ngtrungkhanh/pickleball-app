@@ -64,6 +64,8 @@ còn lại trên BXH hoặc đã đánh ít nhất 15 trận. Ngưỡng làm tr�
 theo mùa đang chọn (hoặc toàn bộ trận khi xem Tổng hợp).
 Người chưa đủ điều kiện nằm dưới nhóm đủ điều kiện, có nhãn `Chưa đủ trận`
 và dấu `—` thay thứ hạng. Không trao biểu tượng dẫn đầu cho người chưa đủ trận.
+Dòng phụ căn trái theo tên, hiển thị số trận hiện tại/mốc cần đạt; khi cột tên
+hẹp, thu gọn thành `Chưa đủ · 0/10 trận`. Mốc cần đạt luôn được giữ trên mobile.
 
 Thứ tự xếp trong mỗi nhóm:
 
