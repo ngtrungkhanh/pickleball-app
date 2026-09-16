@@ -166,6 +166,17 @@ Hall of Fame độc lập với season filter:
 - Dashboard và Analysis không có nút refresh thủ công; reload/F5 là hành động
   lấy dữ liệu mới.
 - Insight không tự rotate theo timer trong một page load.
+- Nhận xét chuyên gia dùng tiêu đề vui và nội dung bám số liệu. Các biến thể
+  không suy diễn kỹ thuật cá nhân, thời lượng hay diễn biến từng điểm từ tỷ số
+  chung cuộc; so sánh đồng đội không quy kết nguyên nhân thắng/thua.
+- Thứ hạng trong nhận xét dùng điều kiện đủ trận và thứ tự như Dashboard.
+  Người chưa đủ trận không có thứ hạng chính thức trong nhận xét. Mốc giữ ngôi
+  đầu lịch sử được tính theo bảng chốt ngày, không phải từng trận.
+- Nhận xét theo buổi ghi ngày cụ thể, nhóm ngày theo giờ Việt Nam. Cửa sổ 7 ngày
+  tính đến trận mới nhất phải nêu ngày kết thúc; nhận xét vắng mặt chỉ xuất hiện
+  khi xem mùa hoạt động hoặc Tổng hợp và nói về trận được ghi nhận.
+- Nhận xét phối hợp đa dạng cần ít nhất 3 trận với mỗi đồng đội được tính.
+  Tiền phạt trong nhận xét là khoản được tính, không xác nhận đã thanh toán.
 - Network card giải thích bằng ngôn ngữ kỳ vọng ELO, không lộ thuật ngữ kỹ thuật
   như `baseline`, `impact` hoặc phần trăm nội bộ.
 - Tiếng Việt trong source phải là UTF-8 hợp lệ, không thêm mojibake.

@@ -301,9 +301,10 @@ export function AnalysisCenter({
       ? generateInsightSelectionResultFromSnapshot(analysisSnapshot, {
         seed: insightSeed ?? 0,
         selectionState: insightSelectionState || {},
+        includeAbsence: selectedSeason === null || selectedSeason === currentActiveSeason,
       })
       : { insights: [], nextSelectionState: insightSelectionState || {} }
-  ), [analysisSnapshot, insightSeed, insightSelectionState, insightsReady]);
+  ), [analysisSnapshot, insightSeed, insightSelectionState, insightsReady, selectedSeason, currentActiveSeason]);
   const insights = insightSelectionResult.insights;
 
   useEffect(() => {

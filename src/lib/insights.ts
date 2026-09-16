@@ -7,6 +7,7 @@ import {
   type PlayerMetrics,
 } from './analysis-core';
 import { isGuestId } from './guest';
+import { applyLeaderboardEligibility } from './leaderboard-eligibility';
 
 export type Insight = {
   type: string;
@@ -36,6 +37,8 @@ type InsightCandidate = Insight & {
 type InsightSelectionOptions = {
   seed?: number;
   selectionState?: InsightSelectionState;
+  /** Disable current absence claims when browsing a historical season. */
+  includeAbsence?: boolean;
 };
 
 type CandidateConfig = {
@@ -323,13 +326,6 @@ function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
 }
 
-function standardDeviation(values: number[]) {
-  if (values.length <= 1) return 0;
-  const avg = average(values);
-  const variance = values.reduce((sum, value) => sum + ((value - avg) ** 2), 0) / values.length;
-  return Math.sqrt(variance);
-}
-
 function resultForPlayer(match: AnalysisMatch, playerId: string): Result {
   return match.win_1 === playerId || match.win_2 === playerId ? 'W' : 'L';
 }
@@ -383,16 +379,25 @@ function matchTime(match: AnalysisMatch) {
 function matchDayKey(match: AnalysisMatch) {
   const time = matchTime(match);
   if (!time) return String(match.date || '').slice(0, 10);
-  const date = new Date(time);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  // Group sessions by the club's timezone, independently of the viewer's device.
+  return new Date(time + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 function formatDayKey(dayKey: string) {
   const parts = dayKey.split('-');
   return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dayKey;
+}
+
+function latestSessionDate(snapshot: AnalysisSnapshot) {
+  const match = snapshot.rankingMatches[0];
+  return match ? formatDayKey(matchDayKey(match)) : '';
+}
+
+function playedLatestSession(snapshot: AnalysisSnapshot, playerId: string) {
+  const latest = snapshot.rankingMatches[0];
+  return Boolean(latest && snapshot.rankingMatches.some(match =>
+    matchDayKey(match) === matchDayKey(latest) && playerInMatch(match, playerId)
+  ));
 }
 
 function sortNewest(matches: AnalysisMatch[]) {
@@ -480,17 +485,22 @@ function candidateSelectionWeight(candidate: InsightCandidate, minScore: number)
 }
 
 function pattern(results: Result[]) {
-  return results.slice(0, 8).join('-');
+  return results.slice(0, 8).map(result => result === 'W' ? 'T' : 'B').join('–');
 }
 
 function edgeRate(edge: AnalysisEdge) {
   return Math.round(edge.rate);
 }
 
+function eligibleRankBoard<T extends { name: string; total: number; wins: number; losses: number; winRate: number }>(rows: T[]) {
+  const sorted = [...rows].sort((a, b) => b.winRate - a.winRate || b.wins - a.wins || a.losses - b.losses || a.name.localeCompare(b.name));
+  // Include zero-match players when calculating the participation threshold,
+  // just like Dashboard; only eligible players receive a numerical rank.
+  return applyLeaderboardEligibility(sorted).filter(row => row.isEligible);
+}
+
 function rankBoard(snapshot: AnalysisSnapshot) {
-  return [...snapshot.playerMetrics]
-    .filter(metric => metric.total > 0)
-    .sort((a, b) => b.winRate - a.winRate || b.wins - a.wins || a.losses - b.losses || a.name.localeCompare(b.name));
+  return eligibleRankBoard(snapshot.playerMetrics);
 }
 
 function oldEloRanks(metrics: PlayerMetrics[]) {
@@ -543,9 +553,7 @@ function buildPreviousSessionBoard(snapshot: AnalysisSnapshot) {
     const winRate = total > 0 ? (wins / total) * 100 : 0;
     return { id: player.id, name: player.name, total, wins, losses: total - wins, winRate };
   });
-  return playerStats
-    .filter(p => p.total > 0)
-    .sort((a, b) => b.winRate - a.winRate || b.wins - a.wins || a.losses - b.losses || a.name.localeCompare(b.name));
+  return eligibleRankBoard(playerStats);
 }
 
 function calculateDaysAtTop1(snapshot: AnalysisSnapshot, topPlayerId: string): number {
@@ -561,11 +569,9 @@ function calculateDaysAtTop1(snapshot: AnalysisSnapshot, topPlayerId: string): n
       const wins = matches.filter(m => resultForPlayer(m, player.id) === 'W').length;
       const total = matches.length;
       const winRate = total > 0 ? (wins / total) * 100 : 0;
-      return { id: player.id, total, wins, losses: total - wins, winRate };
+      return { id: player.id, name: player.name, total, wins, losses: total - wins, winRate };
     });
-    const board = playerStats
-      .filter(p => p.total > 0)
-      .sort((a, b) => b.winRate - a.winRate || b.wins - a.wins || a.losses - b.losses);
+    const board = eligibleRankBoard(playerStats);
     if (board.length === 0 || board[0].id !== topPlayerId) {
       if (d === dayKeys.length - 1) return 0;
       const startDayKey = dayKeys[d + 1];
@@ -636,9 +642,7 @@ function findRankTakeover(snapshot: AnalysisSnapshot) {
     const winRate = total > 0 ? (wins / total) * 100 : 0;
     return { id: player.id, name: player.name, total, wins, losses: total - wins, winRate };
   });
-  const boardBefore = playerStatsBefore
-    .filter(p => p.total > 0)
-    .sort((a, b) => b.winRate - a.winRate || b.wins - a.wins || a.losses - b.losses || a.name.localeCompare(b.name));
+  const boardBefore = eligibleRankBoard(playerStatsBefore);
   const rankBeforeMap = new Map(boardBefore.map((p, index) => [p.id, index + 1]));
   const currentBoard = rankBoard(snapshot);
   const currentRankMap = new Map(currentBoard.map((p, index) => [p.id, index + 1]));
@@ -668,2198 +672,355 @@ function getRandomVariant(variants: string[], randomFn?: () => number): string {
   return variants[index];
 }
 
-// Embedded VARIANTS dictionary
-// This file is auto-generated by scratch/generate_variants_dict.js
-// Do not edit directly.
-
-const VARIANTS: Record<string, (ctx: any) => string[]> = {
-  hot_streak: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} đang thắng liền ${metric.streakCount} trận, phong độ đang cực cao khiến bất kỳ ai cũng phải dè chừng khi chạm trán.`,
-      `${metric.name} đang có chuỗi thắng liền ${metric.streakCount} trận, một phong độ hủy diệt buộc mọi đối thủ trên sân phải đặc biệt cảnh giác.`,
-      `${metric.name} đang thắng liền ${metric.streakCount} trận, đà thăng tiến này chắc chắn sẽ khiến các đối thủ tiếp theo phải đổ mồ hôi hột.`,
-      `${metric.name} đang bay cao với chuỗi thắng liền ${metric.streakCount} trận, ai chạm trán tiếp theo cũng phải chơi với 200% sự tập trung.`,
-      `${metric.name} đang bỏ túi ${metric.streakCount} trận thắng liên tục, phong độ "nóng máy" này đang là mối đe dọa cho bất kỳ ai muốn cản bước.`,
-    ];
-  },
-  cold_streak: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} đang thua liền ${metric.streakCount} trận, phong độ sa sút khiến bất kỳ ai đứng chung cặp cũng cảm thấy phần nào áp lực.`,
-      `${metric.name} đang gánh chuỗi thua liền ${metric.streakCount} trận, nhịp thi đấu hụt hơi buộc đồng đội trên sân phải đặc biệt nỗ lực.`,
-      `${metric.name} đang thua liền ${metric.streakCount} trận, chuỗi thua kéo dài này chắc chắn sẽ khiến các trận đấu tiếp theo vô cùng căng thẳng.`,
-      `${metric.name} đang chìm sâu với chuỗi thua ${metric.streakCount} trận, muốn giải hạn lúc này đòi hỏi sự tập trung cực kỳ lớn.`,
-      `${metric.name} đang nhận ${metric.streakCount} trận thua liên tục, phong độ sụt giảm này đang là bài toán khó cho bất kỳ ai muốn ráp cặp.`,
-    ];
-  },
-  elo_king: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${topElo.name} đang thống trị đỉnh ELO với ${topElo.rating} điểm, phong độ cực kỳ ổn định và khó bị lật đổ.`,
-      `${topElo.name} đang giữ nóc ELO với ${topElo.rating} điểm, vị trí số 1 hiện tại gần như chưa thể lung lay.`,
-      `${topElo.name} độc chiếm đỉnh bảng ELO với ${topElo.rating} điểm, khẳng định đẳng cấp hàng đầu trên sân.`,
-      `${topElo.name} đang làm chủ đỉnh ELO với ${topElo.rating} điểm, là mục tiêu chinh phục của mọi tay vợt.`,
-      `${topElo.name} ngự trị trên đỉnh ELO với ${topElo.rating} điểm, chứng minh sức mạnh của ông vua bảng điểm.`,
-    ];
-  },
-  giant_killer: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} có ${metric.upsetWins} lần lật kèo ngoạn mục dù tỷ lệ thắng trước trận chỉ dưới 30%.`,
-      `${metric.name} đã có ${metric.upsetWins} trận thắng đầy bất ngờ khi cơ hội thắng ban đầu dưới 30%.`,
-      `${metric.name} từng lật ngược tình thế ${metric.upsetWins} lần dù không được đánh giá cao trước trận.`,
-      `${metric.name} giành được ${metric.upsetWins} chiến thắng bất ngờ dù cơ hội thắng trước trận dưới 30%.`,
-      `${metric.name} chứng minh khả năng vượt khó với ${metric.upsetWins} lần thắng dù bị đánh giá yếu thế hơn.`,
-    ];
-  },
-  earthquake_victim: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} có ${metric.upsetLosses} lần sẩy chân đầy tiếc nuối dù cơ hội thắng trước trận lên tới trên 70%.`,
-      `${metric.name} đã có ${metric.upsetLosses} trận rơi điểm đáng tiếc khi tỷ lệ thắng ban đầu được đánh giá trên 70%.`,
-      `${metric.name} từng sẩy chân ${metric.upsetLosses} lần trong những trận đấu tưởng chừng nắm chắc chiến thắng.`,
-      `${metric.name} để rơi chiến thắng ${metric.upsetLosses} lần dù trước trận được đánh giá cao hơn hẳn đối thủ.`,
-      `${metric.name} có ${metric.upsetLosses} trận thua đầy bất ngờ dù cơ hội thắng ban đầu lên tới trên 70%.`,
-    ];
-  },
-  perfect_form5: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} đang sở hữu phong độ tuyệt đối với 5 trận thắng liên tiếp gần đây.`,
-      `${metric.name} đang bay cao với 5 chiến thắng liên tục, phong độ 5 trận gần nhất đang đạt mức hoàn hảo.`,
-      `${metric.name} đang chơi cực bay, bỏ túi trọn vẹn 5 chiến thắng trong 5 lần ra sân gần nhất.`,
-      `${metric.name} đang duy trì phong độ đỉnh cao với chuỗi 5 trận toàn thắng gần đây.`,
-      `${metric.name} đang có phong độ cực sung, thắng sạch cả 5 trận đấu gần nhất.`,
-    ];
-  },
-  zero_form5: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} đang gặp dớp phong độ khi để thua cả 5 trận đấu gần đây nhất.`,
-      `${metric.name} đang trải qua giai đoạn khó khăn với 5 thất bại liên tục trong các trận gần đây.`,
-      `${metric.name} đang chịu chuỗi phong độ đi xuống, thua trắng cả 5 lần ra sân gần nhất.`,
-      `${metric.name} đang rơi vào chuỗi sụt giảm phong độ với 5 trận thua liên tiếp gần đây.`,
-      `${metric.name} đang rất cần một chiến thắng để giải tỏa sau khi nhận 5 thất bại liên tục gần nhất.`,
-    ];
-  },
-  gatekeeper: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} đã chơi ${metric.total} trận nhưng điểm ELO vẫn loanh quanh mốc xuất phát ${metric.rating}.`,
-      `${metric.name} đã cày ải ${metric.total} trận, thắng thua bù trừ làm ELO vẫn dậm chân tại chỗ quanh ${metric.rating}.`,
-      `${metric.name} đã tích lũy ${metric.total} trận đấu mà ELO vẫn chưa thể bứt phá, chỉ xoay quanh ${metric.rating} điểm.`,
-      `${metric.name} ra sân ${metric.total} trận nhưng điểm số ELO vẫn giữ nguyên vị thế trung lập ở mức ${metric.rating}.`,
-      `${metric.name} trải qua ${metric.total} trận đấu mà số điểm ELO vẫn dậm chân quanh mốc ${metric.rating}.`,
-    ];
-  },
-  most_improved: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} bứt phá mạnh mẽ khi tăng liền ${round(metric.recentEloDelta)} điểm ELO trong tuần này.`,
-      `${metric.name} đang có phong độ thăng hoa, tích lũy thêm ${round(metric.recentEloDelta)} ELO từ đầu tuần.`,
-      `${metric.name} cho thấy sự tiến bộ rõ rệt với ${round(metric.recentEloDelta)} điểm ELO cộng thêm trong tuần này.`,
-      `${metric.name} đang trên đà thăng tiến lớn khi tăng ${round(metric.recentEloDelta)} điểm ELO qua các trận tuần này.`,
-      `${metric.name} củng cố thứ hạng với ${round(metric.recentEloDelta)} điểm ELO gia tăng từ đầu tuần.`,
-    ];
-  },
-  free_fall: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} đang có dấu hiệu chững lại khi sụt giảm ${absRound(metric.recentEloDelta)} điểm ELO trong tuần này.`,
-      `${metric.name} gặp khó khăn trong các trận tuần này, để rơi mất ${absRound(metric.recentEloDelta)} điểm ELO.`,
-      `${metric.name} đang tạm thời sa sút phong độ, đánh mất ${absRound(metric.recentEloDelta)} điểm ELO từ đầu tuần.`,
-      `${metric.name} bị trừ ${absRound(metric.recentEloDelta)} điểm ELO sau những kết quả không như ý trong tuần này.`,
-      `${metric.name} đang rơi vào chuỗi khó khăn khi đánh mất ${absRound(metric.recentEloDelta)} ELO từ đầu tuần.`,
-    ];
-  },
-  streak_breaker: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    if (ctx.state === 1) {
-      return [
-        `${player.name} vừa cắt đứt chuỗi ${breaker.streak} trận thắng liên tiếp của ${target.name} ở trận đấu gần nhất.`,
-        `${player.name} chặn đứng chuỗi ${breaker.streak} trận toàn thắng của ${target.name} sau cuộc đối đầu vừa qua.`,
-        `${player.name} chấm dứt mạch bất bại ${breaker.streak} trận của ${target.name} sau chiến thắng thuyết phục.`,
-        `${player.name} hạ gục ${target.name}, khép lại chuỗi ${breaker.streak} trận thắng liên tục của đối thủ.`,
-      ];
-    } else {
-      return [
-        `Kể từ sau khi bị ${player.name} cắt chuỗi thắng, ${target.name} vẫn chưa tìm lại chính mình với chuỗi ${X} trận thua liên tiếp.`,
-        `Chuỗi ngày u ám của ${target.name} vẫn chưa dứt khi phải nhận thêm ${X} trận thua liên tục kể từ ngày bị ${player.name} cắt chuỗi ${breaker.streak} trận thắng.`,
-        `Chưa thể đứng dậy sau trận thua ${player.name}, ${target.name} tiếp tục chìm sâu với thêm ${X} thất bại sau đó.`,
-        `${target.name} dường như vẫn chưa thoát khỏi dớp thua kể từ trận bị ${player.name} cắt chuỗi thắng, phải nhận thêm chuỗi ${X} trận trắng tay.`,
-      ];
-    }
-  },
-  revenge_win: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    if (ctx.state === 1) {
-      return [
-        `${player.name} cuối cùng đã giải được dớp trước ${opponent.name} sau chuỗi ${revenge.priorLosses} trận thua đối đầu liên tiếp.`,
-        `${player.name} phục hận thành công trước ${opponent.name}, có được thắng lợi sau ${revenge.priorLosses} lần thất bại đối đầu liên tục trước đó.`,
-        `${player.name} cắt chuỗi ${revenge.priorLosses} trận thua liên tiếp trước ${opponent.name} bằng một thắng lợi vô cùng quan trọng.`,
-        `Sau ${revenge.priorLosses} trận chỉ biết đến thất bại khi đối đầu, ${player.name} đã tìm lại niềm vui chiến thắng trước ${opponent.name}.`,
-      ];
-    } else {
-      return [
-        `Sau khi giải dớp thành công trước ${opponent.name}, ${player.name} thừa thắng xông lên với thêm ${Y} trận thắng đối đầu liên tiếp.`,
-        `Món nợ cũ đã thanh toán xong, ${player.name} tiếp tục lấn lướt ${opponent.name} với ${Y} chiến thắng liên tiếp sau đó.`,
-        `Nút thắt tâm lý đã gỡ, ${player.name} áp đảo hoàn toàn ${opponent.name} với chuỗi ${Y} trận thắng đối đầu tiếp theo.`,
-        `Cú lật kèo đối đầu ấn tượng: ${player.name} bỏ túi thêm ${Y} thắng lợi trước ${opponent.name} kể từ trận giải dớp.`,
-      ];
-    }
-  },
-  rank_leader: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${topRank.name} xuất sắc chiếm ngôi đầu bảng xếp hạng với tỷ lệ thắng ấn tượng ${round(topRank.winRate)}% (${topRank.wins}/${topRank.total} trận).`,
-      `${topRank.name} đang làm chủ cuộc đua vô địch khi chễm chệ vị trí Top 1 BXH (${topRank.wins}/${topRank.total} trận thắng).`,
-      `${topRank.name} duy trì vị thế số 1 trên bảng xếp hạng với tỷ lệ thắng đạt ${round(topRank.winRate)}%.`,
-      `${topRank.name} dẫn đầu cuộc đua xếp hạng mùa này với thành tích ${topRank.wins} trận thắng sau ${topRank.total} trận.`,
-      `${topRank.name} tạm thời nắm giữ vị trí Top 1 BXH, sở hữu tỷ lệ thắng cao nhất giải đấu (${round(topRank.winRate)}%).`,
-    ];
-  },
-  elo_climber: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} leo liền ${places} bậc trên bảng ELO nhờ bỏ túi ${recentWins} chiến thắng trong 5 trận gần nhất.`,
-      `${metric.name} đang có đà bứt phá mạnh mẽ khi tăng ${places} bậc ELO với thành tích ${recentWins}/5 trận thắng gần đây.`,
-      `${metric.name} thăng tiến ${places} bậc trên bảng ELO, ghi dấu ấn với ${recentWins} trận thắng trong loạt 5 trận vừa qua.`,
-      `${metric.name} áp sát nhóm trên khi leo thêm ${places} bậc ELO, thắng ${recentWins} trong 5 trận gần đây.`,
-      `${metric.name} có chuỗi bứt tốc ấn tượng, thăng hạng ${places} bậc ELO sau khi giành ${recentWins} chiến thắng gần nhất.`,
-    ];
-  },
-  perfect_duo: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${edge.playerName} và ${edge.otherName} thi đấu cực kỳ ăn ý, thắng ${edge.wins}/${edge.total} trận chung với tỷ lệ ${edgeRate(edge)}%.`,
-      `${edge.playerName} ráp cặp cùng ${edge.otherName} đang là bộ đôi đáng gờm, đạt tỷ lệ thắng chung ${edgeRate(edge)}% (${edge.wins}/${edge.total} trận).`,
-      `Sự kết hợp hiệu quả: ${edge.playerName} và ${edge.otherName} thắng tới ${edge.wins}/${edge.total} trận khi đứng chung sân.`,
-      `${edge.playerName} bắt cặp với ${edge.otherName} mang lại kết quả cực tốt, thắng ${edge.wins}/${edge.total} trận (đạt ${edgeRate(edge)}%).`,
-      `${edge.playerName} và ${edge.otherName} là cặp đôi rất hợp vía khi gặt hái ${edge.wins}/${edge.total} chiến thắng chung.`,
-    ];
-  },
-  bad_duo: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${edge.playerName} đi với ${edge.otherName} chưa đạt hiệu quả mong muốn, chỉ mới thắng ${edge.wins}/${edge.total} trận chung.`,
-      `${edge.playerName} và ${edge.otherName} chưa thực sự tìm được tiếng nói chung, mới thắng ${edge.wins}/${edge.total} trận (tỷ lệ ${edgeRate(edge)}%).`,
-      `Chưa tìm thấy nhịp thi đấu chung: ${edge.playerName} bắt cặp cùng ${edge.otherName} mới thắng ${edge.wins}/${edge.total} trận.`,
-      `${edge.playerName} ráp sân cùng ${edge.otherName} chỉ có được ${edge.wins}/${edge.total} chiến thắng, hai người cần thêm thời gian để ăn khớp.`,
-      `${edge.playerName} và ${edge.otherName} chưa thật sự bắt nhịp tốt khi đấu cặp, mới thắng ${edge.wins}/${edge.total} trận.`,
-    ];
-  },
-  partner_boost: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${edge.playerName} khi đứng chung với ${edge.otherName} mang về ${edge.wins}/${edge.total} chiến thắng, kết quả ấn tượng hơn hẳn phong độ thường thấy.`,
-      `${edge.playerName} cặp với ${edge.otherName} ẵm ${edge.wins}/${edge.total} trận thắng, thi đấu thăng hoa và hiệu quả hơn hẳn mức bình thường.`,
-      `Cứ đứng cạnh ${edge.otherName} là ${edge.playerName} thi đấu thăng hoa hơn, gặt ${edge.wins}/${edge.total} trận thắng với phong độ vượt xa ngày thường.`,
-      `Có vẻ rất hợp vía: ${edge.playerName} đánh cặp cùng ${edge.otherName} thắng ${edge.wins}/${edge.total} trận, màn thể hiện tốt hơn hẳn mức thường thấy.`,
-      `Cặp đôi ăn ý: ${edge.playerName} và ${edge.otherName} ráp vào nhau rất mượt, ăn ${edge.wins}/${edge.total} trận và kéo phong độ lên cao hơn hẳn bình thường.`,
-    ];
-  },
-  partner_drag: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${edge.playerName} khi đứng chung với ${edge.otherName} mới có ${edge.wins}/${edge.total} chiến thắng, kết quả thấp hơn hẳn phong độ thường thấy.`,
-      `${edge.playerName} cặp với ${edge.otherName} chỉ thắng ${edge.wins}/${edge.total} trận, nhịp thi đấu có vẻ hụt hơi hơn mức bình thường.`,
-      `Cặp này hơi lệch sóng: cứ đứng cạnh ${edge.otherName} là ${edge.playerName} không còn giữ được phong độ ngày thường, mới gặt ${edge.wins}/${edge.total} trận thắng.`,
-      `Có vẻ chưa thật sự hợp vía: ${edge.playerName} đánh cặp cùng ${edge.otherName} thắng ${edge.wins}/${edge.total} trận, màn thể hiện thấp hơn hẳn mức thường thấy.`,
-      `Cặp đôi chưa vào guồng: ${edge.playerName} và ${edge.otherName} ráp vào nhau còn khá gượng, mới gặt ${edge.wins}/${edge.total} trận nhưng kéo phong độ xuống thấp hơn bình thường.`,
-    ];
-  },
-  cover_master: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} không phải tay săn điểm chủ lực nhưng phối hợp cực kỳ ăn ý với các đối tác, đạt ${round(metric.synergyScore)} điểm phối hợp.`,
-      `${metric.name} sở hữu hiệu suất ghi điểm vừa phải nhưng có chỉ số phối hợp đồng đội rất cao với ${round(metric.synergyScore)} điểm.`,
-      `${metric.name} tuy không dẫn đầu về khâu dứt điểm nhưng hỗ trợ đồng đội cực tốt, đạt ${round(metric.synergyScore)} điểm phối hợp.`,
-      `${metric.name} sở hữu chỉ số phối hợp đồng đội ấn tượng đạt ${round(metric.synergyScore)} điểm, làm chỗ dựa tốt cho các đối tác đứng cùng.`,
-      `${metric.name} đóng góp lớn vào lối chơi chung nhờ khả năng phối hợp ăn ý đạt ${round(metric.synergyScore)} điểm, dù không ghi quá nhiều điểm số cá nhân.`,
-    ];
-  },
-  carry_partner: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Đứng chung sân với ${edge.playerName}, phong độ của ${edge.otherName} được kéo lên hẳn, từ ${round(otherMetric.winRate)}% vọt lên ${edgeRate(edge)}%.`,
-      `Sự hỗ trợ đắc lực từ ${edge.playerName} giúp ${edge.otherName} thi đấu thăng hoa, nâng tỷ lệ thắng từ ${round(otherMetric.winRate)}% lên ${edgeRate(edge)}%.`,
-      `${edge.playerName} gánh vác thế trận cực tốt, giúp ${edge.otherName} tăng vọt tỷ lệ thắng từ ${round(otherMetric.winRate)}% lên ${edgeRate(edge)}%.`,
-      `Cứ ghép cặp với ${edge.playerName} là ${edge.otherName} đánh như lên đồng, tỷ lệ thắng nhảy từ ${round(otherMetric.winRate)}% lên ${edgeRate(edge)}%.`,
-      `Một bờ vai vững chãi: ${edge.playerName} giúp đối tác ${edge.otherName} cải thiện tỷ lệ thắng từ mức bình thường ${round(otherMetric.winRate)}% lên tới ${edgeRate(edge)}%.`,
-    ];
-  },
-  heavy_backpack: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${edge.otherName} đang bay với ${round(otherMetric.winRate)}% thắng, nhưng kẹp chung với ${edge.playerName} thì chỉ còn ${edgeRate(edge)}%. Báo thủ chặt xích là đây!`,
-      `Phong độ của ${edge.otherName} tụt dốc không phanh từ ${round(otherMetric.winRate)}% xuống ${edgeRate(edge)}% mỗi khi phải ráp chung team với ${edge.playerName}.`,
-      `Có vẻ ${edge.playerName} là bài test thể lực quá tầm, khiến ${edge.otherName} tụt tỷ lệ thắng từ ${round(otherMetric.winRate)}% xuống tận ${edgeRate(edge)}%.`,
-      `Ghép cặp chưa tìm thấy nhịp: ${edge.otherName} bị kéo tỷ lệ thắng từ ${round(otherMetric.winRate)}% xuống ${edgeRate(edge)}% khi đi cùng ${edge.playerName}.`,
-      `${edge.playerName} vô tình trở thành cục tạ khiến ${edge.otherName} sụt giảm phong độ rõ rệt, từ mức ${round(otherMetric.winRate)}% xuống còn ${edgeRate(edge)}%.`,
-    ];
-  },
-  stable_partner: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${edge.playerName} và ${edge.otherName} cùng nhau ra sân ${edge.total} trận, thắng ${edge.wins} trận, tuy không quá bùng nổ nhưng thi đấu rất tròn vai.`,
-      `Thi đấu ổn định: ${edge.playerName} và ${edge.otherName} bắt cặp cùng nhau ${edge.total} trận, mang về ${edge.wins} chiến thắng khá tròn vai.`,
-      `${edge.playerName} ráp sân cùng ${edge.otherName} đạt kết quả ổn định với ${edge.wins}/${edge.total} trận thắng, phối hợp vừa vặn và tròn vai.`,
-      `Bộ đôi tròn vai: ${edge.playerName} và ${edge.otherName} thi đấu ${edge.total} trận chung, gặt hái ${edge.wins} thắng lợi đúng với phong độ vốn có.`,
-      `${edge.playerName} bắt cặp với ${edge.otherName} qua ${edge.total} trận đạt tỷ lệ thắng ${edgeRate(edge)}%, lối chơi ổn định và tròn vai.`,
-    ];
-  },
-  glued_pair: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    if (ctx.state === 1) {
-      return [
-        `Độc chiếm ngôi đầu về độ bền bỉ: ${glued.playerName} và ${glued.otherName} sát cánh cùng nhau nhiều nhất sân với ${glued.total} trận chung đội.`,
-        `${glued.playerName} và ${glued.otherName} đang dẫn đầu tuyệt đối toàn sân về tần suất chung đội với ${glued.total} trận sát cánh.`,
-        `${glued.playerName} và ${glued.otherName} độc tôn vị thế cặp đôi dính nhau nhất sân mùa này với ${glued.total} lần ráp cặp.`,
-        `Cặp đôi đồng hành số 1: ${glued.playerName} và ${glued.otherName} sở hữu số trận chung đội nhiều nhất giải đấu với ${glued.total} lần ra sân.`,
-      ];
-    } else {
-      return [
-        `${glued.playerName} và ${glued.otherName} đang là một trong những cặp đôi song hành nhiều nhất giải đấu với ${glued.total} trận chung đội.`,
-        `Dính nhau như sam: ${glued.playerName} và ${glued.otherName} nằm trong nhóm cặp đôi cày ải nhiều nhất sân với ${glued.total} trận.`,
-        `Bạn thân sân bãi: ${glued.playerName} và ${glued.otherName} góp mặt trong số những bộ đôi sát cánh cùng nhau nhiều nhất (${glued.total} trận).`,
-        `${glued.playerName} và ${glued.otherName} là một trong những bộ đôi bắt cặp thường xuyên nhất mùa này với ${glued.total} lần chung chiến tuyến.`,
-      ];
-    }
-  },
-  rare_pair_hot: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${edge.playerName} và ${edge.otherName} mới bắt cặp ${edge.total} trận nhưng đã thắng tới ${edge.wins} trận, một sự kết hợp đầy triển vọng.`,
-      `${edge.playerName} ráp sân cùng ${edge.otherName} tuy chưa nhiều (${edge.total} trận) nhưng đạt tỷ lệ thắng cực cao ${edgeRate(edge)}%.`,
-      `Nhân tố mới tiềm năng: ${edge.playerName} và ${edge.otherName} mới chơi chung ${edge.total} trận nhưng gặt hái tới ${edge.wins} chiến thắng.`,
-      `${edge.playerName} và ${edge.otherName} mới chỉ sát cánh ${edge.total} trận nhưng hiệu suất thắng đạt ${edgeRate(edge)}%, cho thấy sự ăn ý ngay từ đầu.`,
-      `Số trận ít nhưng chất lượng: ${edge.playerName} kết hợp cùng ${edge.otherName} mới ${edge.total} trận đã mang về ${edge.wins} thắng lợi.`,
-    ];
-  },
-  disaster_duo: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${edge.playerName} và ${edge.otherName} chưa có duyên thắng cặp, các trận thua có cách biệt trung bình lên tới ${oneDecimal(avgLossDiff)} điểm.`,
-      `Ráp sân chưa hiệu quả: bộ đôi ${edge.playerName} - ${edge.otherName} thua cách biệt trung bình ${oneDecimal(avgLossDiff)} điểm trong các trận bại.`,
-      `${edge.playerName} đứng chung với ${edge.otherName} gặp nhiều khó khăn, các trận thua chênh lệch trung bình ${oneDecimal(avgLossDiff)} điểm.`,
-      `Chưa tìm được nhịp thi đấu chung, ${edge.playerName} và ${edge.otherName} nhận các thất bại với khoảng cách điểm trung bình là ${oneDecimal(avgLossDiff)}.`,
-      `${edge.playerName} ráp cặp cùng ${edge.otherName} chưa ăn ý, nhận các trận thua với cách biệt trung bình ${oneDecimal(avgLossDiff)} điểm.`,
-    ];
-  },
-  partner_long_games: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Cặp đôi ${edge.playerName} - ${edge.otherName} có khá nhiều trận giằng co, ghi nhận ${edge.deuceGames} trận phải phân định qua mốc 11 điểm.`,
-      `Những trận đấu của ${edge.playerName} và ${edge.otherName} thường có tính giằng co cao, sở hữu ${edge.deuceGames} lần kéo dài quá 11 điểm.`,
-      `Có tới ${edge.deuceGames} trận đấu của cặp đôi ${edge.playerName} - ${edge.otherName} phải kéo dài quá điểm số 11 để phân thắng bại.`,
-      `Không thiếu những pha giằng co kịch tính, ${edge.playerName} và ${edge.otherName} tích lũy ${edge.deuceGames} trận đấu phải đánh quá 11 điểm.`,
-      `Đôi bên chơi khá kiên cường khi ráp cặp chung, trải qua ${edge.deuceGames} trận đấu kéo dài quá mốc 11 điểm.`,
-    ];
-  },
-  top_attack: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} cùng các đồng đội tấn công rất hiệu quả, ghi trung bình ${oneDecimal(metric.avgPointsFor)} điểm mỗi trận.`,
-      `Khả năng ghi điểm ấn tượng: ${metric.name} và đối tác gặt hái trung bình ${oneDecimal(metric.avgPointsFor)} điểm mỗi lần ra sân.`,
-      `Đội của ${metric.name} sở hữu sức tấn công mạnh mẽ, ghi được trung bình ${oneDecimal(metric.avgPointsFor)} điểm/trận.`,
-      `Đứng chung với ${metric.name} rất an tâm ghi điểm, trung bình mỗi trận đội nhà ghi được ${oneDecimal(metric.avgPointsFor)} điểm.`,
-      `Hiệu suất tấn công hàng đầu: đội của ${metric.name} ghi trung bình tới ${oneDecimal(metric.avgPointsFor)} điểm mỗi trận.`,
-    ];
-  },
-  defense_wall: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Hàng thủ vững chắc: ${metric.name} cùng đồng đội chỉ để đối phương ghi trung bình ${oneDecimal(metric.avgConceded)} điểm mỗi trận.`,
-      `Trung bình mỗi trận đấu, đội của ${metric.name} chỉ để lọt lưới ${oneDecimal(metric.avgConceded)} điểm.`,
-      `Chốt chặn tin cậy: ${metric.name} khống chế số điểm ghi được của đối thủ ở mức trung bình ${oneDecimal(metric.avgConceded)} điểm/trận.`,
-      `Đối thủ rất khó ghi điểm khi chạm trán ${metric.name}, trung bình mỗi trận chỉ ghi được ${oneDecimal(metric.avgConceded)} điểm.`,
-      `Khả năng bảo vệ phần sân ấn tượng: đội của ${metric.name} chỉ để lọt lưới trung bình ${oneDecimal(metric.avgConceded)} điểm mỗi trận.`,
-    ];
-  },
-  dominant_closer: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} sở hữu ${metric.dominantWins} chiến thắng giòn giã với cách biệt lớn từ 7 điểm trở lên.`,
-      `Khép lại trận đấu nhanh chóng: ${metric.name} có tới ${metric.dominantWins} trận thắng áp đảo với khoảng cách tối thiểu 7 điểm.`,
-      `Thắng lợi thuyết phục: ${metric.name} tích lũy ${metric.dominantWins} lần hạ gục đối thủ với tỷ số cách biệt lớn.`,
-      `${metric.name} chứng tỏ sức ép thế trận tốt với ${metric.dominantWins} chiến thắng cách biệt từ 7 điểm trở lên.`,
-      `Khi giành chiến thắng, ${metric.name} có ${metric.dominantWins} lần kết thúc trận đấu vô cùng gọn gàng với cách biệt lớn.`,
-    ];
-  },
-  close_loss: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} đã trải qua ${metric.closeLosses} trận thua sát nút với cách biệt tối thiểu 2 điểm đầy tiếc nuối.`,
-      `Thiếu một chút may mắn: ${metric.name} để thua sát nút ${closeLosses} trận với khoảng cách chỉ đúng 2 điểm.`,
-      `Rất nhiều kèo đấu nghẹt thở: ${metric.name} nhận ${closeLosses} thất bại sít sao với tỷ số sát nút.`,
-      `Đáng tiếc cho ${metric.name} khi phải nhận ${closeLosses} trận thua với cách biệt tối thiểu 2 điểm.`,
-      `Duy trì thế trận bám đuổi tốt nhưng ${metric.name} để rơi chiến thắng ở ${closeLosses} trận đấu sát nút.`,
-    ];
-  },
-  long_game_addict: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Vua đấu giằng co: ${metric.name} là người góp mặt trong nhiều trận đấu kéo dài qua mốc 11 điểm nhất sân với ${metric.deuceMatches} trận.`,
-      `Bền bỉ nhất giải: ${metric.name} dẫn đầu toàn sân về số trận đấu phải giằng co sau mốc 11 điểm (${metric.deuceMatches} trận).`,
-      `Đạt kỷ lục về số trận đấu kéo dài, ${metric.name} đã trải qua ${metric.deuceMatches} lần phân định thắng thua quá điểm số 11.`,
-      `Không ngại đấu súng kéo dài: ${metric.name} có tới ${metric.deuceMatches} trận đấu căng thẳng kéo qua 11 điểm, nhiều nhất giải đấu.`,
-      `Thử thách sức bền gọi tên ${metric.name} với kỷ lục tham gia ${metric.deuceMatches} trận đấu giằng co quá mốc 11 điểm.`,
-    ];
-  },
-  bagel_loss: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} có ${metric.bagelLosses} trận thua khá sâu khi đội nhà chỉ ghi được tối đa 2 điểm.`,
-      `Trận đấu khó khăn: ${metric.name} trải qua ${metric.bagelLosses} lần để đối thủ dẫn trước với điểm số ghi được từ 2 trở xuống.`,
-      `Gặp khó khăn trong khâu dứt điểm: đội của ${metric.name} có ${metric.bagelLosses} trận thua chỉ ghi được tối đa 2 điểm.`,
-      `Thất bại chóng vánh: ${metric.name} cùng đồng đội có ${metric.bagelLosses} trận thua cách biệt lớn, ghi không quá 2 điểm.`,
-      `${metric.name} nhận ${metric.bagelLosses} trận thua mà đội nhà chỉ ghi được từ 2 điểm trở xuống.`,
-    ];
-  },
-  clutch_master: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Bản lĩnh trận mạc: ${metric.name} giành chiến thắng tới ${metric.closeWins} trận sát nút, đạt tỷ lệ thắng ${round(tightWinRate)}% trong các kèo đấu giằng co.`,
-      `Tay vợt của những trận đấu lớn: ${metric.name} thắng tới ${metric.closeWins} trận cách biệt 2 điểm, đạt tỷ lệ thắng kèo căng thẳng ${round(tightWinRate)}%.`,
-      `Khả năng dứt điểm trận đấu nghẹt thở ấn tượng: ${metric.name} thắng ${metric.closeWins} trận sát nút với tỷ lệ thắng giằng co ${round(tightWinRate)}%.`,
-      `Cực kỳ lỳ lợm ở thời khắc quyết định, ${metric.name} bỏ túi ${metric.closeWins} trận thắng cách biệt 2 điểm (tỷ lệ thắng giằng co ${round(tightWinRate)}%).`,
-      `Hiệu suất thắng trận sát nút đáng nể: ${metric.name} vượt qua sức ép để thắng ${metric.closeWins} trận căng thẳng (tỷ lệ thắng giằng co ${round(tightWinRate)}%).`,
-    ];
-  },
-  late_collapse: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Gặp khó khăn ở thời khắc quyết định: ${metric.name} để thua sát nút tới ${metric.closeLosses} trận, nhiều lần lỡ nhịp ở cuối trận.`,
-      `Đáng tiếc ở loạt đấu cuối: ${metric.name} nhận ${metric.closeLosses} trận thua cách biệt vỏn vẹn 2 điểm, nhiều kèo chỉ thiếu một chút may mắn.`,
-      `Nhịp đấu quyết định chưa tốt: ${metric.name} nhận tới ${metric.closeLosses} thất bại sít sao, để rơi điểm ở những loạt bóng cuối.`,
-      `Rơi điểm đầy tiếc nuối: ${metric.name} gánh nhận ${metric.closeLosses} trận thua sát nút, hụt hơi ở thời điểm quan trọng.`,
-      `Duy trì bám đuổi tốt nhưng thiếu nhịp dứt điểm: ${metric.name} có tới ${metric.closeLosses} thất bại cách biệt 2 điểm đầy tiếc nuối.`,
-    ];
-  },
-  score_bully: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Thắng là thắng sâu: Mỗi khi giành thắng lợi, đội của ${metric.name} dẫn trước đối thủ trung bình tới ${oneDecimal(metric.avgWinDiff)} điểm, cao nhất toàn giải.`,
-      `Hiệu suất áp đảo đỉnh bảng: ${metric.name} là tay vợt có khoảng cách điểm thắng trung bình lớn nhất sân khi đạt ${oneDecimal(metric.avgWinDiff)} điểm mỗi trận thắng.`,
-      `Khi đã thắng là thắng đậm nhất sân: đội của ${metric.name} vượt qua đối thủ với cách biệt trung bình kỷ lục ${oneDecimal(metric.avgWinDiff)} điểm mỗi trận.`,
-      `Sức ép thế trận lớn nhất: ${metric.name} dẫn đầu giải đấu về chỉ số thắng cách biệt trung bình, đạt ${oneDecimal(metric.avgWinDiff)} điểm mỗi trận thắng.`,
-      `Đội của ${metric.name} sở hữu những trận thắng gọn gàng nhất giải với cách biệt điểm trung bình lên tới ${oneDecimal(metric.avgWinDiff)} điểm.`,
-    ];
-  },
-  low_score_magnet: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Chưa tìm được nhịp ghi điểm: ${metric.name} có ${metric.lowScoreLosses} trận thua mà đội nhà chỉ ghi được tối đa 4 điểm.`,
-      `Nhiều trận đấu gặp khó khăn: đội của ${metric.name} có ${metric.lowScoreLosses} thất bại mà không thể ghi quá mốc 4 điểm.`,
-      `Hàng công bị khóa chặt: ${metric.name} cùng đối tác nhận ${metric.lowScoreLosses} trận thua cách biệt lớn, ghi không quá 4 điểm.`,
-      `Thất bại với điểm số thấp: ${metric.name} cùng đồng đội trải qua ${metric.lowScoreLosses} trận thua chỉ ghi được tối đa 4 điểm.`,
-      `Khó khăn trong khâu lên điểm: đội của ${metric.name} nhận ${metric.lowScoreLosses} trận thua mà chỉ ghi được dưới 4 điểm.`,
-    ];
-  },
-  hard_counter: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Đối đầu áp đảo: ${edge.playerName} đang là "khắc tinh" của ${edge.otherName} khi giành chiến thắng tới ${edge.wins}/${edge.total} trận chạm trán.`,
-      `Thành tích đối đầu vượt trội: ${edge.playerName} tỏ ra lấn lướt trước ${edge.otherName} với ${edge.wins} chiến thắng sau ${edge.total} lần đụng độ.`,
-      `Gặp dớp đối đầu: ${edge.otherName} tỏ ra cực kỳ kỵ rơ trước ${edge.playerName}, để đối phương thắng tới ${edge.wins}/${edge.total} trận.`,
-      `Ưu thế đối đầu vượt trội: ${edge.playerName} giành tới ${edge.wins} thắng lợi sau ${edge.total} lần đối mặt với ${edge.otherName}.`,
-      `Lối chơi khắc chế hiệu quả: ${edge.playerName} tỏ ra rất có duyên khi đối đầu ${edge.otherName}, bỏ túi tới ${edge.wins}/${edge.total} trận thắng.`,
-    ];
-  },
-  target_dummy: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Đối đầu khó khăn: ${edge.playerName} lép vế trước ${edge.otherName} khi để thua tới ${edge.losses}/${edge.total} trận chạm trán.`,
-      `Thử thách đối đầu: ${edge.playerName} chưa tìm ra lời giải trước ${edge.otherName} khi nhận tới ${edge.losses} trận thua sau ${edge.total} lần đụng độ.`,
-      `Thành tích đối đầu chưa tốt: ${edge.playerName} để đối phương lấn lướt với ${edge.losses}/${edge.total} trận thua khi chạm trán ${edge.otherName}.`,
-      `Đối thủ khó vượt qua: ${edge.playerName} để thua ${edge.losses} trận sau ${edge.total} lần đụng độ với ${edge.otherName}.`,
-      `Gặp nhiều khó khăn khi chạm trán: ${edge.playerName} chỉ giành được ${edge.wins} chiến thắng sau ${edge.total} lần đối đầu với ${edge.otherName}.`,
-    ];
-  },
-  balanced_rivalry: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Kỳ phùng địch thủ: ${mostRepeated.playerName} và ${mostRepeated.otherName} bất phân thắng bại với tỷ số đối đầu ${mostRepeated.wins}-${mostRepeated.losses} sau ${mostRepeated.total} trận.`,
-      `Kèo đấu cân tài cân sức: ${mostRepeated.playerName} và ${mostRepeated.otherName} chạm trán ${mostRepeated.total} lần, mỗi bên sở hữu ${mostRepeated.wins} và ${mostRepeated.losses} chiến thắng.`,
-      `Ngang tài ngang sức: ${mostRepeated.playerName} đối đầu ${mostRepeated.otherName} ${mostRepeated.total} trận với kết quả thắng-thua cực kỳ sít sao ${mostRepeated.wins}-${mostRepeated.losses}.`,
-      `Cặp kỳ phùng địch thủ: ${mostRepeated.playerName} và ${mostRepeated.otherName} giằng co từng điểm số qua ${mostRepeated.total} trận đối mặt (tỷ số đối đầu ${mostRepeated.wins}-${mostRepeated.losses}).`,
-      `Bất phân thắng bại: cuộc chạm trán giữa ${mostRepeated.playerName} và ${mostRepeated.otherName} qua ${mostRepeated.total} trận vẫn chưa phân định ai vượt trội (${mostRepeated.wins}-${mostRepeated.losses}).`,
-    ];
-  },
-  long_game_rivalry: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Không ít lần giằng co nghẹt thở: các trận đối đầu trực tiếp giữa ${edge.playerName} và ${edge.otherName} ghi nhận ${edge.deuceGames} lần phải phân định qua mốc 11 điểm.`,
-      `Thành tích đụng độ trực tiếp ghi nhận ${edge.deuceGames} trận đấu giữa ${edge.playerName} và ${edge.otherName} phải kéo dài quá điểm số 11 mới phân thắng bại.`,
-      `Đôi bên chạm trán nhau nhiều lần ở hai đầu chiến tuyến, trong đó có ${edge.deuceGames} trận kết thúc sít sao quá mốc 11 điểm.`,
-      `Các kèo đối đầu giữa ${edge.playerName} và ${edge.otherName} ghi nhận ${edge.deuceGames} trận phải đấu tiếp sau điểm số 11 để phân định thắng thua.`,
-      `Kịch tính đối đầu trực tiếp: cuộc đụng độ giữa ${edge.playerName} và ${edge.otherName} có ${edge.deuceGames} trận kéo dài quá mốc 11 điểm mới tìm ra đội thắng.`,
-    ];
-  },
-  boss_hunter: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Thợ săn trùm: ${metric.name} đã giành tới ${kingWins} chiến thắng khi đối đầu với đội có sự góp mặt của Top 1 ELO ${kingName}.`,
-      `Đối thủ khó chịu của nhà vua: ${metric.name} xuất sắc bỏ túi ${kingWins} trận thắng trước đội của Top 1 ELO ${kingName}.`,
-      `Khả năng hạ gục đối thủ mạnh: ${metric.name} có tới ${kingWins} lần đánh bại đội của người đứng đầu bảng xếp hạng ELO ${kingName}.`,
-      `Không e ngại vị trí số 1: ${metric.name} gặt hái ${kingWins} chiến thắng trong các trận chạm trán đội của Top 1 ELO ${kingName}.`,
-      `Hiệu suất đối đầu ấn tượng: ${metric.name} gieo sầu cho đội của Top 1 ELO ${kingName} with ${kingWins} lần giành phần thắng.`,
-    ];
-  },
-  mental_block: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${edge.playerName} gặp ${edge.otherName} đang khá khớp kèo: chỉ thắng ${edge.wins}/${edge.total} trận và kết quả thực tế thấp hơn hẳn mức trước trận.`,
-      `Cứ đụng ${edge.otherName}, ${edge.playerName} thường không còn là chính mình, thắng ${edge.wins}/${edge.total} trận và tụt rõ so với phong độ thường thấy.`,
-      `${edge.otherName} đang là bài test khó chịu của ${edge.playerName}; mẫu đối đầu ${edge.wins}/${edge.total} cho thấy kết quả thấp hơn hẳn cửa trước trận.`,
-      `Gặp thử thách tâm lý trước ${edge.otherName}: ${edge.playerName} chỉ thắng ${edge.wins}/${edge.total} trận, hiệu suất thấp hơn nhiều so với bình thường.`,
-      `Nhịp thi đấu chưa thanh thoát khi đối đầu ${edge.otherName}: ${edge.playerName} để thua tới ${edge.losses}/${edge.total} trận chạm trán.`,
-    ];
-  },
-  sweet_matchup: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${edge.playerName} gặp ${edge.otherName} lại đánh cực kỳ sáng nước, thắng ${edge.wins}/${edge.total} trận và kết quả thực tế cao hơn hẳn mức trước trận.`,
-      `Đối đầu ${edge.otherName} đang là kèo khá thơm của ${edge.playerName}: thắng ${edge.wins}/${edge.total} trận, hiệu quả vượt rõ cửa trước trận.`,
-      `Cứ chạm ${edge.otherName}, ${edge.playerName} thường bật mode thăng hoa, mẫu đối đầu ${edge.wins}/${edge.total} đang tốt hơn hẳn mức thường thấy.`,
-      `Thi đấu cực kỳ bùng nổ khi gặp ${edge.otherName}: ${edge.playerName} giành tới ${edge.wins}/${edge.total} thắng lợi, vượt xa phong độ thường ngày.`,
-      `Khắc chế hiệu quả lối chơi của ${edge.otherName}: ${edge.playerName} giành phần thắng trong ${edge.wins}/${edge.total} lần chạm trán.`,
-    ];
-  },
-  bully_lower_elo: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Tận dụng tốt lợi thế trước đối thủ được đánh giá thấp hơn: ${metric.name} thắng tới ${metric.winsVsLowerElo}/${metric.totalVsLowerElo} trận.`,
-      `Thi đấu cực kỳ đúng sức: ${metric.name} giành thắng lợi ${metric.winsVsLowerElo}/${metric.totalVsLowerElo} trận khi chạm trán các tay vợt ở nhóm dưới.`,
-      `Chắt chiu điểm số tốt khi ở thế cửa trên: ${metric.name} thắng ${metric.winsVsLowerElo}/${metric.totalVsLowerElo} trận trước các đối thủ có thứ hạng thấp hơn.`,
-      `Đảm bảo hiệu suất khi được đánh giá cao hơn: ${metric.name} giành ${metric.winsVsLowerElo}/${metric.totalVsLowerElo} chiến thắng trước các đối thủ dưới cơ.`,
-      `Phong độ vững vàng khi gặp đối thủ có xếp hạng thấp hơn: ${metric.name} giành phần thắng trong ${metric.winsVsLowerElo}/${metric.totalVsLowerElo} lần đối đầu.`,
-    ];
-  },
-  victim_strong_elo: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `${metric.name} gặp nhiều khó khăn trước các đối thủ mạnh hơn, để thua ${metric.lossesVsHigherElo}/${metric.totalVsHigherElo} trận đối đầu.`,
-      `Thử thách lớn trước các đối thủ nhóm trên: ${metric.name} nhận tới ${metric.lossesVsHigherElo}/${metric.totalVsHigherElo} thất bại khi gặp người có thứ hạng cao hơn.`,
-      `Chưa tìm được lời giải khi gặp đối thủ được đánh giá cao hơn: ${metric.name} để thua ${metric.lossesVsHigherElo}/${metric.totalVsHigherElo} trận.`,
-      `Hiệu suất chưa tốt khi ở thế cửa dưới: ${metric.name} để thua ${metric.lossesVsHigherElo}/${metric.totalVsHigherElo} trận trước các đối thủ trên cơ.`,
-      `Gặp nhiều trở ngại trước các đối thủ mạnh: ${metric.name} nhận thất bại ở ${metric.lossesVsHigherElo}/${metric.totalVsHigherElo} lần đối mặt với các tay vợt xếp hạng cao hơn.`,
-    ];
-  },
-  revenge_target: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Xu hướng đối đầu đang xoay chiều: Gần đây ${player.name} đã thắng ${revenge.recentWins}/${revenge.recentTotal} trận khi đụng độ khắc tinh ${opponent.name}.`,
-      `Lật lại thế cờ: Sau chuỗi ngày lép vế liên tục, ${player.name} đang lấy lại thế chủ động với ${revenge.recentWins}/${revenge.recentTotal} trận thắng gần nhất trước ${opponent.name}.`,
-      `Cân bằng cán cân đối đầu: ${player.name} giành thắng lợi ${revenge.recentWins}/${revenge.recentTotal} trận gần đây trước đối thủ từng gieo sầu cho mình là ${opponent.name}.`,
-      `Tìm lại thế trận trước đối thủ kỵ rơ: ${player.name} xuất sắc giành ${revenge.recentWins}/${revenge.recentTotal} chiến thắng trước ${opponent.name} trong các cuộc đối đầu gần nhất.`,
-      `Bứt phá phong độ đối đầu: ${player.name} dần vượt lên trước đối thủ khó chịu ${opponent.name} với thành tích thắng ${revenge.recentWins}/${revenge.recentTotal} trận gần đây.`,
-    ];
-  },
-  iron_lung: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Chiến thần cày ải: ${metric.name} đang dẫn đầu toàn sân về tần suất thi đấu với tổng cộng ${metric.total} lần ra sân.`,
-      `Gương mặt bền bỉ nhất giải: ${metric.name} vô địch về số trận cày ải khi đã thi đấu tới ${metric.total} trận mùa này.`,
-      `Chiếm trọn danh hiệu chuyên cần: ${metric.name} dẫn đầu danh sách cống hiến với thành tích chơi ${metric.total} trận.`,
-      `Sức bền đáng nể: ${metric.name} là người ra sân nhiều nhất câu lạc bộ với tổng số ${metric.total} trận đấu đã qua.`,
-      `Chiến binh không phổi: ${metric.name} ngự trị ở vị trí số 1 về độ chịu cày khi cán mốc ${metric.total} lần xuất trận.`,
-    ];
-  },
-  missing_player: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Quy ẩn giang hồ: ${metric.name} đã ${metric.daysAbsent} ngày rồi chưa thấy vác vợt ra sân.`,
-      `Anh em đang ngóng chờ: ${metric.name} đã vắng bóng ${metric.daysAbsent} ngày liên tiếp trên sân đấu.`,
-      `Tạm thời gác kiếm: ${metric.name} đã chưa đấu trận nào trong ${metric.daysAbsent} ngày qua, không biết dạo này thế nào.`,
-      `Mất tích bí ẩn: Đã qua ${metric.daysAbsent} ngày mà chưa thấy bóng dáng ${metric.name} xuất hiện.`,
-      `Chưa thấy tái xuất: ${metric.name} đã tạm nghỉ thi đấu liên tục ${metric.daysAbsent} ngày, hy vọng sớm được giao lưu.`,
-    ];
-  },
-  mercenary: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Khách mời chất lượng: ${metric.name} mới chơi ${metric.total} trận nhưng đã bỏ túi ${metric.wins} chiến thắng (đạt tỷ lệ ${round(metric.winRate)}%).`,
-      `Làn gió mới cực bén: Dù mới thi đấu vỏn vẹn ${metric.total} trận, ${metric.name} đã thắng tới ${metric.wins} trận, chứng tỏ thực lực đáng gờm.`,
-      `Chào sân đầy ấn tượng: ${metric.name} đạt tỷ lệ thắng ${round(metric.winRate)}% (thắng ${metric.wins}/${metric.total} trận) dù số trận còn khiêm tốn.`,
-      `Nhân tố mới đầy uy tín: Mới chơi ${metric.total} trận nhưng ${metric.name} đã có tới ${metric.wins} lần giành chiến thắng.`,
-      `Hiệu suất chào sân ấn tượng: ${metric.name} bỏ túi ${metric.wins}/${metric.total} trận thắng, một khởi đầu cực kỳ hứa hẹn.`,
-    ];
-  },
-  alternating_form: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Phong độ hình sin: Kết quả gần đây của ${metric.name} liên tục đảo chiều ${pattern(metric.recentResults)}, thắng thua xen kẽ khó lường.`,
-      `Nhịp thi đấu phập phù: ${metric.name} có tới ${metric.alternations} lần thay đổi trạng thái thắng - thua liên tục qua chuỗi kết quả ${pattern(metric.recentResults)}.`,
-      `Trận nổ trận xịt: Chuỗi trận gần đây của ${metric.name} ghi nhận phong độ trồi sụt liên tục ${pattern(metric.recentResults)}.`,
-      `Đúng chất máy test vợt: ${metric.name} liên tục xoay tua thắng và thua ${pattern(metric.recentResults)} trong các trận đấu gần đây.`,
-      `Kết quả thiếu ổn định: ${metric.name} có chuỗi trận trồi sụt liên tục với kết quả ${pattern(metric.recentResults)}.`,
-    ];
-  },
-  fine_sponsor: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Nhà tài trợ vàng của CLB: Với ${topFine.losses} trận thua, ${topFine.name} đã đóng góp tới ${topFine.money.toLocaleString('vi-VN')}đ vào quỹ sân.`,
-      `Bằng khen chuyên cần đóng quỹ: ${topFine.name} tạm dẫn đầu danh sách nộp phạt với số tiền ${topFine.money.toLocaleString('vi-VN')}đ sau ${topFine.losses} trận bại.`,
-      `Trụ cột tài chính của hội: ${topFine.name} đã đóng tới ${topFine.money.toLocaleString('vi-VN')}đ, dẫn đầu danh sách đóng phạt quỹ sân mùa này.`,
-      `Nhà tài trợ kim cương: ${topFine.name} cống hiến tới ${topFine.money.toLocaleString('vi-VN')}đ cho quỹ câu lạc bộ qua ${topFine.losses} trận chưa thành công.`,
-      `Gương mặt vàng trong làng đóng quỹ: ${topFine.name} nhận ${topFine.losses} trận thua và đóng góp ${topFine.money.toLocaleString('vi-VN')}đ tiền phạt.`,
-    ];
-  },
-  experience_seeker: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Đại sứ thân thiện: ${metric.name} góp mặt nhiệt tình trong ${metric.total} trận nhưng mới chỉ lấy đi ${metric.wins} chiến thắng, tình cảm anh em trên sân mới là chính!`,
-      `Nhà tài trợ điểm số uy tín: ${metric.name} đã ra sân ${metric.total} trận, cống hiến rất nhiều niềm vui (and cả trận thắng) cho các đối thủ.`,
-      `Khách hàng VIP của ELO: Cày ải tới ${metric.total} trận mà mới thắng ${metric.wins} trận, ${metric.name} đang làm giàu điểm số cho cả sân đấu.`,
-      `Người gieo mầm hạnh phúc: ${metric.name} thi đấu ${metric.total} trận với tinh thần cống hiến cao cả, nhường phần lớn chiến thắng cho bạn chơi.`,
-      `Vui là chính, thắng thua là phụ: ${metric.name} ra sân ${metric.total} trận chủ yếu để tạo tiếng cười và nâng đỡ điểm số cho đồng đội.`,
-    ];
-  },
-  casual_visitor: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Khách mời danh dự: ${metric.name} dạo này mới đánh ${metric.total} trận, thưa thớt hơn hẳn mặt bằng chung.`,
-      `Nhân tố bí ẩn: ${metric.name} xuất hiện khá hạn chế với vỏn vẹn ${metric.total} trận đấu từ đầu mùa.`,
-      `Đứng ngoài vòng xoáy cày ải: ${metric.name} mới góp mặt trong ${metric.total} trận đấu, đúng chất thi đấu thong thả.`,
-      `Cơn gió thoảng qua: ${metric.name} ra sân khá thưa thớt khi mới chỉ tích lũy ${metric.total} trận đấu.`,
-      `Phong cách khách mời đặc biệt: ${metric.name} dạo này ra sân rất chọn lọc với chỉ ${metric.total} trận.`,
-    ];
-  },
-  rank_camper: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Nấp lùm bảo toàn thứ hạng: ${metric.name} mới thi đấu ${metric.total} trận (ít hơn trung bình sân ${round(avgMatches)} trận) nhưng vẫn vững vàng ở Top ${leaderboardRank} BXH.`,
-      `Chiến thuật giữ ghế: Đấu ${metric.total} trận khiêm tốn nhưng ${metric.name} vẫn bảo toàn thành công vị trí Top ${leaderboardRank} trên bảng xếp hạng.`,
-      `Đánh ít giữ hạng: ${metric.name} mới đánh ${metric.total} trận (mặt bằng chung ${round(avgMatches)} trận) nhưng vẫn chễm chệ vị trí Top ${leaderboardRank}.`,
-      `Giữ rank an toàn: Tránh bão bằng cách ra sân ${metric.total} trận, ${metric.name} vẫn giữ vững vị thế Top ${leaderboardRank} trên bảng tổng sắp.`,
-      `Thành tích giữ ghế: ${metric.name} cày ải vỏn vẹn ${metric.total} trận (mặt bằng chung là ${round(avgMatches)} trận) để bảo vệ vững chắc vị trí thứ ${leaderboardRank} của mình.`,
-    ];
-  },
-  elo_inflated: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Điểm số kỹ thuật cao nhưng thành tích thực tế chưa tương xứng: ELO của ${metric.name} nằm trong Top ${eloRank} nhưng thứ hạng win rate lại ở vị trí ${leaderboardRank}.`,
-      `Có sự chênh lệch nhẹ giữa lý thuyết và thực hành: ${metric.name} sở hữu ELO Top ${eloRank} toàn sân nhưng thứ hạng thực tế trên bảng tổng sắp chỉ là ${leaderboardRank}.`,
-      `Lạm phát thông số nhẹ: Điểm ELO ngự trị ở vị trí số ${eloRank} nhưng tỷ lệ thắng thực tế lại đẩy ${metric.name} xuống vị thế thứ ${leaderboardRank}.`,
-      `ELO thì cao ngất ngưởng trong Top ${eloRank}, nhưng BXH thực tế của ${metric.name} lại đang dừng chân ở hạng ${leaderboardRank}.`,
-      `Thông số ELO đang có dấu hiệu đi trước kết quả: ELO của ${metric.name} xếp hạng ${eloRank} nhưng thứ hạng thực tế trên BXH win rate lại là hạng ${leaderboardRank}.`,
-    ];
-  },
-  elo_defied: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Vượt khó thực chiến: Điểm ELO xếp hạng ${eloRank} nhưng ${metric.name} vẫn xuất sắc chiếm giữ vị thế Top ${leaderboardRank} BXH.`,
-      `Đập tan mọi thông số lý thuyết: ${metric.name} chễm chệ ở Top ${leaderboardRank} BXH bất kể điểm ELO xuất phát điểm chỉ là ${eloRank}.`,
-      `Anh hùng hệ thực chiến: Không cần điểm số ELO hào nhoáng (hạng ${eloRank}), ${metric.name} vẫn chứng minh thực lực với vị trí Top ${leaderboardRank} BXH.`,
-      `Điểm số chỉ là con số: ${metric.name} vững vàng ở vị trí Top ${leaderboardRank} dù thứ hạng ELO chỉ đứng thứ ${eloRank} toàn sân.`,
-      `Thực tế thuyết phục hơn lý thuyết: ${metric.name} giành vị trí Top ${leaderboardRank} BXH bất chấp điểm số ELO đang tạm đứng hạng ${eloRank}.`,
-    ];
-  },
-  top1_gap: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Độc bá ngôi đầu: Bỏ xa người bám đuổi ${gapText}, ${topRank.name} đang thống trị vững chắc trên đỉnh bảng xếp hạng.`,
-      `Khoảng cách mênh mông: ${topRank.name} độc chiếm vị trí Top 1 BXH và tạo ra cách biệt ${gapText} so với nhóm bám đuổi.`,
-      `Đỉnh cao cô đơn: Không đối thủ nào bắt kịp ${topRank.name} lúc này khi khoảng cách với vị trí thứ 2 đã lên tới ${gapText}.`,
-      `Thế độc tôn tuyệt đối: ${topRank.name} ngự trị vững chắc ở ngôi vương BXH, bỏ xa người xếp sau tới ${gapText}.`,
-      `Cuộc đua song mã đã vỡ: ${topRank.name} dẫn đầu cuộc đua với cách biệt ${gapText}, khẳng định sức mạnh tuyệt đối trên đỉnh bảng.`,
-    ];
-  },
-  late_bloomer: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Khởi nghĩa muộn màng: Dù tỷ lệ thắng cả mùa dưới trung bình, ${metric.name} đang bứt phá khét lẹt với ${recentWins}/5 trận thắng gần nhất.`,
-      `Giai đoạn nước rút thăng hoa: ${metric.name} đang hồi sinh mạnh mẽ khi giành tới ${recentWins} chiến thắng trong 5 trận đấu vừa qua.`,
-      `Độ trễ phong độ: Nửa đầu mùa giải chơi chưa tốt, nhưng dạo gần đây ${metric.name} đang bắt nhịp cực ngọt với thành tích ${recentWins}/5 trận thắng.`,
-      `Thức tỉnh đúng lúc: ${metric.name} đang làm nóng chặng cuối với chuỗi phong độ ấn tượng ${recentWins} lần gieo sầu cho đối thủ trong 5 trận gần nhất.`,
-      `Ngọn cờ khởi nghĩa phất muộn: Thắng liên tiếp ${recentWins} trên 5 trận gần đây, ${metric.name} đang chứng tỏ đà thăng tiến đầy hứa hẹn chặng cuối.`,
-    ];
-  },
-  late_choker: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Ghế nóng lung lay: Đang chễm chệ Top ${leaderboardRank} BXH nhưng ${metric.name} lại bất ngờ để thua tới ${recentLosses} trận trong 5 lần ra sân gần nhất.`,
-      `Dấu hiệu hụt hơi chặng cuối: Vị trí Top ${leaderboardRank} của ${metric.name} đang báo động rõ rệt sau chuỗi 5 trận gãy kèo tới ${recentLosses} lần.`,
-      `Top đầu có vẻ hết xăng: ${metric.name} đang trải qua chuỗi ngày u ám khi để rơi ${recentLosses}/5 chiến thắng gần nhất dù đang đứng hạng ${leaderboardRank}.`,
-      `Cảnh báo tụt hạng: Sơ sẩy chặng cuối khiến ${metric.name} (Top ${leaderboardRank} BXH) phải nhận tới ${recentLosses} trận thua trong 5 trận đấu gần đây.`,
-      `Phong độ chạm đáy lúc nhạy cảm: Thành tích thua ${recentLosses}/5 trận vừa qua đang là hồi chuông cảnh báo cho vị trí Top ${leaderboardRank} của ${metric.name}.`,
-    ];
-  },
-  drama_magnet: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Máy tạo kịch tính: Ghi nhận tới ${tightMatches}/${metric.total} trận đấu của ${metric.name} phải phân định bằng tỷ số sát nút hoặc kéo nhau qua mốc 11 điểm.`,
-      `Nhịp tim khán giả thử thách: Hễ ${metric.name} xuất trận là khán giả phải chuẩn bị sẵn tinh thần khi ${tightMatches}/${metric.total} trận đấu diễn ra siêu nghẹt thở.`,
-      `Nhà máy drama sân bãi: ${metric.name} sở hữu ${tightMatches}/${metric.total} trận đấu giằng co đến những loạt bóng cuối cùng mới tìm ra người thắng.`,
-      `Đam mê kịch bản giật gân: ${metric.name} góp mặt trong ${tightMatches} trận đấu giằng co sít sao trên tổng số ${metric.total} lần ra sân mùa này.`,
-      `Chuyên trị các kèo đấu nghẹt thở: Trận đấu của ${metric.name} hiếm khi diễn ra tẻ nhạt khi ${tightMatches}/${metric.total} trận kết thúc với cách biệt cực kỳ mong manh.`,
-    ];
-  },
-  glass_cannon: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Phong cách tấn công rực lửa nhưng thủ hơi mỏng: Đang ở Top ${leaderboardRank} nhưng hễ sẩy chân là ${metric.name} nhận các trận thua cách biệt trung bình tới ${oneDecimal(metric.avgLossDiff)} điểm.`,
-      `Thắng oanh liệt nhưng bại cũng đậm đà: ${metric.name} (Top ${leaderboardRank} BXH) gánh nhận cách biệt thua trung bình ${oneDecimal(metric.avgLossDiff)} điểm mỗi khi rơi kèo.`,
-      `Hổ giấy công mạnh giáp yếu: Vị thế Top ${leaderboardRank} đầy uy tín nhưng ${metric.name} thường để đối thủ vượt lên với cách biệt trung bình ${oneDecimal(metric.avgLossDiff)} điểm trong các trận bại.`,
-      `Điểm yếu phòng ngự lộ rõ khi gãy trận: ${metric.name} ngự trị Top ${leaderboardRank} nhưng mỗi trận thua thường có khoảng cách điểm khá sâu là ${oneDecimal(metric.avgLossDiff)} điểm.`,
-      `Tấn công cống hiến nhưng giáp thủ mỏng: ${metric.name} tạm giữ vị trí Top ${leaderboardRank} BXH nhưng trung bình mỗi trận thua bị đối thủ gác trước tới ${oneDecimal(metric.avgLossDiff)} điểm.`,
-    ];
-  },
-  stubborn_loser: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Thua trong thế ngẩng cao đầu: Nằm ở nhóm cuối BXH nhưng ${metric.name} cực kỳ lỳ lợm khi các trận thua chỉ chênh lệch trung bình ${oneDecimal(metric.avgLossDiff)} điểm.`,
-      `Kẻ ngáng đường khó nhằn: Đối thủ rất vất vả mới thắng được ${metric.name} khi khoảng cách thua trung bình chỉ vỏn vẹn ${oneDecimal(metric.avgLossDiff)} điểm.`,
-      `Không dễ bị khuất phục: Dù thứ hạng chưa cao, ${metric.name} luôn bám sát nút đối thủ ở các trận bại với cách biệt trung bình ${oneDecimal(metric.avgLossDiff)} điểm.`,
-      `Thiếu một chút duyên đóng hòm: ${metric.name} nhận các trận thua với cách biệt tối thiểu trung bình ${oneDecimal(metric.avgLossDiff)} điểm, lối chơi rất ngang ngửa nhóm trên.`,
-      `Chi bại dưới tay sát nút: Khoảng cách thua trung bình ${oneDecimal(metric.avgLossDiff)} điểm cho thấy ${metric.name} thi đấu vô cùng ngoan cường bất chấp thứ hạng.`,
-    ];
-  },
-  rank_launchpad: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Tri ân đối tác bên kia chiến tuyến: Chiếm giữ vị trí số ${leaderboardRank} BXH, ${metric.name} chắc hẳn rất biết ơn ${launchpadEdge.otherName} vì đã nhường tới ${launchpadEdge.wins} chiến thắng.`,
-      `Bàn đạp thăng hạng uy tín: ${launchpadEdge.wins} trận thắng trước ${launchpadEdge.otherName} đang là bệ phóng quan trọng đưa ${metric.name} chễm chệ vị trí Top ${leaderboardRank}.`,
-      `Kho điểm thân quen: Vị thế Top ${leaderboardRank} của ${metric.name} có sự đóng góp nhiệt tình từ ${launchpadEdge.otherName} với thành tích đối đầu ${launchpadEdge.wins} trận thắng.`,
-      `Nhà tài trợ thứ hạng vàng: Đang đứng Top ${leaderboardRank} BXH, ${metric.name} ghi nhận tới ${launchpadEdge.wins} trận thắng làm bàn đạp từ các cuộc đụng độ ${launchpadEdge.otherName}.`,
-      `Điểm tựa thăng tiến: Cú bứt tốc lên Top ${leaderboardRank} của ${metric.name} có dấu ấn đậm nét của ${launchpadEdge.otherName} với ${launchpadEdge.wins} lần dâng điểm đầy hào phóng.`,
-    ];
-  },
-  hot_seat_threat: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Áp lực bám đuổi nghẹt thở: ${metric.name} đang phả hơi nóng ngay sau ${playerAbove.name} với khoảng cách chỉ ${oneDecimal(diff)} điểm win rate.`,
-      `Hơi nóng sau gáy: Chỉ cần sẩy chân nhẹ, ${playerAbove.name} sẽ bị ${metric.name} soán ngôi khi cách biệt win rate hiện tại chỉ vỏn vẹn ${oneDecimal(diff)}%.`,
-      `Trận chiến cận kề: Vị trí của ${playerAbove.name} đang bị đe dọa nghiêm trọng bởi ${metric.name} khi khoảng cách giữa hai người thu hẹp còn ${oneDecimal(diff)} điểm win rate.`,
-      `Ghế nóng báo động chéo sân: Khoảng cách giữa ${metric.name} và người đứng trên ${playerAbove.name} chỉ còn ${oneDecimal(diff)}%, sơ sẩy một trận là đổi ngôi lập tức.`,
-      `Rượt đuổi sát nút: ${metric.name} đang bám đuổi quyết liệt và chỉ còn cách ${playerAbove.name} đúng ${oneDecimal(diff)} điểm win rate trên bảng tổng sắp.`,
-    ];
-  },
-  buffet_eater: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Phong cách cày bù cực khét: Ít ra sân nhưng hễ đến buổi là ${metric.name} bào sức tới bến với trung bình ${oneDecimal(attendance.matchesPerSession)} trận mỗi lần xuất hiện.`,
-      `Bào sân hệ buffet: ${metric.name} ra sân thưa thớt nhưng mỗi buổi đều cày trung bình ${oneDecimal(attendance.matchesPerSession)} trận liên tục để bù ngày nghỉ.`,
-      `Đã ra sân là phải bào hết công suất: ${metric.name} giữ phong cách đánh dồn dập, gánh trung bình ${oneDecimal(attendance.matchesPerSession)} trận/buổi để thỏa đam mê.`,
-      `Vác vợt đi ăn buffet đúng nghĩa: Số buổi khiêm tốn nhưng ${metric.name} ra sân là chơi trung bình tới ${oneDecimal(attendance.matchesPerSession)} trận để bù lỗ.`,
-      `Chất lượng hơn số lượng: Ít khi lên sân nhưng mỗi lần xuất hiện ${metric.name} đều bào tới ${oneDecimal(attendance.matchesPerSession)} trận đấu mới chịu đi về.`,
-    ];
-  },
-  moody_player: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Tần suất ra sân tùy hứng: Mặc dù đã chơi ${attendance.uniqueDays} ngày, ${metric.name} có nhịp thi đấu lúc dập dồn lúc thưa thớt, có đợt nghỉ tới ${attendance.maxGap} ngày.`,
-      `Lịch thi đấu hệ tâm linh: Anh em rất khó đoán khi nào ${metric.name} xuất hiện khi khoảng nghỉ giữa các buổi chơi trồi sụt thất thường, kéo dài tới ${attendance.maxGap} ngày.`,
-      `Nhịp ra sân khó bắt bài: Đã tham gia ${attendance.uniqueDays} buổi chơi nhưng khoảng nghỉ của ${metric.name} lúc dày đặc lúc giãn cách, có đợt vắng bóng ${attendance.maxGap} ngày.`,
-      `Phong cách ẩn hiện thất thường: ${metric.name} cày ải ${attendance.uniqueDays} ngày nhưng lịch trình cực kỳ khó đoán, có đoạn cách biệt tới ${attendance.maxGap} ngày mới tái xuất.`,
-      `Nhịp độ ra sân trồi sụt: Thi đấu ${attendance.uniqueDays} ngày nhưng ${metric.name} giữ nhịp chơi lúc dồn dập lúc ngắt quãng, đỉnh điểm cách nhau tới ${attendance.maxGap} ngày.`,
-    ];
-  },
-  king_rescue: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Cắt chuỗi đen nhờ tay to: Mạch thua ${row.priorStreak} trận của ${player.name} cuối cùng đã dừng lại khi ráp cặp thành công cùng Phao cứu sinh Top ELO ${partner.name}.`,
-      `Phao cứu sinh xuất hiện đúng lúc: ${player.name} cắt chuỗi thua ${row.priorStreak} trận nhờ được kẹp chung với tay vợt Top ELO ${partner.name} gánh kèo cực mạnh.`,
-      `Ca hồi sinh từ cõi chết: Chuỗi ${row.priorStreak} thất bại liên tiếp của ${player.name} được giải hạn ngay khi đứng chung chiến tuyến với ${partner.name}.`,
-      `Ráp cặp giải hạn thành công: ${player.name} chấm dứt mạch ${row.priorStreak} trận toàn thua nhờ sự bổ trợ đắc lực từ đồng đội thuộc Top đầu ELO ${partner.name}.`,
-      `Hạ nhiệt chuỗi đen: ${player.name} thoát khỏi cơn khủng hoảng ${row.priorStreak} trận gãy kèo liên tục khi bắt cặp cùng điểm tựa uy tín ${partner.name}.`,
-    ];
-  },
-  anchor_drag: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Cắt chuỗi thắng đầy tiếc nuối: Mạch bất bại ${row.priorStreak} trận liên tục của ${player.name} vừa chính thức tan biến khi bắt cặp cùng ${partner.name}.`,
-      `Mỏ neo kéo lùi mạch thắng: ${player.name} đành khép lại chuỗi thắng ${row.priorStreak} trận sau khi ráp cặp bất thành cùng ${partner.name}.`,
-      `Gãy chuỗi thắng vì kèo nặng tạ: Sự kết hợp với ${partner.name} khiến đà thăng hoa ${row.priorStreak} trận thắng của ${player.name} phải dừng bước.`,
-      `Đứt xích lúc đang thăng hoa: Chuỗi ${row.priorStreak} trận toàn thắng của ${player.name} bị chặt đứt bởi một trận thua sát sườn khi ghép cặp cùng ${partner.name}.`,
-      `Mất chuỗi bất bại: ${player.name} gãy mạch ${row.priorStreak} trận thắng liên tiếp sau cuộc bắt cặp chưa như ý với ${partner.name}.`,
-    ];
-  },
-  parasite_win: (ctx) => {
-    const {
-      edge, winShareFromPartner, winRateWithoutPartner, otherRank,
-      winsWithoutPartner, totalWithoutPartner,
-      round = (v: number) => Math.round(v)
-    } = ctx;
-    return [
-      `Sức mạnh của việc bám càng: Ghi nhận tới ${round(winShareFromPartner * 100)}% số trận thắng của ${edge.playerName} là nhờ bắt cặp cùng Top ${otherRank} ${edge.otherName} (thắng ${edge.wins}/${edge.total} trận), tách lẻ ra là tỷ lệ thắng tụt xuống ${winRateWithoutPartner}% (thắng ${winsWithoutPartner}/${totalWithoutPartner} trận).`,
-      `Bạn cùng tiến hệ phụ thuộc: ${edge.playerName} có ${round(winShareFromPartner * 100)}% số lần cười chiến thắng là khi đứng cạnh ${edge.otherName} (thắng ${edge.wins}/${edge.total} trận), vắng bóng tay to này là tỷ lệ thắng chỉ còn ${winRateWithoutPartner}% (${winsWithoutPartner}/${totalWithoutPartner} trận).`,
-      `Hội chứng khuyết tay to: Tách khỏi Top ${otherRank} ${edge.otherName} là tỷ lệ thắng của ${edge.playerName} rớt về ${winRateWithoutPartner}% (${winsWithoutPartner}/${totalWithoutPartner} trận), dù ${round(winShareFromPartner * 100)}% số trận thắng cả mùa là đứng chung sân (${edge.wins}/${edge.total} trận).`,
-      `Sự phụ thuộc thông số rõ rệt: ${edge.playerName} bỏ túi ${round(winShareFromPartner * 100)}% số trận thắng khi ráp sân với ${edge.otherName} (thắng ${edge.wins}/${edge.total} trận), không có điểm tựa này thì hiệu suất chỉ đạt ${winRateWithoutPartner}% (${winsWithoutPartner}/${totalWithoutPartner} trận).`,
-      `Kèo thơm đi kèm bảo chứng: ${edge.playerName} thắng tới ${round(winShareFromPartner * 100)}% số trận (${edge.wins}/${edge.total} trận) khi kết hợp với Top ${otherRank} ${edge.otherName}, thiếu vắng đối tác này thì tỷ lệ thắng chỉ ở mức ${winRateWithoutPartner}% (${winsWithoutPartner}/${totalWithoutPartner} trận).`,
-    ];
-  },
-  gatekeeper_boss: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Đang giữ hạng ${leaderboardRank} nhưng ${metric.name} lại là hung thần ngáng đường của Top ${targetRank} ${edge.otherName} với thành tích đối đầu cực tốt: thắng ${edge.wins}/${edge.total} trận.`,
-      `Kẻ gác cổng khó chịu: Dù đứng hạng ${leaderboardRank}, ${metric.name} vẫn liên tục làm khó Top ${targetRank} ${edge.otherName} khi bỏ túi tới ${edge.wins}/${edge.total} trận thắng đối đầu.`,
-      `Cửa ải gian nan của nhóm dẫn đầu: Top ${targetRank} ${edge.otherName} đụng độ ${metric.name} (hạng ${leaderboardRank}) là dễ gãy cánh khi đối thủ đã thắng tới ${edge.wins}/${edge.total} trận.`,
-      `${metric.name} (hạng ${leaderboardRank}) đang là khắc tinh đích thực của Top ${targetRank} ${edge.otherName}, gạt giò thành công ${edge.wins}/${edge.total} lần chạm trán.`,
-      `Thành tích đối đầu ấn tượng: Dù xếp hạng ${leaderboardRank}, ${metric.name} mới là người làm chủ thế trận trước Top ${targetRank} ${edge.otherName} với ${edge.wins}/${edge.total} chiến thắng.`,
-    ];
-  },
-  unlucky_draw: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Bốc thăm hơi xui: ${metric.name} có ${bottomPartnerMatches.length}/${partnerMatches.length} trận đứng cùng ${bottom1.name}, người đang cuối bảng xếp hạng.`,
-      `Lịch ghép cặp của ${metric.name} hơi nặng: ${bottomPartnerMatches.length}/${partnerMatches.length} trận phải sát cánh cùng tay vợt cuối bảng ${bottom1.name}.`,
-      `${metric.name} thường xuyên rơi vào kèo khó khi có ${bottomPartnerMatches.length} trận đứng cùng ${bottom1.name}, người đang chật vật nhất trên BXH.`,
-      `Đường bốc cặp không mấy bằng phẳng: ${metric.name} đã có ${bottomPartnerMatches.length}/${partnerMatches.length} trận bắt cặp với người cuối bảng ${bottom1.name}.`,
-      `Vận may chia đội chưa mỉm cười với ${metric.name}: tỷ lệ đứng cùng ${bottom1.name} lên tới ${round((bottomPartnerMatches.length / partnerMatches.length) * 100)}% trong các trận có đồng đội.`,
-    ];
-  },
-  friendly_fire: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Đồng đội ăn ý, đối thủ khắc tinh: ${edge.playerName} sát cánh cùng ${edge.otherName} thắng ${partnerEdge.wins}/${partnerEdge.total} trận, nhưng cứ đứng hai đầu chiến tuyến là gieo sầu thắng ${edge.wins}/${edge.total} trận đối đầu.`,
-      `Thân ai nấy lo: Cặp đôi ${edge.playerName} - ${edge.otherName} ráp cặp thì thắng tới ${partnerEdge.wins}/${partnerEdge.total} trận chung, nhưng chia đội là ${edge.playerName} lập tức "gạt giò" đối tác ${edge.wins}/${edge.total} lần.`,
-      `Tình anh em có nhiều sát thương: Thắng chung tới ${partnerEdge.wins}/${partnerEdge.total} trận, nhưng hễ sang hai bên lưới là ${edge.playerName} át vía ${edge.otherName} với ${edge.wins}/${edge.total} trận thắng đối đầu.`,
-      `Đồng cam cộng khổ nhưng thích đối đầu: ${edge.playerName} đứng chung với ${edge.otherName} gặt ${partnerEdge.wins}/${partnerEdge.total} thắng lợi, cơ mà khi chia phe là ${edge.playerName} lấy đi ${edge.wins}/${edge.total} trận thắng từ tay bạn.`,
-      `Cặp đôi duyên nợ: Bắt cặp cực mượt với ${partnerEdge.wins}/${partnerEdge.total} trận thắng, nhưng chia đội đối đầu là ${edge.playerName} hạ gục ${edge.otherName} ${edge.wins}/${edge.total} lần không nể tình xưa.`,
-    ];
-  },
-  rank_takeover: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Cú bứt tốc ngoạn mục! Trận thắng vừa qua giúp ${playerB.name} chính thức qua mặt ${playerA.name} để giành lấy vị trí thứ ${newRank} trên BXH.`,
-      `Đảo ngôi kịch tính: ${playerB.name} vừa lách qua khe hẹp để vươn lên hạng ${newRank}, đẩy ${playerA.name} lùi lại phía sau.`,
-      `Thắng lợi then chốt! ${playerB.name} đã tận dụng cơ hội để soán ngôi ${playerA.name}, chễm chệ ở vị trí số ${newRank}.`,
-      `Màn lật đổ ấn tượng: ${playerB.name} vượt qua ${playerA.name} trên bảng xếp hạng để chiếm lấy hạng ${newRank} sau trận đấu vừa rồi.`,
-      `Cạnh tranh khốc liệt! ${playerB.name} chính thức hất cẳng ${playerA.name} để vươn lên chiếm giữ Top ${newRank}.`,
-    ];
-  },
-  top1_time: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Đã ${daysAtTop1} ngày trôi qua mà ${metric.name} vẫn ngồi lỳ trên đỉnh BXH. Anh em sân bãi dạo này hiền quá chăng?`,
-      `Thống trị tuyệt đối: ${metric.name} đã ngự trị ở vị trí số 1 suốt ${daysAtTop1} ngày liên tiếp mà chưa có dấu hiệu bị lật đổ.`,
-      `Vị trí Top 1 có vẻ hơi lạnh lùng: ${metric.name} đã độc chiếm đỉnh bảng được ${daysAtTop1} ngày rồi, cần lắm một người gạt giò!`,
-      `Nhà vua chưa nhường ngôi: ${metric.name} đánh chiếm vị trí số 1 BXH vững vàng trong suốt ${daysAtTop1} ngày qua.`,
-      `Triều đại của ${metric.name} vẫn đang tiếp diễn với chuỗi ${daysAtTop1} ngày liên tiếp giữ Top 1, thách thức mọi nỗ lực bám đuổi.`,
-    ];
-  },
-  stuck_in_mud: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Cày bừa miệt mài ${recentMatches} trận gần nhất nhưng vị trí thứ ${Rank} của ${metric.name} vẫn đóng đinh y nguyên. Cảm giác trầy trật giống hệt như đang chạy bộ trên máy!`,
-      `Nhiệt tình cày ải ${recentMatches} trận nhưng thứ hạng của ${metric.name} vẫn kẹt cứng ở Top ${Rank}, đúng là tiến thoái lưỡng nan.`,
-      `Đánh mệt nghỉ ${recentMatches} trận qua nhưng ${metric.name} vẫn chưa thoát khỏi hạng ${Rank}, vòng luẩn quẩn thắng thua đang níu chân khá chặt.`,
-      `Ra sân đều đặn ${recentMatches} trận nhưng vị trí số ${Rank} vẫn bất di bất dịch, ${metric.name} đang cần một chuỗi bứt phá thực sự.`,
-      `Tốn khá nhiều mồ hôi qua ${recentMatches} trận nhưng thứ hạng của ${metric.name} vẫn dậm chân tại chỗ ở hạng ${Rank}.`,
-    ];
-  },
-  quantity_over_quality: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Tuy cùng sở hữu ${wins} trận thắng như ${Rank_above.name}, nhưng ${metric.name} đành ngậm ngùi xếp dưới do phải nhận nhiều trận thua hơn.`,
-      `Bằng số trận thắng với ${Rank_above.name} nhưng do có số trận thất bại nhiều hơn, ${metric.name} chấp nhận đứng dưới trên BXH.`,
-      `Cùng cán mốc ${wins} chiến thắng nhưng ${metric.name} xếp dưới ${Rank_above.name} do nhận số trận thua nhiều hơn. Kèo đấu chắt chiu điểm số sẽ giúp bạn bứt phá.`,
-      `Cùng đạt ${wins} trận thắng như ${Rank_above.name} nhưng vì để thua nhiều trận hơn nên ${metric.name} đành ngậm ngùi xếp ở vị trí phía dưới.`,
-      `Có cùng số trận thắng với ${Rank_above.name} nhưng do nhận nhiều trận thua hơn, ${metric.name} đành chấp nhận đứng sau đối thủ.`,
-    ];
-  },
-  vulture_win: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Dù ngự trị ở Top ${leaderboardRank}, phân tích ra mới thấy có tới ${percent}% số trận thắng của ${metric.name} là từ việc chạm trán tay vợt bét bảng ${bottom1.name}.`,
-      `Đứng trong Top ${leaderboardRank} nhưng ${metric.name} lại có tới ${percent}% số trận thắng cả mùa là trước đối thủ cuối bảng ${bottom1.name}.`,
-      `Hiệu suất khai thác điểm số: ${percent}% số trận thắng của tay vợt Top ${leaderboardRank} ${metric.name} là trước đối thủ đang đứng cuối bảng xếp hạng ${bottom1.name}.`,
-      `Vị trí Top ${leaderboardRank} của ${metric.name} ghi nhận tới ${percent}% số trận thắng là từ các cuộc đối đầu tay vợt bét bảng ${bottom1.name}, cần thêm liều thuốc thử mạnh hơn để chứng tỏ bản lĩnh.`,
-      `Có tới ${percent}% số chiến thắng của ${metric.name} là từ các cuộc đụng độ đối thủ cuối bảng ${bottom1.name}. Vị thế dẫn đầu sẽ thuyết phục hơn nếu thắng các kèo đấu đỉnh cao.`,
-    ];
-  },
-  money_blackhole: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Vừa hụt hơi trên BXH vừa đau ví: ${metric.name} đang ở nhóm cuối và tạm dẫn đầu danh sách nộp phạt với ${topFine.money.toLocaleString('vi-VN')}đ.`,
-      `Kèo này hơi kép: thứ hạng của ${metric.name} chưa sáng lên, còn quỹ phạt thì đã nhận thêm ${topFine.money.toLocaleString('vi-VN')}đ từ tay vợt này.`,
-      `Cú đúp hơi chát: ${metric.name} vừa đứng ở nhóm dưới BXH, vừa góp nhiều nhất vào quỹ phạt với ${topFine.money.toLocaleString('vi-VN')}đ.`,
-      `BXH chưa chiều lòng, ví tiền cũng chưa tha: ${metric.name} đã nộp ${topFine.money.toLocaleString('vi-VN')}đ tiền phạt, cao nhất trong nhóm hiện tại.`,
-      `Một mặt trận cần gỡ gạc: ${metric.name} đang chật vật ở nhóm dưới BXH và cũng là người nộp phạt nhiều nhất với ${topFine.money.toLocaleString('vi-VN')}đ.`,
-    ];
-  },
-  spring_jump: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Cú nảy lò xo ngoạn mục: Buổi trước còn ở nhóm cuối bảng, hôm nay ${metric.name} đã bứt tốc leo thẳng lên Top ${Rank} BXH.`,
-      `Màn thăng tiến không tưởng: Từ nhóm cuối bảng ở buổi đấu trước, ${metric.name} đã phóng một mạch lên vị trí thứ ${Rank} trên bảng xếp hạng.`,
-      `Phong độ đảo chiều chóng mặt: ${metric.name} nhảy vọt từ nhóm cuối lên chễm chệ Top ${Rank} BXH chỉ sau một buổi thi đấu thăng hoa.`,
-      `Bứt phá ngoạn mục chéo sân: ${metric.name} chứng tỏ sức bật mạnh mẽ khi leo từ nhóm cuối lên chiếm lĩnh vị trí thứ ${Rank} BXH.`,
-      `Cú lội ngược dòng thứ hạng ấn tượng: ${metric.name} thoát khỏi nhóm bét bảng ở phiên trước để vươn lên ghi tên mình vào Top ${Rank} dẫn đầu.`,
-    ];
-  },
-  last_laugh: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Thua đâu không biết, cứ thắng trận cuối ra về là tươi: Ngày ${sessionDate}, ${metric.name} gãy liên tiếp ${sessionTotal - 1} trận đầu nhưng kết thúc buổi chơi ngọt ngào với chiến thắng ở game đấu chốt hạ.`,
-      `Người cười sau cùng mới là người chiến thắng: Cả buổi chơi ngày ${sessionDate} thua tới ${sessionTotal - 1} trận, nhưng ${metric.name} vẫn ra về trong thế ngẩng cao đầu nhờ thắng trận cuối.`,
-      `Giải hạn đúng thời điểm quyết định: Trong buổi chơi ngày ${sessionDate}, sau ${sessionTotal - 1} thất bại liên tiếp, ${metric.name} đã có chiến thắng chốt hạ đầy cảm xúc để khép lại ngày đấu.`,
-      `Cú chốt hạ ngọt ngào: ${metric.name} trải qua ngày thi đấu ${sessionDate} đầy thử thách với ${sessionTotal - 1} trận thua, nhưng kịp thời tỏa sáng ở game cuối cùng.`,
-      `Thua cả buổi không bằng thắng trận cuối: ${metric.name} gỡ gạc lại cả buổi chơi ngày ${sessionDate} bằng một thắng lợi vô cùng quan trọng ở trận đấu cuối cùng.`,
-    ];
-  },
-  undefeated_session: (ctx) => {
-    const {
-      metric, perfectSessionCount, latestPerfectSessionDate, latestPerfectSessionTotal,
-      bestPerfectSessionDate, bestPerfectSessionTotal,
-    } = ctx;
-    if (perfectSessionCount >= 2) {
-      return [
-        `${metric.name} đã có ${perfectSessionCount} buổi sạch thua trong lịch sử, lần gần nhất là ngày ${latestPerfectSessionDate} với ${latestPerfectSessionTotal} trận toàn thắng.`,
-        `Không chỉ một lần: ${metric.name} đã gom được ${perfectSessionCount} ngày không thua trận nào, buổi gần nhất diễn ra vào ${latestPerfectSessionDate}.`,
-        `${metric.name} có duyên với những ngày sạch thua: ${perfectSessionCount} buổi đánh từ 3 trận trở lên mà không nhận thất bại.`,
-        `Thành tích sạch thua của ${metric.name} đã lặp lại ${perfectSessionCount} lần, nổi bật nhất là ngày ${bestPerfectSessionDate} với ${bestPerfectSessionTotal} trận toàn thắng.`,
-        `${metric.name} từng ${perfectSessionCount} lần khép lại một buổi chơi mà không có trận thua nào, đỉnh nhất là ${bestPerfectSessionTotal} trận thắng trong ngày ${bestPerfectSessionDate}.`,
-      ];
-    }
-    return [
-      `Ngày ${latestPerfectSessionDate}, ${metric.name} đánh ${latestPerfectSessionTotal} trận và không thua trận nào, một buổi đấu rất gọn gàng.`,
-      `${metric.name} từng có một ngày sạch thua vào ${latestPerfectSessionDate}: ${latestPerfectSessionTotal} trận, toàn bộ đều khép lại bằng chiến thắng.`,
-      `Bảng kết quả ngày ${latestPerfectSessionDate} của ${metric.name} rất đẹp: ${latestPerfectSessionTotal}/${latestPerfectSessionTotal} trận thắng.`,
-      `Một buổi không tì vết: ${metric.name} ra sân ${latestPerfectSessionTotal} trận trong ngày ${latestPerfectSessionDate} và không để rơi trận nào.`,
-      `Ngày ${latestPerfectSessionDate} là điểm sáng của ${metric.name}: đánh đủ ${latestPerfectSessionTotal} trận mà vẫn giữ sạch cột thua.`,
-    ];
-  },
-  triangle_paradox: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Vòng lặp oẳn tù tì kịch tính: ${A.name} át vía ${B.name}, ${B.name} bắt bài ${C.name}, nhưng ${C.name} lại luôn gieo sầu cho ${A.name} khi đối đầu.`,
-      `Tam giác khắc chế đầy nghịch lý: ${A.name} làm khó ${B.name}, ${B.name} lấn lướt ${C.name}, nhưng ${C.name} lại là cơn ác mộng của ${A.name} ở hai đầu chiến tuyến.`,
-      `Định luật bắc cầu hoàn toàn thất bại: ${A.name} khắc chế ${B.name}, ${B.name} đè bẹp ${C.name}, nhưng ${C.name} lại luôn tìm được cách đánh bại ${A.name}.`,
-      `Oan oan tương báo vòng tròn: Kèo đối đầu kịch tính khi ${A.name} thắng ${B.name}, ${B.name} hạ ${C.name}, nhưng ${C.name} lại vượt qua ${A.name}.`,
-      `Tam giác nhân duyên nợ nần: ${A.name} là khắc tinh của ${B.name}, ${B.name} át vía ${C.name}, nhưng ${C.name} lại "đòi nợ" sòng phẳng mỗi khi gặp ${A.name}.`,
-    ];
-  },
-  chameleon_partner: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Ráp cặp với ai cũng hiệu quả: Tuần qua ${metric.name} đứng chung với ${count} đồng đội khác nhau và duy trì tỷ lệ thắng tối thiểu 55% với tất cả.`,
-      `Trạm sạc đa năng của sân đấu: ${metric.name} chứng tỏ khả năng thích ứng tuyệt vời khi chơi cùng ${count} đối tác khác nhau và đều đạt win rate từ 55% trở lên trong tuần qua.`,
-      `Chiến thần ngoại giao sân bãi: Ghép cặp cùng ${count} anh em khác nhau trong tuần, ${metric.name} vẫn giữ vững phong độ ổn định với tỷ lệ thắng trên 55% với mỗi người.`,
-      `Đồng đội quốc dân: Tuần qua ${metric.name} bắt cặp với ${count} người chơi khác nhau, duy trì hiệu suất thắng cực ngọt trên 55% với từng đối tác.`,
-      `Dễ ráp dễ thắng: ${metric.name} gặt hái tỷ lệ thắng từ 55% trở lên khi đứng chung với ${count} anh em khác nhau trong suốt tuần qua.`,
-    ];
-  },
-  quick_finisher: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Phong cách thi đấu chớp nhoáng: Đánh tới ${count} trận trong tuần nhưng ${metric.name} hoàn toàn không có trận nào phải đấu thêm điểm phụ, hoặc là đóng hòm nhanh, hoặc là chấp nhận thua sớm!`,
-      `Tác chiến nhanh gọn: Cày ải ${count} trận tuần này nhưng không có bất kỳ game đấu nào phải kéo dài quá mốc 11 điểm. ${metric.name} rõ ràng không thích những kèo đấu cò cưa tốn sức.`,
-      `Đánh nhanh rút gọn: Tuần qua ${metric.name} ra sân ${count} trận và kết thúc tất cả cực kỳ chóng vánh khi không có trận nào phải phân định bằng loạt điểm phụ.`,
-      `Không thích dây dưa kéo dài: Trải qua ${count} trận đấu trong tuần mà hoàn toàn vắng bóng các loạt đấu thêm giằng co, ${metric.name} luôn định đoạt trận đấu rất nhanh.`,
-      `Lối chơi dứt khoát: ${metric.name} thi đấu ${count} trận tuần này với kịch bản kết thúc nhanh gọn, tuyệt đối không cò cưa điểm số quá mốc 11 quen thuộc.`,
-    ];
-  },
-  attendance_king: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Sân bãi có thể đổi nhưng nhân sự thì không: Góp mặt tới ${round(percent)}% số buổi chơi, bằng khen chuyên cần danh giá mùa này chắc chắn thuộc về ${metric.name}.`,
-      `Gương mặt thương hiệu của CLB: Với tần suất xuất hiện đạt ${round(percent)}% tổng số buổi, ${metric.name} xứng đáng dẫn đầu danh sách chuyên cần toàn giải.`,
-      `Độ phủ sóng tuyệt đối: ${metric.name} vững vàng ở ngôi đầu chuyên cần khi góp mặt trong ${round(percent)}% số buổi ra sân từ đầu mùa.`,
-      `Đam mê không lối thoát: ${metric.name} ghi nhận kỷ lục tham gia ${round(percent)}% số buổi thi đấu, chưa vắng mặt một nhịp chơi quan trọng nào.`,
-      `Chiến thần chuyên cần: Không ai có thể so bì độ chăm chỉ với ${metric.name} khi bạn có mặt ở ${round(percent)}% số buổi giao lưu của câu lạc bộ.`,
-    ];
-  },
-  charity_top_rank: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottom1, mostRepeated, closeLosses,
-      pattern = (results: any[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: any) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Chễm chệ ngôi đầu bảng nhưng dạo này ${metric.name} lại để rơi ${recentLossesVsBottom1} trận trước tay vợt cuối bảng ${bottom1.name}.`,
-      `Nhà vua bất ngờ ban điểm: ${metric.name} đang Top 1 BXH nhưng đã thua ${recentLossesVsBottom1} trận gần đây trước ${bottom1.name}, người đứng cuối bảng.`,
-      `Cú sẩy chân khó tin của ngôi đầu: ${metric.name} để đối thủ bét bảng ${bottom1.name} lấy điểm tới ${recentLossesVsBottom1} lần trong nhóm trận gần nhất.`,
-      `Đỉnh bảng gặp đáy bảng mà không hề dễ thở: ${metric.name} đã gãy ${recentLossesVsBottom1} trận trước ${bottom1.name} trong 10 trận gần đây.`,
-      `Top 1 đang hơi hào phóng: ${metric.name} để ${bottom1.name}, người cuối BXH, bỏ túi ${recentLossesVsBottom1} chiến thắng gần đây.`,
-    ];
-  },
-  golden_victim: (ctx) => {
-    const {
-      metric, topElo, gap, player, target, breaker, X, opponent, revenge, Y,
-      topRank, places, recentWins, edge, otherMetric, glued, avgLossDiff,
-      tightWinRate, kingWins, kingName, launchpadEdge, diff, playerAbove,
-      attendance, row, partner, winShareFromPartner, winRateWithoutPartner,
-      otherRank, leaderboardRank, targetRank, bottomPartnerMatches, partnerMatches,
-      partnerEdge, playerB, playerA, newRank, daysAtTop1, recentMatches, Rank,
-      wins, Rank_above, percent, bottom1, topFine, sessionDate, sessionTotal,
-      A, B, C, count, goldenPickled,
-      avgMatches, eloRank, gapText, recentLosses, tightMatches, recentLossesVsBottomGroup, mostRepeated, closeLosses,
-      pattern = (results: (string | number)[]) => results.slice(0, 8).join('-'),
-      edgeRate = (ed: { rate?: number } | null | undefined) => Math.round(ed?.rate || 0),
-      round = (v: number) => Math.round(v),
-      oneDecimal = (v: number) => v.toFixed(1),
-      absRound = (v: number) => Math.abs(Math.round(v))
-    } = ctx;
-    return [
-      `Lịch sử ghi nhận một vết xước nhẹ: ${metric.name} từng bị thua ${goldenPickled} lần 11-0. Anh em ra sân đừng nhắc lại chuyện cũ kẻo chạm nọc!`,
-      `Dữ liệu không biết nói dối: ${metric.name} từng nhận ${goldenPickled} thất bại 11-0 trong lịch sử giải đấu.`,
-      `Bài học thương đau trên sân đấu: ${metric.name} từng bị thua ${goldenPickled} lần với tỷ số 11-0 trong quá khứ.`,
-      `Vết thương lòng chưa phai: Ghi nhận ${metric.name} đã từng ${goldenPickled} lần nhận kết quả thua 11-0, hy vọng dạo này phong độ đã vững vàng hơn.`,
-      `Kỷ niệm không muốn nhớ lại: Sân đấu từng chứng kiến ${metric.name} bị thua ${goldenPickled} lần 11-0. Câu chuyện buồn này tốt nhất nên cất sâu vào lịch sử.`,
-    ];
-  },
+// Keep every variant factual; contexts are checked at each call site.
+export const INSIGHT_TEXT_VARIANTS = {
+  hot_streak: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} thắng ít nhất ${metric.streakCount} trận liên tiếp gần nhất, một chuỗi kết quả rất đẹp.`,
+    `${metric.name} đang có mạch ít nhất ${metric.streakCount} trận thắng liên tiếp trong dữ liệu đang xem.`,
+  ],
+  cold_streak: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} thua ít nhất ${metric.streakCount} trận liên tiếp gần nhất, đang chờ một trận đổi nhịp.`,
+    `Chuỗi kết quả gần nhất của ${metric.name} gồm ít nhất ${metric.streakCount} trận thua liên tiếp.`,
+  ],
+  elo_king: ({ topElo }: { topElo: PlayerMetrics }) => [
+    `${topElo.name} dẫn đầu bảng ELO với ${round(topElo.rating)} điểm.`,
+    `Ngôi đầu ELO đang thuộc về ${topElo.name}, ở mức ${round(topElo.rating)} điểm.`,
+  ],
+  giant_killer: ({ metric }: { metric: PlayerMetrics; }) => [
+    `${metric.name} thắng ${metric.upsetWins} trận mà xác suất thắng của đội theo ELO trước trận dưới 30%.`,
+    `Có ${metric.upsetWins} lần đội của ${metric.name} thắng dù ELO trước trận ước tính cơ hội dưới 30%.`,
+  ],
+  earthquake_victim: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} thua ${metric.upsetLosses} trận dù xác suất thắng của đội theo ELO trước trận trên 70%.`,
+    `Đội của ${metric.name} có ${metric.upsetLosses} thất bại ở những trận được ELO đánh giá cơ hội thắng trên 70%.`,
+  ],
+  perfect_form5: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} thắng cả 5 trận gần nhất, trọn vẹn một bàn tay chiến thắng.`,
+    `5 lần ra sân gần nhất của ${metric.name} đều khép lại bằng chiến thắng.`,
+  ],
+  zero_form5: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} thua cả 5 trận gần nhất, đang cần một kết quả tốt để đổi nhịp.`,
+    `5 trận gần nhất của ${metric.name} đều là thất bại.`,
+  ],
+  gatekeeper: ({ metric }: { metric: PlayerMetrics }) => [
+    `Sau ${metric.total} trận, ELO của ${metric.name} là ${round(metric.rating)}, gần mốc khởi đầu 1.500 điểm.`,
+    `${metric.name} đã đánh ${metric.total} trận và hiện có ${round(metric.rating)} ELO, cách mốc 1.500 không quá 20 điểm.`,
+  ],
+  most_improved: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} tăng ${round(metric.recentEloDelta)} điểm ELO so với đầu tuần hiện tại.`,
+    `So với đầu tuần hiện tại, ELO của ${metric.name} tăng thêm ${round(metric.recentEloDelta)} điểm.`,
+  ],
+  free_fall: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} giảm ${absRound(metric.recentEloDelta)} điểm ELO so với đầu tuần hiện tại.`,
+    `So với đầu tuần hiện tại, ELO của ${metric.name} giảm ${absRound(metric.recentEloDelta)} điểm.`,
+  ],
+  streak_breaker: ({ player, target, X, breaker }: { player: AnalysisPlayer; target: AnalysisPlayer; X: number; breaker: { streak: number } }) => [
+    `${player.name} từng thắng đội của ${target.name}, chấm dứt chuỗi ${breaker.streak} trận thắng của đối thủ.${X > 0 ? ` Sau đó, ${target.name} thua thêm ${X} trận liên tiếp.` : ""}`,
+    `Chuỗi ${breaker.streak} trận thắng của ${target.name} dừng lại ở trận gặp đội của ${player.name}.${X > 0 ? ` Các trận tiếp theo ghi nhận thêm ${X} thất bại liên tiếp.` : ""}`,
+  ],
+  revenge_win: ({ player, opponent, Y, revenge }: { player: AnalysisPlayer; opponent: AnalysisPlayer; Y: number; revenge: { priorLosses: number } }) => [
+    `${player.name} đã thắng đội của ${opponent.name} sau ${revenge.priorLosses} trận thua đối đầu liên tiếp.${Y > 0 ? ` Sau đó thắng thêm ${Y} trận đối đầu liên tiếp.` : ""}`,
+    `Sau chuỗi ${revenge.priorLosses} lần thua khi gặp ${opponent.name}, ${player.name} đã có trận thắng giải hạn.${Y > 0 ? ` Mạch thắng đối đầu tiếp tục thêm ${Y} trận.` : ""}`,
+  ],
+  rank_leader: ({ topRank }: { topRank: PlayerMetrics; }) => [
+    `${topRank.name} dẫn đầu BXH với ${topRank.wins}/${topRank.total} trận thắng, đạt ${round(topRank.winRate)}%.`,
+    `Vị trí số 1 BXH thuộc về ${topRank.name}: thắng ${topRank.wins}/${topRank.total} trận (${round(topRank.winRate)}%).`,
+  ],
+  elo_climber: ({ metric, places, recentWins }: { metric: PlayerMetrics; places: number; recentWins: number }) => [
+    `${metric.name} tăng ${places} bậc ELO so với đầu tuần hiện tại; kết quả 5 trận gần nhất là ${recentWins} thắng.`,
+    `So với đầu tuần hiện tại, ${metric.name} lên ${places} bậc ELO. Trong 5 trận gần nhất, tay vợt này thắng ${recentWins} trận.`,
+  ],
+  perfect_duo: ({ edge }: { edge: AnalysisEdge; }) => [
+    `${edge.playerName} và ${edge.otherName} thắng ${edge.wins}/${edge.total} trận chung đội, đạt ${edgeRate(edge)}%.`,
+    `Cặp ${edge.playerName} – ${edge.otherName} có kết quả nổi bật: ${edge.wins}/${edge.total} trận thắng (${edgeRate(edge)}%).`,
+  ],
+  bad_duo: ({ edge }: { edge: AnalysisEdge; }) => [
+    `${edge.playerName} và ${edge.otherName} mới thắng ${edge.wins}/${edge.total} trận khi đánh cùng nhau.`,
+    `Kết quả chung đội của ${edge.playerName} và ${edge.otherName} là ${edge.wins}/${edge.total} trận thắng (${edgeRate(edge)}%).`,
+  ],
+  partner_boost: ({ edge }: { edge: AnalysisEdge; }) => [
+    `${edge.playerName} thắng ${edge.wins}/${edge.total} trận khi đánh cùng ${edge.otherName}; kết quả sau khi xét kỳ vọng ELO tốt hơn mức chung của ${edge.playerName}.`,
+    `Đánh cùng ${edge.otherName}, ${edge.playerName} có ${edge.wins}/${edge.total} trận thắng và kết quả so với kỳ vọng ELO tốt hơn mức chung.`,
+  ],
+  partner_drag: ({ edge }: { edge: AnalysisEdge; }) => [
+    `${edge.playerName} thắng ${edge.wins}/${edge.total} trận cùng ${edge.otherName}; kết quả sau khi xét kỳ vọng ELO thấp hơn mức chung của ${edge.playerName}.`,
+    `Khi ghép với ${edge.otherName}, ${edge.playerName} thắng ${edge.wins}/${edge.total} trận, với kết quả so với kỳ vọng ELO thấp hơn mức chung.`,
+  ],
+  cover_master: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} có chỉ số phối hợp ${round(metric.synergyScore)}/100, thuộc nhóm 2 người cao nhất; điểm đội ghi trung bình chưa thuộc nhóm 2 người dẫn đầu.`,
+    `Điểm phối hợp của ${metric.name} đạt ${round(metric.synergyScore)}/100, thuộc nhóm đầu theo kết quả đánh cùng các đồng đội.`,
+  ],
+  carry_partner: ({ otherMetric, edge }: { otherMetric: PlayerMetrics; edge: AnalysisEdge; }) => [
+    `${edge.otherName} thắng ${edgeRate(edge)}% khi đánh cùng ${edge.playerName} (${edge.wins}/${edge.total} trận), so với tỷ lệ chung ${round(otherMetric.winRate)}%.`,
+    `Cặp ${edge.playerName} – ${edge.otherName} thắng ${edge.wins}/${edge.total} trận (${edgeRate(edge)}%); tỷ lệ thắng chung của ${edge.otherName} là ${round(otherMetric.winRate)}%.`,
+  ],
+  heavy_backpack: ({ otherMetric, edge }: { otherMetric: PlayerMetrics; edge: AnalysisEdge; }) => [
+    `${edge.otherName} thắng ${edgeRate(edge)}% khi đánh cùng ${edge.playerName} (${edge.wins}/${edge.total} trận), thấp hơn tỷ lệ chung ${round(otherMetric.winRate)}%.`,
+    `Kết quả cặp ${edge.playerName} – ${edge.otherName} là ${edge.wins}/${edge.total} trận thắng (${edgeRate(edge)}%), trong khi tỷ lệ chung của ${edge.otherName} là ${round(otherMetric.winRate)}%.`,
+  ],
+  stable_partner: ({ edge }: { edge: AnalysisEdge; }) => [
+    `${edge.playerName} và ${edge.otherName} thắng ${edge.wins}/${edge.total} trận (${edgeRate(edge)}%); kết quả so với kỳ vọng ELO gần mức chung của cả hai.`,
+    `Cặp ${edge.playerName} – ${edge.otherName} thắng ${edge.wins} trong ${edge.total} trận chung đội, với kết quả theo kỳ vọng ELO gần mức chung.`,
+  ],
+  glued_pair: ({ glued }: { glued: AnalysisEdge }) => [
+    `${glued.playerName} và ${glued.otherName} thuộc nhóm cặp đánh chung nhiều nhất, với ${glued.total} trận.`,
+    `Dính nhau như sam: ${glued.playerName} và ${glued.otherName} có ${glued.total} trận chung đội, thuộc nhóm nhiều nhất.`,
+  ],
+  rare_pair_hot: ({ edge }: { edge: AnalysisEdge; }) => [
+    `${edge.playerName} và ${edge.otherName} thắng ${edge.wins}/${edge.total} trận chung đội; số trận còn ít so với các cặp khác.`,
+    `Cặp ${edge.playerName} – ${edge.otherName} có ${edge.wins}/${edge.total} trận thắng (${edgeRate(edge)}%). Đây vẫn là mẫu ít trận.`,
+  ],
+  disaster_duo: ({ edge, avgLossDiff }: { edge: AnalysisEdge; avgLossDiff: number; }) => [
+    `${edge.playerName} và ${edge.otherName} thắng ${edge.wins}/${edge.total} trận chung đội; các trận thua có cách biệt trung bình ${oneDecimal(avgLossDiff)} điểm.`,
+    `Cặp ${edge.playerName} – ${edge.otherName} có ${edge.losses} trận thua, cách biệt trung bình ${oneDecimal(avgLossDiff)} điểm.`,
+  ],
+  partner_long_games: ({ edge }: { edge: AnalysisEdge }) => [
+    `Cặp ${edge.playerName} – ${edge.otherName} có ${edge.deuceGames}/${edge.total} trận kết thúc với điểm đội thắng vượt mốc 11.`,
+    `${edge.playerName} và ${edge.otherName} đã đánh cùng nhau ${edge.deuceGames} trận có điểm đội thắng trên 11.`,
+  ],
+  top_attack: ({ metric }: { metric: PlayerMetrics }) => [
+    `Đội của ${metric.name} ghi trung bình ${oneDecimal(metric.avgPointsFor)} điểm/trận, cao nhất trong nhóm đã đánh ít nhất 8 trận.`,
+    `${metric.name} dẫn nhóm có ít nhất 8 trận về điểm đội ghi trung bình: ${oneDecimal(metric.avgPointsFor)} điểm/trận.`,
+  ],
+  defense_wall: ({ metric }: { metric: PlayerMetrics }) => [
+    `Đội của ${metric.name} để đối thủ ghi trung bình ${oneDecimal(metric.avgConceded)} điểm/trận, thuộc nhóm thấp nhất trong số người có ít nhất 8 trận.`,
+    `Qua ${metric.total} trận, đội của ${metric.name} để đối phương ghi trung bình ${oneDecimal(metric.avgConceded)} điểm/trận.`,
+  ],
+  dominant_closer: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} có ${metric.dominantWins} trận thắng cách biệt từ 7 điểm trở lên.`,
+    `Thắng là có khoảng cách: ${metric.name} đã thắng ${metric.dominantWins} trận với cách biệt ít nhất 7 điểm.`,
+  ],
+  close_loss: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} có ${metric.closeLosses} trận thua sát nút, cách biệt không quá 2 điểm.`,
+    `${metric.closeLosses} thất bại của ${metric.name} kết thúc với cách biệt chỉ 1–2 điểm.`,
+  ],
+  long_game_addict: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} có ${metric.deuceMatches} trận với điểm đội thắng trên 11, nhiều nhất trong nhóm đã đánh ít nhất 8 trận.`,
+    `Trong nhóm có ít nhất 8 trận, ${metric.name} dẫn đầu số trận vượt mốc 11 điểm ở đội thắng: ${metric.deuceMatches} trận.`,
+  ],
+  bagel_loss: ({ metric }: { metric: PlayerMetrics }) => [
+    `Đội của ${metric.name} có ${metric.bagelLosses} trận thua chỉ ghi được không quá 2 điểm.`,
+    `${metric.name} trải qua ${metric.bagelLosses} trận thua mà đội nhà ghi từ 0 đến 2 điểm.`,
+  ],
+  clutch_master: ({ metric, tightWinRate }: { metric: PlayerMetrics; tightWinRate: number }) => [
+    `${metric.name} thắng ${metric.closeWins} trận sát nút, đạt ${round(tightWinRate)}% trong các trận cách biệt không quá 2 điểm.`,
+    `Ở các trận cách biệt 1–2 điểm, ${metric.name} có ${metric.closeWins} chiến thắng, tỷ lệ thắng ${round(tightWinRate)}%.`,
+  ],
+  late_collapse: ({ metric }: { metric: PlayerMetrics }) => [
+    `Trong các trận cách biệt không quá 2 điểm, ${metric.name} thắng ${metric.closeWins} và thua ${metric.closeLosses} trận.`,
+    `${metric.name} có ${metric.closeLosses} thất bại và ${metric.closeWins} chiến thắng ở những trận sát nút, cách biệt 1–2 điểm.`,
+  ],
+  score_bully: ({ metric }: { metric: PlayerMetrics; }) => [
+    `Các trận thắng của ${metric.name} có cách biệt trung bình ${oneDecimal(metric.avgWinDiff)} điểm, cao nhất nhóm có ít nhất 8 trận và 5 chiến thắng.`,
+    `${metric.name} dẫn nhóm có ít nhất 8 trận và 5 chiến thắng về cách biệt thắng trung bình: ${oneDecimal(metric.avgWinDiff)} điểm.`,
+  ],
+  low_score_magnet: ({ metric }: { metric: PlayerMetrics }) => [
+    `Đội của ${metric.name} có ${metric.lowScoreLosses} trận thua chỉ ghi được không quá 4 điểm.`,
+    `${metric.name} có ${metric.lowScoreLosses} thất bại mà đội nhà ghi từ 0 đến 4 điểm.`,
+  ],
+  hard_counter: ({ edge }: { edge: AnalysisEdge; }) => [
+    `${edge.playerName} thắng ${edge.wins}/${edge.total} trận khi hai người ở khác đội với ${edge.otherName}.`,
+    `Đối đầu có duyên: ${edge.playerName} thắng đội của ${edge.otherName} ${edge.wins}/${edge.total} lần gặp.`,
+  ],
+  target_dummy: ({ edge }: { edge: AnalysisEdge; }) => [
+    `${edge.playerName} thua ${edge.losses}/${edge.total} trận khi gặp đội của ${edge.otherName}.`,
+    `Kèo đối đầu chưa thuận: ${edge.playerName} mới thắng ${edge.wins}/${edge.total} trận trước đội của ${edge.otherName}.`,
+  ],
+  balanced_rivalry: ({ mostRepeated }: { mostRepeated: AnalysisEdge; }) => [
+    `${mostRepeated.playerName} và ${mostRepeated.otherName} có thành tích đối đầu khá cân bằng: ${mostRepeated.wins}–${mostRepeated.losses} sau ${mostRepeated.total} trận.`,
+    `Kèo đấu qua lại: ${mostRepeated.playerName} thắng ${mostRepeated.wins}, thua ${mostRepeated.losses} trận khi gặp đội của ${mostRepeated.otherName}.`,
+  ],
+  long_game_rivalry: ({ edge }: { edge: AnalysisEdge }) => [
+    `Các trận khác đội giữa ${edge.playerName} và ${edge.otherName} có ${edge.deuceGames} lần kết thúc với điểm đội thắng trên 11.`,
+    `${edge.playerName} và ${edge.otherName} đã đối đầu ${edge.deuceGames} trận có điểm đội thắng vượt mốc 11.`,
+  ],
+  boss_hunter: ({ metric, kingWins, kingName }: { metric: PlayerMetrics; kingWins: number; kingName: string }) => [
+    `${metric.name} có ${kingWins} trận thắng trước đội của ${kingName}, người hiện dẫn đầu ELO trong phạm vi đang xem.`,
+    `${metric.name} từng thắng đội của ${kingName} ${kingWins} lần; ${kingName} hiện giữ ngôi đầu ELO.`,
+  ],
+  mental_block: ({ edge }: { edge: AnalysisEdge; }) => [
+    `${edge.playerName} thắng ${edge.wins}/${edge.total} trận trước đội của ${edge.otherName}; kết quả sau khi xét kỳ vọng ELO thấp hơn mức chung của ${edge.playerName}.`,
+    `Gặp đội của ${edge.otherName}, ${edge.playerName} có ${edge.wins}/${edge.total} trận thắng, với kết quả theo kỳ vọng ELO thấp hơn mức chung.`,
+  ],
+  sweet_matchup: ({ edge }: { edge: AnalysisEdge; }) => [
+    `${edge.playerName} thắng ${edge.wins}/${edge.total} trận trước đội của ${edge.otherName}; kết quả sau khi xét kỳ vọng ELO tốt hơn mức chung của ${edge.playerName}.`,
+    `Gặp đội của ${edge.otherName}, ${edge.playerName} có ${edge.wins}/${edge.total} trận thắng và kết quả theo kỳ vọng ELO tốt hơn mức chung.`,
+  ],
+  bully_lower_elo: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} thắng ${metric.winsVsLowerElo}/${metric.totalVsLowerElo} trận gặp đội có ELO trước trận thấp hơn đội mình.`,
+    `Khi đội mình có ELO trước trận cao hơn đối phương, ${metric.name} thắng ${metric.winsVsLowerElo}/${metric.totalVsLowerElo} trận.`,
+  ],
+  victim_strong_elo: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} thua ${metric.lossesVsHigherElo}/${metric.totalVsHigherElo} trận gặp đội có ELO trước trận cao hơn đội mình.`,
+    `Khi đội mình có ELO trước trận thấp hơn đối phương, ${metric.name} thua ${metric.lossesVsHigherElo}/${metric.totalVsHigherElo} trận.`,
+  ],
+  revenge_target: ({ player, opponent, revenge }: { player: AnalysisPlayer; opponent: AnalysisPlayer; revenge: { recentWins: number; recentTotal: number } }) => [
+    `${player.name} thắng ${revenge.recentWins}/${revenge.recentTotal} trận đối đầu gần nhất với ${opponent.name}, sau khi từng có chuỗi thua trước đối thủ này.`,
+    `Kèo cũ đổi nhịp: ${player.name} có ${revenge.recentWins} chiến thắng trong ${revenge.recentTotal} lần gần nhất gặp đội của ${opponent.name}.`,
+  ],
+  iron_lung: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} ra sân nhiều nhất trong phạm vi đang xem, với ${metric.total} trận.`,
+    `Danh hiệu chăm ra sân gọi tên ${metric.name}: ${metric.total} trận, nhiều nhất nhóm.`,
+  ],
+  missing_player: ({ metric }: { metric: PlayerMetrics }) => [
+    `Đã ${metric.daysAbsent} ngày kể từ trận gần nhất được ghi nhận của ${metric.name} trong phạm vi đang xem.`,
+    `${metric.name} chưa có trận mới được ghi nhận trong ${metric.daysAbsent} ngày qua ở phạm vi đang xem.`,
+  ],
+  mercenary: ({ metric }: { metric: PlayerMetrics; }) => [
+    `${metric.name} thắng ${metric.wins}/${metric.total} trận (${round(metric.winRate)}%); số trận còn ít nên cần thêm dữ liệu.`,
+    `Ít trận nhưng kết quả đẹp: ${metric.name} thắng ${metric.wins}/${metric.total} trận. Cần thêm trận để đánh giá ổn định hơn.`,
+  ],
+  alternating_form: ({ metric }: { metric: PlayerMetrics }) => [
+    `Kết quả gần đây của ${metric.name} thường đổi chiều: ${pattern(metric.recentResults)} (T: thắng, B: bại; mới nhất trước).`,
+    `${metric.name} có chuỗi kết quả ${pattern(metric.recentResults)}, xếp từ mới đến cũ (T: thắng, B: bại), với nhiều lần đổi giữa thắng và thua.`,
+  ],
+  fine_sponsor: ({ topFine }: { topFine: PlayerMetrics }) => [
+    `Tiền phạt được tính cho ${topFine.name} là ${topFine.money.toLocaleString("vi-VN")}đ, cao nhất trong phạm vi đang xem.`,
+    `${topFine.name} dẫn nhóm về tiền phạt được tính: ${topFine.money.toLocaleString("vi-VN")}đ.`,
+  ],
+  experience_seeker: ({ metric }: { metric: PlayerMetrics; }) => [
+    `${metric.name} đã ra sân ${metric.total} trận, thắng ${metric.wins} trận (${round(metric.winRate)}%).`,
+    `Chăm cọ xát: ${metric.name} tích lũy ${metric.total} trận, với ${metric.wins} chiến thắng.`,
+  ],
+  casual_visitor: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} có ${metric.total} trận được ghi nhận, ít hơn mặt bằng chung trong phạm vi đang xem.`,
+    `Số trận của ${metric.name} còn khá ít so với nhóm: ${metric.total} trận.`,
+  ],
+  rank_camper: ({ metric, leaderboardRank, avgMatches }: { metric: PlayerMetrics; leaderboardRank: number; avgMatches: number }) => [
+    `${metric.name} đứng hạng ${leaderboardRank} với ${metric.total} trận; trung bình nhóm đã ra sân ${round(avgMatches)} trận.`,
+    `Ít trận vẫn có thứ hạng tốt: ${metric.name} xếp thứ ${leaderboardRank}, đã đánh ${metric.total} trận so với trung bình ${round(avgMatches)} trận.`,
+  ],
+  elo_inflated: ({ metric, leaderboardRank, eloRank }: { metric: PlayerMetrics; leaderboardRank: number; eloRank: number }) => [
+    `${metric.name} xếp thứ ${eloRank} theo ELO và thứ ${leaderboardRank} trên BXH tỷ lệ thắng.`,
+    `Hai góc nhìn xếp hạng của ${metric.name}: ELO thứ ${eloRank}, BXH tỷ lệ thắng thứ ${leaderboardRank}.`,
+  ],
+  elo_defied: ({ metric, leaderboardRank, eloRank }: { metric: PlayerMetrics; leaderboardRank: number; eloRank: number }) => [
+    `${metric.name} đứng thứ ${leaderboardRank} trên BXH tỷ lệ thắng, trong khi xếp thứ ${eloRank} theo ELO.`,
+    `BXH tỷ lệ thắng của ${metric.name} là hạng ${leaderboardRank}; vị trí theo ELO là hạng ${eloRank}.`,
+  ],
+  top1_gap: ({ topRank, gapText }: { topRank: PlayerMetrics; gapText: string }) => [
+    `${topRank.name} dẫn đầu BXH, hơn người thứ hai ${gapText}.`,
+    `So với người thứ hai, ${topRank.name} đang có nhiều hơn ${gapText} và giữ vị trí đầu BXH.`,
+  ],
+  late_bloomer: ({ metric, recentWins }: { metric: PlayerMetrics; recentWins: number }) => [
+    `${metric.name} thắng ${recentWins}/5 trận gần nhất, trong khi tỷ lệ thắng chung là ${round(metric.winRate)}%.`,
+    `Kết quả gần đây khởi sắc: ${metric.name} thắng ${recentWins}/5 trận, cao hơn tỷ lệ chung ${round(metric.winRate)}%.`,
+  ],
+  late_choker: ({ metric, leaderboardRank, recentLosses }: { metric: PlayerMetrics; leaderboardRank: number; recentLosses: number }) => [
+    `${metric.name} đang hạng ${leaderboardRank} BXH nhưng thua ${recentLosses}/5 trận gần nhất.`,
+    `Nhịp gần đây chưa thuận: ${metric.name} thua ${recentLosses} trong 5 trận mới nhất, hiện đứng hạng ${leaderboardRank}.`,
+  ],
+  drama_magnet: ({ metric, tightMatches }: { metric: PlayerMetrics; tightMatches: number }) => [
+    `${metric.name} có ${tightMatches}/${metric.total} trận cách biệt không quá 3 điểm hoặc có điểm đội thắng trên 11.`,
+    `Trong ${metric.total} trận của ${metric.name}, có ${tightMatches} trận sát điểm (cách biệt tối đa 3) hoặc vượt mốc 11 ở đội thắng.`,
+  ],
+  glass_cannon: ({ metric, leaderboardRank }: { metric: PlayerMetrics; leaderboardRank: number }) => [
+    `${metric.name} đang hạng ${leaderboardRank}; các trận thua có cách biệt trung bình ${oneDecimal(metric.avgLossDiff)} điểm.`,
+    `Giữ hạng ${leaderboardRank} BXH, ${metric.name} có cách biệt thua trung bình ${oneDecimal(metric.avgLossDiff)} điểm.`,
+  ],
+  stubborn_loser: ({ metric }: { metric: PlayerMetrics; }) => [
+    `${metric.name} thuộc nhóm cuối trong số người đủ điều kiện xếp hạng; các trận thua có cách biệt trung bình ${oneDecimal(metric.avgLossDiff)} điểm.`,
+    `Cách biệt thua trung bình của ${metric.name} là ${oneDecimal(metric.avgLossDiff)} điểm, dù đang ở nhóm cuối BXH đủ điều kiện.`,
+  ],
+  rank_launchpad: ({ metric, launchpadEdge, leaderboardRank }: { metric: PlayerMetrics; launchpadEdge: AnalysisEdge; leaderboardRank: number; }) => [
+    `${metric.name} đang hạng ${leaderboardRank} và có ${launchpadEdge.wins}/${launchpadEdge.total} trận thắng trước đội của ${launchpadEdge.otherName}.`,
+    `Trong thành tích của ${metric.name} (hạng ${leaderboardRank}), có ${launchpadEdge.wins} chiến thắng qua ${launchpadEdge.total} trận gặp đội của ${launchpadEdge.otherName}.`,
+  ],
+  hot_seat_threat: ({ metric, playerAbove, diff }: { metric: PlayerMetrics; playerAbove: PlayerMetrics; diff: number }) => [
+    `${metric.name} xếp ngay sau ${playerAbove.name}, với tỷ lệ thắng kém ${oneDecimal(diff)} điểm phần trăm.`,
+    `Khoảng cách tỷ lệ thắng giữa ${metric.name} và người xếp ngay trên là ${playerAbove.name} chỉ ${oneDecimal(diff)} điểm phần trăm.`,
+  ],
+  buffet_eater: ({ metric, attendance }: { metric: PlayerMetrics; attendance: { matchesPerSession: number } }) => [
+    `${metric.name} có ít ngày ra sân hơn trung bình nhóm, nhưng đánh trung bình ${oneDecimal(attendance.matchesPerSession)} trận mỗi ngày có thi đấu.`,
+    `Mỗi ngày có trận được ghi nhận, ${metric.name} đánh trung bình ${oneDecimal(attendance.matchesPerSession)} trận; số ngày ra sân thấp hơn trung bình nhóm.`,
+  ],
+  king_rescue: ({ player, partner, row }: { player: AnalysisPlayer; partner: AnalysisPlayer; row: { priorStreak: number } }) => [
+    `${player.name} từng chấm dứt chuỗi ${row.priorStreak} trận thua bằng một chiến thắng khi đánh cùng ${partner.name}.`,
+    `Một trận chung đội với ${partner.name} đã khép lại mạch ${row.priorStreak} thất bại liên tiếp của ${player.name}.`,
+  ],
+  anchor_drag: ({ player, partner, row }: { player: AnalysisPlayer; partner: AnalysisPlayer; row: { priorStreak: number } }) => [
+    `Chuỗi ${row.priorStreak} trận thắng của ${player.name} từng dừng lại ở một trận thua khi đánh cùng ${partner.name}.`,
+    `${player.name} và ${partner.name} từng thua trận đánh dấu kết thúc chuỗi ${row.priorStreak} chiến thắng của ${player.name}.`,
+  ],
+  parasite_win: ({ edge, winShareFromPartner, winRateWithoutPartner, winsWithoutPartner, totalWithoutPartner }: { edge: AnalysisEdge; winShareFromPartner: number; winRateWithoutPartner: number; winsWithoutPartner: number; totalWithoutPartner: number; }) => [
+    `${round(winShareFromPartner * 100)}% số trận thắng của ${edge.playerName} đến từ các trận đánh cùng ${edge.otherName} (${edge.wins}/${edge.total} trận thắng). Khi đánh cùng người khác: ${winsWithoutPartner}/${totalWithoutPartner} trận thắng (${winRateWithoutPartner}%).`,
+    `${edge.playerName} thắng ${edge.wins}/${edge.total} trận cùng ${edge.otherName}, so với ${winsWithoutPartner}/${totalWithoutPartner} trận khi ghép với người khác.`,
+  ],
+  gatekeeper_boss: ({ metric, edge, leaderboardRank, targetRank }: { metric: PlayerMetrics; edge: AnalysisEdge; leaderboardRank: number; targetRank: number; }) => [
+    `${metric.name} đứng hạng ${leaderboardRank} nhưng thắng ${edge.wins}/${edge.total} trận trước đội của ${edge.otherName}, người hiện ở hạng ${targetRank}.`,
+    `Kèo đối đầu đáng chú ý: ${metric.name} (hạng ${leaderboardRank}) thắng đội của ${edge.otherName} (hạng ${targetRank}) ${edge.wins}/${edge.total} lần.`,
+  ],
+  unlucky_draw: ({ metric, bottom1, partnerMatches, bottomPartnerMatches }: { metric: PlayerMetrics; bottom1: PlayerMetrics; partnerMatches: AnalysisMatch[]; bottomPartnerMatches: AnalysisMatch[] }) => [
+    `${metric.name} có ${bottomPartnerMatches.length}/${partnerMatches.length} trận đánh cùng ${bottom1.name}, người hiện xếp cuối nhóm đủ điều kiện trên BXH.`,
+    `${bottomPartnerMatches.length} trong ${partnerMatches.length} trận của ${metric.name} là chung đội với ${bottom1.name}, người đang cuối BXH đủ điều kiện.`,
+  ],
+  friendly_fire: ({ edge, partnerEdge }: { edge: AnalysisEdge; partnerEdge: AnalysisEdge; }) => [
+    `${edge.playerName} và ${edge.otherName} thắng ${partnerEdge.wins}/${partnerEdge.total} trận chung đội; khi khác đội, ${edge.playerName} thắng ${edge.wins}/${edge.total} trận.`,
+    `Chung đội có ${partnerEdge.wins}/${partnerEdge.total} chiến thắng; đối đầu nhau, ${edge.playerName} thắng ${edge.otherName} ${edge.wins}/${edge.total} lần.`,
+  ],
+  rank_takeover: ({ playerB, playerA, newRank, sessionDate }: { playerB: AnalysisPlayer; playerA: AnalysisPlayer; newRank: number; sessionDate: string }) => [
+    `Sau trận mới nhất trong dữ liệu ngày ${sessionDate}, ${playerB.name} vượt ${playerA.name} và lên hạng ${newRank} BXH.`,
+    `Trận mới nhất được ghi nhận ngày ${sessionDate} đưa ${playerB.name} lên hạng ${newRank}, vượt qua ${playerA.name}.`,
+  ],
+  top1_time: ({ metric, daysAtTop1, sessionDate }: { metric: PlayerMetrics; daysAtTop1: number; sessionDate: string }) => [
+    `Tính đến ${sessionDate}, ${metric.name} giữ ngôi đầu ở các mốc chốt ngày trong khoảng ${daysAtTop1} ngày.`,
+    `${metric.name} đứng đầu ở các mốc chốt ngày suốt khoảng ${daysAtTop1} ngày, tính đến ngày có trận mới nhất ${sessionDate}.`,
+  ],
+  stuck_in_mud: ({ metric, Rank, sessionDate }: { metric: PlayerMetrics; Rank: number; sessionDate: string }) => [
+    `Sau buổi đấu ngày ${sessionDate}, ${metric.name} vẫn giữ hạng ${Rank}, bằng vị trí trước buổi đấu.`,
+    `${metric.name} có thi đấu ngày ${sessionDate} nhưng hạng sau buổi vẫn là ${Rank}, không đổi so với trước buổi.`,
+  ],
+  quantity_over_quality: ({ metric, Rank_above, wins }: { metric: PlayerMetrics; Rank_above: PlayerMetrics; wins: number }) => [
+    `${metric.name} và ${Rank_above.name} cùng có ${wins} trận thắng, nhưng ${metric.name} thua nhiều hơn nên có tỷ lệ thắng thấp hơn và xếp sau.`,
+    `Cùng ${wins} chiến thắng như ${Rank_above.name}, ${metric.name} xếp dưới vì đánh nhiều trận hơn và có tỷ lệ thắng thấp hơn.`,
+  ],
+  vulture_win: ({ metric, bottom1, leaderboardRank, percent }: { metric: PlayerMetrics; bottom1: PlayerMetrics; leaderboardRank: number; percent: number }) => [
+    `${percent}% số trận thắng của ${metric.name} (hạng ${leaderboardRank}) là trước đội của ${bottom1.name}, người hiện cuối nhóm đủ điều kiện xếp hạng.`,
+    `${metric.name} đang hạng ${leaderboardRank}; ${percent}% chiến thắng là khi gặp đội của ${bottom1.name}, người đang cuối BXH đủ điều kiện.`,
+  ],
+  money_blackhole: ({ metric }: { metric: PlayerMetrics }) => [
+    `${metric.name} thuộc nhóm cuối BXH đủ điều kiện và có tiền phạt được tính cao nhất: ${metric.money.toLocaleString("vi-VN")}đ.`,
+    `Tiền phạt được tính của ${metric.name} là ${metric.money.toLocaleString("vi-VN")}đ, cao nhất nhóm; vị trí hiện tại thuộc nhóm cuối BXH đủ điều kiện.`,
+  ],
+  spring_jump: ({ metric, Rank, sessionDate }: { metric: PlayerMetrics; Rank: number; sessionDate: string }) => [
+    `Sau buổi đấu ngày ${sessionDate}, ${metric.name} từ nhóm cuối BXH đủ điều kiện vươn lên hạng ${Rank}.`,
+    `${metric.name} lên hạng ${Rank} sau buổi đấu ngày ${sessionDate}, cải thiện từ nhóm cuối trước buổi.`,
+  ],
+  last_laugh: ({ metric, sessionTotal, sessionDate }: { metric: PlayerMetrics; sessionTotal: number; sessionDate: string }) => [
+    `Ngày ${sessionDate}, ${metric.name} thua ${sessionTotal - 1} trận đầu rồi thắng trận cuối được ghi nhận trong ngày.`,
+    `Một trận đổi nhịp: ngày ${sessionDate}, ${metric.name} thắng trận cuối sau ${sessionTotal - 1} thất bại liên tiếp đầu ngày.`,
+  ],
+  undefeated_session: ({ metric, perfectSessionCount, latestPerfectSessionTotal, bestPerfectSessionTotal, latestPerfectSessionDate, bestPerfectSessionDate }: { metric: PlayerMetrics; perfectSessionCount: number; latestPerfectSessionTotal: number; bestPerfectSessionTotal: number; latestPerfectSessionDate: string; bestPerfectSessionDate: string }) => [
+    `${metric.name} có ${perfectSessionCount} ngày toàn thắng với ít nhất 3 trận/ngày; gần nhất là ${latestPerfectSessionDate}, thắng ${latestPerfectSessionTotal}/${latestPerfectSessionTotal} trận.`,
+    `Ngày toàn thắng nhiều trận nhất của ${metric.name} là ${bestPerfectSessionDate}, với ${bestPerfectSessionTotal} chiến thắng. Tổng cộng có ${perfectSessionCount} ngày toàn thắng từ 3 trận trở lên.`,
+  ],
+  triangle_paradox: ({ A, B, C }: { A: PlayerMetrics; B: PlayerMetrics; C: PlayerMetrics }) => [
+    `Đối đầu thành vòng: ${A.name} có lợi thế trước ${B.name}, ${B.name} trước ${C.name}, còn ${C.name} trước ${A.name}; mỗi chiều đều thắng ít nhất 60% qua tối thiểu 4 trận.`,
+    `Một vòng kèo thú vị: ${A.name} → ${B.name} → ${C.name} → ${A.name}. Mỗi người thắng ít nhất 60% số trận gặp người kế tiếp, với ít nhất 4 lần đối đầu.`,
+  ],
+  chameleon_partner: ({ metric, count, sessionDate }: { metric: PlayerMetrics; count: number; sessionDate: string }) => [
+    `Trong 7 ngày tính đến ${sessionDate}, ${metric.name} đạt tỷ lệ thắng từ 55% khi đánh cùng ${count} đồng đội khác nhau; mỗi cặp có ít nhất 3 trận.`,
+    `${metric.name} có ${count} đồng đội mà khi ghép cặp đạt từ 55% trận thắng (ít nhất 3 trận/cặp), trong 7 ngày tính đến ${sessionDate}.`,
+  ],
+  quick_finisher: ({ metric, count, sessionDate }: { metric: PlayerMetrics; count: number; sessionDate: string }) => [
+    `Trong 7 ngày tính đến ${sessionDate}, cả ${count} trận của ${metric.name} đều có điểm đội thắng không quá 11.`,
+    `${metric.name} đánh ${count} trận trong 7 ngày tính đến ${sessionDate}; không trận nào có điểm đội thắng vượt 11.`,
+  ],
+  attendance_king: ({ metric, percent }: { metric: PlayerMetrics; percent: number }) => [
+    `${metric.name} góp mặt trong ${round(percent)}% số ngày có trận được ghi nhận, cao nhất nhóm đang xem.`,
+    `Dẫn đầu chuyên cần: ${metric.name} có trận trong ${round(percent)}% số ngày thi đấu được ghi nhận.`,
+  ],
+  charity_top_rank: ({ metric, bottom1, recentLossesVsBottom1 }: { metric: PlayerMetrics; bottom1: PlayerMetrics; recentLossesVsBottom1: number }) => [
+    `${metric.name} hiện dẫn đầu BXH nhưng thua ${recentLossesVsBottom1} trận trước đội của ${bottom1.name} trong tối đa 10 trận gần nhất; ${bottom1.name} hiện cuối nhóm đủ điều kiện.`,
+    `Trong tối đa 10 trận gần nhất, ${metric.name} thua đội của ${bottom1.name} ${recentLossesVsBottom1} lần. Hiện hai người đứng đầu và cuối BXH đủ điều kiện.`,
+  ],
+  golden_victim: ({ metric, goldenPickled }: { metric: PlayerMetrics; goldenPickled: number }) => [
+    `${metric.name} có ${goldenPickled} trận thua mà đội nhà không ghi được điểm nào.`,
+    `Dữ liệu đang xem ghi nhận ${goldenPickled} lần đội của ${metric.name} thua với 0 điểm.`,
+  ],
 };
 
+const VARIANTS = INSIGHT_TEXT_VARIANTS;
 
 function buildStreakBreakers(snapshot: AnalysisSnapshot) {
   const rows: Array<{ playerId: string; targetId: string; streak: number; matchId: string; matchTime: number }> = [];
@@ -2967,7 +1128,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
 
   if (topElo && topElo.total >= 8) {
     const gap = topElo.rating - (secondElo?.rating ?? 1500);
-    const text = getRandomVariant(VARIANTS.elo_king({ topElo, gap }), random);
+    const text = getRandomVariant(VARIANTS.elo_king({ topElo }), random);
     addCandidate(candidates, snapshot, {
       type: 'elo_king',
       title: '👑 ÔNG TRÙM ELO',
@@ -3003,7 +1164,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
     const winRateGap = topRank.winRate - secondRank.winRate;
     const winsGap = topRank.wins - secondRank.wins;
     if (winRateGap >= 15 || winsGap >= 5) {
-      const gapText = winsGap >= 5 ? `${winsGap} trận thắng` : `${round(winRateGap)} điểm win rate`;
+      const gapText = winsGap >= 5 ? `${winsGap} trận thắng` : `${oneDecimal(winRateGap)} điểm phần trăm tỷ lệ thắng`;
       const text = getRandomVariant(VARIANTS.top1_gap({ topRank, gapText }), random);
       addCandidate(candidates, snapshot, {
         type: 'top1_gap',
@@ -3197,7 +1358,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
       const text = getRandomVariant(VARIANTS.rank_camper({ metric, leaderboardRank, avgMatches }), random);
       addCandidate(candidates, snapshot, {
         type: 'rank_camper',
-        title: '⛺ GIỮ RANK KIỂU NẤP LÙM',
+        title: '⛺ ÍT TRẬN, HẠNG CAO',
         group: 'rank',
         participantIds: [metric.id],
         rarity: 'uncommon',
@@ -3213,7 +1374,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
       const text = getRandomVariant(VARIANTS.elo_inflated({ metric, eloRank, leaderboardRank }), random);
       addCandidate(candidates, snapshot, {
         type: 'elo_inflated',
-        title: '🎈 ELO HƠI CĂNG',
+        title: '🎈 HAI GÓC XẾP HẠNG',
         group: 'elo',
         participantIds: [metric.id],
         rarity: 'uncommon',
@@ -3229,7 +1390,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
       const text = getRandomVariant(VARIANTS.elo_defied({ metric, eloRank, leaderboardRank }), random);
       addCandidate(candidates, snapshot, {
         type: 'elo_defied',
-        title: '🧱 THỰC CHIẾN VƯỢT ELO',
+        title: '🧱 BXH VÀ ELO',
         group: 'elo',
         participantIds: [metric.id],
         rarity: 'uncommon',
@@ -3245,7 +1406,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
       const text = getRandomVariant(VARIANTS.late_bloomer({ metric, recentWins }), random);
       addCandidate(candidates, snapshot, {
         type: 'late_bloomer',
-        title: '🌱 NƯỚC RÚT KHÉT',
+        title: '🌱 NHỊP MỚI KHỞI SẮC',
         group: 'form',
         participantIds: [metric.id],
         rarity: 'uncommon',
@@ -3276,7 +1437,7 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
     const currentRank = eloRank;
     const oldRank = oldRanks.findIndex(row => row.id === metric.id) + 1;
     const places = oldRank > 0 && currentRank > 0 ? oldRank - currentRank : 0;
-    if (places >= 2 && recentWins >= 3) {
+    if (places >= 2 && recentWins >= 3 && recentTotal === 5) {
       const text = getRandomVariant(VARIANTS.elo_climber({ metric, places, recentWins }), random);
       addCandidate(candidates, snapshot, {
         type: 'elo_climber',
@@ -3292,22 +1453,19 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
       });
     }
 
-    // Playstyle candidates (Need at least 5 matches to establish playstyle)
+    // Radar summaries need at least 5 matches; scores do not identify a playing style.
     if (metric.total >= 5) {
       const attack = Math.round(metric.attackScore);
       const defense = Math.round(metric.defenseScore);
 
       if (attack >= 65 && defense < 65) {
         const texts = [
-          `Với điểm Công vượt trội (${attack}đ) và Thủ trung bình (${defense}đ), ${metric.name} đang định hình rõ lối chơi "Sát Thủ Bắn Lưới" – chủ động ép sân và tấn công dồn dập.`,
-          `Lối chơi tấn công áp đảo: ${metric.name} (Công ${attack}đ - Thủ ${defense}đ) liên tục đẩy cao tốc độ bóng, xứng đáng là Sát Thủ Bắn Lưới của giải.`,
-          `Thích chủ động áp đặt thế trận, ${metric.name} (Công ${attack}đ) luôn là mũi tấn công sắc bén dứt điểm nhanh gọn mỗi khi đứng lưới.`,
-          `Hỏa lực dồi dào nhưng phòng ngự ở mức trung bình, ${metric.name} (Thủ ${defense}đ) chơi đúng phong cách một Sát Thủ Bắn Lưới đích thực.`,
-          `Mỗi khi lên lưới, ${metric.name} (Công ${attack}đ) lập tiếp tục gây sức ép lớn buộc đối phương tự hỏng. Một lối chơi tấn công vô cùng phóng khoáng.`
+          `${metric.name} có điểm Công ${attack}/100 và Thủ ${defense}/100 trên radar, tính từ tỷ số các trận đôi.`,
+          `Radar của ${metric.name} nghiêng về Công: ${attack}/100, so với Thủ ${defense}/100. Đây là chỉ số từ kết quả đội.`,
         ];
         addCandidate(candidates, snapshot, {
           type: 'net_assassin',
-          title: '🏹 SÁT THỦ BẮN LƯỚI',
+          title: '🏹 RADAR NGHIÊNG CÔNG',
           group: 'elo',
           participantIds: [metric.id],
           rarity: 'rare',
@@ -3319,15 +1477,12 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
         });
       } else if (defense >= 65 && attack < 65) {
         const texts = [
-          `Điểm Thủ ấn tượng (${defense}đ) và Công trung bình (${attack}đ) biến ${metric.name} thành một "Chốt Chặn Bền Bỉ" – hậu phương cực kỳ vững chắc và ít tự hỏng.`,
-          `Lối chơi vô cùng an toàn và kiên nhẫn: ${metric.name} (Thủ ${defense}đ) luôn bọc lót tốt cho đồng đội và hạn chế tối đa sai lầm.`,
-          `Được ví như bức tường thành kiên cố, ${metric.name} (Thủ ${defense}đ - Công ${attack}đ) kiên cường trả bóng bền bỉ buộc đối thủ phải nản lòng.`,
-          `Không quá bùng nổ ở khâu dứt điểm nhưng cực kỳ chắc chắn ở phòng tuyến, ${metric.name} chính là một Chốt Chặn Bền Bỉ đáng tin cậy.`,
-          `Sự điềm tĩnh và bọc lót thông minh giúp ${metric.name} (Thủ ${defense}đ) trở thành điểm tựa vững chãi cho bất kỳ đồng đội nào đá cặp cùng.`
+          `${metric.name} có điểm Thủ ${defense}/100 và Công ${attack}/100 trên radar, tính từ tỷ số các trận đôi.`,
+          `Radar của ${metric.name} nghiêng về Thủ: ${defense}/100, so với Công ${attack}/100. Đây là chỉ số từ kết quả đội.`,
         ];
         addCandidate(candidates, snapshot, {
           type: 'steady_wall',
-          title: '🧱 CHỐT CHẶN BỀN BỈ',
+          title: '🧱 RADAR NGHIÊNG THỦ',
           group: 'elo',
           participantIds: [metric.id],
           rarity: 'rare',
@@ -3339,15 +1494,12 @@ function addFormAndEloCandidates(candidates: InsightCandidate[], snapshot: Analy
         });
       } else {
         const texts = [
-          `Sở hữu các thông số cân đối (Công ${attack}đ - Thủ ${defense}đ), ${metric.name} điều phối trận đấu vô cùng nhịp nhàng và thích nghi linh hoạt theo đồng đội.`,
-          `Lối chơi "Nhịp Điệu Cân Bằng" giúp ${metric.name} (Công ${attack}đ - Thủ ${defense}đ) giữ thế trận ổn định và kiểm soát tốt khu trung tuyến.`,
-          `Cân bằng hoàn hảo: ${metric.name} không quá thiên lệch về công hay thủ, chơi điềm tĩnh và giữ nhịp độ trận đấu cực kỳ chuẩn mực.`,
-          `Một cầu thủ toàn diện trong việc điều tiết lối chơi, ${metric.name} (Công ${attack}đ - Thủ ${defense}đ) luôn mang lại sự an tâm bằng sự cân bằng.`,
-          `Khả năng đọc tình huống và thích ứng cao giúp ${metric.name} giữ vững Nhịp Điệu Cân Bằng cho đội trong mọi hoàn cảnh khó khăn.`
+          `Radar của ${metric.name} ghi nhận Công ${attack}/100 và Thủ ${defense}/100, tính từ tỷ số các trận đôi.`,
+          `${metric.name} có chỉ số Công ${attack}/100, Thủ ${defense}/100 theo kết quả đội trong phạm vi đang xem.`,
         ];
         addCandidate(candidates, snapshot, {
           type: 'balanced_tempo',
-          title: '🔵 NHỊP ĐIỆU CÂN BẰNG',
+          title: '🔵 GÓC NHÌN RADAR',
           group: 'elo',
           participantIds: [metric.id],
           rarity: 'common',
@@ -3382,7 +1534,7 @@ function addStoryCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
         X_val = targetMatchesAfter.length;
       }
       if (state > 0) {
-        const text = getRandomVariant(VARIANTS.streak_breaker({ player, target, breaker, X: X_val, state }), random);
+        const text = getRandomVariant(VARIANTS.streak_breaker({ player, target, breaker, X: X_val }), random);
         addCandidate(candidates, snapshot, {
           type: 'streak_breaker',
           title: '✂️ CẮT CHUỖI',
@@ -3426,7 +1578,7 @@ function addStoryCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
     const text = getRandomVariant(VARIANTS.anchor_drag({ player, partner, row }), random);
     addCandidate(candidates, snapshot, {
       type: 'anchor_drag',
-      title: '⚓ ĐỨT MẠCH VÌ KÈO NẶNG',
+      title: '⚓ ĐỨT MẠCH THẮNG',
       group: 'partner',
       participantIds: [player.id, partner.id],
       rarity: row.priorStreak >= 6 ? 'epic' : 'rare',
@@ -3444,17 +1596,6 @@ function addStoryCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
       if (player.id === opponent.id) return;
       const meetings = sortOldest(snapshot.rankingMatches.filter(match => opponentIdsForPlayer(match, player.id).includes(opponent.id)));
       if (meetings.length < 4) return;
-
-      let priorLosses = 0;
-      let bestPriorLosses = 0;
-      meetings.forEach(match => {
-        if (resultForPlayer(match, player.id) === 'L') {
-          priorLosses++;
-        } else {
-          bestPriorLosses = Math.max(bestPriorLosses, priorLosses);
-          priorLosses = 0;
-        }
-      });
 
       const revState = getRevengeState(meetings, player.id);
       if (revState && revState.active) {
@@ -3477,13 +1618,7 @@ function addStoryCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
   revengeRows.sort((a, b) => b.priorLosses - a.priorLosses || b.recentWins - a.recentWins);
   const bestRevenge = revengeRows[0];
   if (bestRevenge) {
-    const textRevenge = getRandomVariant(VARIANTS.revenge_win({
-      player: bestRevenge.player,
-      opponent: bestRevenge.opponent,
-      revenge: { priorLosses: bestRevenge.priorLosses },
-      Y: bestRevenge.Y,
-      state: bestRevenge.state
-    }), random);
+    const textRevenge = getRandomVariant(VARIANTS.revenge_win({ player: bestRevenge.player, opponent: bestRevenge.opponent, revenge: { priorLosses: bestRevenge.priorLosses }, Y: bestRevenge.Y }), random);
 
     addCandidate(candidates, snapshot, {
       type: 'revenge_win',
@@ -3499,11 +1634,7 @@ function addStoryCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
     });
 
     if (bestRevenge.recentWins >= 2) {
-      const textTarget = getRandomVariant(VARIANTS.revenge_target({
-        player: bestRevenge.player,
-        opponent: bestRevenge.opponent,
-        revenge: { recentWins: bestRevenge.recentWins, recentTotal: bestRevenge.recentTotal }
-      }), random);
+      const textTarget = getRandomVariant(VARIANTS.revenge_target({ player: bestRevenge.player, opponent: bestRevenge.opponent, revenge: { recentWins: bestRevenge.recentWins, recentTotal: bestRevenge.recentTotal } }), random);
 
       addCandidate(candidates, snapshot, {
         type: 'revenge_target',
@@ -3525,7 +1656,7 @@ function addStoryCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
     const playerB = snapshot.metrics.get(takeover.playerBId);
     const playerA = snapshot.metrics.get(takeover.playerAId);
     if (playerB && playerA) {
-      const text = getRandomVariant(VARIANTS.rank_takeover({ playerB, playerA, newRank: takeover.newRank }), random);
+      const text = getRandomVariant(VARIANTS.rank_takeover({ playerB, playerA, newRank: takeover.newRank, sessionDate: latestSessionDate(snapshot) }), random);
       addCandidate(candidates, snapshot, {
         type: 'rank_takeover',
         title: '🏎️ SOÁN NGÔI',
@@ -3547,7 +1678,6 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
   const pairEdges = uniquePartnerPairs(snapshot.partnerEdges);
   const gluedPairs = uniquePartnerPairs(snapshot.partnerEdges).sort((a, b) => b.edge.total - a.edge.total || b.edge.confidence - a.edge.confidence);
   const glued = gluedPairs[0]?.edge || null;
-  const secondGlued = gluedPairs[1]?.edge || null;
   const ranks = rankBoard(snapshot);
   const rankById = new Map(ranks.map((metric, index) => [metric.id, index + 1]));
   const bottom1 = ranks[ranks.length - 1];
@@ -3555,7 +1685,6 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
   const avgPairTotal = snapshot.partnerEdges.length > 0 ? average(snapshot.partnerEdges.map(e => e.total)) : 0;
 
   pairEdges.forEach(({ edge, maxAbsImpact }) => {
-    const otherMetric = snapshot.metrics.get(edge.otherId);
 
     if (edge.total >= 4 && edge.rate >= 75) {
       const text = getRandomVariant(VARIANTS.perfect_duo({ edge }), random);
@@ -3684,7 +1813,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
       const text = getRandomVariant(VARIANTS.partner_drag({ edge }), random);
       addCandidate(candidates, snapshot, {
         type: 'partner_drag',
-        title: '🪨 QUẢ TẠ VÀNG',
+        title: '🪨 CẶP CHƯA VÀO GUỒNG',
         group: 'partner',
         participantIds: [edge.playerId, edge.otherId],
         rarity: edge.impact <= -25 ? 'epic' : 'rare',
@@ -3701,7 +1830,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
       const text = getRandomVariant(VARIANTS.carry_partner({ edge, otherMetric }), random);
       addCandidate(candidates, snapshot, {
         type: 'carry_partner',
-        title: '🏋️ GÁNH CÒNG LƯNG',
+        title: '🏋️ CẶP CÓ ĐÀ THẮNG',
         group: 'partner',
         participantIds: [edge.playerId, edge.otherId],
         rarity: 'rare',
@@ -3717,7 +1846,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
       const text = getRandomVariant(VARIANTS.heavy_backpack({ edge, otherMetric }), random);
       addCandidate(candidates, snapshot, {
         type: 'heavy_backpack',
-        title: '🎒 NẶNG VAI',
+        title: '🎒 CẶP KHÓ KIẾM THẮNG',
         group: 'partner',
         participantIds: [edge.playerId, edge.otherId],
         rarity: 'rare',
@@ -3733,7 +1862,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
   repeated.forEach(edge => {
     const playerMetric = snapshot.metrics.get(edge.playerId);
     const otherRank = rankById.get(edge.otherId) || 0;
-    if (!playerMetric || playerMetric.wins <= 0 || otherRank > 2) return;
+    if (!playerMetric || playerMetric.wins <= 0 || otherRank < 1 || otherRank > 2) return;
 
     const matchesWithoutPartner = snapshot.rankingMatches.filter(match =>
       playerInMatch(match, edge.playerId) && partnerIdForPlayer(match, edge.playerId) !== edge.otherId
@@ -3743,17 +1872,10 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
     const winShareFromPartner = edge.wins / playerMetric.wins;
 
     if (edge.wins >= 4 && winShareFromPartner >= 0.6 && matchesWithoutPartner.length >= 3 && winRateWithoutPartner < 30) {
-      const text = getRandomVariant(VARIANTS.parasite_win({
-        edge,
-        winShareFromPartner,
-        winRateWithoutPartner,
-        otherRank,
-        winsWithoutPartner,
-        totalWithoutPartner: matchesWithoutPartner.length
-      }), random);
+      const text = getRandomVariant(VARIANTS.parasite_win({ edge, winShareFromPartner, winRateWithoutPartner, winsWithoutPartner, totalWithoutPartner: matchesWithoutPartner.length }), random);
       addCandidate(candidates, snapshot, {
         type: 'parasite_win',
-        title: '🧲 BÁM CÀNG KIẾM ĐIỂM',
+        title: '🧲 ĐỐI TÁC THÂN QUEN',
         group: 'partner',
         participantIds: [edge.playerId, edge.otherId],
         rarity: winShareFromPartner >= 0.75 ? 'epic' : 'rare',
@@ -3767,9 +1889,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
   });
 
   if (glued && glued.total >= 8) {
-    const gap = glued.total - (secondGlued ? secondGlued.total : 0);
-    const state = gap >= 2 ? 1 : 2;
-    const text = getRandomVariant(VARIANTS.glued_pair({ glued, state }), random);
+    const text = getRandomVariant(VARIANTS.glued_pair({ glued }), random);
     addCandidate(candidates, snapshot, {
       type: 'glued_pair',
       title: '🔗 DÍNH NHAU NHẤT SÂN',
@@ -3791,11 +1911,11 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
       return Boolean(partnerId && bottom1 && partnerId === bottom1.id);
     });
     const bottomPartnerShare = partnerMatches.length > 0 ? bottomPartnerMatches.length / partnerMatches.length : 0;
-    if (bottom1 && metric.id !== bottom1.id && partnerMatches.length >= 10 && bottomPartnerMatches.length >= 4 && bottomPartnerShare >= 0.4) {
+    if (ranks.length >= 2 && bottom1 && metric.id !== bottom1.id && partnerMatches.length >= 10 && bottomPartnerMatches.length >= 4 && bottomPartnerShare >= 0.4) {
       const text = getRandomVariant(VARIANTS.unlucky_draw({ metric, bottom1, bottomPartnerMatches, partnerMatches }), random);
       addCandidate(candidates, snapshot, {
         type: 'unlucky_draw',
-        title: '🎲 BỐC THĂM HƠI XUI',
+        title: '🎲 DUYÊN GHÉP CẶP',
         group: 'partner',
         participantIds: [metric.id, bottom1.id],
         rarity: bottomPartnerShare >= 0.5 || bottomPartnerMatches.length >= 6 ? 'rare' : 'uncommon',
@@ -3817,7 +1937,7 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
       const text = getRandomVariant(VARIANTS.cover_master({ metric }), random);
       addCandidate(candidates, snapshot, {
         type: 'cover_master',
-        title: '🩹 TRÙM BỌC LÓT',
+        title: '🩹 ĐIỂM PHỐI HỢP NỔI BẬT',
         group: 'partner',
         participantIds: [metric.id],
         rarity: 'rare',
@@ -3842,9 +1962,9 @@ function addPartnerCandidates(candidates: InsightCandidate[], snapshot: Analysis
       if (resultForPlayer(m, metric.id) === 'W') stat.wins++;
       partnerStats.set(partnerId, stat);
     });
-    const qualifiedPartners = Array.from(partnerStats.entries()).filter(([_, stat]) => stat.wins / stat.total >= 0.55);
+    const qualifiedPartners = Array.from(partnerStats.values()).filter(stat => stat.total >= 3 && stat.wins / stat.total >= 0.55);
     if (qualifiedPartners.length >= 3) {
-      const text = getRandomVariant(VARIANTS.chameleon_partner({ metric, count: qualifiedPartners.length }), random);
+      const text = getRandomVariant(VARIANTS.chameleon_partner({ metric, count: qualifiedPartners.length, sessionDate: latestSessionDate(snapshot) }), random);
       addCandidate(candidates, snapshot, {
         type: 'chameleon_partner',
         title: '🦎 BẠN ĐỒNG HÀNH ĐA NĂNG',
@@ -3865,7 +1985,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
   const active = snapshot.playerMetrics.filter(metric => metric.total > 0);
   const ranks = rankBoard(snapshot);
   const rankById = new Map(ranks.map((metric, index) => [metric.id, index + 1]));
-  const bottomRankIds = new Set(ranks.slice(-2).map(metric => metric.id));
+  const bottomRankIds = new Set(ranks.length >= 4 ? ranks.slice(-2).map(metric => metric.id) : []);
   const topAttack = [...active].filter(metric => metric.total >= 8).sort((a, b) => b.avgPointsFor - a.avgPointsFor)[0];
   const avgConceded = active.reduce((sum, metric) => sum + metric.avgConceded, 0) / Math.max(1, active.length);
   const defenseLeaders = new Set([...active]
@@ -3883,7 +2003,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
       const text = getRandomVariant(VARIANTS.top_attack({ metric }), random);
       addCandidate(candidates, snapshot, {
         type: 'top_attack',
-        title: '💣 CỖ MÁY DẬP BÓNG',
+        title: '💣 ĐỘI GHI ĐIỂM ĐỀU',
         group: 'score',
         participantIds: [metric.id],
         rarity: 'uncommon',
@@ -3933,7 +2053,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
       const text = getRandomVariant(VARIANTS.glass_cannon({ metric, leaderboardRank }), random);
       addCandidate(candidates, snapshot, {
         type: 'glass_cannon',
-        title: '💥 CÔNG TO GIÁP MỎNG',
+        title: '💥 TOP ĐẦU, THUA CÁCH BIỆT',
         group: 'score',
         participantIds: [metric.id],
         rarity: metric.avgLossDiff >= 5.5 ? 'rare' : 'uncommon',
@@ -3965,7 +2085,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
       const text = getRandomVariant(VARIANTS.dominant_closer({ metric }), random);
       addCandidate(candidates, snapshot, {
         type: 'dominant_closer',
-        title: '⚰️ ĐÓNG HÒM CHÓNG VÁNH',
+        title: '⚰️ THẮNG CÁCH BIỆT',
         group: 'score',
         participantIds: [metric.id],
         rarity: metric.dominantWins >= 6 ? 'rare' : 'uncommon',
@@ -3978,10 +2098,10 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
     }
 
     if (metric.closeLosses >= 3) {
-      const text = getRandomVariant(VARIANTS.close_loss({ metric, closeLosses: metric.closeLosses }), random);
+      const text = getRandomVariant(VARIANTS.close_loss({ metric }), random);
       addCandidate(candidates, snapshot, {
         type: 'close_loss',
-        title: '🥲 THÁNH NHỌ SÂN BÃI',
+        title: '🥲 TIẾC NUỐI SÁT NÚT',
         group: 'score',
         participantIds: [metric.id],
         rarity: metric.closeLosses >= 5 ? 'rare' : 'uncommon',
@@ -4031,7 +2151,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
       const text = getRandomVariant(VARIANTS.clutch_master({ metric, tightWinRate: tightWinRate * 100 }), random);
       addCandidate(candidates, snapshot, {
         type: 'clutch_master',
-        title: '💪 CÀNG CUỐI CÀNG LÌ',
+        title: '💪 CÓ DUYÊN TRẬN SÁT NÚT',
         group: 'score',
         participantIds: [metric.id],
         rarity: metric.closeWins >= 5 ? 'rare' : 'uncommon',
@@ -4104,7 +2224,6 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
       });
     });
     const uniqueDays = dayCounts.size;
-    const sessionCounts = Array.from(dayCounts.values());
     const matchesPerSession = uniqueDays > 0 ? metric.total / uniqueDays : 0;
     const allUniqueDays = active.map(m => {
       const counts = new Map<string, number>();
@@ -4198,14 +2317,7 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
         const isLatestPerfectSession = latestPerfectSession.dayKey === latestSessionDayKey;
         const latestPerfectSessionDate = formatDayKey(latestPerfectSession.dayKey);
         const bestPerfectSessionDate = formatDayKey(bestPerfectSession.dayKey);
-        const text = getRandomVariant(VARIANTS.undefeated_session({
-          metric,
-          perfectSessionCount,
-          latestPerfectSessionDate,
-          latestPerfectSessionTotal: latestPerfectSession.total,
-          bestPerfectSessionDate,
-          bestPerfectSessionTotal: bestPerfectSession.total,
-        }), random);
+        const text = getRandomVariant(VARIANTS.undefeated_session({ metric, perfectSessionCount, latestPerfectSessionDate, latestPerfectSessionTotal: latestPerfectSession.total, bestPerfectSessionDate, bestPerfectSessionTotal: bestPerfectSession.total }), random);
         addCandidate(candidates, snapshot, {
           type: 'undefeated_session',
           title: '🏅 NGÀY KHÔNG THUA',
@@ -4232,10 +2344,10 @@ function addScoreCandidates(candidates: InsightCandidate[], snapshot: AnalysisSn
     const totalInWeek = weekMatchesForQF.length;
     const deuceInWeek = weekMatchesForQF.filter(m => Number(m.win_score || 0) > 11).length;
     if (totalInWeek >= 10 && deuceInWeek === 0) {
-      const text = getRandomVariant(VARIANTS.quick_finisher({ metric, count: totalInWeek }), random);
+      const text = getRandomVariant(VARIANTS.quick_finisher({ metric, count: totalInWeek, sessionDate: latestSessionDate(snapshot) }), random);
       addCandidate(candidates, snapshot, {
         type: 'quick_finisher',
-        title: '⚡ ĐÁNH NHANH RÚT GỌN',
+        title: '⚡ GỌN TRONG 11 ĐIỂM',
         group: 'score',
         participantIds: [metric.id],
         rarity: 'uncommon',
@@ -4284,7 +2396,7 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
       const text = getRandomVariant(VARIANTS.target_dummy({ edge }), random);
       addCandidate(candidates, snapshot, {
         type: 'target_dummy',
-        title: '🧸 BỊCH BÔNG GIẢI TRÍ',
+        title: '🧸 KÈO CHƯA THUẬN',
         group: 'opponent',
         participantIds: [edge.playerId, edge.otherId],
         rarity: edge.total >= 6 ? 'epic' : 'rare',
@@ -4318,7 +2430,7 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
       const text = getRandomVariant(VARIANTS.friendly_fire({ edge, partnerEdge }), random);
       addCandidate(candidates, snapshot, {
         type: 'friendly_fire',
-        title: '🎯 ĐỒNG ĐỘI HAY NẠN NHÂN',
+        title: '🎯 BẠN ĐẤU HAI VAI',
         group: 'opponent',
         participantIds: [edge.playerId, edge.otherId],
         rarity: edge.rate >= 90 ? 'rare' : 'uncommon',
@@ -4334,7 +2446,7 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
       const text = getRandomVariant(VARIANTS.mental_block({ edge }), random);
       addCandidate(candidates, snapshot, {
         type: 'mental_block',
-        title: '🧊 KHỚP KÈO',
+        title: '🧊 KÈO KHÓ KIẾM THẮNG',
         group: 'opponent',
         participantIds: [edge.playerId, edge.otherId],
         rarity: edge.impact <= -25 ? 'epic' : 'rare',
@@ -4486,42 +2598,12 @@ function addOpponentCandidates(candidates: InsightCandidate[], snapshot: Analysi
   });
 }
 
-function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnapshot, random?: () => number) {
+function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnapshot, random?: () => number, includeAbsence = true) {
   const active = snapshot.playerMetrics.filter(metric => metric.total > 0);
   const topActivity = [...active].sort((a, b) => b.total - a.total || b.dailyMaxMatches - a.dailyMaxMatches)[0];
-  const topFine = [...active].sort((a, b) => b.money - a.money || b.losses - a.losses)[0];
+  const topFine = [...snapshot.playerMetrics].sort((a, b) => b.money - a.money || b.losses - a.losses)[0];
   const avgMatches = active.reduce((sum, metric) => sum + metric.total, 0) / Math.max(1, active.length);
-  const dayCountsByPlayer = new Map<string, Map<string, number>>();
-
-  snapshot.rankingMatches.forEach(match => {
-    const day = matchDayKey(match);
-    if (!day) return;
-    [match.win_1, match.win_2, match.lose_1, match.lose_2].filter((id): id is string => Boolean(id)).forEach(playerId => {
-      const counts = dayCountsByPlayer.get(playerId) || new Map<string, number>();
-      counts.set(day, (counts.get(day) || 0) + 1);
-      dayCountsByPlayer.set(playerId, counts);
-    });
-  });
-
-  const attendanceRows = active.map(metric => {
-    const dayCounts = dayCountsByPlayer.get(metric.id) || new Map<string, number>();
-    const days = [...dayCounts.keys()].sort();
-    const sessionCounts = [...dayCounts.values()];
-    const dayTimes = days.map(day => new Date(`${day}T00:00:00Z`).getTime()).filter(time => Number.isFinite(time));
-    const gaps = dayTimes.slice(1).map((time, index) => Math.max(0, Math.round((time - dayTimes[index]) / 86400000)));
-    return {
-      metric,
-      uniqueDays: days.length,
-      matchesPerSession: sessionCounts.length ? metric.total / sessionCounts.length : 0,
-      gapStdDev: standardDeviation(gaps),
-      maxGap: gaps.length ? Math.max(...gaps) : 0,
-    };
-  });
-  const avgDays = average(attendanceRows.map(row => row.uniqueDays));
-  const avgMatchesPerSession = average(attendanceRows.map(row => row.matchesPerSession));
-  const attendanceById = new Map(attendanceRows.map(row => [row.metric.id, row]));
-
-  // previous board for spring_jump and quantity_over_quality
+  // Previous board for spring_jump and quantity_over_quality
   const prevBoard = buildPreviousSessionBoard(snapshot);
   const prevRankById = new Map(prevBoard.map((p, index) => [p.id, index + 1]));
 
@@ -4530,7 +2612,6 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
   const top1Player = ranks[0];
 
   active.forEach(metric => {
-    const attendance = attendanceById.get(metric.id);
     const leaderboardRank = rankById.get(metric.id) || 0;
 
     if (topActivity?.id === metric.id && metric.total >= 20) {
@@ -4554,7 +2635,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
       }
     }
 
-    if (metric.daysAbsent !== null && metric.daysAbsent >= 7) {
+    if (includeAbsence && metric.daysAbsent !== null && metric.daysAbsent >= 7) {
       const text = getRandomVariant(VARIANTS.missing_player({ metric }), random);
       addCandidate(candidates, snapshot, {
         type: 'missing_player',
@@ -4588,7 +2669,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
     }
 
     if (metric.total > 0 && metric.total < avgMatches * 0.4) {
-      const text = getRandomVariant(VARIANTS.casual_visitor({ metric, avgMatches }), random);
+      const text = getRandomVariant(VARIANTS.casual_visitor({ metric }), random);
       addCandidate(candidates, snapshot, {
         type: 'casual_visitor',
         title: '🎟️ KHÁCH MỜI DANH DỰ',
@@ -4640,7 +2721,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
     if (leaderboardRank === 1 && top1Player) {
       const daysAtTop1 = calculateDaysAtTop1(snapshot, top1Player.id);
       if (daysAtTop1 >= 14) {
-        const text = getRandomVariant(VARIANTS.top1_time({ metric, daysAtTop1 }), random);
+        const text = getRandomVariant(VARIANTS.top1_time({ metric, daysAtTop1, sessionDate: latestSessionDate(snapshot) }), random);
         addCandidate(candidates, snapshot, {
           type: 'top1_time',
           title: '👑 VỊ VƯƠNG TRƯỜNG KỲ',
@@ -4658,8 +2739,8 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
 
     // stuck_in_mud (75)
     const previousRank = prevRankById.get(metric.id);
-    if (previousRank && leaderboardRank === previousRank && leaderboardRank >= 3 && metric.total >= 5) {
-      const text = getRandomVariant(VARIANTS.stuck_in_mud({ metric, Rank: leaderboardRank, recentMatches: metric.total }), random);
+    if (previousRank && leaderboardRank === previousRank && leaderboardRank >= 3 && metric.total >= 5 && playedLatestSession(snapshot, metric.id)) {
+      const text = getRandomVariant(VARIANTS.stuck_in_mud({ metric, Rank: leaderboardRank, sessionDate: latestSessionDate(snapshot) }), random);
       addCandidate(candidates, snapshot, {
         type: 'stuck_in_mud',
         title: '⛺ KẸT TRONG BÙN',
@@ -4682,7 +2763,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
         const text = getRandomVariant(VARIANTS.quantity_over_quality({ metric, Rank_above, wins: metric.wins }), random);
         addCandidate(candidates, snapshot, {
           type: 'quantity_over_quality',
-          title: '📉 LẤY CÔNG BÙ THỦ',
+          title: '📉 CÙNG THẮNG, KHÁC HẠNG',
           group: 'fun',
           participantIds: [metric.id, Rank_above.id],
           rarity: 'uncommon',
@@ -4695,7 +2776,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
     }
 
     // vulture_win (77)
-    if (leaderboardRank > 0 && leaderboardRank <= 2 && metric.wins >= 5 && ranks.length > 0) {
+    if (leaderboardRank > 0 && leaderboardRank <= 2 && metric.wins >= 5 && ranks.length >= 4) {
       const bottom1 = ranks[ranks.length - 1];
       if (bottom1) {
         const winsVsBottom1 = snapshot.rankingMatches.filter(m =>
@@ -4708,7 +2789,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
           const text = getRandomVariant(VARIANTS.vulture_win({ metric, bottom1, percent, leaderboardRank }), random);
           addCandidate(candidates, snapshot, {
             type: 'vulture_win',
-            title: '🦅 KỀN KỀN ĂN ĐIỂM',
+            title: '🦅 ĐIỂM HẸN CHIẾN THẮNG',
             group: 'fun',
             participantIds: [metric.id, bottom1.id],
             rarity: 'uncommon',
@@ -4723,12 +2804,12 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
     }
 
     // money_blackhole (78)
-    const activePlayersCount = active.length;
-    if (leaderboardRank >= Math.max(1, activePlayersCount - 1) && metric.money === topFine?.money && metric.money > 0) {
-      const text = getRandomVariant(VARIANTS.money_blackhole({ metric, topFine }), random);
+    const activePlayersCount = ranks.length;
+    if (activePlayersCount >= 4 && leaderboardRank >= activePlayersCount - 1 && metric.money === topFine?.money && metric.money > 0) {
+      const text = getRandomVariant(VARIANTS.money_blackhole({ metric }), random);
       addCandidate(candidates, snapshot, {
         type: 'money_blackhole',
-        title: '💸 HỐ ĐEN TÀI CHÍNH',
+        title: '💸 BXH VÀ QUỸ PHẠT',
         group: 'fun',
         participantIds: [metric.id],
         rarity: 'uncommon',
@@ -4741,8 +2822,8 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
     }
 
     // spring_jump (79)
-    if (previousRank && previousRank >= Math.max(1, prevBoard.length - 1) && leaderboardRank > 0 && leaderboardRank <= 2) {
-      const text = getRandomVariant(VARIANTS.spring_jump({ metric, Rank: leaderboardRank }), random);
+    if (prevBoard.length >= 4 && previousRank && previousRank >= prevBoard.length - 1 && leaderboardRank > 0 && leaderboardRank <= 2 && leaderboardRank < previousRank && playedLatestSession(snapshot, metric.id)) {
+      const text = getRandomVariant(VARIANTS.spring_jump({ metric, Rank: leaderboardRank, sessionDate: latestSessionDate(snapshot) }), random);
       addCandidate(candidates, snapshot, {
         type: 'spring_jump',
         title: '🦘 CÚ NHẢY LÒ XO',
@@ -4758,7 +2839,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
     }
 
     // charity_top_rank (85)
-    if (leaderboardRank === 1 && activePlayersCount > 0) {
+    if (leaderboardRank === 1 && activePlayersCount >= 2) {
       const bottom1 = ranks[ranks.length - 1];
       const playerMatches = sortNewest(snapshot.rankingMatches.filter(m => playerInMatch(m, metric.id)));
       const recent10 = playerMatches.slice(0, 10);
@@ -4790,7 +2871,7 @@ function addFunCandidates(candidates: InsightCandidate[], snapshot: AnalysisSnap
       const text = getRandomVariant(VARIANTS.golden_victim({ metric, goldenPickled }), random);
       addCandidate(candidates, snapshot, {
         type: 'golden_victim',
-        title: '🥒 TRÁI DƯA CHUỘT VÀNG',
+        title: '🥒 KỶ NIỆM THUA TRẮNG',
         group: 'fun',
         participantIds: [metric.id],
         rarity: 'rare',
@@ -4983,15 +3064,15 @@ function selectInsights(candidates: InsightCandidate[], limit = 8, options: Insi
   };
 }
 
-export function generateInsightCandidatesForDebug(snapshot: AnalysisSnapshot) {
-  const random = seededRandom(42);
+export function generateInsightCandidatesForDebug(snapshot: AnalysisSnapshot, options: InsightSelectionOptions = {}) {
+  const random = seededRandom(options.seed ?? 42);
   const candidates: InsightCandidate[] = [];
   addFormAndEloCandidates(candidates, snapshot, random);
   addStoryCandidates(candidates, snapshot, random);
   addPartnerCandidates(candidates, snapshot, random);
   addScoreCandidates(candidates, snapshot, random);
   addOpponentCandidates(candidates, snapshot, random);
-  addFunCandidates(candidates, snapshot, random);
+  addFunCandidates(candidates, snapshot, random, options.includeAbsence ?? true);
   return candidates.map(candidate => ({
     type: candidate.type,
     title: candidate.title,
@@ -5013,7 +3094,7 @@ export function generateInsightSelectionResultFromSnapshot(snapshot: AnalysisSna
   addPartnerCandidates(candidates, snapshot, random);
   addScoreCandidates(candidates, snapshot, random);
   addOpponentCandidates(candidates, snapshot, random);
-  addFunCandidates(candidates, snapshot, random);
+  addFunCandidates(candidates, snapshot, random, options.includeAbsence ?? true);
   return selectInsights(candidates, 8, options, random);
 }
 
