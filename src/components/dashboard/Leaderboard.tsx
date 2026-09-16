@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Handshake, ShieldCheck, Skull, Sparkles, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { calculateLeaderboard, getPlayerAdvancedStats } from '@/lib/stats';
+import { applyLeaderboardEligibility } from '@/lib/leaderboard-eligibility';
 import { motion } from 'framer-motion';
 
 const containerVariants = {
@@ -113,7 +114,8 @@ function formatMoney(value: number) {
   return value.toLocaleString('vi-VN');
 }
 
-function RankBadge({ i }: { i: number }) {
+function RankBadge({ i, eligible }: { i: number; eligible: boolean }) {
+  if (!eligible) return <span className="text-sm text-slate-400">—</span>;
   if (i === 0) {
     return (
       <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-amber-400/35 bg-amber-400/10 text-amber-300">
@@ -132,6 +134,18 @@ function WinRatePill({ rate }: { rate: number }) {
       <span className="font-black text-[15px] tabular-nums leading-none" style={{ color }}>{rate}%</span>
       <div className="w-12 h-[2px] bg-white/[0.16] rounded-full overflow-hidden">
         <div className="h-full rounded-full" style={{ width: `${rate}%`, background: color, opacity: 0.75 }} />
+      </div>
+    </div>
+  );
+}
+
+function ParticipationNote({ total, required }: { total: number; required: number }) {
+  return (
+    <div className="@container mt-1 w-full text-left" title={`Chưa đủ trận: đã đánh ${total}/${required} trận cần để được xếp hạng. Mốc cập nhật theo số trận của nhóm, tối đa 15 trận.`}>
+      <div className="flex flex-wrap items-baseline gap-x-1 text-[10px] leading-4 font-medium text-amber-200/65" aria-label={`Chưa đủ trận: ${total}/${required} trận`}>
+        <span className="@[200px]:hidden">Chưa đủ</span>
+        <span className="hidden @[200px]:inline">Chưa đủ trận</span>
+        <span className="whitespace-nowrap tabular-nums">· {total}/{required} trận</span>
       </div>
     </div>
   );
@@ -362,14 +376,14 @@ export function Leaderboard({
     : null;
 
   // Task 18: Use pre-calculated stats for active season, calculate from raw matches for history
-  const board = calculateLeaderboard(players, filtered, loseMoney, {
+  const boardPlayers = players.filter(p => p.active !== false && !p.hidden && !p.deleted_at && p.id !== '__GUEST__');
+  const board = applyLeaderboardEligibility(calculateLeaderboard(boardPlayers, filtered, loseMoney, {
     getLoseMoney: (match) => seasonFineByName.get(String(match.season || 'Season 1')) ?? loseMoney,
     shouldPayFine: (playerId, match) => {
       const season = String(match.season || 'Season 1');
       return playerFineBySeason.get(`${playerId}:${season}`) ?? playerFineById.get(playerId) ?? true;
     },
-  })
-    .filter(p => p.active !== false && p.id !== '__GUEST__')
+  }))
     .slice(0, 20);
 
   const stopClosing = (id: string) => {
@@ -515,19 +529,20 @@ export function Leaderboard({
                       'border-t border-slate-500/18 cursor-pointer transition-all group',
                       exp || closing 
                         ? 'bg-emerald-400/[0.075]' 
-                        : i === 0 
+                        : i === 0 && p.isEligible
                           ? 'rank-1-row' 
                           : 'bg-[#17243a]/55 hover:bg-slate-700/65',
                     )}
                   >
-                    <td className={cn("py-3 px-4 text-center", i === 0 && "rank-1-first-td")}><RankBadge i={i} /></td>
-                    <td className="py-3 px-4">
+                    <td className={cn("py-3 px-4 text-center", i === 0 && p.isEligible && "rank-1-first-td")}><RankBadge i={i} eligible={p.isEligible} /></td>
+                    <td className="py-3 px-4 text-left">
                       <div className="flex items-center gap-3">
-                        <span className={cn('font-black text-base 2xl:text-lg truncate transition-all', i === 0 ? 'text-amber-400' : exp ? 'text-primary' : 'text-white group-hover:text-white')}>
+                        <span className={cn('font-black text-base 2xl:text-lg truncate transition-all', i === 0 && p.isEligible ? 'text-amber-400' : exp ? 'text-primary' : 'text-white group-hover:text-white')}>
                           {p.name}
                         </span>
                         <div className={cn('w-1.5 h-1.5 rounded-full bg-primary opacity-0 transition-all scale-0', (exp || closing) && 'opacity-100 scale-100')} />
                       </div>
+                      {!p.isEligible && <ParticipationNote total={p.total} required={p.requiredMatches} />}
                     </td>
                     <td className="py-3 px-4 text-center font-black text-base 2xl:text-lg text-slate-100 tabular-nums">{p.total}</td>
                     <td className="py-3 px-4 text-center font-black text-base 2xl:text-lg text-green-300 tabular-nums">{p.wins}</td>
@@ -578,16 +593,17 @@ export function Leaderboard({
                   'w-full flex items-center gap-3 px-4 py-4 text-left transition-all',
                   exp || closing 
                     ? 'bg-primary/[0.09]' 
-                    : i === 0 
+                    : i === 0 && p.isEligible
                       ? 'bg-gradient-to-r from-amber-400/[0.06] to-transparent shimmer-row' 
                       : 'active:bg-white/[0.05]'
                 )}
               >
-                <div className="w-8 shrink-0 flex justify-center"><RankBadge i={i} /></div>
+                <div className="w-8 shrink-0 flex justify-center"><RankBadge i={i} eligible={p.isEligible} /></div>
                 <div className="flex-1 min-w-0">
                   <div className={cn('font-black text-lg truncate mb-1', exp ? 'text-primary' : 'text-white/90')}>
                     {p.name}
                   </div>
+                  {!p.isEligible && <ParticipationNote total={p.total} required={p.requiredMatches} />}
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
                     <span className="text-slate-300/65">{p.total}T</span>
                     <span className="text-green-300/75">{p.wins}W</span>
