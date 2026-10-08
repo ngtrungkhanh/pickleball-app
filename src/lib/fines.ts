@@ -23,6 +23,9 @@ export type FinePlayerSeasonSetting = {
   player_id: string;
   season: string;
   pay_fine: boolean;
+  active?: boolean;
+  hidden?: boolean;
+  deleted_at?: string | null;
 };
 
 export type FineRules = {

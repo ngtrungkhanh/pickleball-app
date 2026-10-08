@@ -1,4 +1,7 @@
 'use client';
+import { SettingsModal } from '@/components/SettingsModal';
+import { applyPlayerSeasonSettings, filterSeasonMatches, matchPlayerIds } from '@/lib/player-season-settings';
+import type { StoredPlayerSeasonSetting } from '@/lib/db';
 import { useState, useEffect, useTransition, useCallback } from 'react';
 import {
   ShieldCheck,
@@ -18,13 +21,13 @@ import {
   getArchives,
   restoreFromArchive,
   verifyAdminAction,
-  updatePlayerAction,
-  deletePlayerAction,
+
+
   getAppDataAction,
   getAppDataManifestAction,
   getAppDataPartsAction,
   deleteMatchAction,
-  togglePlayerActiveAction,
+
   updateMatchAction
 } from '@/app/actions';
 import { cn } from '@/lib/utils';
@@ -145,8 +148,9 @@ export default function AdminPage() {
   const [matchSearch, setMatchSearch] = useState('');
 
   // Inline editing states
-  const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
-  const [editPlayerName, setEditPlayerName] = useState('');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [playerSeasonSettings, setPlayerSeasonSettings] = useState<StoredPlayerSeasonSetting[]>([]);
+  const [config, setConfig] = useState<Record<string, string>>({});
 
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [editMatchData, setEditMatchData] = useState<any>(null);
@@ -160,12 +164,16 @@ export default function AdminPage() {
 
   const applySnapshot = useCallback((snapshot: Awaited<ReturnType<typeof getAppCacheSnapshot>>) => {
     setPlayers(snapshot.players || []);
+    setPlayerSeasonSettings(snapshot.playerSeasonSettings);
+    setConfig(snapshot.config);
     setSeasons(snapshot.seasons || []);
     setMatches(snapshot.matches || []);
   }, []);
 
   const applyServerData = useCallback((appData: NonNullable<Awaited<ReturnType<typeof getAppDataPartsAction>>>) => {
     setPlayers(appData.players || []);
+    setPlayerSeasonSettings(appData.playerSeasonSettings || []);
+    setConfig(appData.config || {});
     setSeasons(appData.seasons || []);
     setMatches(appData.matches || []);
   }, []);
@@ -518,29 +526,6 @@ export default function AdminPage() {
     });
   };
 
-  const onTogglePlayer = async (pid: string, current: boolean) => {
-    const res = await togglePlayerActiveAction(pid, !current);
-    if (actionSucceeded(res)) loadData();
-  };
-
-  const onSavePlayer = async (pid: string) => {
-    if (!editPlayerName.trim()) return alert('Tên thành viên không được để trống');
-    const fd = new FormData();
-    fd.append('id', pid);
-    fd.append('name', editPlayerName.trim());
-    fd.append('active', 'true'); // Keep active by default when editing name
-    
-    setLoading(true);
-    const res = await updatePlayerAction(fd);
-    if (actionSucceeded(res)) {
-      setEditingPlayerId(null);
-      loadData();
-    } else {
-      alert(actionError(res, 'Lỗi khi cập nhật thành viên'));
-    }
-    setLoading(false);
-  };
-
   const applyMatchLocal = useCallback(async (match: any) => {
     setMatches(prev => prev.map(item => item.id === match.id ? { ...item, ...match } : item));
     await saveMatchesLocal([match]);
@@ -636,7 +621,7 @@ export default function AdminPage() {
 
 
   const playerName = (id?: string | null) => players.find(p => p.id === id)?.name || id || '';
-  const visibleMatches = [...matches]
+  const visibleMatches = filterSeasonMatches(matches, playerSeasonSettings)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .filter(m => {
       const q = matchSearch.trim().toLowerCase();
@@ -908,6 +893,9 @@ export default function AdminPage() {
                       const formattedTime = formatAdminDateTime(matchDate);
 
                       if (isEditing) {
+                        const memberIds = new Set(applyPlayerSeasonSettings(players, m.season || 'Season 1', playerSeasonSettings, matches).filter(p => !p.deleted_at).map(p => p.id));
+                        matchPlayerIds(m).forEach(id => memberIds.add(id));
+                        const editPlayers = players.filter(p => memberIds.has(p.id));
                         return (
                           <tr key={m.id} className="bg-white/[0.03]">
                             <td className="px-6 py-4">
@@ -964,7 +952,7 @@ export default function AdminPage() {
                                 disabled={isSavingThisMatch}
                                 className="bg-slate-950 text-white border border-white/10 rounded px-2 py-1 text-xs font-bold w-full"
                               >
-                                {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                {editPlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                               </select>
                               <select
                                 value={editMatchData?.win_2 || ''}
@@ -973,7 +961,7 @@ export default function AdminPage() {
                                 className="bg-slate-950 text-white border border-white/10 rounded px-2 py-1 text-xs font-bold w-full"
                               >
                                 <option value="">(Không có người 2)</option>
-                                {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                {editPlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                               </select>
                             </td>
                             <td className="px-6 py-4 flex items-center gap-1">
@@ -1000,7 +988,7 @@ export default function AdminPage() {
                                 disabled={isSavingThisMatch}
                                 className="bg-slate-950 text-white border border-white/10 rounded px-2 py-1 text-xs font-bold w-full"
                               >
-                                {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                {editPlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                               </select>
                               <select
                                 value={editMatchData?.lose_2 || ''}
@@ -1009,7 +997,7 @@ export default function AdminPage() {
                                 className="bg-slate-950 text-white border border-white/10 rounded px-2 py-1 text-xs font-bold w-full"
                               >
                                 <option value="">(Không có người 2)</option>
-                                {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                {editPlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                               </select>
                             </td>
                             <td className="px-6 py-4 text-xs font-bold text-white/20">
@@ -1092,76 +1080,10 @@ export default function AdminPage() {
           )}
 
           {activeTab === 'Thành viên' && (
-            <div className="bg-slate-900/50 border border-white/5 rounded-3xl overflow-hidden">
-              <div className="px-6 py-5 border-b border-white/5">
-                <h3 className="font-black text-sm uppercase tracking-widest">Danh sách Thành viên</h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 p-6 gap-4">
-                {players.map(p => {
-                  const isEditing = editingPlayerId === p.id;
-                  return (
-                    <div key={p.id} className="bg-white/5 border border-white/10 rounded-2xl p-5 flex items-center justify-between group">
-                      <div className="flex-1 min-w-0 mr-3">
-                        {isEditing ? (
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={editPlayerName}
-                              onChange={e => setEditPlayerName(e.target.value)}
-                              className="bg-slate-950 text-white border border-white/10 rounded-xl px-3 py-1.5 text-sm font-black w-full"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => onSavePlayer(p.id)}
-                              className="px-3 py-1.5 bg-primary hover:bg-primary/95 text-black rounded-lg text-[9px] font-black uppercase"
-                            >
-                              Lưu
-                            </button>
-                            <button
-                              onClick={() => setEditingPlayerId(null)}
-                              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[9px] font-black uppercase"
-                            >
-                              Hủy
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 group/title">
-                            <div>
-                              <p className="text-lg font-black text-white group-hover:text-primary transition-colors">{p.name}</p>
-                              <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">{p.id}</p>
-                            </div>
-                            <button
-                              onClick={() => {
-                                setEditingPlayerId(p.id);
-                                setEditPlayerName(p.name);
-                              }}
-                              className="text-[10px] font-black uppercase tracking-wider text-white/20 hover:text-primary transition-colors ml-2 shrink-0"
-                            >
-                              [Sửa]
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          onClick={() => onTogglePlayer(p.id, p.active)}
-                          className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                            p.active ? "bg-green-500/10 text-green-400 hover:bg-green-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20")}
-                        >
-                          {p.active ? 'Active' : 'Inactive'}
-                        </button>
-                        <button onClick={() => { if (confirm('Xóa vĩnh viễn thành viên này?')) {
-                          const fd = new FormData();
-                          fd.append('id', p.id);
-                          deletePlayerAction(fd).then(loadData);
-                        }}} className="p-2 hover:bg-red-500/20 text-white/20 hover:text-red-400 transition-all">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="rounded-2xl bg-slate-900 p-6">
+              <p className="mb-4 text-sm">Quản lý người chơi, tuỳ chọn và xoá/khôi phục riêng cho từng mùa.</p>
+              <button className="rounded-xl bg-primary px-4 py-3 font-bold text-black" onClick={() => setSettingsOpen(true)}>Quản lý thành viên theo mùa</button>
+              <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} canEdit={isAuth} onUnlock={() => false} onLock={() => setIsAuth(false)} players={players} matches={matches} seasons={seasons} config={config} playerSeasonSettings={playerSeasonSettings} onDataChanged={loadData} />
             </div>
           )}
 

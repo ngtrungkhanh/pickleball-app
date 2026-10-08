@@ -80,6 +80,7 @@ export type StoredPlayerSeasonSetting = {
   active: boolean;
   pay_fine: boolean;
   hidden: boolean;
+  deleted_at?: string | null;
 };
 
 export type StoredHallImage = {

@@ -1,6 +1,8 @@
 'use client';
+import { filterSeasonMatches, selectAnalysisPlayers, selectLeaderboardPlayers } from '@/lib/player-season-settings';
 
-import { useEffect, useMemo, useRef, useState, useCallback, Fragment, type ReactNode } from 'react';
+
+import { useEffect, useMemo, useRef, useState, Fragment, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, RefreshCw, Database,
@@ -178,23 +180,6 @@ export function AnalysisCenter({
     setGlobalSelectedSeason(season);
   };
 
-  const getPlayerSetting = useCallback((playerId: string, seasonName: string) => {
-    const setting = sharedData.playerSeasonSettings.find(s => s.player_id === playerId && s.season === seasonName);
-    if (setting) {
-      return {
-        active: setting.active !== false,
-        pay_fine: setting.pay_fine !== false,
-        hidden: setting.hidden === true
-      };
-    }
-    // Fallback: lấy từ bảng players gốc
-    const player = players.find(p => p.id === playerId);
-    return {
-      active: player?.active !== false,
-      pay_fine: player?.pay_fine !== false,
-      hidden: player?.hidden === true
-    };
-  }, [sharedData.playerSeasonSettings, players]);
 
   // Tiền phạt lose_money tính theo season
   const currentSeasonInfo = useMemo(() => {
@@ -209,41 +194,19 @@ export function AnalysisCenter({
     return Number(config.lose_money || loseMoney);
   }, [currentSeasonInfo, config.lose_money, loseMoney]);
 
-  const visiblePlayers = useMemo(() => {
-    const seasonForSettings = selectedSeason || currentActiveSeason;
-    return players
-      .map(p => {
-        const settings = getPlayerSetting(p.id, seasonForSettings);
-        return {
-          ...p,
-          active: settings.active,
-          pay_fine: settings.pay_fine,
-          hidden: settings.hidden,
-        };
-      })
-      .filter(p => p.active && !p.hidden && !isGuestId(p.id));
-  }, [players, getPlayerSetting, selectedSeason, currentActiveSeason]);
-
-  const [playerId, setPlayerId] = useState(visiblePlayers[0]?.id || '');
-
-  const filteredAllMatches = useMemo(() => {
-    return allMatches.filter(m => {
-      const matchSeason = m.season || 'Season 1';
-      const isPlayerActive = (playerId: string) => getPlayerSetting(playerId, matchSeason).active;
-
-      const isWin1Inactive = m.win_1 && !isPlayerActive(String(m.win_1));
-      const isWin2Inactive = m.win_2 && !isPlayerActive(String(m.win_2));
-      const isLose1Inactive = m.lose_1 && !isPlayerActive(String(m.lose_1));
-      const isLose2Inactive = m.lose_2 && !isPlayerActive(String(m.lose_2));
-      return !m.deleted_at && !isWin1Inactive && !isWin2Inactive && !isLose1Inactive && !isLose2Inactive;
-    });
-  }, [allMatches, getPlayerSetting]);
-
-  const activeMatches = selectedSeason === null ? filteredAllMatches : filteredAllMatches.filter(m => (m.season || 'Season 1') === selectedSeason);
+  const filteredAllMatches = useMemo(() => filterSeasonMatches(allMatches, sharedData.playerSeasonSettings), [allMatches, sharedData.playerSeasonSettings]);
+  const activeMatches = useMemo(() => selectedSeason === null ? filteredAllMatches : filteredAllMatches.filter(m => (m.season || 'Season 1') === selectedSeason), [selectedSeason, filteredAllMatches]);
+  const analysisPlayers = useMemo(() => {
+    const leaderboardIds = new Set(selectLeaderboardPlayers(players, selectedSeason, sharedData.playerSeasonSettings, allMatches).map(p => p.id));
+    const participantIds = new Set(selectAnalysisPlayers(players, activeMatches).map(p => p.id));
+    return players.filter(p => leaderboardIds.has(p.id) || participantIds.has(p.id)).map(p => ({ ...p, hidden: !leaderboardIds.has(p.id) }));
+  }, [players, selectedSeason, sharedData.playerSeasonSettings, allMatches, activeMatches]);
+  const visiblePlayers = useMemo(() => selectAnalysisPlayers(analysisPlayers, activeMatches), [analysisPlayers, activeMatches]);
+  const [playerId, setPlayerId] = useState('');
   const seasonOptions = Array.from(new Set([currentActiveSeason, ...currentSeasons.map(s => s.name), ...allMatches.map(m => m.season || 'Season 1')].filter(Boolean)));
 
   const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(
-    visiblePlayers,
+    analysisPlayers,
     activeMatches,
     currentLoseMoney,
     {
@@ -252,7 +215,7 @@ export function AnalysisCenter({
       playerSeasonSettings: sharedData.playerSeasonSettings,
       fallbackLoseMoney: currentLoseMoney,
     },
-  ), [visiblePlayers, activeMatches, currentLoseMoney, players, currentSeasons, sharedData.playerSeasonSettings]);
+  ), [analysisPlayers, activeMatches, currentLoseMoney, players, currentSeasons, sharedData.playerSeasonSettings]);
   const hallOfFameEntries = useMemo(
     () => buildHallOfFameEntries(players, allMatches, currentSeasons, currentActiveSeason, currentLoseMoney, sharedData.playerSeasonSettings),
     [players, allMatches, currentSeasons, currentActiveSeason, currentLoseMoney, sharedData.playerSeasonSettings]

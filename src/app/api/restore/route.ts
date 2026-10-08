@@ -1,3 +1,4 @@
+import { seedPlayerSeasonRoster } from '@/lib/player-roster-db';
 import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
@@ -88,6 +89,7 @@ async function ensureRestoreColumns() {
       PRIMARY KEY (player_id, season)
     )
   `;
+  await sql`ALTER TABLE player_season_settings ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
 }
 
 export async function POST(request: Request) {
@@ -219,10 +221,12 @@ export async function POST(request: Request) {
       const season = String(setting.season || '').trim();
       if (!playerId || !season || !restoredPlayerIds.has(playerId) || !restoredSeasonNames.has(season)) continue;
       await sql`
-        INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden)
-        VALUES (${playerId}, ${season}, ${setting.active !== false}, ${setting.pay_fine !== false}, ${setting.hidden === true})
+        INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden, deleted_at)
+        VALUES (${playerId}, ${season}, ${setting.active !== false}, ${setting.pay_fine !== false}, ${setting.hidden === true}, ${normalizeBackupTimestamp(setting.deleted_at)})
       `;
     }
+
+    await seedPlayerSeasonRoster();
 
     // 6. Restore Archives
     for (const a of archives) {

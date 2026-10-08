@@ -90,6 +90,7 @@ export function FastAddShell({ previewWritesBlocked }: { previewWritesBlocked: b
     sharedData.players,
     activeSeason,
     sharedData.playerSeasonSettings,
+    sharedData.matches,
   );
 
   if (!sharedData.cacheLoaded) {

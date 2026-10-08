@@ -152,7 +152,7 @@ function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCance
   );
 }
 
-function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDeleteMatch }: { matches: any[]; players: any[]; onClose: () => void; canEdit: boolean; matchExpected?: any; onDeleteMatch?: (matchId: string) => Promise<void> | void }) {
+function HistoryModal({ matches, players, filterPlayers, onClose, canEdit, matchExpected, onDeleteMatch }: { matches: any[]; players: any[]; filterPlayers?: any[]; onClose: () => void; canEdit: boolean; matchExpected?: any; onDeleteMatch?: (matchId: string) => Promise<void> | void }) {
   const [isClosing, setIsClosing] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
@@ -356,7 +356,7 @@ function HistoryModal({ matches, players, onClose, canEdit, matchExpected, onDel
     };
   }, []);
 
-  const playerOptions = players.filter(p => p.active !== false && !p.deleted_at);
+  const playerOptions = filterPlayers ?? players.filter(p => !p.deleted_at);
   const ids = (m: any) => [m.win_1, m.win_2, m.lose_1, m.lose_2].filter(Boolean);
   const team = (m: any, id: string) => ([m.win_1, m.win_2].includes(id) ? 'win' : [m.lose_1, m.lose_2].includes(id) ? 'loss' : null);
   const matchesBaseFilters = (m: any) => {
@@ -651,7 +651,7 @@ function MatchCard({ m, players, onDelete, canEdit, isDeleting, matchExpected, h
 }
 
 // ─── Main RecentHistory ───────────────────────────────────────────────────────
-export function RecentHistory({ matches, players, canEdit = false, matchExpected, defaultShowAll = false, onDeleteMatch }: { matches: any[]; players: any[]; canEdit?: boolean; matchExpected?: any; defaultShowAll?: boolean; onDeleteMatch?: (matchId: string) => Promise<void> | void }) {
+export function RecentHistory({ matches, players, filterPlayers, canEdit = false, matchExpected, defaultShowAll = false, onDeleteMatch }: { matches: any[]; players: any[]; filterPlayers?: any[]; canEdit?: boolean; matchExpected?: any; defaultShowAll?: boolean; onDeleteMatch?: (matchId: string) => Promise<void> | void }) {
   const [showAll, setShowAll] = useState(defaultShowAll);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
@@ -670,7 +670,7 @@ export function RecentHistory({ matches, players, canEdit = false, matchExpected
     <>
       {showAll && (
         <PortalLayer>
-          <HistoryModal matches={matches} players={players} canEdit={canEdit} onClose={() => setShowAll(false)} matchExpected={matchExpected} onDeleteMatch={onDeleteMatch} />
+          <HistoryModal matches={matches} players={players} filterPlayers={filterPlayers} canEdit={canEdit} onClose={() => setShowAll(false)} matchExpected={matchExpected} onDeleteMatch={onDeleteMatch} />
         </PortalLayer>
       )}
       {deleteTarget && (

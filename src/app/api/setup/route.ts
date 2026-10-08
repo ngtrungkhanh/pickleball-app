@@ -90,6 +90,13 @@ export async function GET() {
     await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_path TEXT;`;
     await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS champion_image_updated_at TIMESTAMP;`;
 
+    await sql`CREATE TABLE IF NOT EXISTS player_season_settings (
+      player_id VARCHAR(80) NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      season VARCHAR(80) NOT NULL, active BOOLEAN DEFAULT TRUE,
+      pay_fine BOOLEAN DEFAULT TRUE, hidden BOOLEAN DEFAULT FALSE, deleted_at TIMESTAMP,
+      PRIMARY KEY (player_id, season)
+    )`;
+    await sql`ALTER TABLE player_season_settings ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
     // 5. Create audit_logs table
     await sql`
       CREATE TABLE IF NOT EXISTS audit_logs (

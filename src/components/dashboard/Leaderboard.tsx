@@ -298,6 +298,7 @@ function DetailPanel({ adv, closing = false }: { adv: AdvancedStats; closing?: b
 
 export function Leaderboard({
   players,
+  allPlayers = players,
   matches,
   seasons: seasonList = [],
   activeSeason = 'Season 1',
@@ -308,6 +309,7 @@ export function Leaderboard({
   showSeasonHeader = true,
 }: {
   players: Player[];
+  allPlayers?: Player[];
   matches: Match[];
   seasons?: Season[];
   activeSeason?: string;
@@ -376,7 +378,7 @@ export function Leaderboard({
     : null;
 
   // Task 18: Use pre-calculated stats for active season, calculate from raw matches for history
-  const boardPlayers = players.filter(p => p.active !== false && !p.hidden && !p.deleted_at && p.id !== '__GUEST__');
+  const boardPlayers = players.filter(p => !p.hidden && !p.deleted_at && p.id !== '__GUEST__');
   const board = applyLeaderboardEligibility(calculateLeaderboard(boardPlayers, filtered, loseMoney, {
     getLoseMoney: (match) => seasonFineByName.get(String(match.season || 'Season 1')) ?? loseMoney,
     shouldPayFine: (playerId, match) => {
@@ -517,7 +519,7 @@ export function Leaderboard({
               const exp = expandedId === p.id;
               const closing = closingIds.has(p.id);
               const showDetail = exp || closing;
-              const adv = getPlayerAdvancedStats(p.id, filtered, players);
+              const adv = getPlayerAdvancedStats(p.id, filtered, allPlayers);
               const rate = Math.round(p.winRate);
 
               return (
@@ -577,7 +579,7 @@ export function Leaderboard({
           const exp = expandedId === p.id;
           const closing = closingIds.has(p.id);
           const showDetail = exp || closing;
-          const adv = getPlayerAdvancedStats(p.id, filtered, players);
+          const adv = getPlayerAdvancedStats(p.id, filtered, allPlayers);
           const rate = Math.round(p.winRate);
           const rateColor = rate >= 60 ? '#22c55e' : rate >= 40 ? '#94a3b8' : '#f87171';
 

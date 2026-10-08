@@ -1,3 +1,4 @@
+import { filterSeasonMatches, selectLeaderboardPlayers } from './player-season-settings';
 import { buildAnalysisElo } from './analysis-core';
 import { buildFineLookup, type FinePlayerSeasonSetting } from './fines';
 import { isGuestId, isRankingMatch } from './guest';
@@ -99,10 +100,10 @@ export function buildHallOfFameEntries(
 
   return completedSeasonNames
     .map(seasonName => {
-      const seasonMatches = matches.filter(match => !match.deleted_at && (match.season || 'Season 1') === seasonName);
+      const seasonMatches = filterSeasonMatches(matches, playerSeasonSettings).filter(match => (match.season || 'Season 1') === seasonName);
       if (seasonMatches.length === 0) return null;
 
-      const board = calculateLeaderboard(eligiblePlayers, seasonMatches, loseMoney, {
+      const board = calculateLeaderboard(selectLeaderboardPlayers(eligiblePlayers, seasonName, playerSeasonSettings, matches), seasonMatches, loseMoney, {
         getLoseMoney: fineLookup.getLoseMoney,
         shouldPayFine: fineLookup.shouldPayFine,
       })

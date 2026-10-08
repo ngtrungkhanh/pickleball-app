@@ -3,6 +3,7 @@
 import { useSwipeable } from 'react-swipeable';
 import { motion } from 'framer-motion';
 
+import { applyPlayerSeasonSettings } from '@/lib/player-season-settings';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -18,13 +19,14 @@ import {
   Upload,
   Users,
   X,
-  EyeOff,
+
 } from 'lucide-react';
 import {
   addPlayerAction,
   createSeasonAction,
   deleteChampionImageAction,
   deletePlayerAction,
+  setPlayerSeasonDeletedAction,
   deleteSeasonAction,
   endSeasonAction,
   setActiveSeasonAction,
@@ -205,23 +207,6 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
     setGlobalSelectedSeason(season);
   };
 
-  const getPlayerSetting = (playerId: string, seasonName: string) => {
-    const setting = playerSeasonSettings?.find(s => s.player_id === playerId && s.season === seasonName);
-    if (setting) {
-      return {
-        active: setting.active !== false,
-        pay_fine: setting.pay_fine !== false,
-        hidden: setting.hidden === true
-      };
-    }
-    const p = players.find(x => x.id === playerId);
-    return {
-      active: p?.active !== false,
-      pay_fine: p?.pay_fine !== false,
-      hidden: p?.hidden === true
-    };
-  };
-
   const hallEntries = useMemo(
     () => buildHallOfFameEntries(
       players,
@@ -268,8 +253,8 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
       }
 
       setFeedback({ target, type: 'success', text: successText });
+      await onDataChanged?.(changedParts);
       startTransition(() => {
-        onDataChanged?.(changedParts);
         router.refresh();
         setIsSaving(false);
       });
@@ -291,8 +276,8 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
         return;
       }
       setFeedback({ target, type: 'success', text: successText });
+      await onDataChanged?.(changedParts);
       startTransition(() => {
-        onDataChanged?.(changedParts);
         router.refresh();
         setIsSaving(false);
       });
@@ -431,6 +416,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                 </div>
                 <select
                   value={selectedConfigSeason}
+                  disabled={isPending}
                   onChange={(e) => handleConfigSeasonChange(e.target.value)}
                   className="rounded-xl bg-[#0f1a2c] border border-slate-500/25 px-4 py-2 text-xs font-bold text-white outline-none focus:border-primary/50 transition-all min-w-44"
                 >
@@ -515,6 +501,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                   <div className="space-y-2">
                     <div className="text-[10px] font-black text-slate-300/65 uppercase tracking-[0.2em] px-1">Thêm thành viên</div>
                     <form action={(fd) => submit(addPlayerAction, fd, 'add-player', 'Đã thêm', ['players', 'playerSeasonSettings'])} className="flex gap-2">
+                      <input type="hidden" name="season" value={selectedConfigSeason} />
                       <input name="name" placeholder="Tên thành viên..." className="flex-1 rounded-xl bg-[#0f1a2c] border border-slate-500/25 px-4 py-2.5 text-sm text-white outline-none focus:border-primary/50 transition-all" />
                       <button disabled={isPending} className="rounded-xl bg-primary px-5 py-2.5 text-[10px] font-black text-black uppercase tracking-widest active:scale-95 transition-all">Thêm</button>
                     </form>
@@ -524,52 +511,42 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                   <div className="space-y-2">
                     <div className="text-[10px] font-black text-slate-300/65 uppercase tracking-[0.2em] px-1">Danh sách thành viên</div>
                     <div className="grid grid-cols-1 gap-1" key={selectedConfigSeason}>
-                      {[...players]
-                        .map(p => {
-                          const s = getPlayerSetting(p.id, selectedConfigSeason);
-                          return {
-                            ...p,
-                            active: s.active,
-                            pay_fine: s.pay_fine,
-                            hidden: s.hidden
-                          };
-                        })
-                        .sort((a, b) => (a.active === b.active ? 0 : a.active ? -1 : 1))
+                      {applyPlayerSeasonSettings(players, selectedConfigSeason, playerSeasonSettings, matches)
+                        .sort((a, b) => Number(!!a.deleted_at) - Number(!!b.deleted_at))
                         .map(p => (
                           <div key={p.id} className={cn(
-                            "group flex items-center gap-2 rounded-xl border p-1.5 transition-all",
-                            p.active !== false 
+                            "group flex flex-wrap items-center gap-2 rounded-xl border p-2 transition-all",
+                            !p.deleted_at
                               ? "bg-white/[0.045] border-slate-500/20 hover:bg-white/[0.07]"
                               : "bg-black/20 border-slate-500/12 opacity-55"
                           )}>
-                            <div className="flex-1 flex items-center gap-2 min-w-0">
+                            <div className="w-full sm:flex-1 flex items-center gap-2 min-w-0">
                               <input 
                                 defaultValue={isGuestId(p.id) ? GUEST_NAME : p.name}
-                                disabled={isGuestId(p.id)}
+                                disabled={isGuestId(p.id) || !!p.deleted_at || isPending}
                                 onBlur={(e) => {
                                   if (!isGuestId(p.id) && e.target.value.trim() !== p.name) {
                                     const fd = new FormData();
                                     fd.append('id', p.id);
                                     fd.append('name', e.target.value.trim());
-                                    fd.append('active', String(p.active !== false));
-                                    fd.append('pay_fine', String(p.pay_fine !== false));
-                                    fd.append('hidden', String(p.hidden === true));
                                     submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu', ['players', 'playerSeasonSettings']);
                                   }
                                 }}
                                 className="flex-1 bg-transparent px-2 py-0.5 text-sm font-bold text-white outline-none focus:text-primary transition-colors min-w-0 disabled:text-primary disabled:cursor-not-allowed" 
                               />
-                              <InlineFeedback feedback={feedback} target={`player-${p.id}`} />
+                              {!!p.deleted_at && <span className="text-[10px] text-slate-400">Đã xoá khỏi mùa</span>}
+                               <InlineFeedback feedback={feedback} target={`player-${p.id}`} />
                             </div>
                             
                             <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0">
                               <input 
                                 type="checkbox" 
-                                defaultChecked={p.active !== false} 
+                                checked={p.active !== false}
+                                disabled={!!p.deleted_at || isPending}
                                 onChange={(e) => {
                                   const isChecked = e.target.checked;
                                   submitDirect(
-                                    () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, isChecked, p.pay_fine !== false, p.hidden === true),
+                                    () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, { active: isChecked }),
                                     `player-${p.id}`,
                                     'Đã lưu',
                                     ['playerSeasonSettings']
@@ -577,18 +554,19 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                                 }}
                                 className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0" 
                               />
-                              <span className="text-[9px] font-black text-slate-300/65 uppercase tracking-widest hidden sm:inline">{isGuestId(p.id) ? 'Dropdown' : 'Active'}</span>
+                              <span className="text-[9px] font-black text-slate-300/65 uppercase tracking-widest">Danh sách chọn</span>
                             </label>
 
                             {!isGuestId(p.id) && (
                               <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0" title="Phạt tiền">
                                 <input 
                                   type="checkbox" 
-                                  defaultChecked={p.pay_fine !== false} 
+                                  checked={p.pay_fine !== false}
+                                  disabled={!!p.deleted_at || isPending}
                                   onChange={(e) => {
                                     const isChecked = e.target.checked;
                                     submitDirect(
-                                      () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, p.active !== false, isChecked, p.hidden === true),
+                                      () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, { pay_fine: isChecked }),
                                       `player-${p.id}`,
                                       'Đã lưu',
                                       ['playerSeasonSettings']
@@ -596,7 +574,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                                   }}
                                   className="w-3.5 h-3.5 rounded border-amber-500/20 bg-white/5 text-amber-500 focus:ring-0 focus:ring-offset-0" 
                                 />
-                                <Banknote className="w-3.5 h-3.5 text-amber-500 hidden sm:inline" />
+                                <span className="text-[10px]">Phạt tiền</span>
                               </label>
                             )}
 
@@ -604,11 +582,12 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                               <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0" title="Ẩn khỏi BXH">
                                 <input 
                                   type="checkbox" 
-                                  defaultChecked={p.hidden === true} 
+                                  checked={p.hidden === true}
+                                  disabled={!!p.deleted_at || isPending}
                                   onChange={(e) => {
                                     const isChecked = e.target.checked;
                                     submitDirect(
-                                      () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, p.active !== false, p.pay_fine !== false, isChecked),
+                                      () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, { hidden: isChecked }),
                                       `player-${p.id}`,
                                       'Đã lưu',
                                       ['playerSeasonSettings']
@@ -616,17 +595,19 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                                   }}
                                   className="w-3.5 h-3.5 rounded border-slate-500/20 bg-white/5 text-slate-400 focus:ring-0 focus:ring-offset-0" 
                                 />
-                                <EyeOff className="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />
+                                <span className="text-[10px]">Ẩn BXH</span>
                               </label>
                             )}
 
                             {!isGuestId(p.id) && (
                               <button
                                 type="button"
-                                onClick={() => setDeleteTarget(p)}
-                                className="w-7 h-7 rounded-lg border border-red-500/10 bg-red-500/5 text-red-400/20 hover:text-red-400 hover:bg-red-500/15 flex items-center justify-center transition-all shrink-0"
+                                disabled={isPending}
+                                title={p.deleted_at ? 'Khôi phục' : 'Xoá khỏi mùa'}
+                                onClick={() => p.deleted_at ? submitDirect(() => setPlayerSeasonDeletedAction(p.id, selectedConfigSeason, false), `player-${p.id}`, 'Đã khôi phục', ['playerSeasonSettings']) : setDeleteTarget(p)}
+                                className="min-w-7 px-1 h-8 rounded-lg border border-red-500/10 bg-red-500/5 text-red-300 hover:text-red-200 hover:bg-red-500/15 flex items-center justify-center transition-all shrink-0"
                               >
-                                <Trash2 className="w-3 h-3" />
+                                <span className="text-[10px]">{p.deleted_at ? 'Khôi phục' : <Trash2 className="w-3 h-3" />}</span>
                               </button>
                             )}
                           </div>
@@ -641,7 +622,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-3">
                     <div className="text-[10px] font-black text-slate-300/70 uppercase tracking-[0.2em] px-1">Tạo Season mới</div>
-                    <form action={(fd) => submit(createSeasonAction, fd, 'create-season', 'Đã tạo', ['seasons', 'config'])} className="flex gap-2">
+                    <form action={(fd) => submit(createSeasonAction, fd, 'create-season', 'Đã tạo', ['seasons', 'config', 'playerSeasonSettings'])} className="flex gap-2">
                       <input name="name" placeholder="Tên Season..." className="flex-1 rounded-2xl bg-[#0f1a2c] border border-slate-500/25 px-4 py-3 text-sm text-white outline-none focus:border-primary/50 transition-all" />
                       <button disabled={isPending} className="rounded-2xl bg-primary px-4 py-3 text-[10px] font-black text-black uppercase tracking-widest shadow-lg shadow-primary/10 active:scale-95 transition-all">Tạo</button>
                     </form>
@@ -674,7 +655,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                       )}>
                         <div className="flex items-center gap-3 min-w-0">
                           <span className="font-black text-white text-base tracking-tight truncate">{s.name}</span>
-                          {s.active && <span className="px-2 py-0.5 rounded-full bg-primary text-[8px] font-black text-black uppercase tracking-widest">Active</span>}
+                          {s.active && <span className="px-2 py-0.5 rounded-full bg-primary text-[8px] font-black text-black uppercase tracking-widest">Đang chạy</span>}
                           <InlineFeedback feedback={feedback} target={`season-${s.name}`} />
                         </div>
 
@@ -830,9 +811,9 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                    <AlertTriangle className="w-8 h-8" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-white tracking-tight">Xóa thành viên & Trận?</h3>
+                  <h3 className="text-xl font-black text-white tracking-tight">Xoá khỏi mùa này?</h3>
                   <p className="mt-2 text-sm font-bold text-slate-300/70 leading-relaxed">
-                    Hành động này sẽ xóa **{deleteTarget.name}** và **toàn bộ lịch sử trận** liên quan. Dữ liệu sẽ được lưu vào kho lưu trữ (Archive).
+                    Xoá {deleteTarget.name} khỏi {selectedConfigSeason} sẽ ẩn {matches.filter(m => (m.season || 'Season 1') === selectedConfigSeason && !m.deleted_at && [m.win_1, m.win_2, m.lose_1, m.lose_2].includes(deleteTarget.id)).length} trận liên quan và tính lại thống kê. Có thể khôi phục sau; các mùa khác không đổi.
                   </p>
                 </div>
                 <div className="flex gap-3 w-full">
@@ -842,6 +823,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                       if (isPending) return;
                       const fd = new FormData();
                       fd.append('id', deleteTarget.id);
+                      fd.append('season', selectedConfigSeason);
                       setFeedback({ target: 'delete-player', type: 'saving', text: 'Đang xóa...' });
                       setIsSaving(true);
                       (async () => {
@@ -867,7 +849,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                     }}
                     className="flex-1 rounded-2xl bg-red-500 hover:bg-red-600 px-4 py-4 text-xs font-black text-white uppercase tracking-widest shadow-lg shadow-red-500/20 active:scale-95 transition-all"
                   >
-                    Xóa sạch
+                    Xoá khỏi mùa
                   </button>
                 </div>
                 <InlineFeedback feedback={feedback} target="delete-player" />

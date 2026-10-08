@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres';
+import { sql, type VercelPoolClient } from '@vercel/postgres';
 
 export const DATA_VERSION_KEY = 'data_version';
 export const GLOBAL_VERSION_KEY = 'version_global';
@@ -37,7 +37,7 @@ const VERSION_KEYS: Record<AppDataPart, string> = {
   admin: 'version_admin',
 };
 
-type SqlTag = typeof sql;
+type SqlTag = VercelPoolClient['sql'];
 type SqlRunner = {
   sql: SqlTag;
 };

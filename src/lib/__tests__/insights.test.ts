@@ -98,7 +98,8 @@ describe('expert insight evidence and wording', () => {
   });
 
   it('does not call a stable rank a leap when the ranked group is small', () => {
-    const roster = players.map(player => ({ ...player, active: ['a', 'b'].includes(player.id) }));
+    // A genuinely small analysis roster; active now controls input only.
+    const roster = players.filter(player => ['a', 'b'].includes(player.id));
     const data = snapshot([...Array.from({ length: 10 }, (_, i) => match(i)), match(11, { date: '2026-09-16T09:00:00+07:00' })], roster);
     expect(candidates(data, 'spring_jump')).toHaveLength(0);
     expect(candidates(data, 'money_blackhole')).toHaveLength(0);

@@ -5,6 +5,7 @@ export type AnalysisPlayer = {
   id: string;
   name: string;
   active?: boolean;
+  hidden?: boolean;
 };
 
 export type AnalysisMatch = {
@@ -915,13 +916,13 @@ export function buildAnalysisSnapshot(
   fineRules: FineRules = {},
   now = new Date()
 ): AnalysisSnapshot {
-  const visiblePlayers = players.filter(player => player.active !== false && !isGuestId(player.id));
+  const visiblePlayers = players.filter(player => !isGuestId(player.id));
   const visibleMatches = matches.filter(match => !match.deleted_at);
   const rankingMatches = sortNewestFirst(visibleMatches.filter(match => isRankingMatch(match) && isFullDoublesMatch(match)));
   const elo = buildAnalysisElo(visiblePlayers, rankingMatches, now);
   const playerMetrics = buildPlayerMetrics(visiblePlayers, visibleMatches, rankingMatches, elo, loseMoney, fineRules, now);
   const metrics = new Map(playerMetrics.map(metric => [metric.id, metric]));
-  const board = [...playerMetrics].sort((a, b) => b.rating - a.rating || b.winRate - a.winRate || b.wins - a.wins || a.name.localeCompare(b.name));
+  const board = playerMetrics.filter(p => !p.hidden).sort((a, b) => b.rating - a.rating || b.winRate - a.winRate || b.wins - a.wins || a.name.localeCompare(b.name));
   const partnerEdges = buildPartnerEdges(visiblePlayers, rankingMatches, metrics, elo);
   const opponentEdges = buildOpponentEdges(visiblePlayers, rankingMatches, metrics, elo);
   const profiles = new Map(visiblePlayers.map(player => [

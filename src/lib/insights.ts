@@ -492,8 +492,8 @@ function edgeRate(edge: AnalysisEdge) {
   return Math.round(edge.rate);
 }
 
-function eligibleRankBoard<T extends { name: string; total: number; wins: number; losses: number; winRate: number }>(rows: T[]) {
-  const sorted = [...rows].sort((a, b) => b.winRate - a.winRate || b.wins - a.wins || a.losses - b.losses || a.name.localeCompare(b.name));
+function eligibleRankBoard<T extends { name: string; total: number; wins: number; losses: number; winRate: number; hidden?: boolean }>(rows: T[]) {
+  const sorted = rows.filter(p => !p.hidden).sort((a, b) => b.winRate - a.winRate || b.wins - a.wins || a.losses - b.losses || a.name.localeCompare(b.name));
   // Include zero-match players when calculating the participation threshold,
   // just like Dashboard; only eligible players receive a numerical rank.
   return applyLeaderboardEligibility(sorted).filter(row => row.isEligible);
@@ -505,7 +505,7 @@ function rankBoard(snapshot: AnalysisSnapshot) {
 
 function oldEloRanks(metrics: PlayerMetrics[]) {
   return [...metrics]
-    .filter(metric => metric.total > 0)
+    .filter(metric => metric.total > 0 && !metric.hidden)
     .sort((a, b) => (b.rating - b.recentEloDelta) - (a.rating - a.recentEloDelta));
 }
 
@@ -551,7 +551,7 @@ function buildPreviousSessionBoard(snapshot: AnalysisSnapshot) {
     const wins = matches.filter(m => resultForPlayer(m, player.id) === 'W').length;
     const total = matches.length;
     const winRate = total > 0 ? (wins / total) * 100 : 0;
-    return { id: player.id, name: player.name, total, wins, losses: total - wins, winRate };
+    return { id: player.id, name: player.name, hidden: player.hidden, total, wins, losses: total - wins, winRate };
   });
   return eligibleRankBoard(playerStats);
 }
@@ -569,7 +569,7 @@ function calculateDaysAtTop1(snapshot: AnalysisSnapshot, topPlayerId: string): n
       const wins = matches.filter(m => resultForPlayer(m, player.id) === 'W').length;
       const total = matches.length;
       const winRate = total > 0 ? (wins / total) * 100 : 0;
-      return { id: player.id, name: player.name, total, wins, losses: total - wins, winRate };
+      return { id: player.id, name: player.name, hidden: player.hidden, total, wins, losses: total - wins, winRate };
     });
     const board = eligibleRankBoard(playerStats);
     if (board.length === 0 || board[0].id !== topPlayerId) {
@@ -640,7 +640,7 @@ function findRankTakeover(snapshot: AnalysisSnapshot) {
     const wins = matches.filter(m => resultForPlayer(m, player.id) === 'W').length;
     const total = matches.length;
     const winRate = total > 0 ? (wins / total) * 100 : 0;
-    return { id: player.id, name: player.name, total, wins, losses: total - wins, winRate };
+    return { id: player.id, name: player.name, hidden: player.hidden, total, wins, losses: total - wins, winRate };
   });
   const boardBefore = eligibleRankBoard(playerStatsBefore);
   const rankBeforeMap = new Map(boardBefore.map((p, index) => [p.id, index + 1]));

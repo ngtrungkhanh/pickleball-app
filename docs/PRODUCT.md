@@ -74,7 +74,7 @@ Thứ tự xếp trong mỗi nhóm:
 3. số trận thua tăng dần;
 4. tên tăng dần.
 
-Leaderboard chỉ hiển thị người chơi active, non-guest và tối đa 20 người.
+Leaderboard chỉ hiển thị thành viên chưa xoá của mùa, không bật Ẩn BXH, không phải Guest; tối đa 20 người. Tắt Danh sách chọn không ảnh hưởng thứ hạng.
 
 Chi tiết mở rộng gồm:
 
@@ -110,9 +110,26 @@ Settings hỗ trợ:
 - chỉnh tiền phạt;
 - upload/xóa ảnh Hall of Fame theo champion của season.
 
-Trong active season, thành viên Active phải xuất hiện ở form nhập tỷ số và BXH.
-Tùy chọn `Ẩn BXH` loại thành viên khỏi BXH/analytics hiển thị và khỏi danh sách
-nhập tỷ số của season đó.
+Tên người chơi dùng chung xuyên suốt các mùa. Đổi tên không đổi các tuỳ chọn.
+Tên mới phải duy nhất, kể cả người đã xoá; kiểm tra không phân biệt hoa/thường,
+chuẩn hoá Unicode và khoảng trắng.
+
+Mùa mới tự sao chép toàn bộ danh sách và tuỳ chọn của mùa gần nhất, kể cả người
+đã xoá. Sau đó các mùa độc lập. Thêm người mới chỉ thêm vào mùa đang cấu hình.
+Danh sách chọn chỉ điều khiển nhập điểm (kể cả nhập nhanh/giọng nói) và bộ lọc
+lịch sử. Ẩn BXH chỉ ẩn khỏi BXH thường/ELO và danh sách ứng viên Vinh danh.
+Phạt tiền áp dụng cho toàn bộ trận của người đó trong mùa, kể cả trận cũ.
+
+Xoá người khỏi mùa giữ dòng mờ ở cuối Settings, khoá các tuỳ chọn và đổi nút
+xoá thành Khôi phục. Mọi trận chứa người bị xoá trong mùa bị ẩn và ngừng tính
+thống kê. Khôi phục giữ nguyên các tuỳ chọn; trận chỉ trở lại khi không còn
+người bị xoá trong mùa và trận không bị xoá riêng.
+
+Tổng hợp gom các mùa, không có tuỳ chọn riêng: người được chọn/hiện BXH khi có
+ít nhất một mùa chưa xoá cho phép tương ứng. Thống kê lấy toàn bộ trận còn được
+tính; tiền phạt cộng theo cấu hình của từng mùa. Form nhập điểm luôn theo mùa
+đang chạy. Analysis cá nhân/mạng lưới giữ mọi người có trận còn được tính,
+không phụ thuộc Danh sách chọn hoặc Ẩn BXH.
 
 Admin hỗ trợ:
 

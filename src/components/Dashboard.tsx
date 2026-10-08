@@ -11,7 +11,6 @@ import { ScoreForm } from './ScoreForm';
 import { SettingsModal } from './SettingsModal';
 import { useSharedAppData } from '@/lib/use-shared-app-data';
 import { removeMatchesLocal, type StoredPlayerSeasonSetting } from '@/lib/db';
-import { isGuestId } from '@/lib/guest';
 import { buildAnalysisSnapshot } from '@/lib/analysis-core';
 import { generateInsightSelectionResultFromSnapshot, type InsightSelectionState } from '@/lib/insights';
 import { getGlobalSelectedSeason, setGlobalSelectedSeason, isGlobalSeasonSet } from '@/lib/season-state';
@@ -20,7 +19,7 @@ import { buildHallOfFameEntries, formatHallDate, getLatestHallOfFameEntry } from
 import { deleteMatchAction } from '@/app/actions';
 import { navigateToAnalysis } from '@/lib/analysis-navigation';
 import { getSeasonTimeText } from '@/lib/season-display';
-import { selectLeaderboardPlayers, selectScorePlayers } from '@/lib/player-season-settings';
+import { filterSeasonMatches, selectAnalysisPlayers, selectLeaderboardPlayers, selectScorePlayers } from '@/lib/player-season-settings';
 import {
   patchPendingMatchDelete,
   readPendingMatchDeletes,
@@ -372,23 +371,6 @@ export default function Dashboard({
     setGlobalSelectedSeason(season);
   };
 
-  const getPlayerSetting = useCallback((playerId: string, seasonName: string) => {
-    const setting = sharedData.playerSeasonSettings.find(s => s.player_id === playerId && s.season === seasonName);
-    if (setting) {
-      return {
-        active: setting.active !== false,
-        pay_fine: setting.pay_fine !== false,
-        hidden: setting.hidden === true
-      };
-    }
-    // Fallback: lấy từ bảng players gốc
-    const player = players.find(p => p.id === playerId);
-    return {
-      active: player?.active !== false,
-      pay_fine: player?.pay_fine !== false,
-      hidden: player?.hidden === true
-    };
-  }, [sharedData.playerSeasonSettings, players]);
 
   // Tiền phạt lose_money tính theo mùa giải
   const currentSeasonInfo = useMemo(() => {
@@ -403,35 +385,24 @@ export default function Dashboard({
     return Number(config.lose_money || 5000);
   }, [currentSeasonInfo, config.lose_money]);
 
-  const activeMatches = useMemo(() => {
-    return matches.filter(m => {
-      const matchSeason = m.season || 'Season 1';
-      const isPlayerActive = (playerId: string) => getPlayerSetting(playerId, matchSeason).active;
+  const activeMatches = useMemo(() => filterSeasonMatches(matches, sharedData.playerSeasonSettings), [matches, sharedData.playerSeasonSettings]);
 
-      const isWin1Inactive = m.win_1 && !isPlayerActive(String(m.win_1));
-      const isWin2Inactive = m.win_2 && !isPlayerActive(String(m.win_2));
-      const isLose1Inactive = m.lose_1 && !isPlayerActive(String(m.lose_1));
-      const isLose2Inactive = m.lose_2 && !isPlayerActive(String(m.lose_2));
-      return !m.deleted_at && !isWin1Inactive && !isWin2Inactive && !isLose1Inactive && !isLose2Inactive;
-    });
-  }, [matches, getPlayerSetting]);
-
-  const viewedMatches = selectedSeason === null ? activeMatches : activeMatches.filter(m => (m.season || 'Season 1') === selectedSeason);
+  const viewedMatches = useMemo(() => selectedSeason === null ? activeMatches : activeMatches.filter(m => (m.season || 'Season 1') === selectedSeason), [selectedSeason, activeMatches]);
 
   const leaderboardPlayers = useMemo(() => {
-    const seasonForSettings = selectedSeason || activeSeason;
-    return selectLeaderboardPlayers(players, seasonForSettings, sharedData.playerSeasonSettings);
-  }, [players, selectedSeason, activeSeason, sharedData.playerSeasonSettings]);
+    return selectLeaderboardPlayers(players, selectedSeason, sharedData.playerSeasonSettings, matches);
+  }, [players, selectedSeason, matches, sharedData.playerSeasonSettings]);
 
   const visiblePlayers = useMemo(() => {
-    const seasonForSettings = selectedSeason || activeSeason;
-    return selectLeaderboardPlayers(players, seasonForSettings, sharedData.playerSeasonSettings)
-      .filter(p => !isGuestId(p.id));
-  }, [players, selectedSeason, activeSeason, sharedData.playerSeasonSettings]);
+    const leaderboardIds = new Set(leaderboardPlayers.map(p => p.id));
+    const participantIds = new Set(selectAnalysisPlayers(players, viewedMatches).map(p => p.id));
+    return players.filter(p => leaderboardIds.has(p.id) || participantIds.has(p.id)).map(p => ({ ...p, hidden: !leaderboardIds.has(p.id) }));
+  }, [players, viewedMatches, leaderboardPlayers]);
+  const historyPlayers = selectScorePlayers(players, selectedSeason, sharedData.playerSeasonSettings, matches);
 
   const scorePlayers = useMemo(
-    () => selectScorePlayers(players, activeSeason, sharedData.playerSeasonSettings),
-    [players, activeSeason, sharedData.playerSeasonSettings],
+    () => selectScorePlayers(players, activeSeason, sharedData.playerSeasonSettings, matches),
+    [players, activeSeason, sharedData.playerSeasonSettings, matches],
   );
 
   const analysisSnapshot = useMemo(() => buildAnalysisSnapshot(
@@ -851,7 +822,7 @@ export default function Dashboard({
               />
             </div>
             <Leaderboard
-              players={leaderboardPlayers}
+              players={leaderboardPlayers} allPlayers={players}
               matches={activeMatches}
               seasons={seasons}
               activeSeason={activeSeason}
@@ -878,7 +849,7 @@ export default function Dashboard({
               </section>
             )}
             <div className="relative z-0 3xl:hidden">
-              <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} onDeleteMatch={deleteLocalMatch} />
+              <RecentHistory matches={viewedMatches} players={players} filterPlayers={historyPlayers} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} onDeleteMatch={deleteLocalMatch} />
             </div>
           </section>
 
@@ -891,7 +862,7 @@ export default function Dashboard({
               seasons={seasons}
               playerSeasonSettings={sharedData.playerSeasonSettings}
             />
-            <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} onDeleteMatch={deleteLocalMatch} />
+            <RecentHistory matches={viewedMatches} players={players} filterPlayers={historyPlayers} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} onDeleteMatch={deleteLocalMatch} />
           </aside>
         </div>
       </div>
@@ -1036,7 +1007,7 @@ export default function Dashboard({
       {/* 2. Leaderboard */}
       <div className={DESKTOP_PANEL_WIDTH}>
         <Leaderboard
-          players={leaderboardPlayers}
+          players={leaderboardPlayers} allPlayers={players}
           matches={activeMatches}
           seasons={seasons}
           activeSeason={activeSeason}
@@ -1072,7 +1043,7 @@ export default function Dashboard({
 
       {/* 4. Recent History */}
       <div className={`relative z-0 ${DESKTOP_PANEL_WIDTH}`}>
-        <RecentHistory matches={viewedMatches} players={players} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} onDeleteMatch={deleteLocalMatch} />
+        <RecentHistory matches={viewedMatches} players={players} filterPlayers={historyPlayers} canEdit={canWrite} matchExpected={analysisSnapshot.elo.matchExpected} onDeleteMatch={deleteLocalMatch} />
       </div>
 
     </div>

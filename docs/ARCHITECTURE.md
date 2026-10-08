@@ -14,11 +14,11 @@ revalidation, backup/restore hoặc Vercel.
 
 ## Bảng và config chính
 
-- `players`: thành viên và trạng thái active.
+- `players`: danh tính và tên chung; các cờ toàn cục chỉ còn phục vụ chuyển dữ liệu cũ.
 - `matches`: lịch sử trận.
 - `config`: `active_season`, `lose_money` và data versions.
 - `seasons`: season và metadata ảnh champion.
-- `player_season_settings`: cấu hình theo người và season.
+- `player_season_settings`: danh sách thành viên theo mùa, ba tuỳ chọn và `deleted_at` riêng từng mùa.
 - `audit_logs`: lịch sử thao tác.
 - `archives`: dữ liệu soft-delete có thể phục hồi.
 
@@ -95,6 +95,24 @@ không chờ audit log hoặc revalidation. Trạng thái sync/error vẫn chạ
 
 Guest match không tăng win/loss ranking. Tiền phạt cho người thật ở đội thua vẫn
 được tính.
+
+## Danh sách người chơi theo mùa
+
+Trạng thái xoá thành viên nằm trên player-season row, không ghi đè deleted_at
+của trận. Read model loại trận nếu bất kỳ người nào bị xoá trong mùa của trận.
+Write tuỳ chọn chỉ patch trường được đổi, yêu cầu row chưa xoá; đổi tên chỉ cập
+nhật players.name. Tạo người và kiểm tra tên trùng chạy trong transaction có
+advisory lock. Tạo mùa và sao chép roster cũng là một transaction.
+
+Trước khi release cần chuyển dữ liệu bằng seedPlayerSeasonRoster: giữ các
+setting hiện có, bổ sung membership từ lịch sử, đặt người chưa có trận/setting
+vào mùa đang chạy; Guest có ở các mùa. Chuyển xoá toàn cục cũ thành xoá từng
+mùa, chỉ gỡ tombstone trận thuộc chính thao tác xoá người cũ. Backup/restore và
+import dùng cùng helper. Không gọi migration trong page render.
+Endpoint POST /api/player-roster chỉ dành cho Preview dev, yêu cầu bearer token
+PLAYER_ROSTER_MIGRATION_TOKEN và Preview write guard. Production phải được
+phê duyệt và chạy migration riêng trước khi release. Bump players, matches,
+playerSeasonSettings và ghi match reset sau chuyển đổi để cache đồng bộ lại.
 
 ## Edit, delete và restore
 

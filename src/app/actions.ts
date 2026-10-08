@@ -1,4 +1,5 @@
 'use server';
+import { normalizePlayerName, playerNameKey } from '@/lib/player-season-settings';
 import { sql } from '@vercel/postgres';
 import { del, put } from '@vercel/blob';
 import { revalidatePath } from 'next/cache';
@@ -64,6 +65,7 @@ async function ensurePlayerSeasonSettingsTable() {
       PRIMARY KEY (player_id, season)
     )
   `;
+  await sql`ALTER TABLE player_season_settings ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`;
   await sql`ALTER TABLE seasons ADD COLUMN IF NOT EXISTS lose_money INT DEFAULT 5000`;
 }
 
@@ -566,50 +568,44 @@ export async function deleteMatchAction(matchId: string) {
 
 export async function addPlayerAction(formData: FormData) {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
-
   try {
-    const name = String(formData.get('name') || '').trim();
-    if (!name) return { error: 'Tên thành viên không hợp lệ' };
-
-    const id = `P${Date.now().toString(36).slice(-7)}`.toUpperCase();
-    await sql`INSERT INTO players (id, name, active) VALUES (${id}, ${name}, true)`;
-    
-    await logAudit('ADD_PLAYER', `Added player ${name} (${id})`);
-    await bumpDataVersions(['players', 'admin']);
-
-    revalidatePath('/');
-    revalidatePath('/analysis');
+    const name = normalizePlayerName(String(formData.get('name') || ''));
+    const season = String(formData.get('season') || '').trim();
+    if (!name || !season) return { error: 'Cần nhập tên và chọn mùa.' };
+    await withTransaction(async client => {
+      await client.sql`SELECT pg_advisory_xact_lock(720241)`;
+      const { rows } = await client.sql`SELECT id, name FROM players`;
+      if (rows.some((p: { name: string }) => playerNameKey(p.name) === playerNameKey(name))) throw new Error('Tên này đã tồn tại. Hãy khôi phục người đã xoá hoặc dùng tên khác.');
+      const seasons = await client.sql`SELECT id FROM seasons WHERE name = ${season} AND archived = false`;
+      if (!seasons.rows.length) throw new Error('Mùa không tồn tại.');
+      const id = 'P' + crypto.randomUUID().replaceAll('-', '').slice(0, 9);
+      await client.sql`INSERT INTO players (id, name, active) VALUES (${id}, ${name}, true)`;
+      await client.sql`INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden) VALUES (${id}, ${season}, true, true, false)`;
+    });
+    await logAudit('ADD_PLAYER', 'Added ' + name + ' to ' + season);
+    await bumpDataVersions(['players', 'playerSeasonSettings', 'admin']);
+    revalidatePath('/'); revalidatePath('/analysis');
     return { success: true };
-  } catch (error) {
-    console.error('Failed to add player:', error);
-    return { error: 'Lỗi khi thêm thành viên. Kiểm tra lại database/setup.' };
-  }
+  } catch (error) { return { error: error instanceof Error ? error.message : 'Lỗi khi thêm thành viên.' }; }
 }
 
 export async function updatePlayerAction(formData: FormData) {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
-
   try {
     const id = String(formData.get('id') || '');
-    const name = String(formData.get('name') || '').trim();
-    const active = String(formData.get('active') || 'true') === 'true';
-    const pay_fine = String(formData.get('pay_fine') || 'true') === 'true';
-    const hidden = String(formData.get('hidden') || 'false') === 'true';
-    if (!id || !name) return { error: 'Thông tin thành viên không hợp lệ' };
-
-    if (isGuestId(id)) {
-      await sql`UPDATE players SET name = ${GUEST_NAME}, active = ${active}, deleted_at = NULL WHERE id = ${GUEST_ID}`;
-    } else {
-      await sql`UPDATE players SET name = ${name}, active = ${active}, pay_fine = ${pay_fine}, hidden = ${hidden} WHERE id = ${id}`;
-    }
-    await bumpDataVersions(['players', 'playerSeasonSettings', 'admin']);
-    revalidatePath('/');
-    revalidatePath('/analysis');
+    const name = normalizePlayerName(String(formData.get('name') || ''));
+    if (!id || !name || isGuestId(id)) return { error: 'Thông tin thành viên không hợp lệ.' };
+    await withTransaction(async client => {
+      await client.sql`SELECT pg_advisory_xact_lock(720241)`;
+      const { rows } = await client.sql`SELECT id, name FROM players`;
+      if (rows.some((p: { id: string; name: string }) => p.id !== id && playerNameKey(p.name) === playerNameKey(name))) throw new Error('Tên này đã tồn tại. Hãy dùng tên khác.');
+      await client.sql`UPDATE players SET name = ${name} WHERE id = ${id}`;
+    });
+    await logAudit('UPDATE_PLAYER', 'Renamed ' + id + ' to ' + name);
+    await bumpDataVersions(['players', 'admin']);
+    revalidatePath('/'); revalidatePath('/analysis');
     return { success: true };
-  } catch (error) {
-    console.error('Failed to update player:', error);
-    return { error: 'Lỗi khi lưu thành viên. Kiểm tra lại database/setup.' };
-  }
+  } catch (error) { return { error: error instanceof Error ? error.message : 'Lỗi khi đổi tên.' }; }
 }
 
 export async function updatePlayersAction(formData: FormData) {
@@ -652,55 +648,20 @@ async function ensureArchiveTable() {
 }
 
 export async function deletePlayerAction(formData: FormData) {
+  return setPlayerSeasonDeletedAction(String(formData.get('id') || ''), String(formData.get('season') || ''), true);
+}
+
+export async function setPlayerSeasonDeletedAction(playerId: string, season: string, deleted: boolean) {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
-
+  if (!season || !playerId || isGuestId(playerId)) return { error: 'Cần chọn thành viên và mùa hợp lệ.' };
   try {
-    const id = String(formData.get('id') || '').trim();
-    if (isGuestId(id)) return { error: 'Không được xóa Khách' };
-    if (!id) return { error: 'Thành viên không hợp lệ' };
-
-    await ensureArchiveTable();
-    await ensureSoftDeleteColumns();
-    await ensureSoftDeleteColumns();
-
-    // Get player info
-    const { rows: players } = await sql`SELECT * FROM players WHERE id = ${id}`;
-    if (players.length === 0) return { error: 'Không tìm thấy thành viên' };
-
-    // Get all related matches
-    const { rows: matches } = await sql`
-      SELECT * FROM matches 
-      WHERE deleted_at IS NULL
-        AND (win_1 = ${id} OR win_2 = ${id} OR lose_1 = ${id} OR lose_2 = ${id})
-    `;
-
-    // Archive data
-    const archiveData = { player: players[0], matches };
-    await sql`
-      INSERT INTO archives (type, original_id, name, data)
-      VALUES ('PLAYER', ${id}, ${players[0].name}, ${JSON.stringify(archiveData)})
-    `;
-
-    const groupId = `delete-player-${id}-${Date.now().toString(36)}`;
-    await sql`
-      UPDATE matches
-      SET deleted_at = NOW(), delete_group_id = ${groupId}
-      WHERE deleted_at IS NULL
-        AND (win_1 = ${id} OR win_2 = ${id} OR lose_1 = ${id} OR lose_2 = ${id})
-    `;
-    await sql`UPDATE players SET deleted_at = NOW(), active = false, delete_group_id = ${groupId} WHERE id = ${id}`;
-    
-    await logAudit('DELETE_PLAYER', `Soft deleted player ${players[0].name} (${id}) and ${matches.length} related matches.`);
-    const dataVersion = await bumpDataVersions(['players', 'matches', 'playerSeasonSettings', 'admin']);
-    await recordAppDataReset('matches', dataVersion);
-
-    revalidatePath('/');
-    revalidatePath('/analysis');
+    const { rowCount } = await sql`UPDATE player_season_settings SET deleted_at = CASE WHEN ${deleted} THEN CURRENT_TIMESTAMP ELSE NULL END WHERE player_id = ${playerId} AND season = ${season}`;
+    if (!rowCount) return { error: 'Thành viên không thuộc mùa này.' };
+    await logAudit(deleted ? 'DELETE_PLAYER_SEASON' : 'RESTORE_PLAYER_SEASON', playerId + ' in ' + season);
+    await bumpDataVersions(['playerSeasonSettings', 'admin']);
+    revalidatePath('/'); revalidatePath('/analysis'); revalidatePath('/admin');
     return { success: true };
-  } catch (error) {
-    console.error('Failed to destructive delete player:', error);
-    return { error: 'Lỗi khi xóa thành viên và dữ liệu liên quan.' };
-  }
+  } catch { return { error: 'Không thể cập nhật trạng thái thành viên trong mùa.' }; }
 }
 
 export async function deleteSeasonAction(formData: FormData) {
@@ -792,28 +753,26 @@ export async function endSeasonAction() {
 
 export async function createSeasonAction(formData: FormData) {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
-
   try {
-    await ensureSeasonTable();
     const name = String(formData.get('name') || '').trim();
-    if (!name) return { error: 'Tên Season không hợp lệ' };
-
-    await sql`UPDATE seasons SET active = false, end_date = NOW() WHERE active = true`;
-    await sql`UPDATE seasons SET active = false WHERE active = true`;
-    await sql`
-      INSERT INTO seasons (id, name, start_date, active)
-      VALUES (${name}, ${name}, NOW(), true)
-      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, active = true, archived = false, end_date = NULL
-    `;
-    await setConfigValue('active_season', name);
-    await bumpDataVersions(['seasons', 'config', 'admin']);
-    revalidatePath('/');
-    revalidatePath('/analysis');
+    if (!name) return { error: 'Tên mùa không hợp lệ.' };
+    await withTransaction(async client => {
+      await client.sql`SELECT pg_advisory_xact_lock(720242)`;
+      const existing = await client.sql`SELECT id FROM seasons WHERE name = ${name} OR id = ${name}`;
+      if (existing.rows.length) throw new Error('Tên mùa đã tồn tại.');
+      const previous = await client.sql`SELECT name FROM seasons WHERE archived = false ORDER BY start_date DESC, created_at DESC, id DESC LIMIT 1`;
+      await client.sql`UPDATE seasons SET active = false, end_date = NOW() WHERE active = true`;
+      await client.sql`INSERT INTO seasons (id, name, start_date, active) VALUES (${name}, ${name}, NOW(), true)`;
+      if (previous.rows[0]) {
+        await client.sql`INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden, deleted_at)
+          SELECT player_id, ${name}, active, pay_fine, hidden, deleted_at FROM player_season_settings WHERE season = ${previous.rows[0].name}`;
+      }
+      await client.sql`INSERT INTO config (key, value) VALUES ('active_season', ${name}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`;
+    });
+    await bumpDataVersions(['seasons', 'config', 'playerSeasonSettings', 'admin']);
+    revalidatePath('/'); revalidatePath('/analysis');
     return { success: true };
-  } catch (error) {
-    console.error('Failed to create season:', error);
-    return { error: 'Lỗi khi tạo Season.' };
-  }
+  } catch (error) { return { error: error instanceof Error ? error.message : 'Lỗi khi tạo mùa.' }; }
 }
 
 export async function setActiveSeasonAction(formData: FormData) {
@@ -1028,6 +987,8 @@ export async function restoreFromArchive(archiveId: number) {
     const data = item.data;
     
     if (item.type === 'PLAYER') {
+      const existing = await sql`SELECT id FROM players WHERE id = ${data.player.id}`;
+      if (existing.rows.length) return { error: 'Hãy khôi phục thành viên tại Settings của mùa cần khôi phục.' };
       const p = data.player;
       await sql`INSERT INTO players (id, name, active) VALUES (${p.id}, ${p.name}, ${p.active})`;
       for (const m of data.matches) {
@@ -1166,6 +1127,7 @@ function normalizePlayerSeasonSettingRows(rows: any[]) {
     active: Boolean(row.active),
     pay_fine: Boolean(row.pay_fine),
     hidden: Boolean(row.hidden),
+    deleted_at: row.deleted_at ? new Date(row.deleted_at).toISOString() : null,
   }));
 }
 
@@ -1352,20 +1314,6 @@ export async function getSeasonsAction() {
   }
 }
 
-export async function togglePlayerActiveAction(playerId: string, active: boolean) {
-  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
-
-  try {
-    await sql`UPDATE players SET active = ${active} WHERE id = ${playerId}`;
-    await logAudit('UPDATE_PLAYER', `Changed player ${playerId} active status to ${active}`);
-    await bumpDataVersions(['players', 'playerSeasonSettings', 'admin']);
-    revalidatePath('/');
-    return { success: true };
-  } catch {
-    return { error: 'Lỗi khi cập nhật trạng thái thành viên' };
-  }
-}
-
 export async function updateMatchAction(formData: FormData) {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
 
@@ -1424,30 +1372,22 @@ export async function updateMatchAction(formData: FormData) {
 }
 
 export async function updatePlayerSeasonSettingsAction(
-  playerId: string,
-  season: string,
-  active: boolean,
-  pay_fine: boolean,
-  hidden: boolean
+  playerId: string, season: string, patch: { active?: boolean; pay_fine?: boolean; hidden?: boolean },
 ) {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
-
+  if (!season || !playerId || !Object.keys(patch).length || Object.entries(patch).some(([key, value]) => !['active', 'pay_fine', 'hidden'].includes(key) || typeof value !== 'boolean')) return { error: 'Tuỳ chọn không hợp lệ.' };
   try {
-    await sql`
-      INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden)
-      VALUES (${playerId}, ${season}, ${active}, ${pay_fine}, ${hidden})
-      ON CONFLICT (player_id, season) 
-      DO UPDATE SET active = EXCLUDED.active, pay_fine = EXCLUDED.pay_fine, hidden = EXCLUDED.hidden
-    `;
-    await logAudit('UPDATE_PLAYER_SEASON_SETTINGS', `Updated settings for player ${playerId} in ${season}: active=${active}, pay_fine=${pay_fine}, hidden=${hidden}`);
+    const { rowCount } = await sql`UPDATE player_season_settings SET
+      active = COALESCE(${patch.active ?? null}::boolean, active),
+      pay_fine = COALESCE(${patch.pay_fine ?? null}::boolean, pay_fine),
+      hidden = COALESCE(${patch.hidden ?? null}::boolean, hidden)
+      WHERE player_id = ${playerId} AND season = ${season} AND deleted_at IS NULL`;
+    if (!rowCount) return { error: 'Thành viên không thuộc mùa hoặc đã bị xoá. Hãy khôi phục trước.' };
+    await logAudit('UPDATE_PLAYER_SEASON_SETTINGS', playerId + ' in ' + season + ': ' + JSON.stringify(patch));
     await bumpDataVersions(['playerSeasonSettings', 'admin']);
-    revalidatePath('/');
-    revalidatePath('/analysis');
+    revalidatePath('/'); revalidatePath('/analysis');
     return { success: true };
-  } catch (error) {
-    console.error('Update player season settings failed:', error);
-    return { error: 'Lỗi khi cập nhật cấu hình thành viên cho mùa giải' };
-  }
+  } catch { return { error: 'Lỗi khi cập nhật tuỳ chọn.' }; }
 }
 
 export async function updateSeasonFineAction(seasonId: string, loseMoney: number) {

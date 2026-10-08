@@ -1,3 +1,4 @@
+import { seedPlayerSeasonRoster } from '@/lib/player-roster-db';
 import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
@@ -171,6 +172,7 @@ export async function GET(request: Request) {
       `;
     }
 
+    await seedPlayerSeasonRoster();
     const dataVersion = await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
     await recordAppDataReset('matches', dataVersion);
 
@@ -281,6 +283,7 @@ export async function POST(request: Request) {
       inserted++;
     }
 
+    await seedPlayerSeasonRoster();
     const dataVersion = await bumpDataVersions(['matches', 'players', 'seasons', 'config', 'playerSeasonSettings', 'admin']);
     await recordAppDataReset('matches', dataVersion);
 
