@@ -4,11 +4,37 @@ import {
   calculatePairwiseDebts,
   calculateOptimizedSettlement,
   calculatePlayerStats,
+  getShortNameMap,
   LocPlayer,
   LocRound,
 } from '@/lib/loc-core';
 
 describe('loc-core', () => {
+  describe('getShortNameMap', () => {
+    it('lấy tên chính khi không trùng lặp', () => {
+      const roster: LocPlayer[] = [
+        { id: '1', name: 'Nguyễn Trung Khánh' },
+        { id: '2', name: 'Lê Văn Tuấn' },
+        { id: '3', name: 'Hải' },
+      ];
+      const map = getShortNameMap(roster);
+      expect(map.get('1')).toBe('Khánh');
+      expect(map.get('2')).toBe('Tuấn');
+      expect(map.get('3')).toBe('Hải');
+    });
+
+    it('thêm chữ cái viết tắt khi trùng tên chính (ví dụ T.Khánh)', () => {
+      const roster: LocPlayer[] = [
+        { id: '1', name: 'Nguyễn Trung Khánh' },
+        { id: '2', name: 'Lê Văn Khánh' },
+        { id: '3', name: 'Phạm Tuấn' },
+      ];
+      const map = getShortNameMap(roster);
+      expect(map.get('1')).toBe('T.Khánh');
+      expect(map.get('2')).toBe('V.Khánh');
+      expect(map.get('3')).toBe('Tuấn');
+    });
+  });
   const players: LocPlayer[] = [
     { id: 'tuan', name: 'Tuấn' },
     { id: 'minh', name: 'Minh' },

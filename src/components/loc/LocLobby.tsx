@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { LocSession, LocPlayer } from '@/lib/loc-core';
+import { LocSession, LocPlayer, getShortNameMap } from '@/lib/loc-core';
 import { Plus, Users, Clock, Sparkles, ChevronRight, X, UserPlus, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
@@ -261,7 +261,7 @@ export function LocLobby({
                   <div className="flex items-center gap-2 text-xs text-white/50">
                     <span className="flex items-center gap-1">
                       <Users className="w-3 h-3" />
-                      {s.players.map(p => p.name).join(', ')}
+                      {Array.from(getShortNameMap(s.players).values()).join(', ')}
                     </span>
                   </div>
                   <div className="text-[10px] text-white/30 font-mono">

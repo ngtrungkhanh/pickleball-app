@@ -59,6 +59,76 @@ export interface PlayerSessionStats {
 }
 
 /**
+ * Trích xuất tên gọi ngắn gọn cho người chơi:
+ * - Mặc định chỉ lấy tên chính (từ cuối cùng, ví dụ "Khánh", "Tuấn")
+ * - Nếu trong bàn có từ 2 người trở lên trùng tên chính:
+ *   thêm chữ cái đầu của tên đệm hoặc họ phía trước (ví dụ: T.Khánh)
+ */
+export function getShortNameMap(players: LocPlayer[]): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!players || players.length === 0) return map;
+
+  const parsed = players.map(p => {
+    const trimmed = (p.name || '').trim();
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    const givenName = parts[parts.length - 1] || trimmed || 'P';
+    return {
+      id: p.id,
+      fullName: trimmed,
+      parts,
+      givenName,
+    };
+  });
+
+  const counts = new Map<string, number>();
+  parsed.forEach(p => {
+    const key = p.givenName.toLowerCase();
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+
+  parsed.forEach(p => {
+    const key = p.givenName.toLowerCase();
+    const isDuplicate = (counts.get(key) || 0) > 1;
+
+    if (!isDuplicate) {
+      map.set(p.id, p.givenName);
+    } else {
+      // Có người trùng tên:
+      // Ưu tiên lấy từ liền trước tên (tên đệm) nếu có >= 3 từ (VD: "Trung Khánh" -> "T.Khánh")
+      // Nếu chỉ có 2 từ (VD: "Lê Khánh") -> lấy họ ("L.Khánh")
+      if (p.parts.length >= 2) {
+        const disambiguator = p.parts.length >= 3 ? p.parts[p.parts.length - 2] : p.parts[0];
+        const initial = disambiguator.charAt(0).toUpperCase();
+        map.set(p.id, `${initial}.${p.givenName}`);
+      } else {
+        map.set(p.id, p.givenName);
+      }
+    }
+  });
+
+  // Kiểm tra lần 2: nếu vẫn còn trùng lặp (ví dụ 2 người cùng ra "T.Khánh")
+  const disambiguatedCounts = new Map<string, number>();
+  parsed.forEach(p => {
+    const short = map.get(p.id) || p.givenName;
+    disambiguatedCounts.set(short.toLowerCase(), (disambiguatedCounts.get(short.toLowerCase()) || 0) + 1);
+  });
+
+  parsed.forEach(p => {
+    const currentShort = map.get(p.id) || p.givenName;
+    if ((disambiguatedCounts.get(currentShort.toLowerCase()) || 0) > 1) {
+      // Nếu trùng, thêm cả họ và đệm: N.T.Khánh
+      if (p.parts.length >= 3) {
+        const hInitial = p.parts[0].charAt(0).toUpperCase();
+        const dInitial = p.parts[p.parts.length - 2].charAt(0).toUpperCase();
+        map.set(p.id, `${hInitial}.${dInitial}.${p.givenName}`);
+      }
+    }
+  });
+
+  return map;
+}
+
+/**
  * Tự động phát hiện trường hợp đặc biệt dựa trên số lá:
  * - 14 lá: Úng / Cóng
  * - Tất cả người thua = 20: Báo Sâm (Ăn Sâm)
@@ -124,7 +194,7 @@ export function calculatePairwiseDebts(
   matrix: Record<string, Record<string, number>>;
   directList: PairwiseDebt[];
 } {
-  const nameMap = new Map(players.map(p => [p.id, p.name]));
+  const nameMap = getShortNameMap(players);
   const raw: Record<string, Record<string, number>> = {};
 
   // Khởi tạo bảng raw
@@ -202,7 +272,7 @@ export function calculateOptimizedSettlement(
   players: LocPlayer[],
   rounds: LocRound[]
 ): SettlementTransaction[] {
-  const nameMap = new Map(players.map(p => [p.id, p.name]));
+  const nameMap = getShortNameMap(players);
   const net: Record<string, number> = {};
   players.forEach(p => {
     net[p.id] = 0;
@@ -266,14 +336,14 @@ export function calculatePlayerStats(
   players: LocPlayer[],
   rounds: LocRound[]
 ): PlayerSessionStats[] {
-  const nameMap = new Map(players.map(p => [p.id, p.name]));
+  const nameMap = getShortNameMap(players);
   const { matrix } = calculatePairwiseDebts(players, rounds);
 
   const statsMap = new Map<string, PlayerSessionStats>();
   players.forEach(p => {
     statsMap.set(p.id, {
       id: p.id,
-      name: p.name,
+      name: nameMap.get(p.id) || p.name,
       totalRounds: 0,
       wins: 0,
       losses: 0,

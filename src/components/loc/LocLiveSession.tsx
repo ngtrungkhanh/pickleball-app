@@ -8,6 +8,7 @@ import {
   calculatePairwiseDebts,
   calculateOptimizedSettlement,
   calculatePlayerStats,
+  getShortNameMap,
   PlayerSessionStats,
 } from '@/lib/loc-core';
 import { LocDebtMatrix } from './LocDebtMatrix';
@@ -112,18 +113,30 @@ export function LocLiveSession({
     } catch {}
   };
 
+  // Bảng tên ngắn gọn (nếu trùng thêm viết tắt T.Khánh)
+  const shortNameMap = useMemo(() => {
+    return getShortNameMap(session.players);
+  }, [session.players]);
+
+  const displayPlayers = useMemo(() => {
+    return session.players.map(p => ({
+      id: p.id,
+      name: shortNameMap.get(p.id) || p.name,
+    }));
+  }, [session.players, shortNameMap]);
+
   // Tính toán
   const playerStats = useMemo(() => {
-    return calculatePlayerStats(session.players, rounds);
-  }, [session.players, rounds]);
+    return calculatePlayerStats(displayPlayers, rounds);
+  }, [displayPlayers, rounds]);
 
   const { matrix, directList } = useMemo(() => {
-    return calculatePairwiseDebts(session.players, rounds);
-  }, [session.players, rounds]);
+    return calculatePairwiseDebts(displayPlayers, rounds);
+  }, [displayPlayers, rounds]);
 
   const settlements = useMemo(() => {
-    return calculateOptimizedSettlement(session.players, rounds);
-  }, [session.players, rounds]);
+    return calculateOptimizedSettlement(displayPlayers, rounds);
+  }, [displayPlayers, rounds]);
 
   const handleShare = async () => {
     const url = window.location.href;
@@ -167,21 +180,21 @@ export function LocLiveSession({
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col pb-24">
       {/* Top Bar */}
-      <div className="sticky top-0 z-30 bg-slate-950/95 backdrop-blur-md border-b border-white/10 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="sticky top-0 z-30 bg-slate-950/95 backdrop-blur-md border-b border-white/10 px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
           <button
             onClick={onBackToLobby}
-            className="p-1.5 -ml-1.5 text-white/60 hover:text-white rounded-lg hover:bg-white/10"
+            className="p-1 -ml-1 text-white/60 hover:text-white rounded-lg hover:bg-white/10 shrink-0"
             title="Về danh sách"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <div>
-            <h1 className="text-sm font-black text-white truncate max-w-[200px] sm:max-w-md">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xs sm:text-sm font-bold text-white/95 leading-tight break-words">
               {session.title}
             </h1>
-            <div className="flex items-center gap-1.5 text-[10px] text-white/50">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <div className="flex items-center gap-1.5 text-[10px] text-white/50 mt-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
               <span>Trực tiếp · {rounds.length} ván</span>
             </div>
           </div>
@@ -189,17 +202,17 @@ export function LocLiveSession({
 
         <button
           onClick={handleShare}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/[0.05] border border-white/10 text-xs font-semibold text-white/80 hover:bg-white/10 transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/[0.05] border border-white/10 text-xs font-semibold text-white/80 hover:bg-white/10 transition-colors shrink-0"
         >
           {copied ? (
             <>
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-emerald-400 font-bold">Đã chép link</span>
+              <span className="text-emerald-400 font-bold text-[11px] sm:text-xs">Đã chép link</span>
             </>
           ) : (
             <>
               <Share2 className="w-3.5 h-3.5 text-amber-400" />
-              <span>Chia sẻ</span>
+              <span className="text-[11px] sm:text-xs">Chia sẻ</span>
             </>
           )}
         </button>
@@ -294,7 +307,7 @@ export function LocLiveSession({
 
         {/* Tab 1: Sổ nợ ma trận */}
         {activeTab === 'matrix' && (
-          <LocDebtMatrix players={session.players} matrix={matrix} directList={directList} />
+          <LocDebtMatrix players={displayPlayers} matrix={matrix} directList={directList} />
         )}
 
         {/* Tab 2: Bù trừ tối ưu (Cấp độ 2) */}
@@ -345,7 +358,7 @@ export function LocLiveSession({
               </div>
             ) : (
               [...rounds].reverse().map(round => {
-                const winner = session.players.find(p => p.id === round.winnerId);
+                const winnerName = shortNameMap.get(round.winnerId) || 'Người thắng';
                 const totalWon = round.debts.reduce((sum, d) => sum + (d.cards || 0), 0);
 
                 return (
@@ -359,7 +372,7 @@ export function LocLiveSession({
                           #{round.roundNumber}
                         </span>
                         <span className="font-bold text-sm text-emerald-400">
-                          🏆 {winner?.name || 'Người thắng'} ăn (+{totalWon} lá)
+                          🏆 {winnerName} ăn (+{totalWon} lá)
                         </span>
                       </div>
 
@@ -377,13 +390,13 @@ export function LocLiveSession({
                     {/* Chi tiết người thua */}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {round.debts.map(d => {
-                        const loser = session.players.find(p => p.id === d.loserId);
+                        const loserName = shortNameMap.get(d.loserId) || 'Người thua';
                         return (
                           <div
                             key={d.loserId}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/5 text-xs"
                           >
-                            <span className="text-white/80">{loser?.name}:</span>
+                            <span className="text-white/80">{loserName}:</span>
                             <span className="font-mono font-bold text-red-400">-{d.cards}</span>
                             {d.autoTag && (
                               <span className="px-1.5 py-0.2 rounded text-[10px] font-black bg-amber-500/20 text-amber-300 uppercase">
@@ -422,7 +435,7 @@ export function LocLiveSession({
           key={`round-${rounds.length + 1}`}
           isOpen={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}
-          players={session.players}
+          players={displayPlayers}
           roundNumber={rounds.length + 1}
           onSave={handleSaveRound}
         />

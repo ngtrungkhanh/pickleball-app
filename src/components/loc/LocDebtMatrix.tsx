@@ -150,20 +150,24 @@ export function LocDebtMatrix({ players, matrix, directList }: LocDebtMatrixProp
         </div>
       ) : (
         /* Danh sách thẻ nợ */
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="space-y-1.5">
           {directList.map((item, idx) => (
             <div
               key={`${item.fromId}-${item.toId}-${idx}`}
-              className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5"
+              className="grid grid-cols-[1fr_24px_1fr_60px] items-center px-3 py-2.5 rounded-xl bg-white/[0.02] border border-white/5 text-xs sm:text-sm"
             >
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-sm text-white/90">{item.fromName}</span>
-                <ArrowRight className="w-3.5 h-3.5 text-white/30" />
-                <span className="font-bold text-sm text-emerald-400">{item.toName}</span>
+              <span className="font-bold text-white/90 text-right truncate pr-1">
+                {item.fromName}
+              </span>
+              <div className="flex items-center justify-center text-white/30">
+                <ArrowRight className="w-3.5 h-3.5" />
               </div>
-              <div className="flex items-center gap-1 font-mono font-black text-red-400 text-sm">
+              <span className="font-bold text-emerald-400 text-left truncate pl-1">
+                {item.toName}
+              </span>
+              <div className="flex items-center justify-end gap-1 font-mono font-black text-red-400 text-right">
                 <span>{item.cards}</span>
-                <span className="text-[11px] text-white/40 font-normal">lá</span>
+                <span className="text-[10px] text-white/40 font-normal">lá</span>
               </div>
             </div>
           ))}
