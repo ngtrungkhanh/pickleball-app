@@ -319,6 +319,14 @@ export function AnalysisCenter({
           
             {/* Header Controls */}
             <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-end lg:shrink-0">
+              <Link
+                href="/loc"
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-white/[0.08] bg-slate-900 px-2.5 text-xs font-semibold text-white/60 hover:bg-amber-500/10 hover:text-amber-300 hover:border-amber-500/30 transition-colors"
+                title="Sổ Lốc tính lá"
+              >
+                <span>🂠</span>
+                <span>Sổ Lốc</span>
+              </Link>
               <select
                 value={selectedSeason ?? 'all'}
                 onChange={e => handleSeasonChange(e.target.value === 'all' ? null : e.target.value)}
