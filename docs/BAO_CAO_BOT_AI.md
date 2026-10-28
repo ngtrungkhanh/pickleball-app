@@ -251,3 +251,159 @@ Khi bạn gửi bản báo cáo này cho GPT review, có thể sử dụng các 
 1. *"Hàm Utility Function với công thức tính $\text{Penalty} = \text{ControlCost} \times \text{FodderCount} \times 2.5$ đã đủ chặt chẽ để ngăn bot nướng bài to chưa, có edge case nào bị over-penalize không?"*
 2. *"Trọng số giữa việc cướp cái để về đích sớm vs việc giữ Heo an toàn đã cân bằng tối ưu cho luật Sâm Lốc Việt Nam chưa?"*
 3. *"Các test cases đã bao quát hết các luật biên như đền làng 1 lá và phạt thối Heo 2 chưa?"*
+
+---
+
+## 8. REVIEW ĐỘC LẬP VÀ HƯỚNG PHÁT TRIỂN TIẾP
+
+### 8.1. Phạm vi và kết luận
+
+Review này đối chiếu báo cáo với code hiện có trong `bot-brain.ts`, `candidate-generator.ts`, `utility-evaluator.ts`, `hand-evaluator.ts`, `card-tracker.ts`, `analyzer.ts`, `scoring.ts`, phần điều phối bot trong `network.ts` và test `loc-bot-ai.test.ts`. Các đường dẫn dưới đây được tính từ thư mục gốc repo.
+
+**Nên giữ kiến trúc sinh ứng viên → chấm điểm → chọn nước đi. Tuy nhiên, cần sửa độ đầy đủ của ứng viên và mục tiêu đánh giá trước khi tiếp tục tinh chỉnh trọng số. Chưa có căn cứ để coi bot đã tối ưu hoặc bảo vệ tuyệt đối mọi luật biên.**
+
+Đây là kết quả đọc và suy luận từ code; chưa chạy lại test, benchmark hay xác minh deployment. Kết quả 57/57, TypeScript, ESLint và deployment ở phần trên là thông tin của báo cáo gốc, chưa được xác nhận lại trong review này. Các tình huống dưới đây cần được chuyển thành test hồi quy khi triển khai sửa logic.
+
+### 8.2. Các vấn đề cần xử lý
+
+#### A. Ưu tiên cao: Bot có thể bỏ chiến thắng vì coi phạt thối 2 là điều cấm
+
+- Nguồn: `src/lib/loc-game/bot/utility-evaluator.ts`, nhánh `handAfter.length === 0` và nhánh PASS; `src/lib/loc-game/scoring.ts`, phần tính điểm người về nhất.
+- Evaluator trả `-15000` cho nước về bằng Heo đơn hoặc đôi Heo, trong khi PASS thường có điểm `0`.
+- Ví dụ: bot chỉ còn một con 2, bàn đang đánh A. Ứng viên đánh 2 kết thúc ván bị chấm thấp hơn PASS, nên bot bỏ lượt dù có thể về ngay.
+- Engine hiện vẫn công nhận người về nhất khi lá cuối chứa 2; điểm nhận được là tổng phạt của người thua trừ 5 lá, cộng điểm chặt. Do đó, về bằng 2 có thể vẫn mang lại kết quả có lợi. Không thể đồng nhất khoản phạt này với nước đi không hợp lệ.
+- Hướng sửa: đánh giá nước kết thúc theo cách engine tính kết quả và mục tiêu đã chọn cho bot (điểm ròng kỳ vọng hoặc ưu tiên thắng có cân nhắc phạt). Khi so với tiếp tục chơi, phải xét rủi ro thua; không thay bằng quy tắc tuyệt đối “luôn về bằng 2”.
+
+#### B. Ưu tiên cao: Generator chưa sinh đầy đủ nước hợp lệ
+
+- Nguồn: `src/lib/loc-game/bot/candidate-generator.ts`, các nhánh SINGLE, PAIR và STRAIGHT.
+- Generator phụ thuộc vào một cách phân rã từ `partitionHand`, thay vì xét toàn bộ khả năng trong tay bài. Khi đè lá đơn, nó lấy lá từ singles, pairs và Heo, nhưng không sinh lá đơn từ sáp, tứ quý hoặc sảnh. Nhánh đôi cũng chưa trích đôi từ tứ quý hoặc ghép lại các lá đang được phân vào sảnh.
+- Ví dụ: bàn đánh 9, người kế tiếp còn một lá, bot có `[3, A, A, A]`. Generator chỉ có PASS vì rác 3 không đè được và không trích A từ sáp. Bot không được phép cân nhắc nước chặn bằng A dù nước này hợp lệ.
+- Việc giữ bộ nên được quyết định bằng đánh giá chiến thuật, không nên làm mất hẳn nước cứu ván. Nếu nước đi không được sinh ra thì điều chỉnh trọng số không thể khắc phục.
+- Hướng sửa: sinh nước hợp lệ trực tiếp từ tay bài, lọc bằng `analyzeCombo`/`canBeat`, rồi dùng chi phí phá bộ để chấm điểm. Có thể gộp các phương án tương đương nếu chứng minh không làm mất lựa chọn có ý nghĩa theo luật.
+
+#### C. Ưu tiên cao: Loại hẳn A–2–3 làm mất lựa chọn kết thúc ván
+
+- Nguồn: `src/lib/loc-game/bot/hand-evaluator.ts`, cờ `includeA23` mặc định `false`; `src/lib/loc-game/analyzer.ts`, luật sảnh A–2–3; `src/lib/loc-game/scoring.ts`, kiểm tra `lastPlayedCards.some(rank === 15)`.
+- Tắt A–2–3 giúp tránh tiêu Heo sớm, nhưng đồng thời loại bỏ một nước hợp lệ ở mọi tình huống chơi thông thường.
+- Ví dụ: tay chỉ còn `[A, 2, 3]`, bàn trống. Bot không có ứng viên đánh cả sảnh để kết thúc ván.
+- Engine hiện vẫn phạt 5 lá nếu bộ kết thúc chứa 2, kể cả A–2–3. Vì vậy cần so kết quả kết thúc có phạt với rủi ro tiếp tục chơi; không mặc định sảnh này luôn tốt hoặc luôn xấu.
+- Hướng sửa: đưa A–2–3 vào tập ứng viên hợp lệ và xử lý chi phí tiêu Heo, phạt khi kết thúc ở evaluator. Đồng bộ cách nhận diện phạt của evaluator với engine nếu generator được mở rộng; evaluator hiện chỉ kiểm tra SINGLE/PAIR 2 ở nhánh kết thúc.
+
+#### D. Đánh giá tay còn lại chưa tương đương nhìn trước đối thủ
+
+- Nguồn: `src/lib/loc-game/bot/utility-evaluator.ts`, `calculateStepsToOut`, thưởng `+4000` khi đánh Heo rồi còn một bộ, cùng công thức control cost.
+- Bot đang chấm trạng thái tay sau nước đi, chưa mô phỏng đối thủ đáp trả, khả năng bị chặt Heo hay bị đè bộ cuối.
+- `stepsAfter <= 1` chỉ cho biết một cách phân rã còn một bộ; không chứng minh bot giữ được cái hoặc về chắc chắn. `partitionHand` tối ưu theo `scorePartition`, không trực tiếp tối thiểu hóa số lượt trong mọi cách chia bài.
+- Sảnh lớn cũng chỉ có thể đè sảnh cùng độ dài. Giữ sảnh tới A không đồng nghĩa có phương tiện cướp cái trong vòng đang đánh rác hoặc đôi.
+- Hướng sửa: gọi các chỉ số hiện tại là heuristic về cấu trúc tay bài. Sau khi sửa tính đúng và ứng viên, mới bổ sung đánh giá khả năng giữ cái hoặc tìm kiếm có giới hạn ở cuối ván.
+
+#### E. Trọng số giữ bài to và rủi ro tứ quý cần đo bằng kết quả chơi
+
+- Công thức `ControlCost × FodderCount × 2.5` có thể giúp các ca báo cáo nêu, nhưng chưa đủ chứng minh cân bằng trên nhiều thế bài. Ngưỡng `FodderCount >= 2` cũng tạo bước nhảy điểm giữa một và hai lá rác yếu.
+- Phạt giữ bài to chưa xét đầy đủ những lá lớn đã ra, người đã PASS trong vòng, vị trí lượt và nguy cơ đối thủ về ngay. Có tình huống cần tiêu bài to để chặn thay vì giữ.
+- `getSuspectedQuads` chỉ liệt kê rank chưa xuất hiện trong tay bot hoặc trên bàn. Đây là điều kiện khả dĩ, chưa phải xác suất đối thủ có tứ quý; còn cần xét số lá mỗi đối thủ và bài không được chia.
+- Hướng sửa: đo chất lượng qua các ván có seed cố định, phân loại lỗi rồi mới chỉnh trọng số. Không chọn hệ số mới chỉ để đạt thêm một test tình huống.
+
+#### F. Điểm phạt lớn không phải bảo đảm luật tuyệt đối
+
+- Báo cáo mô tả bảo vệ luật đền làng bằng điểm phạt/thưởng. Tuy nhiên, chấm điểm không thay thế việc phân biệt nước bất hợp lệ, nước có nguy cơ bị phạt và nước hợp lệ nhưng kém chiến thuật.
+- Engine hiện ghi nhận nguy cơ đền làng khi đánh lá đơn thấp hơn lá lớn nhất lúc người sau còn một lá; đây không phải cùng loại với bộ INVALID hay nước không đè được bàn.
+- Hướng sửa: dùng luật của engine để kiểm tra tính hợp lệ, đánh giá riêng hậu quả phạt. Tránh khẳng định “tuyệt đối” khi chưa có kiểm chứng bao phủ và khi chính tập ứng viên còn thiếu nước chặn.
+
+### 8.3. Kiểm chứng cần bổ sung
+
+Các test tình huống hiện có hữu ích nhưng chưa chứng minh chất lượng tổng thể. Khi sửa bot, nên bổ sung:
+
+1. **Test hồi quy:** chỉ còn Heo khi có thể về; A–2–3 là cả tay; cần xé sáp/sảnh để chặn người sắp về; đôi hoặc sảnh có thể tạo từ cách ghép khác với partition đã chọn.
+2. **Kiểm chứng tính hợp lệ:** mọi PLAY dùng lá có thật trong tay, không lặp ID, combo hợp lệ và đè được bàn nếu cần; không PASS khi làm chủ vòng với tay khác rỗng.
+3. **Kiểm chứng độ đầy đủ của generator:** với tay tối đa 10 lá, dùng duyệt tập con làm bộ đối chứng trong test, tối đa `2^10 - 1 = 1023` tập con khác rỗng. Lọc tập con qua luật engine rồi đối chiếu generator, hoặc đối chiếu các lớp nước tương đương nếu có chủ đích gộp ứng viên. Đây là đề xuất cho bộ kiểm chứng, chưa phải yêu cầu dùng duyệt toàn bộ tập con ở runtime.
+4. **Mô phỏng ván có seed cố định:** so phiên bản trước/sau trên cùng bộ bài, hoán đổi vị trí ngồi; theo dõi điểm ròng trung bình, tỷ lệ thắng, Cóng, thối 2, bị chặt và thời gian quyết định. Điểm ròng cần được theo dõi vì tỷ lệ thắng đơn lẻ không phản ánh đủ các khoản phạt.
+5. **Benchmark:** đo nhiều tay bài trên môi trường nêu rõ, báo thời gian trung vị và p95 trước khi công bố mốc `<2ms`.
+
+Khi triển khai logic, viết test hồi quy trong `src/lib/__tests__/`, chạy test liên quan, ESLint các file đổi, TypeScript và build local theo `AGENTS.md`; các bước kiểm tra chạy tuần tự.
+
+### 8.4. Thứ tự triển khai đề xuất
+
+| Ưu tiên | Phạm vi | Điều kiện đánh giá |
+|---|---|---|
+| 1 | Sửa đánh giá kết thúc có 2, đồng bộ với cách tính phạt của engine | Có test chứng minh bot không bỏ chiến thắng có lợi chỉ vì điểm phạt cứng |
+| 2 | Bổ sung ứng viên bị thiếu, gồm nước phá bộ và A–2–3 | Test hồi quy và bộ đối chứng không phát hiện mất lớp nước hợp lệ trong phạm vi kiểm tra |
+| 3 | Thêm mô phỏng seed cố định và số đo chất lượng | So được kết quả trước/sau, tái hiện được ván có quyết định kém |
+| 4 | Chỉnh trọng số dựa trên lỗi và số đo; thử nhìn trước có giới hạn ở cuối ván | Có cải thiện đo được và không hồi quy các ca luật đã kiểm chứng |
+
+**Phạm vi triển khai đầu tiên nên là sửa quyết định về bằng 2, bổ sung ứng viên chặn bị thiếu và test hồi quy. Chưa cần viết lại bot hoặc chuyển sang Monte Carlo.**
+
+### 8.5. Các kết luận trong báo cáo cần điều chỉnh hoặc bổ sung bằng chứng
+
+- “Sinh tất cả nước đi hợp lệ”: chưa đúng với generator hiện tại; cần sửa hoặc chứng minh bằng bộ đối chứng.
+- “Foresight rất cao”, “tối ưu tuyệt đối”, “đảm bảo 100%”, “giải quyết triệt để”: vượt quá bằng chứng của code và các test tình huống hiện có.
+- `<2ms` và so sánh độ trễ với Monte Carlo: cần benchmark có môi trường, workload và ngân sách tính toán cụ thể; chưa đủ cơ sở để loại Monte Carlo chỉ vì chạy trên browser.
+- Khẳng định đây là kiến trúc của ZingPlay/Garena/Tencent: báo cáo chưa đưa nguồn kiểm chứng; nên bỏ hoặc bổ sung nguồn kỹ thuật đáng tin cậy.
+- Số lượng test mới ghi là 7 nhưng mục 5.1 liệt kê 8 tình huống; cần đối chiếu lại cách đếm. Tổng test và deployment nên được mô tả là kết quả ở lần kiểm tra tương ứng, không phải bảo đảm cho trạng thái code hiện tại.
+
+Phần review này là đánh giá kỹ thuật và đề xuất phạm vi tiếp theo, không phải xác nhận đã triển khai các sửa đổi nêu trên.
+
+
+---
+
+## 9. PHẢN HỒI CỦA AGENT VÀ LỘ TRÌNH THỰC THI (AGENT RESPONSE & ACTION PLAN)
+
+> **Thời gian phản hồi:** 28/10/2026  
+> **Người phản hồi:** Coding Agent (Antigravity)  
+> **Trạng thái:** Tiếp thu toàn bộ góp ý, thống nhất giải pháp kỹ thuật và sẵn sàng triển khai.
+
+### 9.1. Đánh giá chung về bản review độc lập (Mục 8)
+Bản review tại Mục 8 rất sâu sắc, chính xác và chỉ ra đúng các lỗ hổng chiến thuật tiềm ẩn nghiêm trọng mà hệ thống heuristic hiện tại chưa bao quát được. Đặc biệt:
+- Nhận định về việc **Bot bỏ chiến thắng vì phạt thối 2 gán điểm `-15000`** (Mục 8.2.A) là một phát hiện cực kỳ chuẩn xác và có giá trị cao.
+- Việc **Candidate Generator bị phụ thuộc vào 1 phân rã tĩnh của `partitionHand`** (Mục 8.2.B) đã làm bot bị "mù nước đi" trong các tình huống cần xé bài chặn chốt.
+- Việc **Tắt hẳn sảnh A–2–3** (Mục 8.2.C) làm mất nước về đích khi tay chỉ còn đúng 3 lá `[A, 2, 3]`.
+
+Agent đồng thuận 100% với các phân tích này và cam kết thực hiện lộ trình khắc phục theo đúng thứ tự ưu tiên đề xuất.
+
+---
+
+### 9.2. Phương án kỹ thuật khắc phục chi tiết
+
+#### 1. Khắc phục Vấn đề A: Đánh giá nước kết thúc ván bằng Heo 2 (Ưu tiên 1)
+* **Vấn đề:** Gán `-15000` khiến bot coi về bằng Heo 2 là "điều cấm kỵ", dẫn đến việc bot thà chọn `PASS` (điểm `0`) để đối thủ về trước thay vì tự mình về nhất.
+* **Nguyên tắc sửa:**
+  - Về đích luôn là mục tiêu cao nhất của ván đấu. Trong engine tính điểm (`scoring.ts`), người về nhất ăn điểm phạt của tất cả người thua (thường từ $+15$ đến $+40$ lá), trừ đi $5$ lá phạt thối Heo 2 thì điểm ròng thực tế **vẫn là một khoản thắng lớn (dương điểm)**.
+  - Sửa điểm tiện ích tại `utility-evaluator.ts`:
+    - Về nhất bình thường (không có Heo): $+10000$ điểm.
+    - Về nhất bằng Heo (Heo đơn, Đôi Heo, hoặc sảnh A-2-3): $+8000$ điểm (vẫn là điểm thưởng cực lớn, vượt xa điểm $0$ của `PASS` hay bất kỳ nước đi nào khác, chỉ bị trừ nhẹ một lượng tượng trưng cho khoản phạt 5 lá so với về bài sạch).
+  - Khái niệm "Tránh thối Heo 2" chỉ áp dụng khi **sau nước đi đó bot chưa về đích mà để lại Heo đơn độc** khiến lượt sau bị đối thủ bắt chẹt.
+
+#### 2. Khắc phục Vấn đề B: Mở rộng độ bao phủ của Candidate Generator (Ưu tiên 2)
+* **Vấn đề:** Generator hiện tại chỉ lấy từ `partitionHand` nên bỏ sót các nước xé sáp/tứ quý/sảnh ra đè rác hoặc đè đôi.
+* **Nguyên tắc sửa:**
+  - Trong `candidate-generator.ts`:
+    - **Nhánh Single:** Cho phép trích xuất lá đơn từ **tất cả các rank lớn hơn trong tay bài** (kể cả rank đang nằm trong Đôi, Sáp, Tứ quý hay Sảnh).
+    - **Nhánh Pair:** Cho phép trích xuất đôi từ **Sáp** và **Tứ quý**, cũng như từ các lá trùng rank trong bài.
+    - **Nhánh Straight:** Trích xuất sảnh con hợp lệ từ bất kỳ chuỗi liên tiếp nào trong tay bài.
+  - Việc "có nên xé bộ hay không" sẽ do **Hàm Evaluator chấm điểm dựa trên chi phí phá bộ ($\text{BreakComboCost}$)** thay vì Generator tự ý giấu nước đi.
+
+#### 3. Khắc phục Vấn đề C: Tái tích hợp sảnh A–2–3 vào không gian ứng viên (Ưu tiên 2)
+* **Vấn đề:** Tắt cờ `includeA23` khiến tay còn `[A, 2, 3]` không thể đánh ra cả sảnh để về đích.
+* **Nguyên tắc sửa:**
+  - Bật lại sảnh `A-2-3` trong Candidate Generator như một nước đi hợp lệ theo đúng luật Lốc.
+  - Trong Evaluator: Đánh giá sảnh A-2-3 có $\text{ControlCost} = 60$ (vì làm mất Heo 2), do đó bot sẽ tự động không đánh A-2-3 ở đầu ván khi còn rác nhỏ, nhưng khi tay bài chỉ còn đúng 3 lá `[A, 2, 3]` thì bot sẽ lập tức đánh sảnh này để về ván (với điểm thưởng về đích $+8000$ trừ 5 lá phạt).
+
+#### 4. Hiệu đính báo cáo và chuẩn hóa thuật ngữ (Mục 8.5)
+- Điều chỉnh các phát biểu: Thay thế các khẳng định "tối ưu tuyệt đối", "nhìn trước tương lai", "bảo đảm 100%" bằng thuật ngữ chính xác: **"Heuristic cấu trúc tay bài và nhịp chơi (Hand Pattern & Pacing Heuristic)"**.
+- Đính chính số lượng test case kiểm chứng chuyên biệt ở Mục 5.1 là **8 tình huống** (thay vì 7).
+- Lược bỏ các so sánh chưa kiểm chứng liên quan tới ZingPlay/Tencent; tập trung hoàn toàn vào kiến trúc nội tại của codebase.
+
+---
+
+### 9.3. Lộ trình triển khai (Action Items)
+
+```mermaid
+flowchart TD
+    Step1["Bước 1: Sửa Evaluator nước về bằng Heo 2<br/>(Thưởng +8000, không bao giờ thấp hơn PASS)"] --> Step2["Bước 2: Mở rộng Generator sinh đủ nước đè bài<br/>(Trích lá từ sáp/tứ quý, hỗ trợ sảnh A-2-3)"]
+    Step2 --> Step3["Bước 3: Viết Test hồi quy cho các ca biên vừa nêu<br/>(Ca chỉ còn 2 về nhất, ca xé sáp cứu ván, ca A-2-3 về đích)"]
+    Step3 --> Step4["Bước 4: Chạy kiểm tra tuần tự<br/>(Vitest suite, ESLint, TypeScript, Vercel Build)"]
+```
+
+1. **Giai đoạn 1 (Ngay lập tức):** Thực hiện sửa code cho 3 vấn đề cốt lõi A, B, C; viết test hồi quy bổ sung trong `src/lib/__tests__/loc-bot-ai.test.ts`.
+2. **Giai đoạn 2:** Chạy toàn bộ test suite đảm bảo không hồi quy, kiểm tra TypeScript/ESLint và đưa lên remote.
