@@ -45,6 +45,11 @@ export interface TableState {
   currentTurnPlayerId: string | null;
   roundLeaderPlayerId: string | null;
   turnDeadline: number | null; // Timestamp đếm ngược 30s cho mỗi lượt đánh
+  historyPause?: {
+    viewerIds: string[];
+    remainingTurnMs: number;
+    remainingBotMs?: number;
+  };
   lastPlay: { playerId: string; playerName: string; combo: CardCombo } | null;
   recentPlays?: { playerId: string; playerName: string; combo: CardCombo }[];
   roundPlayRecords?: RoundPlayRecord[];
@@ -86,6 +91,7 @@ export type BroadcastEvent =
   | { type: 'SKIP_SAM'; roomId: string; playerId: string }
   | { type: 'PLAY_CARDS'; roomId: string; playerId: string; cards: Card[] }
   | { type: 'PASS_TURN'; roomId: string; playerId: string }
+  | { type: 'HISTORY_VIEW'; roomId: string; playerId: string; isOpen: boolean }
 
   // ROOM EVENTS: Host -> Clients
   | { type: 'SYNC_TABLE_STATE'; roomId: string; state: TableState }

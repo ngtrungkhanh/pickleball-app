@@ -8,11 +8,13 @@ import { X, History } from 'lucide-react';
 interface LocPlayHistoryModalProps {
   records: RoundPlayRecord[];
   onClose: () => void;
+  isPaused?: boolean;
 }
 
 export const LocPlayHistoryModal: React.FC<LocPlayHistoryModalProps> = ({
   records,
   onClose,
+  isPaused = false,
 }) => {
   // Sắp xếp theo phương dọc: Lượt mới nhất ở trên, lá nào đánh trước ở dưới.
   // Khi người dùng cuộn/kéo lên trên sẽ tới lá đầu tiên được đánh.
@@ -20,7 +22,7 @@ export const LocPlayHistoryModal: React.FC<LocPlayHistoryModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4 animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[90cqh] flex flex-col shadow-2xl overflow-hidden">
         {/* HEADER */}
         <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/80 shrink-0">
           <div className="flex items-center gap-2">
@@ -34,6 +36,7 @@ export const LocPlayHistoryModal: React.FC<LocPlayHistoryModalProps> = ({
                   ? `Tổng cộng ${records.length} lượt đánh (Lá đánh trước ở dưới cùng)`
                   : 'Chưa có lượt đánh nào'}
               </p>
+              {isPaused && <p className="text-[11px] text-amber-300">Ván đang tạm dừng, đóng lịch sử để tiếp tục.</p>}
             </div>
           </div>
           <button

@@ -97,6 +97,7 @@ export const LocCard: React.FC<LocCardProps> = ({
 
   return (
     <div
+      data-card-id={card.id}
       onClick={!disabled ? onClick : undefined}
       className={`relative select-none cursor-pointer bg-white opacity-100 transition-all duration-150 flex flex-col justify-between p-1.5 sm:p-2 border border-slate-300 overflow-hidden ${
         isSelected

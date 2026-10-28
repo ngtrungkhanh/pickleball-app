@@ -159,6 +159,7 @@ export class HostGameEngine {
   private announceInterval: NodeJS.Timeout | null = null;
   private samTimer: NodeJS.Timeout | null = null;
   private turnTimer: NodeJS.Timeout | null = null;
+  private botTurnDeadline: number | null = null;
   private previousWinnerId: string | null = null;
   private bots: Map<string, BotBrain> = new Map();
   private botTimers: Map<string, NodeJS.Timeout> = new Map();
@@ -495,6 +496,7 @@ export class HostGameEngine {
    * Xử lý người rời phòng
    */
   public handleLeave(playerId: string) {
+    this.state.historyPause = undefined;
     const leaver = this.state.players.find((p) => p.id === playerId) || this.state.spectators.find((s) => s.id === playerId);
     const leaverName = leaver?.name || 'Một người chơi';
 
@@ -555,6 +557,7 @@ export class HostGameEngine {
    * Kết thúc ván, không đánh tiếp (về bàn chờ)
    */
   public endRoundToWaiting() {
+    this.state.historyPause = undefined;
     this.stopTurnTimer();
     this.clearAllBotTimers();
     this.state.turnDeadline = null;
@@ -591,6 +594,8 @@ export class HostGameEngine {
     }
 
     // 1. Chia bài cho tất cả người chơi
+    this.state.historyPause = undefined;
+    this.stopTurnTimer();
     this.clearAllBotTimers();
     for (const [, brain] of this.bots) {
       brain.getTracker().reset();
@@ -810,12 +815,39 @@ export class HostGameEngine {
   }
 
   /**
-   * Bắt đầu đếm ngược 30s cho lượt hiện tại (và kích hoạt Bot nếu đến lượt Bot)
+   * Giữ thời gian còn lại cho đến khi tất cả người xem lịch sử đã đóng.
    */
-  private startTurnTimer() {
+  public handleHistoryView(playerId: string, isOpen: boolean) {
+    if (this.state.status !== 'playing' || !this.state.players.some(player => player.id === playerId && !player.isBot)) return;
+    const pause = this.state.historyPause;
+    if (isOpen) {
+      if (pause?.viewerIds.includes(playerId)) return;
+      this.state.historyPause = pause
+        ? { ...pause, viewerIds: [...pause.viewerIds, playerId] }
+        : {
+            viewerIds: [playerId],
+            remainingTurnMs: Math.max(0, (this.state.turnDeadline ?? Date.now()) - Date.now()),
+            remainingBotMs: this.botTurnDeadline === null ? undefined : Math.max(0, this.botTurnDeadline - Date.now()),
+          };
+      this.stopTurnTimer();
+      this.state.turnDeadline = null;
+    } else {
+      if (!pause?.viewerIds.includes(playerId)) return;
+      const viewerIds = pause.viewerIds.filter(id => id !== playerId);
+      if (viewerIds.length) this.state.historyPause = { ...pause, viewerIds };
+      else {
+        this.state.historyPause = undefined;
+        this.startTurnTimer(pause.remainingTurnMs, pause.remainingBotMs);
+      }
+    }
+    this.broadcastState();
+  }
+
+  /** Bắt đầu lượt mới hoặc tiếp tục thời gian còn lại sau khi tạm dừng. */
+  private startTurnTimer(remainingMs = 30000, remainingBotMs?: number) {
     this.stopTurnTimer();
     const currentId = this.state.currentTurnPlayerId;
-    if (!currentId || this.state.status !== 'playing') {
+    if (!currentId || this.state.status !== 'playing' || this.state.historyPause) {
       this.state.turnDeadline = null;
       return;
     }
@@ -825,9 +857,10 @@ export class HostGameEngine {
     if (currentPlayer?.isBot) {
       const brain = this.bots.get(currentId);
       if (brain) {
-        const botDelay = 800 + Math.floor(Math.random() * 800);
+        const botDelay = remainingBotMs ?? (800 + Math.floor(Math.random() * 800));
+        this.botTurnDeadline = Date.now() + botDelay;
         const timer = setTimeout(() => {
-          if (this.state.status !== 'playing' || this.state.currentTurnPlayerId !== currentId) return;
+          if (this.state.status !== 'playing' || this.state.historyPause || this.state.currentTurnPlayerId !== currentId) return;
           const botHand = this.hands[currentId] || [];
           const decision = brain.decideMove(currentId, botHand, this.state);
           if (decision.action === 'PLAY' && decision.cards.length > 0) {
@@ -840,13 +873,14 @@ export class HostGameEngine {
       }
     }
 
-    this.state.turnDeadline = Date.now() + 30000;
+    this.state.turnDeadline = Date.now() + remainingMs;
     this.turnTimer = setTimeout(() => {
       this.handleTurnTimeout();
-    }, 30000);
+    }, remainingMs);
   }
 
   private stopTurnTimer() {
+    this.botTurnDeadline = null;
     if (this.turnTimer) {
       clearTimeout(this.turnTimer);
       this.turnTimer = null;
@@ -863,7 +897,7 @@ export class HostGameEngine {
    */
   private handleTurnTimeout() {
     const currentId = this.state.currentTurnPlayerId;
-    if (!currentId || this.state.status !== 'playing') return;
+    if (!currentId || this.state.status !== 'playing' || this.state.historyPause) return;
 
     const playerName = this.state.players.find((p) => p.id === currentId)?.name || 'Người chơi';
 
@@ -893,7 +927,7 @@ export class HostGameEngine {
    * Người chơi đánh bài
    */
   public handlePlayCards(playerId: string, cards: Card[], botReason?: string) {
-    if (this.state.status !== 'playing') return;
+    if (this.state.status !== 'playing' || this.state.historyPause) return;
     if (this.state.currentTurnPlayerId !== playerId) return;
 
     const combo = analyzeCombo(cards);
@@ -1026,7 +1060,7 @@ export class HostGameEngine {
    * Người chơi Bỏ lượt
    */
   public handlePassTurn(playerId: string, botReason?: string) {
-    if (this.state.status !== 'playing') return;
+    if (this.state.status !== 'playing' || this.state.historyPause) return;
     if (this.state.currentTurnPlayerId !== playerId) return;
     if (this.state.roundLeaderPlayerId === playerId) {
       // Người làm chủ vòng không được bỏ lượt khi bàn trống

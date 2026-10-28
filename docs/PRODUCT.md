@@ -33,6 +33,16 @@ nghìn trận:
 - `/fast-add`: Giao diện nhập điểm nhanh tối giản chuyên dùng cho PWA shortcut. Có một đường link bí mật (phiên bản v1.0.0) ẩn dưới cùng góc trái màn hình Settings để truy cập thủ công.
 - Không có route người dùng riêng cho `/history` hoặc `/add-match`.
 
+## Game đánh Lốc
+
+- Bàn chơi hỗ trợ 3–5 người, tối ưu điện thoại ngang và màn dọc tự xoay 90°.
+- Bài trên tay được sắp xếp tự động. Nút Xoay nằm ở cạnh dưới bàn; nút Báo Sâm,
+  Huỷ Sâm và thao tác đánh/bỏ lượt dùng chung vùng phía trên bộ bài.
+- Khi không có bài chặn, ẩn thao tác đánh/bỏ lượt và tự qua sau 2 giây.
+- Người chơi mở lịch sử đánh bài sẽ tạm dừng cả bàn: giữ nguyên thời gian lượt,
+  dừng bot và auto bỏ lượt. Chỉ tiếp tục khi tất cả người đang xem đã đóng lịch sử.
+  Khán giả xem lịch sử không làm dừng bàn.
+
 ## Ghi điểm
 
 - Bắt buộc chọn đủ `winner 1`, `winner 2`, `loser 1`, `loser 2`.

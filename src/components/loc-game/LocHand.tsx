@@ -15,6 +15,7 @@ interface LocHandProps {
   onSelectionChange: (selectedIds: string[]) => void;
   disabled?: boolean;
   playerName?: string;
+  playerId?: string;
   dimHintCardIds?: string[];
   isAiHintEnabled?: boolean;
   turnSecondsLeft?: number | null;
@@ -22,6 +23,7 @@ interface LocHandProps {
   isNextTurn?: boolean;
   isRoundEnded?: boolean;
   scoreDetail?: PlayerScoreDetail | null;
+  trailingControl?: React.ReactNode;
 }
 
 export const LocHand: React.FC<LocHandProps> = ({
@@ -32,6 +34,7 @@ export const LocHand: React.FC<LocHandProps> = ({
   onSelectionChange,
   disabled = false,
   playerName = 'You',
+  playerId,
   dimHintCardIds = [],
   isAiHintEnabled = true,
   turnSecondsLeft = null,
@@ -39,6 +42,7 @@ export const LocHand: React.FC<LocHandProps> = ({
   isNextTurn = false,
   isRoundEnded = false,
   scoreDetail = null,
+  trailingControl,
 }) => {
   const isWinner = Boolean(scoreDetail?.isWinner);
   const sortedHand = useMemo(() => sortCards(hand), [hand]);
@@ -77,11 +81,6 @@ export const LocHand: React.FC<LocHandProps> = ({
       const newSelected = [...selectedCardIds, card.id];
       onSelectionChange(newSelected);
     }
-  };
-
-  // Nút Sắp Xếp
-  const handleSortClick = () => {
-    onSelectionChange([]);
   };
 
   return (
@@ -240,7 +239,7 @@ export const LocHand: React.FC<LocHandProps> = ({
       </div>
 
       {/* 2. DÃY LÁ BÀI TRÊN TAY: XẾP XÒE GỐI ĐÈ NHAU CHUẨN ZINGPLAY */}
-      <div className="min-w-0 flex-1 flex justify-center items-end px-2 sm:px-4 overflow-visible">
+      <div data-hand-player-id={playerId} className="loc-self-hand min-w-0 flex-1 flex justify-center items-end px-2 sm:px-4 overflow-visible">
         <div
           className="grid items-end select-none w-full"
           style={{
@@ -280,16 +279,7 @@ export const LocHand: React.FC<LocHandProps> = ({
         </div>
       </div>
 
-      {/* 3. NÚT "SẮP XẾP" */}
-      <div className="shrink-0">
-        <button
-          type="button"
-          onClick={handleSortClick}
-          className="px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-black text-xs sm:text-sm text-white bg-gradient-to-r from-sky-400 to-cyan-500 hover:from-sky-300 hover:to-cyan-400 active:scale-95 transition shadow-[0_4px_15px_rgba(14,165,233,0.6)] border border-white/20 select-none cursor-pointer"
-        >
-          Sắp Xếp
-        </button>
-      </div>
+      <div className="shrink-0">{trailingControl}</div>
     </div>
   );
 };

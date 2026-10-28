@@ -204,6 +204,8 @@ export default function DanhLocPage() {
         engine.handlePlayCards(event.playerId, event.cards);
       } else if (event.type === 'PASS_TURN') {
         engine.handlePassTurn(event.playerId);
+      } else if (event.type === 'HISTORY_VIEW') {
+        engine.handleHistoryView(event.playerId, event.isOpen);
       } else if (event.type === 'PLAYER_READY') {
         engine.handlePlayerReady(event.playerId, event.isReady);
       } else if (event.type === 'END_ROUND_WAITING') {
@@ -291,6 +293,13 @@ export default function DanhLocPage() {
         roomId: currentRoomId,
         playerId,
       });
+    }
+  };
+
+  const handleHistoryView = (isOpen: boolean) => {
+    if (hostEngineRef.current) hostEngineRef.current.handleHistoryView(playerId, isOpen);
+    else if (sendRoomEventRef.current && currentRoomId) {
+      sendRoomEventRef.current({ type: 'HISTORY_VIEW', roomId: currentRoomId, playerId, isOpen });
     }
   };
 
@@ -414,6 +423,7 @@ export default function DanhLocPage() {
           isSpectator={isSpectator}
           onPlayCards={handlePlayCards}
           onPassTurn={handlePassTurn}
+          onHistoryViewChange={handleHistoryView}
           onCallSam={handleCallSam}
           onSkipSam={handleSkipSam}
           onStartGame={handleStartGame}

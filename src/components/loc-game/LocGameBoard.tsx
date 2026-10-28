@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { TableState } from '@/lib/loc-game/network-types';
 import { Card } from '@/lib/loc-game/types';
 import { analyzeCombo, canBeat } from '@/lib/loc-game/analyzer';
@@ -33,6 +33,7 @@ interface LocGameBoardProps {
   isSpectator: boolean;
   onPlayCards: (cards: Card[]) => void;
   onPassTurn: () => void;
+  onHistoryViewChange?: (isOpen: boolean) => void;
   onCallSam: () => void;
   onSkipSam: () => void;
   onStartGame: () => void;
@@ -51,6 +52,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   isSpectator,
   onPlayCards,
   onPassTurn,
+  onHistoryViewChange,
   onCallSam,
   onSkipSam,
   onStartGame,
@@ -65,6 +67,20 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showScoreHistory, setShowScoreHistory] = useState(false);
   const [showPlayHistoryModal, setShowPlayHistoryModal] = useState(false);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const playRef = useRef<HTMLDivElement>(null);
+  const selectedOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const historyCallbackRef = useRef(onHistoryViewChange);
+  const passCallbackRef = useRef(onPassTurn);
+  const autoPassRef = useRef({ remainingMs: 2000 });
+  useEffect(() => {
+    historyCallbackRef.current = onHistoryViewChange;
+    passCallbackRef.current = onPassTurn;
+  }, [onHistoryViewChange, onPassTurn]);
+  useEffect(() => {
+    if (!isSpectator) historyCallbackRef.current?.(showPlayHistoryModal);
+  }, [showPlayHistoryModal, isSpectator]);
+  useEffect(() => () => { historyCallbackRef.current?.(false); }, []);
   const [showDebugModal, setShowDebugModal] = useState(false);
   const [showRoundOverModal, setShowRoundOverModal] = useState(false);
   const [confirmExitType, setConfirmExitType] = useState<'to_waiting' | 'leave_room' | null>(null);
@@ -253,6 +269,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
 
   const isHost = players.find((p) => p.id === myPlayerId)?.isHost ?? false;
   const isMyTurn = currentTurnPlayerId === myPlayerId && status === 'playing';
+  const isPaused = Boolean(tableState.historyPause) || (showPlayHistoryModal && !isSpectator && status === 'playing');
   const myPlayer = players.find((p) => p.id === myPlayerId);
 
   useEffect(() => {
@@ -261,9 +278,10 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   }, []);
 
   const turnSecondsLeft = useMemo(() => {
+    if (tableState.historyPause) return Math.ceil(tableState.historyPause.remainingTurnMs / 1000);
     if (status !== 'playing' || !turnDeadline) return null;
     return Math.max(0, Math.ceil((turnDeadline - now) / 1000));
-  }, [status, turnDeadline, now]);
+  }, [status, turnDeadline, now, tableState.historyPause]);
 
   const samSecondsLeft = useMemo(() => {
     if (status !== 'sam_calling' || !samState?.deadline) return null;
@@ -286,13 +304,22 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   }, [isMyTurn, isSpectator, status, lastPlay, myHand]);
 
   useEffect(() => {
-    if (cannotBeat) {
-      const timer = setTimeout(() => {
-        onPassTurn();
-      }, 500);
-      return () => clearTimeout(timer);
+    const autoPass = autoPassRef.current;
+    if (!cannotBeat) {
+      autoPass.remainingMs = 2000;
+      return;
     }
-  }, [cannotBeat, onPassTurn]);
+    if (isPaused) return;
+    const startedAt = Date.now();
+    const timer = setTimeout(() => {
+      autoPass.remainingMs = 2000;
+      passCallbackRef.current();
+    }, autoPass.remainingMs);
+    return () => {
+      clearTimeout(timer);
+      autoPass.remainingMs = Math.max(0, autoPass.remainingMs - (Date.now() - startedAt));
+    };
+  }, [cannotBeat, isPaused, currentTurnPlayerId, lastPlay]);
 
   const botBrain = useMemo(() => new BotBrain(), []);
 
@@ -363,16 +390,6 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
     };
   }, [opponents]);
 
-  // Hướng bay animation của lá bài vừa đánh ra giữa bàn
-  const flyDirection = useMemo(() => {
-    if (!lastPlay) return 'bottom';
-    if (lastPlay.playerId === myPlayerId) return 'bottom';
-    if (leftOpponent && lastPlay.playerId === leftOpponent.id) return 'left';
-    if (rightOpponent && lastPlay.playerId === rightOpponent.id) return 'right';
-    if (topOpponents.some((p) => p && p.id === lastPlay.playerId)) return 'top';
-    return 'bottom';
-  }, [lastPlay, myPlayerId, leftOpponent, rightOpponent, topOpponents]);
-
   const selectedCards = useMemo(() => {
     const idSet = new Set(selectedCardIds);
     return myHand.filter((c) => idSet.has(c.id));
@@ -383,23 +400,30 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   }, [selectedCards]);
 
   const canPlay = useMemo(() => {
-    if (!isMyTurn || isSpectator || selectedCombo.type === 'INVALID') {
+    if (!isMyTurn || isPaused || isSpectator || selectedCombo.type === 'INVALID') {
       return false;
     }
     if (!lastPlay) {
       return true;
     }
     return canBeat(selectedCombo, lastPlay.combo);
-  }, [isMyTurn, isSpectator, selectedCombo, lastPlay]);
+  }, [isMyTurn, isPaused, isSpectator, selectedCombo, lastPlay]);
 
   const canPass = useMemo(() => {
-    if (!isMyTurn || isSpectator) return false;
+    if (!isMyTurn || isPaused || isSpectator) return false;
     if (roundLeaderPlayerId === myPlayerId || !lastPlay) return false;
     return true;
-  }, [isMyTurn, isSpectator, roundLeaderPlayerId, myPlayerId, lastPlay]);
+  }, [isMyTurn, isPaused, isSpectator, roundLeaderPlayerId, myPlayerId, lastPlay]);
 
   const handlePlayClick = () => {
     if (canPlay) {
+      const cards = [...(boardRef.current?.querySelectorAll<HTMLElement>('[data-card-id]') ?? [])]
+        .filter(element => element.classList.contains('loc-hand-card') && selectedCardIds.includes(element.dataset.cardId!))
+        .map(element => element.getBoundingClientRect());
+      if (cards.length) selectedOriginRef.current = {
+        x: (Math.min(...cards.map(card => card.left)) + Math.max(...cards.map(card => card.right))) / 2,
+        y: (Math.min(...cards.map(card => card.top)) + Math.max(...cards.map(card => card.bottom))) / 2,
+      };
       onPlayCards(selectedCards);
       setSelectedCardIds([]);
     }
@@ -412,8 +436,51 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
     }
   };
 
+  const sourcePlayerId = lastPlay?.playerId;
+  const playKey = lastPlay ? `${lastPlay.playerId}:${lastPlay.combo.cards.map(card => card.id).join(',')}` : '';
+  useLayoutEffect(() => {
+    const target = playRef.current;
+    const source = [...(boardRef.current?.querySelectorAll<HTMLElement>('[data-hand-player-id]') ?? [])]
+      .find(element => element.dataset.handPlayerId === sourcePlayerId);
+    if (!target?.animate || !source || !sourcePlayerId) return;
+    const targetRect = target.getBoundingClientRect();
+    const sourceRect = source.getBoundingClientRect();
+    const origin = sourcePlayerId === myPlayerId && selectedOriginRef.current
+      ? selectedOriginRef.current
+      : { x: sourceRect.left + sourceRect.width / 2, y: sourceRect.top + sourceRect.height / 2 };
+    selectedOriginRef.current = null;
+    const screenX = origin.x - (targetRect.left + targetRect.width / 2);
+    const screenY = origin.y - (targetRect.top + targetRect.height / 2);
+    const scale = (isRotated ? targetRect.height : targetRect.width) / target.offsetWidth || 1;
+    const x = (isRotated ? screenY : screenX) / scale;
+    const y = (isRotated ? -screenX : screenY) / scale;
+    const animation = target.animate([
+      { transform: `translate(${x}px, ${y}px) rotate(${Math.max(-18, Math.min(18, x / 20))}deg) scale(0.65)` },
+      { transform: 'translate(0, 0) rotate(0) scale(1)' },
+    ], { duration: 500, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' });
+    return () => animation.cancel();
+  }, [playKey, sourcePlayerId, isRotated, myPlayerId]);
+
+  const rotateControl = (
+    <button
+      type="button"
+      onClick={handleToggleRotate}
+      className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-bold transition shadow-md cursor-pointer active:scale-95 ${
+        isRotated
+          ? 'bg-amber-400 text-slate-950 border border-amber-200'
+          : 'bg-black/60 hover:bg-black/80 text-amber-300 border border-amber-400/40'
+      }`}
+      title="Xoay ngang 90 độ bàn chơi"
+    >
+      <RotateCcw className={`w-3.5 h-3.5 transition-transform duration-200 ${isRotated ? 'rotate-90' : ''}`} />
+      <span className="text-[11px] sm:text-xs font-mono font-bold">{isRotated ? '90°' : 'Xoay'}</span>
+    </button>
+  );
+
+
   return (
     <div
+      ref={boardRef}
       className={`loc-game-board ${status === 'round_ended' ? 'loc-round-ended' : ''} relative bg-[#0b1a2d] overflow-hidden select-none font-sans flex flex-col justify-between`}
       style={
         isRotated
@@ -438,39 +505,14 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
             }
       }
     >
-      {/* KEYFRAMES ANIMATION LIA BÀI RA GIỮA BÀN */}
       <style jsx global>{`
-        @keyframes locFlyBottom {
-          0% { transform: translateY(200px) rotate(-12deg) scale(0.65); opacity: 0.3; }
-          75% { transform: translateY(-8px) rotate(3deg) scale(1.04); opacity: 1; }
-          100% { transform: translateY(0) scale(1); opacity: 1; }
-        }
-        @keyframes locFlyTop {
-          0% { transform: translateY(-200px) rotate(12deg) scale(0.65); opacity: 0.3; }
-          75% { transform: translateY(8px) rotate(-3deg) scale(1.04); opacity: 1; }
-          100% { transform: translateY(0) scale(1); opacity: 1; }
-        }
-        @keyframes locFlyLeft {
-          0% { transform: translate(-240px, -40px) rotate(-18deg) scale(0.65); opacity: 0.3; }
-          75% { transform: translate(8px, -4px) rotate(3deg) scale(1.04); opacity: 1; }
-          100% { transform: translate(0, 0) scale(1); opacity: 1; }
-        }
-        @keyframes locFlyRight {
-          0% { transform: translate(240px, -40px) rotate(18deg) scale(0.65); opacity: 0.3; }
-          75% { transform: translate(-8px, -4px) rotate(-3deg) scale(1.04); opacity: 1; }
-          100% { transform: translate(0, 0) scale(1); opacity: 1; }
-        }
-        .anim-fly-bottom { animation: locFlyBottom 0.5s ease-out forwards; }
-        .anim-fly-top { animation: locFlyTop 0.5s ease-out forwards; }
-        .anim-fly-left { animation: locFlyLeft 0.5s ease-out forwards; }
-        .anim-fly-right { animation: locFlyRight 0.5s ease-out forwards; }
         .loc-game-board {
           container-type: size;
           --loc-hand-card-width: clamp(80px, 10cqw, 144px);
         }
         .loc-hand-card { width: var(--loc-hand-card-width); }
         @container (max-height: 500px) {
-          .loc-hand-card { height: 108px; aspect-ratio: auto; }
+          .loc-hand-card { height: 88px; aspect-ratio: auto; }
           .loc-self-portrait { width: 32px; height: 32px; }
           .loc-opponent-avatar { width: 64px; }
           .loc-opponent-portrait { width: 32px; height: 32px; }
@@ -530,23 +572,6 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
               Khán giả
             </span>
           )}
-
-          {/* Nút Xoay ngang 90 độ */}
-          <button
-            type="button"
-            onClick={handleToggleRotate}
-            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-bold transition shadow-md cursor-pointer active:scale-95 ${
-              isRotated
-                ? 'bg-amber-400 text-slate-950 border border-amber-200'
-                : 'bg-black/60 hover:bg-black/80 text-amber-300 border border-amber-400/40'
-            }`}
-            title="Xoay ngang 90 độ bàn chơi"
-          >
-            <RotateCcw className={`w-3.5 h-3.5 transition-transform duration-200 ${isRotated ? 'rotate-90' : ''}`} />
-            <span className="text-[11px] sm:text-xs font-mono font-bold">
-              {isRotated ? '90°' : 'Xoay'}
-            </span>
-          </button>
 
           {/* Nút Cài đặt (Mở Modal gom tất cả tiện ích) */}
           <button
@@ -720,46 +745,6 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
               </div>
             )}
 
-            {/* TRƯỜNG HỢP 2: BÁO SÂM */}
-            {status === 'sam_calling' && (
-              <div className="flex flex-row items-center justify-center gap-2 sm:gap-3 flex-wrap">
-                {!hasSkippedSam ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={onCallSam}
-                      className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-black text-xs sm:text-sm text-white bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 hover:brightness-110 active:scale-95 transition shadow-[0_6px_20px_rgba(34,197,94,0.6)] border border-white/20 cursor-pointer"
-                    >
-                      Báo Sâm
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onSkipSam}
-                      className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-black text-xs sm:text-sm text-white bg-gradient-to-r from-red-500 via-rose-500 to-red-600 hover:brightness-110 active:scale-95 transition shadow-[0_6px_20px_rgba(239,68,68,0.6)] border border-white/20 cursor-pointer"
-                    >
-                      Huỷ Sâm
-                    </button>
-                  </>
-                ) : (
-                  <div className="px-3.5 py-1.5 rounded-xl font-bold text-xs text-slate-200 bg-slate-900/90 border border-emerald-500/40 shadow-xl flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                    Đã huỷ Báo Sâm
-                  </div>
-                )}
-
-                {samSecondsLeft !== null && (
-                  <div className="px-3 py-1.5 rounded-xl bg-black/70 border border-amber-400/40 flex items-center gap-1.5 shadow-lg">
-                    <span className="text-[11px] font-bold text-amber-300">
-                      ⏳ Tự huỷ sau:
-                    </span>
-                    <span className="text-xs sm:text-sm font-black font-mono text-yellow-400 animate-pulse">
-                      {samSecondsLeft}s
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* TRƯỜNG HỢP 3: CỤM BÀI VỪA ĐÁNH Ở GIỮA BÀN (CÓ ANIMATION LIA BÀI RA GIỮA) */}
             {status === 'playing' && currentRecentPlays.length > 0 && (
               <div
@@ -785,15 +770,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
                 {/* Hàng 2 (lượt mới nhất): bài bay từ phía người đánh ra giữa bàn */}
                 <div
                   key={lastPlay ? `play_${lastPlay.playerId}_${lastPlay.combo.cards.map((c) => c.id).join('_')}` : 'play_cur'}
-                  className={`flex items-center justify-center z-20 drop-shadow-[0_16px_30px_rgba(0,0,0,0.85)] ${
-                    flyDirection === 'top'
-                      ? 'anim-fly-top'
-                      : flyDirection === 'left'
-                      ? 'anim-fly-left'
-                      : flyDirection === 'right'
-                      ? 'anim-fly-right'
-                      : 'anim-fly-bottom'
-                  }`}
+                  ref={playRef}
+                  className="flex items-center justify-center z-20 drop-shadow-[0_16px_30px_rgba(0,0,0,0.85)]"
                 >
                   {currentRecentPlays[currentRecentPlays.length - 1].combo.cards.map((c, idx) => (
                     <div
@@ -831,85 +809,134 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
 
         {/* --- KHU VỰC DƯỚI BÀN: NÚT THAO TÁC VÀ DÃY BÀI NGƯỜI CHƠI --- */}
         <div className="w-full shrink-0 flex flex-col items-center">
-          {/* Chừa khoảng trống cho độ nhô và viền sáng của lá được chọn. */}
-          {status === 'playing' && isMyTurn && !isSpectator && (
-            <div className="flex items-center justify-center gap-2 sm:gap-4 mb-9 sm:mb-11 z-30 pointer-events-auto">
-              {/* Nút Cho Qua */}
-              <button
-                type="button"
-                onClick={handlePassClick}
-                disabled={!canPass}
-                className={`w-20 sm:w-28 md:w-32 py-1.5 sm:py-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-base text-white transition shadow-lg shrink-0 cursor-pointer ${
-                  canPass
-                    ? 'bg-[#e24c4c] hover:bg-[#d63031] active:scale-95 shadow-[0_4px_16px_rgba(226,76,76,0.6)] border border-white/20'
-                    : 'bg-slate-700/60 text-slate-400 opacity-50 cursor-not-allowed'
-                }`}
-              >
-                Cho Qua
-              </button>
+          <div className={status === 'waiting' ? 'contents' : 'w-full min-h-[80px] sm:min-h-[90px] flex items-start justify-center'}>
+            {/* TRƯỜNG HỢP 2: BÁO SÂM */}
+            {status === 'sam_calling' && (
+              <div className="flex min-h-11 items-center justify-center gap-2 sm:gap-3 mb-9 sm:mb-11 z-30">
+                {!hasSkippedSam ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={onCallSam}
+                      className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-black text-xs sm:text-sm text-white bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 hover:brightness-110 active:scale-95 transition shadow-[0_6px_20px_rgba(34,197,94,0.6)] border border-white/20 cursor-pointer"
+                    >
+                      Báo Sâm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onSkipSam}
+                      className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-black text-xs sm:text-sm text-white bg-gradient-to-r from-red-500 via-rose-500 to-red-600 hover:brightness-110 active:scale-95 transition shadow-[0_6px_20px_rgba(239,68,68,0.6)] border border-white/20 cursor-pointer"
+                    >
+                      Huỷ Sâm
+                    </button>
+                  </>
+                ) : (
+                  <div className="px-3.5 py-1.5 rounded-xl font-bold text-xs text-slate-200 bg-slate-900/90 border border-emerald-500/40 shadow-xl flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    Đã huỷ Báo Sâm
+                  </div>
+                )}
 
-              {/* Bộ đếm giây 30s của turn ở chính giữa */}
-              {turnSecondsLeft !== null && (
-                <div
-                  className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full font-black text-xs sm:text-sm font-mono shadow-xl border-2 flex items-center gap-1 shrink-0 ${
-                    turnSecondsLeft <= 5
-                      ? 'bg-red-600 text-white border-white animate-bounce shadow-[0_0_15px_rgba(239,68,68,0.9)]'
-                      : 'bg-emerald-500 text-slate-950 border-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.7)]'
-                  }`}
+                {samSecondsLeft !== null && (
+                  <div className="px-3 py-1.5 rounded-xl bg-black/70 border border-amber-400/40 flex items-center gap-1.5 shadow-lg">
+                    <span className="text-[11px] font-bold text-amber-300">
+                      ⏳ Tự huỷ sau:
+                    </span>
+                    <span className="text-xs sm:text-sm font-black font-mono text-yellow-400 animate-pulse">
+                      {samSecondsLeft}s
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Chừa khoảng trống cho độ nhô và viền sáng của lá được chọn. */}
+            {status === 'playing' && isMyTurn && !isSpectator && (
+              <div className="flex items-center justify-center gap-2 sm:gap-4 mb-9 sm:mb-11 z-30 pointer-events-auto">
+                {/* Không yêu cầu thao tác khi không có bài chặn. */}
+                {!cannotBeat && (
+                  <button
+                    type="button"
+                    onClick={handlePassClick}
+                    disabled={!canPass}
+                    className={`w-20 sm:w-28 md:w-32 py-1.5 sm:py-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-base text-white transition shadow-lg shrink-0 cursor-pointer ${
+                      canPass
+                        ? 'bg-[#e24c4c] hover:bg-[#d63031] active:scale-95 shadow-[0_4px_16px_rgba(226,76,76,0.6)] border border-white/20'
+                        : 'bg-slate-700/60 text-slate-400 opacity-50 cursor-not-allowed'
+                    }`}
+                  >
+                    Cho Qua
+                  </button>
+                )}
+                {cannotBeat && <span className="text-xs font-bold text-amber-200">{isPaused ? 'Đang tạm dừng' : 'Không có bài chặn · tự qua sau 2s'}</span>}
+
+                {/* Bộ đếm giây 30s của turn ở chính giữa */}
+                {turnSecondsLeft !== null && (
+                  <div
+                    className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full font-black text-xs sm:text-sm font-mono shadow-xl border-2 flex items-center gap-1 shrink-0 ${
+                      turnSecondsLeft <= 5
+                        ? 'bg-red-600 text-white border-white animate-bounce shadow-[0_0_15px_rgba(239,68,68,0.9)]'
+                        : 'bg-emerald-500 text-slate-950 border-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.7)]'
+                    }`}
+                  >
+                    <span>⏱️</span>
+                    <span>{turnSecondsLeft}s</span>
+                  </div>
+                )}
+
+                {/* Nút Đánh */}
+                {!cannotBeat && (
+                  <button
+                    type="button"
+                    onClick={handlePlayClick}
+                    disabled={!canPlay}
+                    className={`w-20 sm:w-28 md:w-32 py-1.5 sm:py-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-base transition shadow-lg shrink-0 cursor-pointer ${
+                      canPlay
+                        ? 'bg-[#22c55e] hover:bg-[#16a34a] text-white active:scale-95 shadow-[0_4px_16px_rgba(34,197,94,0.7)] border border-white/20 ring-2 ring-emerald-300 animate-pulse'
+                        : 'bg-[#546e7a] text-slate-300 opacity-60 cursor-not-allowed border border-white/10'
+                    }`}
+                  >
+                    Đánh
+                  </button>
+                  )}
+              </div>
+            )}
+
+            {/* KHI KẾT THÚC VÁN: VỊ TRÍ 2 NÚT BIẾN THÀNH [VÁN MỚI] VÀ [VỀ PHÒNG CHỜ] */}
+            {status === 'round_ended' && (
+              <div className="flex items-center justify-center gap-2 sm:gap-4 mb-9 sm:mb-11 z-30 pointer-events-auto animate-fade-in">
+                <button
+                  type="button"
+                  onClick={onNextRound}
+                  className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-[0_4px_20px_rgba(34,197,94,0.7)] border border-emerald-300 hover:brightness-110 active:scale-95 transition cursor-pointer flex items-center gap-1.5"
                 >
-                  <span>⏱️</span>
-                  <span>{turnSecondsLeft}s</span>
-                </div>
-              )}
+                  <span>▶</span>
+                  <span>{isHost ? 'Ván Mới (Chủ phòng)' : 'Sẵn Sàng Ván Mới'}</span>
+                </button>
 
-              {/* Nút Đánh */}
-              <button
-                type="button"
-                onClick={handlePlayClick}
-                disabled={!canPlay}
-                className={`w-20 sm:w-28 md:w-32 py-1.5 sm:py-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-base transition shadow-lg shrink-0 cursor-pointer ${
-                  canPlay
-                    ? 'bg-[#22c55e] hover:bg-[#16a34a] text-white active:scale-95 shadow-[0_4px_16px_rgba(34,197,94,0.7)] border border-white/20 ring-2 ring-emerald-300 animate-pulse'
-                    : 'bg-[#546e7a] text-slate-300 opacity-60 cursor-not-allowed border border-white/10'
-                }`}
-              >
-                Đánh
-              </button>
-            </div>
-          )}
+                <button
+                  type="button"
+                  onClick={() => setConfirmExitType('to_waiting')}
+                  className="px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl font-extrabold text-xs sm:text-sm bg-slate-800/90 hover:bg-slate-700 text-amber-200 border border-slate-600 active:scale-95 transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>⏸️</span>
+                  <span>Về Phòng Chờ</span>
+                </button>
+              </div>
+            )}
 
-          {/* KHI KẾT THÚC VÁN: VỊ TRÍ 2 NÚT BIẾN THÀNH [VÁN MỚI] VÀ [VỀ PHÒNG CHỜ] */}
-          {status === 'round_ended' && (
-            <div className="flex items-center justify-center gap-2 sm:gap-4 mb-9 sm:mb-11 z-30 pointer-events-auto animate-fade-in">
-              <button
-                type="button"
-                onClick={onNextRound}
-                className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-[0_4px_20px_rgba(34,197,94,0.7)] border border-emerald-300 hover:brightness-110 active:scale-95 transition cursor-pointer flex items-center gap-1.5"
-              >
-                <span>▶</span>
-                <span>{isHost ? 'Ván Mới (Chủ phòng)' : 'Sẵn Sàng Ván Mới'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setConfirmExitType('to_waiting')}
-                className="px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl font-extrabold text-xs sm:text-sm bg-slate-800/90 hover:bg-slate-700 text-amber-200 border border-slate-600 active:scale-95 transition cursor-pointer flex items-center gap-1.5"
-              >
-                <span>⏸️</span>
-                <span>Về Phòng Chờ</span>
-              </button>
-            </div>
-          )}
-
+          </div>
           {/* DÃY BÀI TRÊN TAY CỦA NGƯỜI CHƠI */}
           <div className="w-full">
             <LocHand
+              playerId={myPlayerId}
+              trailingControl={rotateControl}
               hand={myHand}
               tableCombo={lastPlay?.combo ?? null}
               isMyTurn={isMyTurn}
               selectedCardIds={status === 'playing' ? selectedCardIds : []}
               onSelectionChange={setSelectedCardIds}
-              disabled={status !== 'playing' || !isMyTurn || isSpectator}
+              disabled={status !== 'playing' || !isMyTurn || isPaused || isSpectator}
               playerName={myPlayer?.name || 'You'}
               dimHintCardIds={isAiHintEnabled && isMyTurn ? suggestedCardIds : []}
               isAiHintEnabled={isAiHintEnabled}
@@ -922,6 +949,12 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
           </div>
         </div>
       </div>
+
+      {tableState.historyPause && !showPlayHistoryModal && (
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 rounded-xl border border-amber-400/40 bg-slate-950/95 px-4 py-3 text-center text-xs font-bold text-amber-200 shadow-xl">
+          Tạm dừng · {players.filter(player => tableState.historyPause!.viewerIds.includes(player.id)).map(player => player.name).join(', ')} đang xem lịch sử
+        </div>
+      )}
 
       {/* POPUP TỔNG KẾT VÁN ĐẤU (CHỈ HIỆN KHI NGƯỜI DÙNG BẤM XEM TỪ CÀI ĐẶT) */}
       {showRoundOverModal && tableState.roundResult && (
@@ -1101,6 +1134,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
       {/* POPUP LỊCH SỬ ĐÁNH BÀI VÁN HIỆN TẠI */}
       {showPlayHistoryModal && (
         <LocPlayHistoryModal
+          isPaused={isPaused}
           records={tableState.roundPlayRecords || []}
           onClose={() => setShowPlayHistoryModal(false)}
         />

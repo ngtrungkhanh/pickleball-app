@@ -236,7 +236,7 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
 
   // Lá bài của đối thủ: Khi kết thúc ván thì NGỬA BÀI, khi đang chơi thì ÚP BÀI
   const cardBox = isRoundEnded && remainingCards ? (
-    <div className="loc-revealed-hand grid grid-cols-[repeat(4,minmax(0,1fr))_40px] sm:grid-cols-[repeat(4,minmax(0,1fr))_48px] md:grid-cols-[repeat(4,minmax(0,1fr))_56px] gap-y-1 w-[136px] sm:w-[160px] md:w-[184px] shrink-0">
+    <div data-hand-player-id={player.id} className="loc-revealed-hand grid grid-cols-[repeat(4,minmax(0,1fr))_40px] sm:grid-cols-[repeat(4,minmax(0,1fr))_48px] md:grid-cols-[repeat(4,minmax(0,1fr))_56px] gap-y-1 w-[136px] sm:w-[160px] md:w-[184px] shrink-0">
       {remainingCards.length > 0 ? (
         remainingCards.map((c, idx) => (
           <div key={c.id} className="relative" style={{ zIndex: 10 + idx }}>
@@ -244,13 +244,13 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
           </div>
         ))
       ) : (
-        <span className="text-[11px] font-extrabold text-amber-300/90 px-2 py-1 rounded bg-black/50 border border-amber-400/30">
+        <span className="col-span-full justify-self-center whitespace-nowrap text-[11px] font-extrabold text-amber-300/90 px-2 py-1 rounded bg-black/50 border border-amber-400/30">
           ✓ Hết bài
         </span>
       )}
     </div>
   ) : (
-    <div className={isPassed ? 'opacity-60 grayscale transition-opacity' : 'transition-opacity'}>
+    <div data-hand-player-id={player.id} className={isPassed ? 'opacity-60 grayscale transition-opacity' : 'transition-opacity'}>
       <LocCard
         faceDown
         remainingCount={player.cardsRemaining}

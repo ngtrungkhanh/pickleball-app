@@ -79,6 +79,15 @@ describe('Lốc auto bỏ lượt', () => {
     act(() => { vi.advanceTimersByTime(1000); });
     expect(p.onPassTurn).toHaveBeenCalledTimes(1);
   });
+  it('nút Back đóng lịch sử và bỏ yêu cầu tạm dừng', () => {
+    const p = { ...props(), onHistoryViewChange: vi.fn() };
+    const view = render(<LocGameBoard {...p} />);
+    fireEvent.click(view.getByTitle('Bấm để xem toàn bộ lịch sử đánh bài của ván này'));
+    expect(p.onHistoryViewChange).toHaveBeenLastCalledWith(true);
+    fireEvent.popState(window);
+    expect(view.queryByRole('heading', { name: 'Lịch Sử Đánh Bài Ván Này' })).toBeNull();
+    expect(p.onHistoryViewChange).toHaveBeenLastCalledWith(false);
+  });
 });
 
 describe('Lốc cập nhật ghế khi thêm người', () => {
