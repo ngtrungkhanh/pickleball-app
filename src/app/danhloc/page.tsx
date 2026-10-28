@@ -120,17 +120,22 @@ export default function DanhLocPage() {
 
   // 3. RỜI PHÒNG
   const handleLeaveRoom = useCallback(() => {
-    if (currentRoomId && sendRoomEventRef.current) {
+    if (hostEngineRef.current) {
+      if (currentRoomId && sendRoomEventRef.current) {
+        sendRoomEventRef.current({
+          type: 'ROOM_CLOSED',
+          roomId: currentRoomId,
+          reason: 'Chủ phòng đã rời phòng. Bàn chơi đã giải tán!',
+        });
+      }
+      hostEngineRef.current.destroy();
+      hostEngineRef.current = null;
+    } else if (currentRoomId && sendRoomEventRef.current) {
       sendRoomEventRef.current({
         type: 'LEAVE_ROOM',
         roomId: currentRoomId,
         playerId,
       });
-    }
-
-    if (hostEngineRef.current) {
-      hostEngineRef.current.destroy();
-      hostEngineRef.current = null;
     }
 
     setCurrentRoomId(null);
@@ -192,11 +197,26 @@ export default function DanhLocPage() {
         engine.handlePlayCards(event.playerId, event.cards);
       } else if (event.type === 'PASS_TURN') {
         engine.handlePassTurn(event.playerId);
+      } else if (event.type === 'PLAYER_READY') {
+        engine.handlePlayerReady(event.playerId, event.isReady);
+      } else if (event.type === 'END_ROUND_WAITING') {
+        engine.endRoundToWaiting();
       }
     }
 
     // Xử lý chung cho tất cả các máy (cả Host và Client)
-    if (event.type === 'NAME_EXISTS_CONFIRM' && event.targetPlayerId === playerId) {
+    if (event.type === 'ROOM_CLOSED') {
+      alert(event.reason || 'Phòng chơi đã đóng do chủ phòng rời phòng!');
+      if (hostEngineRef.current) {
+        hostEngineRef.current.destroy();
+        hostEngineRef.current = null;
+      }
+      setCurrentRoomId(null);
+      setTableState(null);
+      setMyHand([]);
+      setIsSpectator(false);
+      setConfirmTakeoverName(null);
+    } else if (event.type === 'NAME_EXISTS_CONFIRM' && event.targetPlayerId === playerId) {
       setConfirmTakeoverName(event.existingName);
     } else if (event.type === 'KICKED_TAKEOVER' && event.targetPlayerId === playerId) {
       setKickedReason(event.reason);
@@ -326,6 +346,30 @@ export default function DanhLocPage() {
     }
   };
 
+  const handlePlayerReady = (isReady: boolean) => {
+    if (hostEngineRef.current) {
+      hostEngineRef.current.handlePlayerReady(playerId, isReady);
+    } else if (sendRoomEventRef.current && currentRoomId) {
+      sendRoomEventRef.current({
+        type: 'PLAYER_READY',
+        roomId: currentRoomId,
+        playerId,
+        isReady,
+      });
+    }
+  };
+
+  const handleEndRoundToWaiting = () => {
+    if (hostEngineRef.current) {
+      hostEngineRef.current.endRoundToWaiting();
+    } else if (sendRoomEventRef.current && currentRoomId) {
+      sendRoomEventRef.current({
+        type: 'END_ROUND_WAITING',
+        roomId: currentRoomId,
+      });
+    }
+  };
+
   // Cleanup khi unmount
   useEffect(() => {
     return () => {
@@ -360,6 +404,8 @@ export default function DanhLocPage() {
           onStartGame={handleStartGame}
           onLeaveRoom={handleLeaveRoom}
           onNextRound={handleNextRound}
+          onPlayerReady={handlePlayerReady}
+          onEndRoundToWaiting={handleEndRoundToWaiting}
           onAddBot={handleAddBot}
           onRemoveBot={handleRemoveBot}
         />

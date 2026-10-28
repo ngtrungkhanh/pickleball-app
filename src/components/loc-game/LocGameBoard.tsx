@@ -24,6 +24,8 @@ interface LocGameBoardProps {
   onStartGame: () => void;
   onLeaveRoom: () => void;
   onNextRound?: () => void;
+  onPlayerReady?: (isReady: boolean) => void;
+  onEndRoundToWaiting?: () => void;
   onAddBot?: () => void;
   onRemoveBot?: (botId: string) => void;
 }
@@ -40,6 +42,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   onStartGame,
   onLeaveRoom,
   onNextRound,
+  onPlayerReady,
+  onEndRoundToWaiting,
   onAddBot,
   onRemoveBot,
 }) => {
@@ -395,56 +399,124 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
           <div className="flex-1 flex flex-col items-center justify-center max-w-md px-1 min-h-0">
             {/* TRƯỜNG HỢP 1: PHÒNG CHỜ (WAITING) */}
             {status === 'waiting' && (
-              <div className="flex flex-col items-center text-center p-3 sm:p-4 rounded-2xl bg-black/50 border border-white/10 backdrop-blur-sm shadow-2xl">
-                <span className="text-xs sm:text-base font-extrabold text-amber-200 mb-2 sm:mb-3 flex items-center gap-2">
-                  <Users className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
+              <div className="flex flex-col items-center text-center p-3 sm:p-4 rounded-2xl bg-black/60 border border-white/10 backdrop-blur-md shadow-2xl max-w-sm w-full mx-auto">
+                <span className="text-xs sm:text-sm font-extrabold text-amber-200 mb-2 flex items-center justify-center gap-1.5">
+                  <Users className="w-4 h-4 text-amber-400" />
                   {players.length < 3
-                    ? `Cần thêm người chơi (${players.length}/3 - 5)`
-                    : `Phòng sẵn sàng (${players.length}/5 người)`}
+                    ? `Phòng chờ: ${players.length}/5 người (Cần tối thiểu 3)`
+                    : `Phòng chờ: ${players.length}/5 người`}
                 </span>
 
-                {isHost ? (
-                  <div className="flex flex-col items-center gap-2">
+                {/* Danh sách người chơi và trạng thái Bắt đầu/Sẵn sàng */}
+                <div className="w-full flex flex-wrap items-center justify-center gap-1.5 mb-3 max-h-32 overflow-y-auto">
+                  {players.map((p) => {
+                    const isMe = p.id === myPlayerId;
+                    const isReady = p.isReady || p.isBot;
+                    return (
+                      <div
+                        key={p.id}
+                        className={`px-2 py-1 rounded-lg text-[11px] sm:text-xs flex items-center gap-1.5 border ${
+                          isReady
+                            ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300'
+                            : 'bg-slate-800/80 border-slate-700 text-slate-300'
+                        }`}
+                      >
+                        <span className="font-semibold truncate max-w-[80px] sm:max-w-[100px]">
+                          {p.name} {isMe && '(Bạn)'}
+                        </span>
+                        {isReady ? (
+                          <span className="px-1 py-0.2 bg-emerald-500/20 text-emerald-400 font-bold rounded text-[10px]">
+                            ✓ Sẵn sàng
+                          </span>
+                        ) : (
+                          <span className="px-1 py-0.2 bg-amber-500/20 text-amber-400 font-bold rounded text-[10px] animate-pulse">
+                            ⏳ Chờ bấm
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Dòng hướng dẫn quy tắc bắt đầu */}
+                <p className="text-[11px] sm:text-xs text-amber-300/90 font-medium mb-3">
+                  {players.length < 3
+                    ? '⚠️ Cần tối thiểu 3 người chơi để bắt đầu ván mới'
+                    : '👉 Cần tất cả người chơi bấm Bắt đầu để vào ván'}
+                </p>
+
+                {/* Nút bấm Bắt đầu / Sẵn sàng & Rời phòng */}
+                <div className="w-full flex flex-col gap-2">
+                  {!isSpectator && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const myPlayer = players.find((p) => p.id === myPlayerId);
+                        const nextReady = !myPlayer?.isReady;
+                        onPlayerReady?.(nextReady);
+                      }}
+                      className={`w-full py-2.5 sm:py-3 rounded-xl font-extrabold text-sm sm:text-base transition shadow-xl cursor-pointer ${
+                        players.find((p) => p.id === myPlayerId)?.isReady
+                          ? 'bg-slate-700 hover:bg-slate-600 text-amber-300 border border-amber-400/30'
+                          : 'bg-gradient-to-r from-emerald-500 to-green-600 text-white hover:brightness-110 active:scale-95 shadow-[0_6px_20px_rgba(34,197,94,0.5)] border border-emerald-400/30 animate-pulse'
+                      }`}
+                    >
+                      {players.find((p) => p.id === myPlayerId)?.isReady
+                        ? '✓ Đã sẵn sàng (Bấm để hủy)'
+                        : '▶ Bắt đầu (Sẵn sàng)'}
+                    </button>
+                  )}
+
+                  {/* Nút ép bắt đầu ván cho Host nếu tất cả đã sẵn sàng */}
+                  {isHost && players.length >= 3 && players.every((p) => p.isReady || p.isBot) && (
                     <button
                       type="button"
                       onClick={onStartGame}
-                      disabled={players.length < 3}
-                      className="px-6 sm:px-8 py-2 sm:py-3 rounded-xl font-black text-sm sm:text-base bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-xl hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+                      className="w-full py-2 rounded-xl font-black text-xs sm:text-sm bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 shadow-lg hover:brightness-110 active:scale-95 transition cursor-pointer"
                     >
-                      Bắt đầu ván
+                      🚀 Bắt đầu ván ngay (Chủ phòng)
                     </button>
+                  )}
 
-                    {/* Cụm nút Thêm / Bớt Bot AI */}
-                    <div className="flex items-center gap-2 mt-1">
-                      {players.length < 5 && onAddBot && (
-                        <button
-                          type="button"
-                          onClick={onAddBot}
-                          className="px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-bold bg-indigo-600/80 hover:bg-indigo-600 text-white border border-indigo-400/30 flex items-center gap-1 active:scale-95 transition cursor-pointer"
-                        >
-                          <Bot className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                          + Thêm Bot
-                        </button>
-                      )}
-                      {players.some((p) => p.isBot) && onRemoveBot && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const lastBot = [...players].reverse().find((p) => p.isBot);
-                            if (lastBot) onRemoveBot(lastBot.id);
-                          }}
-                          className="px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-bold bg-rose-600/80 hover:bg-rose-600 text-white border border-rose-400/30 flex items-center gap-1 active:scale-95 transition cursor-pointer"
-                        >
-                          - Bớt Bot
-                        </button>
-                      )}
-                    </div>
+                  <div className="flex items-center gap-2">
+                    {/* Cụm nút Thêm / Bớt Bot AI cho Host */}
+                    {isHost && (
+                      <div className="flex items-center gap-1.5 flex-1">
+                        {players.length < 5 && onAddBot && (
+                          <button
+                            type="button"
+                            onClick={onAddBot}
+                            className="flex-1 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold bg-indigo-600/80 hover:bg-indigo-600 text-white border border-indigo-400/30 flex items-center justify-center gap-1 active:scale-95 transition cursor-pointer"
+                          >
+                            <Bot className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                            + Bot
+                          </button>
+                        )}
+                        {players.some((p) => p.isBot) && onRemoveBot && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const lastBot = [...players].reverse().find((p) => p.isBot);
+                              if (lastBot) onRemoveBot(lastBot.id);
+                            }}
+                            className="flex-1 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold bg-rose-600/80 hover:bg-rose-600 text-white border border-rose-400/30 flex items-center justify-center gap-1 active:scale-95 transition cursor-pointer"
+                          >
+                            - Bot
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Nút Rời phòng */}
+                    <button
+                      type="button"
+                      onClick={onLeaveRoom}
+                      className="py-1.5 px-3 rounded-lg text-[11px] sm:text-xs font-bold bg-slate-800/90 hover:bg-rose-950/80 text-rose-300 hover:text-rose-200 border border-rose-500/30 flex items-center justify-center gap-1 active:scale-95 transition cursor-pointer ml-auto"
+                    >
+                      🚪 Rời phòng
+                    </button>
                   </div>
-                ) : (
-                  <span className="text-xs text-slate-300 animate-pulse font-medium">
-                    Đang đợi chủ phòng bắt đầu...
-                  </span>
-                )}
+                </div>
               </div>
             )}
 
@@ -620,6 +692,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
           scoreboard={tableState.roundResult}
           isHost={isHost}
           onNextRound={onNextRound || (() => {})}
+          onEndRoundToWaiting={onEndRoundToWaiting}
+          onLeaveRoom={onLeaveRoom}
         />
       )}
     </div>

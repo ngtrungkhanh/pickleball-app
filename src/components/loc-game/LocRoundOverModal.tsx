@@ -123,7 +123,7 @@ export const LocRoundOverModal: React.FC<LocRoundOverModalProps> = ({
               className="w-full py-2.5 sm:py-3 rounded-2xl font-black text-xs sm:text-sm bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-lg hover:brightness-110 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <ArrowRight className="w-4 h-4" />
-              <span>Sẵn sàng ván tiếp theo</span>
+              <span>{isHost ? 'Ván tiếp theo (Chủ phòng)' : 'Sẵn sàng ván tiếp theo'}</span>
             </button>
           )}
 
