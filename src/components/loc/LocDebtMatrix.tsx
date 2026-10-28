@@ -17,7 +17,7 @@ export function LocDebtMatrix({ players, matrix, directList }: LocDebtMatrixProp
   const exampleDebt = directList.find(d => d.cards > 0);
 
   return (
-    <div className="rounded-2xl bg-slate-900/90 border border-white/10 p-3.5 space-y-3">
+    <div className="rounded-2xl bg-slate-900/90 border border-white/10 p-2.5 sm:p-3.5 space-y-3">
       {/* Title & View Toggle */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -61,33 +61,33 @@ export function LocDebtMatrix({ players, matrix, directList }: LocDebtMatrixProp
         </div>
       ) : viewMode === 'matrix' ? (
         <div className="space-y-3">
-          <div className="overflow-x-auto pb-1 -mx-1 px-1">
-            <table className="w-full min-w-[320px] text-xs border-collapse">
+          <div className="w-full">
+            <table className="w-full table-fixed text-xs border-collapse">
               <thead>
                 <tr>
-                  <th className="p-2 text-left border-b border-white/10 min-w-[85px]">
-                    <div className="text-[10px] font-black text-amber-400 uppercase tracking-wider leading-tight">
-                      Hàng nợ ↓ \ Cột nhận →
+                  <th className="w-[24%] p-1 sm:p-2 text-left border-b border-white/10">
+                    <div className="text-[10px] font-black text-amber-400 uppercase tracking-tight leading-tight">
+                      <span>Nợ ↓</span>
+                      <span className="text-emerald-400/80 block text-[9px] font-bold">Nhận →</span>
                     </div>
                   </th>
                   {players.map(colPlayer => (
                     <th
                       key={colPlayer.id}
-                      className={`p-2 text-center border-b border-white/10 transition-colors ${
+                      style={{ width: `${76 / Math.max(1, players.length)}%` }}
+                      className={`p-1 sm:p-2 text-center border-b border-white/10 transition-colors ${
                         highlightedPlayerId === colPlayer.id
                           ? 'bg-amber-500/20 text-amber-300 font-black'
                           : 'text-white/80 font-bold'
                       }`}
                       title={colPlayer.name}
                     >
-                      <div className="text-center min-w-[55px]">
-                        <span className="text-xs font-bold text-emerald-400 block truncate max-w-[80px] mx-auto leading-tight">
-                          {colPlayer.name}
-                        </span>
-                        <span className="text-[9px] text-white/40 block font-normal mt-0.5">
-                          (Nhận)
-                        </span>
-                      </div>
+                      <span className="text-[11px] sm:text-xs font-bold text-emerald-400 block truncate leading-tight">
+                        {colPlayer.name}
+                      </span>
+                      <span className="text-[8px] sm:text-[9px] text-white/40 block font-normal leading-none mt-0.5">
+                        (Nhận)
+                      </span>
                     </th>
                   ))}
                 </tr>
@@ -108,11 +108,11 @@ export function LocDebtMatrix({ players, matrix, directList }: LocDebtMatrixProp
                       }`}
                     >
                       {/* Tên người nợ (hàng dọc) */}
-                      <td className="p-2 text-left font-bold text-white/90 border-b border-white/5 truncate max-w-[100px]">
-                        <span className="text-xs font-bold text-white/90 truncate block leading-tight">
+                      <td className="p-1 sm:p-2 text-left font-bold border-b border-white/5 truncate">
+                        <span className="text-[11px] sm:text-xs font-bold text-white/90 truncate block leading-tight">
                           {rowPlayer.name}
                         </span>
-                        <span className="text-[9px] text-red-400/60 block font-normal mt-0.5">
+                        <span className="text-[8px] sm:text-[9px] text-red-400/70 block font-normal leading-none mt-0.5">
                           (Nợ)
                         </span>
                       </td>
@@ -123,7 +123,7 @@ export function LocDebtMatrix({ players, matrix, directList }: LocDebtMatrixProp
                           return (
                             <td
                               key={colPlayer.id}
-                              className="p-2 text-center text-white/20 border-b border-white/5 font-mono"
+                              className="p-1 sm:p-2 text-center text-white/20 border-b border-white/5 font-mono text-xs"
                             >
                               -
                             </td>
@@ -137,16 +137,16 @@ export function LocDebtMatrix({ players, matrix, directList }: LocDebtMatrixProp
                         return (
                           <td
                             key={colPlayer.id}
-                            className={`p-2 text-center border-b border-white/5 font-mono font-bold transition-colors ${
+                            className={`p-1 sm:p-2 text-center border-b border-white/5 font-mono font-bold transition-colors ${
                               cellHighlight ? 'bg-white/[0.03]' : ''
                             }`}
                           >
                             {owes > 0 ? (
-                              <span className="inline-block px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 text-[11px] font-black border border-red-500/30">
+                              <span className="inline-flex items-center justify-center min-w-[20px] h-5 sm:min-w-[26px] sm:h-6 px-1 rounded bg-red-500/20 text-red-300 text-[11px] sm:text-xs font-black border border-red-500/30">
                                 {owes}
                               </span>
                             ) : (
-                              <span className="text-white/20">-</span>
+                              <span className="text-white/20 text-xs">-</span>
                             )}
                           </td>
                         );

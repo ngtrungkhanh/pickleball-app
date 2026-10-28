@@ -219,7 +219,7 @@ export function LocLiveSession({
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 max-w-2xl w-full mx-auto p-4 space-y-4">
+      <div className="flex-1 max-w-2xl w-full mx-auto p-2.5 sm:p-4 space-y-3 sm:space-y-4">
         {/* Scoreboard Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {playerStats.map((p, idx) => {
