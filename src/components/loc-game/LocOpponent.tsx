@@ -55,7 +55,7 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
   // Khung Avatar nhân vật
   const avatarBox = (
     <div
-      className={`relative flex flex-col items-center justify-between w-18 sm:w-20 md:w-22 p-1 rounded-xl transition-all duration-200 select-none shadow-xl ${
+      className={`loc-opponent-avatar relative z-20 shrink-0 flex flex-col items-center justify-between w-18 sm:w-20 md:w-22 p-1 rounded-xl transition-all duration-200 select-none shadow-xl ${
         isWinner
           ? 'bg-amber-950/90 ring-3 ring-amber-400 border-amber-300 shadow-[0_0_25px_rgba(251,191,36,0.8)]'
           : isCurrentTurn
@@ -95,7 +95,7 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
       </div>
 
       {/* Hình Chibi Avatar */}
-      <div className="relative w-11 h-11 sm:w-13 sm:h-13 my-0.5 flex items-center justify-center">
+      <div className="loc-opponent-portrait relative w-11 h-11 sm:w-13 sm:h-13 my-0.5 flex items-center justify-center">
         {/* Vòng hào quang sáng khi đang chơi */}
         {isCurrentTurn && !isRoundEnded && (
           <div className="absolute inset-0 rounded-full bg-emerald-400/25 blur-sm animate-pulse pointer-events-none" />
@@ -236,11 +236,11 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
 
   // Lá bài của đối thủ: Khi kết thúc ván thì NGỬA BÀI, khi đang chơi thì ÚP BÀI
   const cardBox = isRoundEnded && remainingCards ? (
-    <div className="flex items-center justify-center -space-x-4 sm:-space-x-5 max-w-[120px] sm:max-w-[160px] overflow-visible">
+    <div className="loc-revealed-hand grid grid-cols-[repeat(4,minmax(0,1fr))_40px] sm:grid-cols-[repeat(4,minmax(0,1fr))_48px] md:grid-cols-[repeat(4,minmax(0,1fr))_56px] gap-y-1 w-[136px] sm:w-[160px] md:w-[184px] shrink-0">
       {remainingCards.length > 0 ? (
         remainingCards.map((c, idx) => (
-          <div key={c.id} style={{ zIndex: 10 + idx }}>
-            <LocCard card={c} size="sm" className="shadow-md scale-85 sm:scale-90" />
+          <div key={c.id} className="relative" style={{ zIndex: 10 + idx }}>
+            <LocCard card={c} size="sm" className="loc-revealed-card shadow-md" />
           </div>
         ))
       ) : (
@@ -255,13 +255,13 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
         faceDown
         remainingCount={player.cardsRemaining}
         size="md"
-        className="shrink-0"
+        className="loc-opponent-back shrink-0"
       />
     </div>
   );
 
   return (
-    <div className={`flex items-center gap-2 select-none ${className}`}>
+    <div className={`flex shrink-0 items-center gap-2 select-none ${className}`}>
       {cardPosition === 'left' ? (
         <>
           {cardBox}

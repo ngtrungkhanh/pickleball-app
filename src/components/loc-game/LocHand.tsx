@@ -122,7 +122,7 @@ export const LocHand: React.FC<LocHandProps> = ({
         )}
 
         {/* Chibi Avatar Bạn gái kính râm/kính cận */}
-        <div className="relative w-9 h-9 sm:w-12 sm:h-12 md:w-14 md:h-14 my-0.5 flex items-center justify-center">
+        <div className="loc-self-portrait relative w-9 h-9 sm:w-12 sm:h-12 md:w-14 md:h-14 my-0.5 flex items-center justify-center">
           {/* Vòng hào quang sáng khi đang chơi */}
           {isMyTurn && !isRoundEnded && (
             <div className="absolute inset-0 rounded-full bg-emerald-400/25 blur-sm animate-pulse pointer-events-none" />
@@ -240,8 +240,14 @@ export const LocHand: React.FC<LocHandProps> = ({
       </div>
 
       {/* 2. DÃY LÁ BÀI TRÊN TAY: XẾP XÒE GỐI ĐÈ NHAU CHUẨN ZINGPLAY */}
-      <div className="flex-1 flex justify-center items-end px-1 sm:px-4 max-w-full overflow-visible">
-        <div className="flex items-end justify-center select-none pb-0">
+      <div className="min-w-0 flex-1 flex justify-center items-end px-2 sm:px-4 overflow-visible">
+        <div
+          className="grid items-end select-none w-full"
+          style={{
+            maxWidth: `calc(var(--loc-hand-card-width) * ${1 + Math.max(0, hand.length - 1) * 0.55})`,
+            gridTemplateColumns: `${hand.length > 1 ? `repeat(${hand.length - 1}, minmax(0, 1fr)) ` : ''}var(--loc-hand-card-width)`,
+          }}
+        >
           {sortedHand.map((card, index) => {
             const isSelected = selectedSet.has(card.id);
             // Sáng nổi bật khi là lá được gợi ý theo tổ hợp đang chọn
@@ -250,23 +256,10 @@ export const LocHand: React.FC<LocHandProps> = ({
             const isDimHint =
               isAiHintEnabled && !isSelected && !isHighlighted && dimHintSet.has(card.id) && selectedSet.size === 0;
 
-            let overlapClass = '';
-            if (index > 0) {
-              if (hand.length >= 8) {
-                overlapClass = '-ml-11 sm:-ml-14 md:-ml-17 lg:-ml-20';
-              } else if (hand.length >= 5) {
-                overlapClass = '-ml-9 sm:-ml-12 md:-ml-14 lg:-ml-17';
-              } else if (hand.length >= 3) {
-                overlapClass = '-ml-6 sm:-ml-8 md:-ml-10 lg:-ml-12';
-              } else {
-                overlapClass = 'ml-4 sm:ml-6';
-              }
-            }
-
             return (
               <div
                 key={card.id}
-                className={`transition-all duration-150 shrink-0 ${overlapClass}`}
+                className="transition-all duration-150 min-w-0"
                 style={{
                   zIndex: 10 + index,
                 }}
@@ -278,6 +271,7 @@ export const LocHand: React.FC<LocHandProps> = ({
                   isDimHint={isDimHint}
                   disabled={disabled}
                   size="xl"
+                  className="loc-hand-card"
                   onClick={() => handleCardClick(card)}
                 />
               </div>

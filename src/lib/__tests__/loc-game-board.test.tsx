@@ -1,0 +1,53 @@
+// @vitest-environment jsdom
+import React from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, render } from '@testing-library/react';
+import { LocGameBoard } from '@/components/loc-game/LocGameBoard';
+import { TableState } from '../loc-game/network-types';
+import { hasAnyPlayableMove } from '../loc-game/smart-hint';
+
+vi.mock('../loc-game/smart-hint', () => ({ hasAnyPlayableMove: vi.fn(() => false) }));
+vi.mock('../loc-game/bot', () => ({ BotBrain: class {
+  getTracker() { return { recordPlay() {}, reset() {} }; }
+  decideMove() { return null; }
+}, getBotHintForSelection: () => [] }));
+
+const card = { id: '3_spades', rank: 3, suit: 'spades' } as const;
+const table: TableState = {
+  roomId: 'test', roomName: 'Test', hostId: 'other', status: 'playing',
+  players: ['me', 'other'].map(id => ({ id, name: id, isHost: id === 'other', isSpectator: false, cardsRemaining: 1, hasPassed: false })),
+  spectators: [], currentTurnPlayerId: 'me', roundLeaderPlayerId: 'other', turnDeadline: null,
+  lastPlay: { playerId: 'other', playerName: 'other', combo: { type: 'SINGLE', cards: [{ id: '15_spades', rank: 15, suit: 'spades' }], highestRank: 15, length: 1 } },
+  samState: null, playHistory: [], roundResult: null,
+};
+const props = () => ({ tableState: table, myPlayerId: 'me', myHand: [card], isSpectator: false,
+  onPassTurn: vi.fn(), onPlayCards: vi.fn(), onCallSam: vi.fn(), onSkipSam: vi.fn(), onStartGame: vi.fn(), onLeaveRoom: vi.fn() });
+
+beforeEach(() => { vi.useFakeTimers(); vi.mocked(hasAnyPlayableMove).mockReturnValue(false); });
+afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+describe('Lốc auto bỏ lượt', () => {
+  it('bỏ lượt đúng sau 500ms khi không có bài chặn', () => {
+    const p = props(); render(<LocGameBoard {...p} />);
+    act(() => { vi.advanceTimersByTime(499); });
+    expect(p.onPassTurn).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(p.onPassTurn).toHaveBeenCalledTimes(1);
+  });
+  it('hủy auto bỏ lượt khi đã chuyển sang người khác', () => {
+    const p = props(); const view = render(<LocGameBoard {...p} />);
+    act(() => { vi.advanceTimersByTime(250); });
+    view.rerender(<LocGameBoard {...p} tableState={{ ...table, currentTurnPlayerId: 'other' }} />);
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(p.onPassTurn).not.toHaveBeenCalled();
+  });
+  it('không tự bỏ khi có bài chặn hoặc đang mở vòng', () => {
+    const p = props(); vi.mocked(hasAnyPlayableMove).mockReturnValue(true);
+    const view = render(<LocGameBoard {...p} />);
+    act(() => { vi.advanceTimersByTime(600); });
+    vi.mocked(hasAnyPlayableMove).mockReturnValue(false);
+    view.rerender(<LocGameBoard {...p} tableState={{ ...table, lastPlay: null }} />);
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(p.onPassTurn).not.toHaveBeenCalled();
+  });
+});

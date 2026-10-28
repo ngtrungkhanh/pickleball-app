@@ -209,11 +209,10 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   }, []);
 
   useEffect(() => {
+    document.body.style.overflow = 'hidden';
     if (isRotated) {
-      document.body.style.overflow = 'hidden';
       document.body.style.touchAction = 'none';
     } else {
-      document.body.style.overflow = '';
       document.body.style.touchAction = '';
     }
     return () => {
@@ -290,7 +289,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
     if (cannotBeat) {
       const timer = setTimeout(() => {
         onPassTurn();
-      }, 1500);
+      }, 500);
       return () => clearTimeout(timer);
     }
   }, [cannotBeat, onPassTurn]);
@@ -415,7 +414,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
 
   return (
     <div
-      className="relative bg-[#0b1a2d] overflow-hidden select-none font-sans flex flex-col justify-between"
+      className={`loc-game-board ${status === 'round_ended' ? 'loc-round-ended' : ''} relative bg-[#0b1a2d] overflow-hidden select-none font-sans flex flex-col justify-between`}
       style={
         isRotated
           ? {
@@ -430,6 +429,10 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
               overflow: 'hidden',
             }
           : {
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              zIndex: 40,
               width: '100%',
               height: '100dvh',
             }
@@ -438,25 +441,55 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
       {/* KEYFRAMES ANIMATION LIA BÀI RA GIỮA BÀN */}
       <style jsx global>{`
         @keyframes locFlyBottom {
-          0% { transform: translateY(160px) scale(0.4); opacity: 0; }
+          0% { transform: translateY(200px) rotate(-12deg) scale(0.65); opacity: 0.3; }
+          75% { transform: translateY(-8px) rotate(3deg) scale(1.04); opacity: 1; }
           100% { transform: translateY(0) scale(1); opacity: 1; }
         }
         @keyframes locFlyTop {
-          0% { transform: translateY(-160px) scale(0.4); opacity: 0; }
+          0% { transform: translateY(-200px) rotate(12deg) scale(0.65); opacity: 0.3; }
+          75% { transform: translateY(8px) rotate(-3deg) scale(1.04); opacity: 1; }
           100% { transform: translateY(0) scale(1); opacity: 1; }
         }
         @keyframes locFlyLeft {
-          0% { transform: translate(-180px, -30px) scale(0.4); opacity: 0; }
+          0% { transform: translate(-240px, -40px) rotate(-18deg) scale(0.65); opacity: 0.3; }
+          75% { transform: translate(8px, -4px) rotate(3deg) scale(1.04); opacity: 1; }
           100% { transform: translate(0, 0) scale(1); opacity: 1; }
         }
         @keyframes locFlyRight {
-          0% { transform: translate(180px, -30px) scale(0.4); opacity: 0; }
+          0% { transform: translate(240px, -40px) rotate(18deg) scale(0.65); opacity: 0.3; }
+          75% { transform: translate(-8px, -4px) rotate(-3deg) scale(1.04); opacity: 1; }
           100% { transform: translate(0, 0) scale(1); opacity: 1; }
         }
-        .anim-fly-bottom { animation: locFlyBottom 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .anim-fly-top { animation: locFlyTop 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .anim-fly-left { animation: locFlyLeft 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .anim-fly-right { animation: locFlyRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .anim-fly-bottom { animation: locFlyBottom 0.5s ease-out forwards; }
+        .anim-fly-top { animation: locFlyTop 0.5s ease-out forwards; }
+        .anim-fly-left { animation: locFlyLeft 0.5s ease-out forwards; }
+        .anim-fly-right { animation: locFlyRight 0.5s ease-out forwards; }
+        .loc-game-board {
+          container-type: size;
+          --loc-hand-card-width: clamp(80px, 10cqw, 144px);
+        }
+        .loc-hand-card { width: var(--loc-hand-card-width); }
+        @container (max-height: 500px) {
+          .loc-hand-card { height: 108px; aspect-ratio: auto; }
+          .loc-self-portrait { width: 32px; height: 32px; }
+          .loc-opponent-avatar { width: 64px; }
+          .loc-opponent-portrait { width: 32px; height: 32px; }
+          .loc-opponent-back { width: 44px; }
+          .loc-side-seat { position: absolute; top: 48%; transform: translateY(-50%); }
+          .loc-side-seat-left { left: 12px; }
+          .loc-side-seat-right { right: 12px; }
+          .loc-table-middle { position: static; }
+          .loc-table-play { transform: translateY(24px) scale(0.8); }
+          .loc-table-play .loc-table-card { width: 54px; }
+          .loc-table-card-slot + .loc-table-card-slot { margin-left: -28px; }
+          .loc-table-previous { margin-bottom: -42px; }
+          .loc-revealed-hand { width: 116px; grid-template-columns: repeat(4, minmax(0, 1fr)) 36px; }
+          .loc-revealed-card { width: 36px; height: 34px; padding: 3px; }
+          .loc-revealed-card span { font-size: 12px; }
+          .loc-revealed-card > div:last-child { display: none; }
+          .loc-round-ended .loc-opponent-portrait { width: 16px; height: 16px; }
+          .loc-round-ended .loc-side-seat { top: 55%; }
+        }
       `}</style>
 
       {/* BÀN CHƠI HÌNH OVAL NỈ ĐỎ MẬN CHÍN VỚI VIỀN GỖ BO TRÒN FULL 100% VIEWPORT */}
@@ -483,8 +516,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
             <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
 
-          <div className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-black/60 border border-white/10 backdrop-blur-sm shadow-md">
-            <span className="text-[11px] sm:text-xs md:text-sm font-extrabold text-amber-200">
+          <div className="max-w-[40cqw] px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-black/60 border border-white/10 backdrop-blur-sm shadow-md">
+            <span className="block truncate text-[11px] sm:text-xs md:text-sm font-extrabold text-amber-200">
               Bàn: {roomName}
             </span>
           </div>
@@ -527,8 +560,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
         </div>
 
         {/* --- ĐỐI THỦ PHÍA TRÊN --- */}
-        <div className="relative z-20 flex items-center justify-center gap-4 sm:gap-6 pt-1 shrink-0">
-          {topOpponents.map((opp) =>
+        <div className={`absolute top-14 sm:top-16 inset-x-0 z-20 flex items-center gap-4 sm:gap-6 ${topOpponents.length === 2 ? 'justify-between px-[16%]' : 'justify-center'}`}>
+          {topOpponents.map((opp, index) =>
             opp && opp.id ? (
               <LocOpponent
                 key={opp.id}
@@ -537,7 +570,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
                 isNextTurn={nextTurnPlayerId === opp.id}
                 isRoundPlaying={status === 'playing'}
                 turnSecondsLeft={currentTurnPlayerId === opp.id ? turnSecondsLeft : null}
-                cardPosition="right"
+                cardPosition={index === 1 ? 'left' : 'right'}
                 isRoundEnded={status === 'round_ended'}
                 remainingCards={tableState.remainingHands ? tableState.remainingHands[opp.id] : null}
                 scoreDetail={tableState.roundResult ? tableState.roundResult[opp.id] : null}
@@ -547,9 +580,9 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
         </div>
 
         {/* --- KHU VỰC GIỮA BÀN: ĐỐI THỦ HAI BÊN & BÀI VỪA ĐÁNH --- */}
-        <div className="w-full flex-1 flex items-center justify-between px-1 sm:px-4 relative z-20 min-h-0 my-auto">
+        <div className="loc-table-middle w-full flex-1 flex items-center justify-between px-1 sm:px-4 relative z-20 min-h-0 my-auto">
           {/* Đối thủ bên trái */}
-          <div className="shrink-0 w-16 sm:w-28 md:w-32 flex justify-start">
+          <div className="loc-side-seat loc-side-seat-left shrink-0 w-16 sm:w-28 md:w-32 flex justify-start">
             {leftOpponent && (
               <div className="scale-75 sm:scale-100 origin-left">
                 <LocOpponent
@@ -568,7 +601,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
           </div>
 
           {/* VÙNG CHÍNH GIỮA BÀN: BÀI VỪA ĐÁNH / TRẠNG THÁI PHÒNG */}
-          <div className="flex-1 flex flex-col items-center justify-center max-w-md px-1 min-h-0">
+          <div className="flex-1 flex flex-col items-center justify-center max-w-md mx-auto px-1 min-h-0">
             {/* TRƯỜNG HỢP 1: PHÒNG CHỜ (WAITING) */}
             {status === 'waiting' && (
               <div className="flex flex-col items-center text-center p-3 sm:p-4 rounded-2xl bg-black/60 border border-white/10 backdrop-blur-md shadow-2xl max-w-sm w-full mx-auto">
@@ -731,19 +764,19 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
             {status === 'playing' && currentRecentPlays.length > 0 && (
               <div
                 onClick={() => setShowPlayHistoryModal(true)}
-                className="relative flex flex-col items-center justify-center cursor-pointer group p-1 rounded-xl transition hover:brightness-105 active:scale-95 scale-80 sm:scale-85 md:scale-90 origin-center"
+                className="loc-table-play relative flex flex-col items-center justify-center cursor-pointer group p-1 rounded-xl transition hover:brightness-105 active:scale-95 scale-80 sm:scale-85 md:scale-90 origin-center"
                 title="Bấm để xem toàn bộ lịch sử đánh bài của ván này"
               >
                 {/* Hàng 1 (lượt cũ hơn): nằm phía trên lùi lại, mờ nhẹ */}
                 {currentRecentPlays.length === 2 && (
-                  <div className="flex items-center justify-center -mb-14 sm:-mb-18 md:-mb-22 opacity-85 transition-all z-10 drop-shadow-md pointer-events-none">
+                  <div className="loc-table-previous flex items-center justify-center -mb-14 sm:-mb-18 md:-mb-22 opacity-85 transition-all z-10 drop-shadow-md pointer-events-none">
                     {currentRecentPlays[0].combo.cards.map((c, idx) => (
                       <div
                         key={`prev_${c.id}`}
-                        className={idx > 0 ? '-ml-9 sm:-ml-12 md:-ml-15' : ''}
+                        className={`loc-table-card-slot ${idx > 0 ? '-ml-9 sm:-ml-12 md:-ml-15' : ''}`}
                         style={{ zIndex: 10 + idx }}
                       >
-                        <LocCard card={c} size="md" className="shadow-lg filter brightness-90" />
+                        <LocCard card={c} size="md" className="loc-table-card shadow-lg filter brightness-90" />
                       </div>
                     ))}
                   </div>
@@ -765,10 +798,10 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
                   {currentRecentPlays[currentRecentPlays.length - 1].combo.cards.map((c, idx) => (
                     <div
                       key={`curr_${c.id}`}
-                      className={idx > 0 ? '-ml-9 sm:-ml-12 md:-ml-15' : ''}
+                      className={`loc-table-card-slot ${idx > 0 ? '-ml-9 sm:-ml-12 md:-ml-15' : ''}`}
                       style={{ zIndex: 20 + idx }}
                     >
-                      <LocCard card={c} size="md" className="shadow-2xl" />
+                      <LocCard card={c} size="md" className="loc-table-card shadow-2xl" />
                     </div>
                   ))}
                 </div>
@@ -777,7 +810,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
           </div>
 
           {/* Đối thủ bên phải */}
-          <div className="shrink-0 w-16 sm:w-28 md:w-32 flex justify-end">
+          <div className="loc-side-seat loc-side-seat-right shrink-0 w-16 sm:w-28 md:w-32 flex justify-end">
             {rightOpponent && (
               <div className="scale-75 sm:scale-100 origin-right">
                 <LocOpponent
@@ -796,11 +829,11 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
           </div>
         </div>
 
-        {/* --- KHU VỰC DƯỚI BÀN: CỤM NÚT [CHO QUA] - [30S] - [ĐÁNH] SÁT BỘ BÀI & DÃY BÀI NGƯỜI CHƠI --- */}
+        {/* --- KHU VỰC DƯỚI BÀN: NÚT THAO TÁC VÀ DÃY BÀI NGƯỜI CHƠI --- */}
         <div className="w-full shrink-0 flex flex-col items-center">
-          {/* CỤM NÚT [CHO QUA] - [30S] - [ĐÁNH] SÁT XUỐNG DÃY BÀI (CAO HƠN LÁ CHUẨN BỊ ĐÁNH) */}
+          {/* Chừa khoảng trống cho độ nhô và viền sáng của lá được chọn. */}
           {status === 'playing' && isMyTurn && !isSpectator && (
-            <div className="flex items-center justify-center gap-2 sm:gap-4 -mb-1 sm:-mb-2.5 z-30 pointer-events-auto">
+            <div className="flex items-center justify-center gap-2 sm:gap-4 mb-9 sm:mb-11 z-30 pointer-events-auto">
               {/* Nút Cho Qua */}
               <button
                 type="button"
@@ -847,7 +880,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
 
           {/* KHI KẾT THÚC VÁN: VỊ TRÍ 2 NÚT BIẾN THÀNH [VÁN MỚI] VÀ [VỀ PHÒNG CHỜ] */}
           {status === 'round_ended' && (
-            <div className="flex items-center justify-center gap-2 sm:gap-4 -mb-1 sm:-mb-2.5 z-30 pointer-events-auto animate-fade-in">
+            <div className="flex items-center justify-center gap-2 sm:gap-4 mb-9 sm:mb-11 z-30 pointer-events-auto animate-fade-in">
               <button
                 type="button"
                 onClick={onNextRound}
@@ -874,7 +907,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
               hand={myHand}
               tableCombo={lastPlay?.combo ?? null}
               isMyTurn={isMyTurn}
-              selectedCardIds={selectedCardIds}
+              selectedCardIds={status === 'playing' ? selectedCardIds : []}
               onSelectionChange={setSelectedCardIds}
               disabled={status !== 'playing' || !isMyTurn || isSpectator}
               playerName={myPlayer?.name || 'You'}
