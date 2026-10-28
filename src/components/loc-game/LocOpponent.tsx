@@ -8,6 +8,8 @@ import { Crown } from 'lucide-react';
 interface LocOpponentProps {
   player: RoomPlayer;
   isCurrentTurn: boolean;
+  isNextTurn?: boolean;
+  isRoundPlaying?: boolean;
   cardPosition?: 'left' | 'right';
   turnSecondsLeft?: number | null;
   className?: string;
@@ -32,38 +34,44 @@ function getAvatarProps(playerId: string) {
 export const LocOpponent: React.FC<LocOpponentProps> = ({
   player,
   isCurrentTurn,
+  isNextTurn = false,
+  isRoundPlaying = true,
   cardPosition = 'right',
   turnSecondsLeft = null,
   className = '',
 }) => {
+  const isPassed = Boolean(isRoundPlaying && player.hasPassed);
   const isOneCardLeft = player.cardsRemaining === 1;
   const avatar = getAvatarProps(player.id);
 
   // Khung Avatar nhân vật
   const avatarBox = (
     <div
-      className={`relative flex flex-col items-center justify-between w-18 sm:w-20 md:w-22 p-1 rounded-xl bg-black/75 border border-white/10 transition-all duration-200 select-none shadow-xl ${
+      className={`relative flex flex-col items-center justify-between w-18 sm:w-20 md:w-22 p-1 rounded-xl transition-all duration-200 select-none shadow-xl ${
         isCurrentTurn
-          ? 'ring-3 sm:ring-4 ring-emerald-500 border-emerald-400 shadow-[0_0_20px_rgba(34,197,94,0.6)]'
-          : player.hasPassed
-          ? 'opacity-60'
-          : ''
+          ? 'bg-black/85 ring-3 sm:ring-4 ring-emerald-400 border-emerald-300 shadow-[0_0_25px_rgba(52,211,153,0.7),inset_0_0_15px_rgba(52,211,153,0.2)] animate-pulse'
+          : isPassed
+          ? 'bg-slate-900/90 border border-slate-700/80 grayscale opacity-60 contrast-90 shadow-none'
+          : isNextTurn
+          ? 'bg-black/80 border border-sky-400/60 shadow-[0_0_15px_rgba(56,189,248,0.35)]'
+          : 'bg-black/75 border border-white/10'
       }`}
     >
       {/* Bộ đếm 30s khi tới lượt của đối thủ */}
       {isCurrentTurn && turnSecondsLeft !== null && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-30">
+        <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
           <div
-            className={`px-2 py-0.5 rounded-full font-black text-[11px] font-mono shadow-lg border flex items-center gap-1 ${
+            className={`px-2 py-0.5 rounded-full font-black text-[11px] font-mono shadow-xl border flex items-center gap-1 ${
               turnSecondsLeft <= 5
-                ? 'bg-red-600 text-white border-white animate-bounce'
-                : 'bg-emerald-500 text-slate-950 border-emerald-300'
+                ? 'bg-red-600 text-white border-white animate-bounce shadow-[0_0_12px_rgba(239,68,68,0.8)]'
+                : 'bg-emerald-500 text-slate-950 border-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.8)]'
             }`}
           >
             ⏱️ {turnSecondsLeft}s
           </div>
         </div>
       )}
+
       {/* Tên người chơi */}
       <div className="w-full text-center px-1 flex items-center justify-center gap-1">
         <span className="text-[11px] sm:text-xs font-bold text-white truncate block">
@@ -78,6 +86,11 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
 
       {/* Hình Chibi Avatar */}
       <div className="relative w-11 h-11 sm:w-13 sm:h-13 my-0.5 flex items-center justify-center">
+        {/* Vòng hào quang sáng khi đang chơi */}
+        {isCurrentTurn && (
+          <div className="absolute inset-0 rounded-full bg-emerald-400/25 blur-sm animate-pulse pointer-events-none" />
+        )}
+
         <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow">
           {/* Thân áo */}
           <path d="M 20 100 C 20 70 80 70 80 100 Z" fill={avatar.clothes} />
@@ -116,15 +129,6 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
           </div>
         )}
 
-        {/* Biểu tượng "Cho qua" đè lên avatar khi bỏ lượt (như ảnh mẫu) */}
-        {player.hasPassed && (
-          <div className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center backdrop-blur-xs">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-red-600 border-2 border-white flex items-center justify-center shadow-lg">
-              <span className="text-sm sm:text-base select-none">✋</span>
-            </div>
-          </div>
-        )}
-
         {/* CHỮ "BÁO 1" 3D VÀNG KIM LOẠI NHẤP NHÁY (Chuẩn 100% ảnh mẫu) */}
         {isOneCardLeft && (
           <div className="absolute -inset-1 flex items-center justify-center z-20 pointer-events-none">
@@ -136,6 +140,24 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
             >
               BÁO 1
             </div>
+          </div>
+        )}
+
+        {/* CHỮ "QUA LƯỢT" Ở GÓC DƯỚI ICON KHI BỎ LƯỢT */}
+        {isPassed && (
+          <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 z-20 pointer-events-none whitespace-nowrap">
+            <span className="px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-tight bg-slate-800/95 text-slate-300 border border-slate-500 shadow-md">
+              Qua lượt
+            </span>
+          </div>
+        )}
+
+        {/* CHỮ "CHUẨN BỊ" Ở GÓC DƯỚI ICON KHI CHUẨN BỊ ĐÁNH */}
+        {isNextTurn && !isCurrentTurn && !isPassed && (
+          <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 z-20 pointer-events-none whitespace-nowrap">
+            <span className="px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-tight bg-gradient-to-r from-sky-500 to-blue-600 text-white border border-sky-300 shadow-[0_2px_8px_rgba(14,165,233,0.6)] animate-pulse">
+              Chuẩn bị
+            </span>
           </div>
         )}
       </div>
@@ -154,12 +176,14 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
 
   // Lá bài úp hiển thị số lượng lá bài còn lại
   const cardBox = (
-    <LocCard
-      faceDown
-      remainingCount={player.cardsRemaining}
-      size="md"
-      className="shrink-0"
-    />
+    <div className={isPassed ? 'opacity-60 grayscale transition-opacity' : 'transition-opacity'}>
+      <LocCard
+        faceDown
+        remainingCount={player.cardsRemaining}
+        size="md"
+        className="shrink-0"
+      />
+    </div>
   );
 
   return (

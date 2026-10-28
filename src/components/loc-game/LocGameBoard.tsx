@@ -320,6 +320,28 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   }, [suggestedDecision]);
 
   
+  // 5. XÁC ĐỊNH NGƯỜI CHƠI TIẾP THEO CHUẨN BỊ ĐÁNH
+  const nextTurnPlayerId = useMemo(() => {
+    if (status !== 'playing' || !currentTurnPlayerId || players.length < 2) return null;
+    const currentIdx = players.findIndex((p) => p.id === currentTurnPlayerId);
+    if (currentIdx === -1) return null;
+
+    const activePlayers = players.filter((p) => !p.hasPassed);
+    if (activePlayers.length <= 1) {
+      return null;
+    }
+
+    for (let offset = 1; offset < players.length; offset++) {
+      const nextIndex = (currentIdx + offset) % players.length;
+      const nextPlayer = players[nextIndex];
+      if (!nextPlayer.hasPassed) {
+        return nextPlayer.id;
+      }
+    }
+
+    return null;
+  }, [status, currentTurnPlayerId, players]);
+
   // Danh sách đối thủ
   const opponents = useMemo(() => {
     return players.filter((p) => p.id !== myPlayerId);
@@ -533,6 +555,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
                 key={opp.id}
                 player={opp}
                 isCurrentTurn={currentTurnPlayerId === opp.id}
+                isNextTurn={nextTurnPlayerId === opp.id}
+                isRoundPlaying={status === 'playing'}
                 turnSecondsLeft={currentTurnPlayerId === opp.id ? turnSecondsLeft : null}
                 cardPosition="right"
               />
@@ -549,6 +573,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
                 <LocOpponent
                   player={leftOpponent}
                   isCurrentTurn={currentTurnPlayerId === leftOpponent.id}
+                  isNextTurn={nextTurnPlayerId === leftOpponent.id}
+                  isRoundPlaying={status === 'playing'}
                   turnSecondsLeft={currentTurnPlayerId === leftOpponent.id ? turnSecondsLeft : null}
                   cardPosition="right"
                 />
@@ -834,6 +860,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
                 <LocOpponent
                   player={rightOpponent}
                   isCurrentTurn={currentTurnPlayerId === rightOpponent.id}
+                  isNextTurn={nextTurnPlayerId === rightOpponent.id}
+                  isRoundPlaying={status === 'playing'}
                   turnSecondsLeft={currentTurnPlayerId === rightOpponent.id ? turnSecondsLeft : null}
                   cardPosition="left"
                 />
@@ -854,6 +882,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
             dimHintCardIds={isAiHintEnabled && isMyTurn ? suggestedCardIds : []}
             isAiHintEnabled={isAiHintEnabled}
             turnSecondsLeft={isMyTurn ? turnSecondsLeft : null}
+            hasPassed={status === 'playing' && Boolean(myPlayer?.hasPassed)}
+            isNextTurn={nextTurnPlayerId === myPlayerId}
           />
         </div>
       </div>

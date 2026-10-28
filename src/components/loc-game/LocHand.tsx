@@ -17,7 +17,8 @@ interface LocHandProps {
   dimHintCardIds?: string[];
   isAiHintEnabled?: boolean;
   turnSecondsLeft?: number | null;
-  
+  hasPassed?: boolean;
+  isNextTurn?: boolean;
 }
 
 export const LocHand: React.FC<LocHandProps> = ({
@@ -31,7 +32,8 @@ export const LocHand: React.FC<LocHandProps> = ({
   dimHintCardIds = [],
   isAiHintEnabled = true,
   turnSecondsLeft = null,
-  
+  hasPassed = false,
+  isNextTurn = false,
 }) => {
   const sortedHand = useMemo(() => sortCards(hand), [hand]);
 
@@ -80,10 +82,14 @@ export const LocHand: React.FC<LocHandProps> = ({
     <div className="w-full flex items-end justify-between px-2 sm:px-6 select-none relative z-20">
       {/* 1. KHUNG AVATAR CỦA BẠN ("You" - Góc dưới trái chuẩn ZingPlay) */}
       <div
-        className={`relative flex flex-col items-center justify-between w-12 sm:w-16 md:w-20 p-1 sm:p-1.5 rounded-xl bg-black/80 border border-white/10 transition-all duration-200 shadow-xl shrink-0 ${
+        className={`relative flex flex-col items-center justify-between w-12 sm:w-16 md:w-20 p-1 sm:p-1.5 rounded-xl transition-all duration-200 shadow-xl shrink-0 ${
           isMyTurn
-            ? 'ring-3 sm:ring-4 ring-emerald-500 border-emerald-400 shadow-[0_0_20px_rgba(34,197,94,0.7)]'
-            : ''
+            ? 'bg-black/85 ring-3 sm:ring-4 ring-emerald-400 border-emerald-300 shadow-[0_0_25px_rgba(52,211,153,0.7),inset_0_0_15px_rgba(52,211,153,0.2)] animate-pulse'
+            : hasPassed
+            ? 'bg-slate-900/90 border border-slate-700/80 grayscale opacity-60 contrast-90 shadow-none'
+            : isNextTurn
+            ? 'bg-black/80 border border-sky-400/60 shadow-[0_0_15px_rgba(56,189,248,0.35)]'
+            : 'bg-black/80 border border-white/10'
         }`}
       >
         <div className="w-full text-center px-0.5">
@@ -94,12 +100,12 @@ export const LocHand: React.FC<LocHandProps> = ({
 
         {/* Bộ đếm 30s khi tới lượt của bạn */}
         {isMyTurn && turnSecondsLeft !== null && (
-          <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-30">
+          <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
             <div
-              className={`px-1.5 sm:px-2 py-0.5 rounded-full font-black text-[10px] sm:text-xs font-mono shadow-lg border flex items-center gap-1 ${
+              className={`px-1.5 sm:px-2 py-0.5 rounded-full font-black text-[10px] sm:text-xs font-mono shadow-xl border flex items-center gap-1 ${
                 turnSecondsLeft <= 5
-                  ? 'bg-red-600 text-white border-white animate-bounce'
-                  : 'bg-emerald-500 text-slate-950 border-emerald-300'
+                  ? 'bg-red-600 text-white border-white animate-bounce shadow-[0_0_12px_rgba(239,68,68,0.8)]'
+                  : 'bg-emerald-500 text-slate-950 border-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.8)]'
               }`}
             >
               ⏱️ {turnSecondsLeft}s
@@ -109,6 +115,11 @@ export const LocHand: React.FC<LocHandProps> = ({
 
         {/* Chibi Avatar Bạn gái kính râm/kính cận */}
         <div className="relative w-9 h-9 sm:w-12 sm:h-12 md:w-14 md:h-14 my-0.5 flex items-center justify-center">
+          {/* Vòng hào quang sáng khi đang chơi */}
+          {isMyTurn && (
+            <div className="absolute inset-0 rounded-full bg-emerald-400/25 blur-sm animate-pulse pointer-events-none" />
+          )}
+
           <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow">
             <path d="M 20 100 C 20 70 80 70 80 100 Z" fill="#f43f5e" />
             <polygon points="40,80 50,92 60,80 50,75" fill="#ffffff" />
@@ -138,6 +149,24 @@ export const LocHand: React.FC<LocHandProps> = ({
               >
                 BÁO 1
               </div>
+            </div>
+          )}
+
+          {/* CHỮ "QUA LƯỢT" Ở GÓC DƯỚI ICON KHI BỎ LƯỢT */}
+          {hasPassed && (
+            <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 z-20 pointer-events-none whitespace-nowrap">
+              <span className="px-1 sm:px-1.5 py-0.2 rounded-full text-[8px] sm:text-[9px] md:text-[10px] font-black uppercase tracking-tight bg-slate-800/95 text-slate-300 border border-slate-500 shadow-md">
+                Qua lượt
+              </span>
+            </div>
+          )}
+
+          {/* CHỮ "CHUẨN BỊ" Ở GÓC DƯỚI ICON KHI CHUẨN BỊ ĐÁNH */}
+          {isNextTurn && !isMyTurn && !hasPassed && (
+            <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 z-20 pointer-events-none whitespace-nowrap">
+              <span className="px-1 sm:px-1.5 py-0.2 rounded-full text-[8px] sm:text-[9px] md:text-[10px] font-black uppercase tracking-tight bg-gradient-to-r from-sky-500 to-blue-600 text-white border border-sky-300 shadow-[0_2px_8px_rgba(14,165,233,0.6)] animate-pulse">
+                Chuẩn bị
+              </span>
             </div>
           )}
         </div>
