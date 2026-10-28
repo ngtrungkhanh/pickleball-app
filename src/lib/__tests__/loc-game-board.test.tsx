@@ -32,11 +32,12 @@ beforeEach(() => { vi.useFakeTimers(); vi.mocked(hasAnyPlayableMove).mockReturnV
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('Lốc auto bỏ lượt', () => {
-  it('ẩn nút bỏ qua và tự bỏ lượt đúng sau 2 giây khi không có bài chặn', () => {
+  it('ẩn nút bỏ qua và tự bỏ lượt đúng sau 1,5 giây khi không có bài chặn', () => {
     const p = props(); const view = render(<LocGameBoard {...p} />);
     expect(view.queryByRole('button', { name: 'Cho Qua' })).toBeNull();
     expect(view.queryByRole('button', { name: 'Sắp Xếp' })).toBeNull();
-    act(() => { vi.advanceTimersByTime(1999); });
+    expect(view.queryByText(/Không có bài chặn|tự qua sau/)).toBeNull();
+    act(() => { vi.advanceTimersByTime(1499); });
     expect(p.onPassTurn).not.toHaveBeenCalled();
     act(() => { vi.advanceTimersByTime(1); });
     expect(p.onPassTurn).toHaveBeenCalledTimes(1);
@@ -67,16 +68,16 @@ describe('Lốc auto bỏ lượt', () => {
     expect(p.onPassTurn).not.toHaveBeenCalled();
     fireEvent.click(view.getByRole('button', { name: 'Đóng' }));
     expect(p.onHistoryViewChange).toHaveBeenLastCalledWith(false);
-    act(() => { vi.advanceTimersByTime(1299); });
+    act(() => { vi.advanceTimersByTime(799); });
     expect(p.onPassTurn).not.toHaveBeenCalled();
     act(() => { vi.advanceTimersByTime(1); });
     expect(p.onPassTurn).toHaveBeenCalledTimes(1);
   });
   it('bản cập nhật đồng hồ không kéo dài delay auto bỏ lượt', () => {
     const p = props(); const view = render(<LocGameBoard {...p} />);
-    act(() => { vi.advanceTimersByTime(1000); });
+    act(() => { vi.advanceTimersByTime(750); });
     view.rerender(<LocGameBoard {...p} onPassTurn={() => p.onPassTurn()} tableState={{ ...table, lastPlay: { ...table.lastPlay! } }} />);
-    act(() => { vi.advanceTimersByTime(1000); });
+    act(() => { vi.advanceTimersByTime(750); });
     expect(p.onPassTurn).toHaveBeenCalledTimes(1);
   });
   it('nút Back đóng lịch sử và bỏ yêu cầu tạm dừng', () => {
@@ -118,6 +119,51 @@ describe('Lốc cập nhật ghế khi thêm người', () => {
       expect(view.container.querySelectorAll('.loc-opponent-avatar')).toHaveLength(4);
     } finally {
       engine.destroy();
+    }
+  });
+});
+
+describe('Lá cuối và lịch sử sau khi kết thúc ván', () => {
+  it.each(['me', 'other'])('vẫn bay lá cuối của %s và giữ cụm bài để xem lịch sử', winner => {
+    const originalAnimate = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'animate');
+    const animate = vi.fn(() => ({ cancel: vi.fn() }));
+    Object.defineProperty(HTMLElement.prototype, 'animate', { configurable: true, value: animate });
+    try {
+      const winningCard = { id: '15_hearts', rank: 15, suit: 'hearts' } as const;
+      const previousPlay = {
+        playerId: 'other', playerName: 'other',
+        combo: { type: 'SINGLE' as const, cards: [{ id: '14_spades', rank: 14 as const, suit: 'spades' as const }], highestRank: 14, length: 1 },
+      };
+      const finalPlay = {
+        playerId: winner, playerName: winner,
+        combo: { type: 'SINGLE' as const, cards: [winningCard], highestRank: 15, length: 1 },
+      };
+      const p = { ...props(), tableState: { ...table, lastPlay: previousPlay }, myHand: [winningCard] };
+      const view = render(<LocGameBoard {...p} />);
+      const pile = view.getByTitle('Bấm để xem toàn bộ lịch sử đánh bài của ván này');
+      animate.mockClear();
+      const ended: TableState = {
+        ...table, status: 'round_ended', currentTurnPlayerId: null, turnDeadline: null,
+        players: table.players.map(player => ({ ...player, cardsRemaining: player.id === winner ? 0 : 1 })),
+        lastPlay: finalPlay, recentPlays: [previousPlay, finalPlay],
+        remainingHands: { [winner]: [] },
+        roundPlayRecords: [{ id: 'final', turnIndex: 1, playerId: winner, playerName: winner, cards: [winningCard], combo: finalPlay.combo, timestamp: Date.now() }],
+      };
+      view.rerender(<LocGameBoard {...p} tableState={ended} myHand={winner === 'me' ? [] : p.myHand} />);
+      expect(animate).toHaveBeenCalledTimes(1);
+      expect(view.getByTitle('Bấm để xem toàn bộ lịch sử đánh bài của ván này')).toBe(pile);
+      expect(pile.textContent).toContain('2');
+      fireEvent.click(pile);
+      expect(view.getByRole('heading', { name: 'Lịch Sử Đánh Bài Ván Này' })).toBeTruthy();
+      expect(view.getByText(/Tổng cộng 1 lượt đánh/)).toBeTruthy();
+      fireEvent.click(view.getByRole('button', { name: /^Đóng$/ }));
+      expect(view.getByTitle('Bấm để xem toàn bộ lịch sử đánh bài của ván này')).toBe(pile);
+      view.rerender(<LocGameBoard {...p} tableState={{ ...table, status: 'waiting', lastPlay: null, recentPlays: [] }} />);
+      expect(view.queryByTitle('Bấm để xem toàn bộ lịch sử đánh bài của ván này')).toBeNull();
+    } finally {
+      cleanup();
+      if (originalAnimate) Object.defineProperty(HTMLElement.prototype, 'animate', originalAnimate);
+      else delete (HTMLElement.prototype as { animate?: unknown }).animate;
     }
   });
 });

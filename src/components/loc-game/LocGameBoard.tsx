@@ -70,9 +70,10 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   const boardRef = useRef<HTMLDivElement>(null);
   const playRef = useRef<HTMLDivElement>(null);
   const selectedOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const handOriginsRef = useRef(new Map<string, { x: number; y: number; isRotated: boolean }>());
   const historyCallbackRef = useRef(onHistoryViewChange);
   const passCallbackRef = useRef(onPassTurn);
-  const autoPassRef = useRef({ remainingMs: 2000 });
+  const autoPassRef = useRef({ remainingMs: 1500 });
   useEffect(() => {
     historyCallbackRef.current = onHistoryViewChange;
     passCallbackRef.current = onPassTurn;
@@ -261,7 +262,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   } = tableState;
 
   const currentRecentPlays = useMemo(() => {
-    if (status !== 'playing') return [];
+    if (status !== 'playing' && status !== 'round_ended') return [];
     if (recentPlays && recentPlays.length > 0) return recentPlays;
     if (lastPlay) return [lastPlay];
     return [];
@@ -306,13 +307,13 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   useEffect(() => {
     const autoPass = autoPassRef.current;
     if (!cannotBeat) {
-      autoPass.remainingMs = 2000;
+      autoPass.remainingMs = 1500;
       return;
     }
     if (isPaused) return;
     const startedAt = Date.now();
     const timer = setTimeout(() => {
-      autoPass.remainingMs = 2000;
+      autoPass.remainingMs = 1500;
       passCallbackRef.current();
     }, autoPass.remainingMs);
     return () => {
@@ -447,7 +448,9 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
     const sourceRect = source.getBoundingClientRect();
     const origin = sourcePlayerId === myPlayerId && selectedOriginRef.current
       ? selectedOriginRef.current
-      : { x: sourceRect.left + sourceRect.width / 2, y: sourceRect.top + sourceRect.height / 2 };
+      : status === 'round_ended' && handOriginsRef.current.get(sourcePlayerId)?.isRotated === isRotated
+        ? handOriginsRef.current.get(sourcePlayerId)!
+        : { x: sourceRect.left + sourceRect.width / 2, y: sourceRect.top + sourceRect.height / 2 };
     selectedOriginRef.current = null;
     const screenX = origin.x - (targetRect.left + targetRect.width / 2);
     const screenY = origin.y - (targetRect.top + targetRect.height / 2);
@@ -459,7 +462,21 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
       { transform: 'translate(0, 0) rotate(0) scale(1)' },
     ], { duration: 500, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' });
     return () => animation.cancel();
-  }, [playKey, sourcePlayerId, isRotated, myPlayerId]);
+  }, [playKey, sourcePlayerId, isRotated, myPlayerId, status]);
+
+  // Save the hand positions before the next play can replace a winner's hand
+  // with the end-of-round badge. The final card still flies from that hand.
+  useLayoutEffect(() => {
+    handOriginsRef.current.clear();
+    boardRef.current?.querySelectorAll<HTMLElement>('[data-hand-player-id]').forEach(element => {
+      const rect = element.getBoundingClientRect();
+      handOriginsRef.current.set(element.dataset.handPlayerId!, {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+        isRotated,
+      });
+    });
+  }, [players, myHand, isRotated, status]);
 
   const rotateControl = (
     <button
@@ -746,7 +763,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
             )}
 
             {/* TRƯỜNG HỢP 3: CỤM BÀI VỪA ĐÁNH Ở GIỮA BÀN (CÓ ANIMATION LIA BÀI RA GIỮA) */}
-            {status === 'playing' && currentRecentPlays.length > 0 && (
+            {currentRecentPlays.length > 0 && (
               <div
                 onClick={() => setShowPlayHistoryModal(true)}
                 className="loc-table-play relative flex flex-col items-center justify-center cursor-pointer group p-1 rounded-xl transition hover:brightness-105 active:scale-95 scale-80 sm:scale-85 md:scale-90 origin-center"
@@ -868,7 +885,6 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
                     Cho Qua
                   </button>
                 )}
-                {cannotBeat && <span className="text-xs font-bold text-amber-200">{isPaused ? 'Đang tạm dừng' : 'Không có bài chặn · tự qua sau 2s'}</span>}
 
                 {/* Bộ đếm giây 30s của turn ở chính giữa */}
                 {turnSecondsLeft !== null && (

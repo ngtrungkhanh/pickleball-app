@@ -38,7 +38,10 @@ nghìn trận:
 - Bàn chơi hỗ trợ 3–5 người, tối ưu điện thoại ngang và màn dọc tự xoay 90°.
 - Bài trên tay được sắp xếp tự động. Nút Xoay nằm ở cạnh dưới bàn; nút Báo Sâm,
   Huỷ Sâm và thao tác đánh/bỏ lượt dùng chung vùng phía trên bộ bài.
-- Khi không có bài chặn, ẩn thao tác đánh/bỏ lượt và tự qua sau 2 giây.
+- Khi không có bài chặn, ẩn thao tác đánh/bỏ lượt và tự qua sau 1,5 giây,
+  không hiện thông báo tự qua lượt.
+- Lá cuối vẫn bay ra giữa bàn khi kết thúc ván. Cụm bài đã đánh được giữ lại
+  để bấm xem lịch sử cho đến khi bắt đầu ván mới hoặc về phòng chờ.
 - Người chơi mở lịch sử đánh bài sẽ tạm dừng cả bàn: giữ nguyên thời gian lượt,
   dừng bot và auto bỏ lượt. Chỉ tiếp tục khi tất cả người đang xem đã đóng lịch sử.
   Khán giả xem lịch sử không làm dừng bàn.
