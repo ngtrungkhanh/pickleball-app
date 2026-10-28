@@ -1,7 +1,7 @@
 import { getSupabaseClient } from './supabase';
 import { BroadcastEvent, TableState, RoomSummary, RoundPlayRecord } from './network-types';
 import { dealCards } from './deck';
-import { analyzeCombo, canBeat, hasHigherSingleCard } from './analyzer';
+import { analyzeCombo, canBeat, hasHigherSingleCard, checkInstantWin } from './analyzer';
 import { calculateRoundScores, ChopEvent } from './scoring';
 import { Card } from './types';
 import { BotBrain } from './bot';
@@ -623,9 +623,39 @@ export class HostGameEngine {
     // Gửi bài cho từng người
     for (const pid of playerIds) {
       this.sendHandToPlayer(pid);
+    }    // 2. Kiểm tra Tới Trắng (Auto thắng ăn 30 lá)
+    let instantWinnerId: string | null = null;
+    let highestWinCheck = {
+      isInstantWin: false,
+      priority: 0,
+      reason: '',
+    };
+
+    for (const p of this.state.players) {
+      const hand = this.hands[p.id] || [];
+      const winCheck = checkInstantWin(hand);
+      if (winCheck.isInstantWin && winCheck.priority > highestWinCheck.priority) {
+        highestWinCheck = {
+          isInstantWin: true,
+          priority: winCheck.priority,
+          reason: winCheck.reason || 'Tới trắng',
+        };
+        instantWinnerId = p.id;
+      }
     }
 
-    // 2. Chuyển sang giai đoạn Báo Sâm
+    if (instantWinnerId) {
+      const winnerName = this.state.players.find((p) => p.id === instantWinnerId)?.name || 'Người chơi';
+      this.state.playHistory = [{
+        id: Math.random().toString(),
+        text: `👑 ${winnerName} TỚI TRẮNG (${highestWinCheck.reason})! Ăn mỗi người 30 lá!`,
+        timestamp: Date.now(),
+      }];
+      this.finishRound(instantWinnerId, undefined, highestWinCheck.reason);
+      return;
+    }
+
+    // 3. Chuyển sang giai đoạn Báo Sâm
     this.state.status = 'sam_calling';
     this.state.samState = {
       samCallerId: null,
@@ -1073,7 +1103,7 @@ export class HostGameEngine {
   /**
    * Kết thúc ván đấu
    */
-  private finishRound(winnerId: string, denLangPlayerId?: string) {
+  private finishRound(winnerId: string, denLangPlayerId?: string, instantWinReason?: string) {
     this.stopTurnTimer();
     this.clearAllBotTimers();
     this.state.turnDeadline = null;
@@ -1094,6 +1124,9 @@ export class HostGameEngine {
       isSamSuccess: samSuccess,
       isSamFailed: samFailed,
       samPlayerId: this.state.samState?.samCallerId || undefined,
+      isInstantWin: !!instantWinReason,
+      instantWinPlayerId: instantWinReason ? winnerId : undefined,
+      instantWinReason,
       denLangPlayerId,
       chopEvents: this.chopEvents,
     });

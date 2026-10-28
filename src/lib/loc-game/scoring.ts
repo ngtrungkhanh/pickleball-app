@@ -12,6 +12,9 @@ export interface CalculateRoundScoresParams {
   cardsPlayedCount: Record<string, number>; // Số lá mỗi người đã đánh trong ván
   winnerId: string;
   lastPlayedCards?: Card[]; // Lá bài cuối cùng của winner để check thối 2
+  isInstantWin?: boolean; // Tới trắng (Tứ quý 2, 5 đôi, full đỏ/đen)
+  instantWinPlayerId?: string;
+  instantWinReason?: string;
   isSamSuccess?: boolean;
   isSamFailed?: boolean;
   samPlayerId?: string;
@@ -29,6 +32,9 @@ export function calculateRoundScores(params: CalculateRoundScoresParams): Record
     cardsPlayedCount,
     winnerId,
     lastPlayedCards = [],
+    isInstantWin = false,
+    instantWinPlayerId,
+    instantWinReason,
     isSamSuccess = false,
     isSamFailed = false,
     samPlayerId,
@@ -67,7 +73,27 @@ export function calculateRoundScores(params: CalculateRoundScoresParams): Record
     }
   }
 
-  // 2. TRƯỜNG HỢP: SÂM THÀNH CÔNG
+  // 2. TRƯỜNG HỢP: TỚI TRẮNG (Auto thắng ăn 30 lá / người)
+  if (isInstantWin && instantWinPlayerId) {
+    const instantWinner = result[instantWinPlayerId];
+    instantWinner.isInstantWin = true;
+    instantWinner.instantWinReason = instantWinReason;
+    instantWinner.isWinner = true;
+
+    let totalWonFromInstantWin = 0;
+    for (const p of players) {
+      if (p.id !== instantWinPlayerId) {
+        // Mỗi người thua nộp 30 lá
+        result[p.id].penaltyCards += 30;
+        result[p.id].netCards = -30 + result[p.id].chopPoints;
+        totalWonFromInstantWin += 30;
+      }
+    }
+    instantWinner.netCards = totalWonFromInstantWin + instantWinner.chopPoints;
+    return result;
+  }
+
+  // 3. TRƯỜNG HỢP: SÂM THÀNH CÔNG
   if (isSamSuccess && samPlayerId) {
     const samWinner = result[samPlayerId];
     samWinner.isSamSuccess = true;
@@ -86,7 +112,7 @@ export function calculateRoundScores(params: CalculateRoundScoresParams): Record
     return result;
   }
 
-  // 3. TRƯỜNG HỢP: ĐỀN SÂM (Bị người khác chặn)
+  // 4. TRƯỜNG HỢP: ĐỀN SÂM (Bị người khác chặn)
   if (isSamFailed && samPlayerId) {
     const samLoser = result[samPlayerId];
     samLoser.isSamFailed = true;
@@ -103,7 +129,7 @@ export function calculateRoundScores(params: CalculateRoundScoresParams): Record
     return result;
   }
 
-  // 4. TRƯỜNG HỢP: VÁN ĐẤU BÌNH THƯỜNG
+  // 5. TRƯỜNG HỢP: VÁN ĐẤU BÌNH THƯỜNG
   let totalCardsLostByOthers = 0;
 
   for (const p of otherPlayers) {
@@ -111,23 +137,14 @@ export function calculateRoundScores(params: CalculateRoundScoresParams): Record
     const hand = remainingHands[p.id] || [];
     const playedCount = cardsPlayedCount[p.id] || 0;
 
-    // A. Kiểm tra Cóng / Cháy bài (chưa đánh được lá nào)
+    // A. Kiểm tra Cóng / Úng bài (chưa đánh được lá nào)
     const isBurned = playedCount === 0 && hand.length === 10;
     detail.isBurned = isBurned;
 
-    let baseCards = 0;
-    if (isBurned) {
-      baseCards = 14; // Cóng phạt 14 lá
-    } else {
-      baseCards = hand.length; // Mỗi lá còn lại tính 1 lá
-    }
-
-    // B. Thối 2: 5 lá mỗi con 2
+    // B. Đếm số lá 2 và tứ quý trên tay
     const twos = hand.filter((c) => c.rank === 15).length;
     detail.twosRemaining = twos;
-    const thoi2Penalty = twos * 5;
 
-    // C. Thối Tứ quý: 5 lá mỗi bộ tứ quý
     const rankCounts: Record<number, number> = {};
     for (const c of hand) {
       rankCounts[c.rank] = (rankCounts[c.rank] || 0) + 1;
@@ -137,9 +154,22 @@ export function calculateRoundScores(params: CalculateRoundScoresParams): Record
       if (count === 4) quads++;
     }
     detail.quadsRemaining = quads;
-    const thoiQuadPenalty = quads * 5;
 
-    const totalPenalty = baseCards + thoi2Penalty + thoiQuadPenalty;
+    let totalPenalty = 0;
+    if (isBurned) {
+      // Khi đã úng thì chỉ tính 14 lá cố định, KHÔNG tính thêm thối 2 hay thối tứ quý
+      totalPenalty = 14;
+    } else {
+      // Thua thông thường:
+      // Các lá bài thường (không phải 2): tính 1 lá / lá
+      const normalCards = hand.length - twos;
+      // Mỗi lá 2 thối tính là 5 lá (VD: 8 lá có 1 lá 2 thì mất 7 + 5 = 12 lá)
+      const twosPenalty = twos * 5;
+      // Thối Tứ quý: Phạt thêm 5 lá / mỗi bộ tứ quý còn trên tay
+      const quadsPenalty = quads * 5;
+      totalPenalty = normalCards + twosPenalty + quadsPenalty;
+    }
+
     detail.penaltyCards = totalPenalty;
     detail.netCards = -totalPenalty + detail.chopPoints;
 
@@ -162,7 +192,7 @@ export function calculateRoundScores(params: CalculateRoundScoresParams): Record
     }
   }
 
-  // 5. Tính cho Người về nhất
+  // 6. Tính cho Người về nhất
   const winnerDetail = result[winnerId];
   // Kiểm tra nếu người về nhất đánh lá 2 cuối cùng -> bị phạt thối 2
   const endsWithTwo = lastPlayedCards.some((c) => c.rank === 15);

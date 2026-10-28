@@ -33,8 +33,15 @@
   - **Không cho phép 2 Tứ quý chặt đôi 2** (Đôi 2 là to nhất không thể chặt).
   - Điểm chặt 2 được cộng dồn và kết toán vào bảng điểm cuối ván.
 
-### 1.3. Báo Sâm (Cướp lượt ăn cả làng)
-- Đầu mỗi ván, hệ thống có giai đoạn chờ Báo Sâm.
+### 1.3. Tới trắng (Auto thắng ăn 30 lá)
+- Ngay sau khi chia bài, nếu bài người chơi đạt một trong các điều kiện sau sẽ **Tự động thắng (Tới trắng)** ngay lập tức mà không cần đánh:
+  1. **Tứ quý 2 (4 con Heo):** Sở hữu đủ 4 lá 2 (độ ưu tiên cao nhất).
+  2. **5 đôi:** 10 lá bài xếp trọn vẹn thành 5 đôi (độ ưu tiên nhì).
+  3. **Đồng màu (Full Đỏ / Full Đen):** Toàn bộ 10 lá đều là chất Đỏ (Cơ, Rô) hoặc toàn bộ 10 lá đều là chất Đen (Bích, Chuồn/Tép).
+- **Mức thưởng:** Người tới trắng **ăn mỗi người chơi khác 30 lá**. Mỗi người thua nộp 30 lá.
+
+### 1.4. Báo Sâm (Cướp lượt ăn cả làng)
+- Đầu mỗi ván (nếu không có ai tới trắng), hệ thống có giai đoạn chờ Báo Sâm.
 - **Luật chọn người:** Chỉ nhận **người bấm Báo Sâm sớm nhất**.
 - **Điều kiện kết thúc chờ:**
   - Khi tất cả người chơi đều bấm "Bỏ qua" $\rightarrow$ Bắt đầu ván ngay lập tức.
@@ -43,17 +50,18 @@
   - *Sâm thành công:* Ăn mỗi người chơi 20 lá.
   - *Đền Sâm (Bị chặn dù chỉ 1 nước):* Đền cho tất cả người chơi còn lại (mỗi người 20 lá).
 
-### 1.4. Kết thúc ván & Quy đổi lá phạt
+### 1.5. Kết thúc ván & Quy đổi lá phạt
 - Ván đấu kết thúc ngay khi có 1 người đánh hết bài (về nhất).
-- **Về bằng lá 2:** Bị tính là **Thối 2**.
-- **Cách tính điểm (Quy đổi ra lá):**
-  - **Lá bài còn lại:** $-1$ lá / lá bài trên tay. Người về nhất ăn tổng số lá này.
-  - **Cháy bài (Cóng - chưa đánh được lá nào):** Phạt cố định **14 lá**.
-  - **Thối 2:** Phạt thêm **5 lá** / mỗi con 2 trên tay.
-  - **Thối Tứ quý:** Phạt thêm **5 lá** / mỗi bộ tứ quý trên tay.
+- **Về bằng lá 2:** Bị tính là **Thối 2** (phạt 5 lá).
+- **Cách tính điểm phạt (Quy đổi ra lá):**
+  - **Úng (Cóng / Cháy bài - chưa đánh được lá nào):** Phạt cố định **14 lá**, **KHÔNG tính thêm thối 2 hay thối tứ quý**.
+  - **Thua thông thường (đã đánh được ít nhất 1 lá):**
+    - Các lá bài thường (không phải 2): tính **1 lá / lá**.
+    - Mỗi lá 2 trên tay tính là **5 lá** (Ví dụ: thua 8 lá, trong đó có 1 lá 2 thì mất $7 + 5 = 12$ lá).
+    - Thối Tứ quý: Phạt thêm **5 lá** / mỗi bộ tứ quý còn trên tay.
   - **Chặt 2:** $+10$ lá cho người chặt, $-10$ lá cho người bị chặt (kết toán dồn cuối trận).
 
-### 1.5. Báo 1 lá & Luật Đền Làng (Đền Báo)
+### 1.6. Báo 1 lá & Luật Đền Làng (Đền Báo)
 - **Trạng thái Báo 1 lá:** Khi bất kỳ người chơi nào chỉ còn đúng **1 lá bài trên tay**, hệ thống kích hoạt trạng thái "Đã báo" (hiển thị cảnh báo trực quan cho cả bàn).
 - **Trách nhiệm của người cửa trên (người ngồi ngay trước người đã báo theo chiều đánh):**
   - Khi người cửa trên đánh bài rác (lá đơn), **bắt buộc phải đánh quân bài to nhất trên tay**.
@@ -66,7 +74,7 @@
   - Những người chơi còn lại trong bàn được **miễn trừ toàn bộ tiền phạt ván đó** ($0$ lá phạt, chỉ tính điểm bù trừ Chặt 2 nếu có).
   - Đảm bảo cơ chế kết toán Zero-sum ($Total = 0$).
 
-### 1.6. Yêu cầu & Lưu ý đặc biệt cho Bot AI (Luật Báo)
+### 1.7. Yêu cầu & Lưu ý đặc biệt cho Bot AI (Luật Báo)
 - **Hành vi khi đối thủ cửa dưới đã Báo 1 lá:**
   - Engine của Bot AI (`bot-brain.ts` / `hand-evaluator.ts`) phải theo dõi số lá còn lại của người kế tiếp.
   - Nếu người kế tiếp còn 1 lá:

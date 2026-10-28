@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Card } from '../loc-game/types';
 import { createDeck, dealCards } from '../loc-game/deck';
-import { analyzeCombo, canBeat, hasHigherSingleCard } from '../loc-game/analyzer';
+import { analyzeCombo, canBeat, hasHigherSingleCard, checkInstantWin } from '../loc-game/analyzer';
 import { getSmartHint } from '../loc-game/smart-hint';
 import { calculateRoundScores } from '../loc-game/scoring';
 
@@ -105,6 +105,94 @@ describe('Loc Game Analyzer & Rules', () => {
   });
 });
 
+describe('Loc Game Tới Trắng (Instant Win)', () => {
+  it('nhận diện 4 con 2 (Tứ quý 2) tới trắng', () => {
+    const hand: Card[] = [
+      { id: '15_s', rank: 15, suit: 'spades' },
+      { id: '15_c', rank: 15, suit: 'clubs' },
+      { id: '15_d', rank: 15, suit: 'diamonds' },
+      { id: '15_h', rank: 15, suit: 'hearts' },
+      { id: '3_s', rank: 3, suit: 'spades' },
+      { id: '4_s', rank: 4, suit: 'spades' },
+      { id: '5_s', rank: 5, suit: 'spades' },
+      { id: '6_s', rank: 6, suit: 'spades' },
+      { id: '7_s', rank: 7, suit: 'spades' },
+      { id: '8_s', rank: 8, suit: 'spades' },
+    ];
+    const check = checkInstantWin(hand);
+    expect(check.isInstantWin).toBe(true);
+    expect(check.type).toBe('FOUR_TWOS');
+    expect(check.priority).toBe(3);
+  });
+
+  it('nhận diện 5 đôi tới trắng', () => {
+    const hand: Card[] = [
+      { id: '3_s', rank: 3, suit: 'spades' },
+      { id: '3_c', rank: 3, suit: 'clubs' },
+      { id: '5_d', rank: 5, suit: 'diamonds' },
+      { id: '5_h', rank: 5, suit: 'hearts' },
+      { id: '7_s', rank: 7, suit: 'spades' },
+      { id: '7_d', rank: 7, suit: 'diamonds' },
+      { id: '9_c', rank: 9, suit: 'clubs' },
+      { id: '9_h', rank: 9, suit: 'hearts' },
+      { id: '11_s', rank: 11, suit: 'spades' },
+      { id: '11_h', rank: 11, suit: 'hearts' },
+    ];
+    const check = checkInstantWin(hand);
+    expect(check.isInstantWin).toBe(true);
+    expect(check.type).toBe('FIVE_PAIRS');
+    expect(check.priority).toBe(2);
+  });
+
+  it('nhận diện full đỏ hoặc full đen tới trắng', () => {
+    const handRed: Card[] = [
+      { id: '3_h', rank: 3, suit: 'hearts' },
+      { id: '4_h', rank: 4, suit: 'hearts' },
+      { id: '5_d', rank: 5, suit: 'diamonds' },
+      { id: '6_d', rank: 6, suit: 'diamonds' },
+      { id: '7_h', rank: 7, suit: 'hearts' },
+      { id: '8_h', rank: 8, suit: 'hearts' },
+      { id: '9_d', rank: 9, suit: 'diamonds' },
+      { id: '10_d', rank: 10, suit: 'diamonds' },
+      { id: '11_h', rank: 11, suit: 'hearts' },
+      { id: '12_d', rank: 12, suit: 'diamonds' },
+    ];
+    expect(checkInstantWin(handRed).isInstantWin).toBe(true);
+    expect(checkInstantWin(handRed).type).toBe('SAME_COLOR');
+
+    const handBlack: Card[] = [
+      { id: '3_s', rank: 3, suit: 'spades' },
+      { id: '4_c', rank: 4, suit: 'clubs' },
+      { id: '5_s', rank: 5, suit: 'spades' },
+      { id: '6_c', rank: 6, suit: 'clubs' },
+      { id: '7_s', rank: 7, suit: 'spades' },
+      { id: '8_c', rank: 8, suit: 'clubs' },
+      { id: '9_s', rank: 9, suit: 'spades' },
+      { id: '10_c', rank: 10, suit: 'clubs' },
+      { id: '11_s', rank: 11, suit: 'spades' },
+      { id: '12_c', rank: 12, suit: 'clubs' },
+    ];
+    expect(checkInstantWin(handBlack).isInstantWin).toBe(true);
+    expect(checkInstantWin(handBlack).type).toBe('SAME_COLOR');
+  });
+
+  it('bài bình thường hỗn hợp không tới trắng', () => {
+    const normalHand: Card[] = [
+      { id: '3_s', rank: 3, suit: 'spades' },
+      { id: '4_h', rank: 4, suit: 'hearts' },
+      { id: '5_d', rank: 5, suit: 'diamonds' },
+      { id: '6_c', rank: 6, suit: 'clubs' },
+      { id: '7_s', rank: 7, suit: 'spades' },
+      { id: '8_h', rank: 8, suit: 'hearts' },
+      { id: '9_d', rank: 9, suit: 'diamonds' },
+      { id: '10_c', rank: 10, suit: 'clubs' },
+      { id: '11_s', rank: 11, suit: 'spades' },
+      { id: '12_h', rank: 12, suit: 'hearts' },
+    ];
+    expect(checkInstantWin(normalHand).isInstantWin).toBe(false);
+  });
+});
+
 describe('Loc Game Smart Hint Engine', () => {
   // Bộ bài test: 5-5-5-6-7-8-9
   const c5_1: Card = { id: '5_s', rank: 5, suit: 'spades' };
@@ -166,43 +254,110 @@ describe('Loc Game Scoring & Penalties', () => {
     { id: 'p3', name: 'Cường' },
   ];
 
-  it('tính điểm ván thường: cóng (14 lá), thối 2 (5 lá/con), và bảo toàn zero-sum', () => {
+  it('khi đã úng (cóng) chỉ tính 14 lá, không tính thối 2 nữa', () => {
     const remainingHands = {
-      p1: [], // p1 về nhất
+      p1: [],
       p2: [
-        { id: '15_s', rank: 15, suit: 'spades' } as Card, // 1 con 2
         { id: '4_s', rank: 4, suit: 'spades' } as Card,
-        { id: '7_s', rank: 7, suit: 'spades' } as Card,
-      ], // 3 lá (có 1 con 2) -> 3 + 5 = 8 lá phạt
-      p3: new Array(10).fill({ id: 'x', rank: 3, suit: 'spades' }), // Cóng (10 lá, chưa đánh lá nào) -> phạt 14 lá
+      ],
+      p3: [
+        // p3 bị cóng: 10 lá và có tới 2 con 2
+        { id: '15_s', rank: 15, suit: 'spades' } as Card,
+        { id: '15_c', rank: 15, suit: 'clubs' } as Card,
+        ...new Array(8).fill({ id: 'x', rank: 3, suit: 'spades' } as Card),
+      ],
     };
 
-    const cardsPlayedCount = {
-      p1: 10,
-      p2: 2,
-      p3: 0, // Cóng
-    };
+    const cardsPlayedCount = { p1: 10, p2: 1, p3: 0 }; // p3 chưa đánh lá nào -> cóng
 
     const score = calculateRoundScores({
       players,
       remainingHands,
       cardsPlayedCount,
       winnerId: 'p1',
-      lastPlayedCards: [{ id: '9_h', rank: 9, suit: 'hearts' } as Card],
     });
 
     expect(score.p3.isBurned).toBe(true);
+    // Khi đã úng chỉ tính 14 lá, không cộng thêm 2 con 2 thối
     expect(score.p3.penaltyCards).toBe(14);
     expect(score.p3.netCards).toBe(-14);
 
-    expect(score.p2.twosRemaining).toBe(1);
-    expect(score.p2.penaltyCards).toBe(8);
-    expect(score.p2.netCards).toBe(-8);
+    expect(score.p2.penaltyCards).toBe(1);
+    expect(score.p2.netCards).toBe(-1);
+
+    expect(score.p1.netCards).toBe(15);
+    const totalNet = Object.values(score).reduce((acc, p) => acc + p.netCards, 0);
+    expect(totalNet).toBe(0);
+  });
+
+  it('mỗi lá 2 thối = 5 lá (VD thua 8 lá trong đó có 1 con 2 thì mất 7 + 5 = 12 lá)', () => {
+    const remainingHands = {
+      p1: [], // về nhất
+      p2: [
+        { id: '15_s', rank: 15, suit: 'spades' } as Card, // 1 lá 2
+        { id: '3_s', rank: 3, suit: 'spades' } as Card,
+        { id: '4_s', rank: 4, suit: 'spades' } as Card,
+        { id: '5_s', rank: 5, suit: 'spades' } as Card,
+        { id: '6_s', rank: 6, suit: 'spades' } as Card,
+        { id: '7_s', rank: 7, suit: 'spades' } as Card,
+        { id: '8_s', rank: 8, suit: 'spades' } as Card,
+        { id: '9_s', rank: 9, suit: 'spades' } as Card,
+      ], // 8 lá gồm 1 con 2 và 7 lá thường
+      p3: [
+        { id: '10_s', rank: 10, suit: 'spades' } as Card,
+      ],
+    };
+
+    const cardsPlayedCount = { p1: 10, p2: 2, p3: 2 }; // Đều đã đánh bài, không ai bị cóng
+
+    const score = calculateRoundScores({
+      players,
+      remainingHands,
+      cardsPlayedCount,
+      winnerId: 'p1',
+    });
+
+    // p2: 7 lá thường + 1 lá 2 (5 lá) = 12 lá phạt
+    expect(score.p2.penaltyCards).toBe(12);
+    expect(score.p2.netCards).toBe(-12);
+
+    expect(score.p3.penaltyCards).toBe(1);
+    expect(score.p3.netCards).toBe(-1);
+
+    expect(score.p1.netCards).toBe(13); // 12 + 1 = 13
+    const totalNet = Object.values(score).reduce((acc, p) => acc + p.netCards, 0);
+    expect(totalNet).toBe(0);
+  });
+
+  it('kết toán Tới Trắng: người tới trắng ăn 30 lá / mỗi người chơi khác', () => {
+    const tablePlayers = [
+      { id: 'p1', name: 'Player 1' },
+      { id: 'p2', name: 'Player 2' },
+      { id: 'p3', name: 'Player 3' },
+      { id: 'p4', name: 'Player 4' },
+    ];
+
+    const score = calculateRoundScores({
+      players: tablePlayers,
+      remainingHands: { p1: [], p2: [], p3: [], p4: [] },
+      cardsPlayedCount: { p1: 0, p2: 0, p3: 0, p4: 0 },
+      winnerId: 'p1',
+      isInstantWin: true,
+      instantWinPlayerId: 'p1',
+      instantWinReason: 'Tứ quý 2 (4 con Heo)',
+    });
 
     expect(score.p1.isWinner).toBe(true);
-    expect(score.p1.netCards).toBe(22); // 14 + 8 = 22
+    expect(score.p1.isInstantWin).toBe(true);
+    // Ăn 3 người x 30 lá = +90 lá
+    expect(score.p1.netCards).toBe(90);
 
-    // Tổng điểm của cả bàn phải bằng 0 (Zero-sum)
+    // Mỗi người thua nộp 30 lá
+    expect(score.p2.penaltyCards).toBe(30);
+    expect(score.p2.netCards).toBe(-30);
+    expect(score.p3.netCards).toBe(-30);
+    expect(score.p4.netCards).toBe(-30);
+
     const totalNet = Object.values(score).reduce((acc, p) => acc + p.netCards, 0);
     expect(totalNet).toBe(0);
   });
@@ -290,7 +445,7 @@ describe('Loc Game Scoring & Penalties', () => {
         { id: '3_s', rank: 3, suit: 'spades' },
         { id: '4_d', rank: 4, suit: 'diamonds' },
         { id: '5_c', rank: 5, suit: 'clubs' },
-        { id: '15_h', rank: 15, suit: 'hearts' }, // Thối 2: 5 lá -> tổng 3 + 5 = 8 lá
+        { id: '15_h', rank: 15, suit: 'hearts' }, // 3 lá thường (3) + 1 con 2 (5) = 8 lá
       ] as Card[],
       p4: [
         { id: '8_s', rank: 8, suit: 'spades' },
@@ -319,19 +474,19 @@ describe('Loc Game Scoring & Penalties', () => {
     expect(score.p2.penaltyCards).toBe(0);
     expect(score.p2.netCards).toBe(0);
 
-    // p3: còn 4 lá + thối 2 (5 lá) = 9 lá nhưng được miễn trừ
+    // p3: 3 lá thường + 5 lá thối 2 = 8 lá nhưng được miễn trừ
     expect(score.p3.penaltyCards).toBe(0);
     expect(score.p3.netCards).toBe(0);
 
     // p4: người đền làng -> gánh toàn bộ lá phạt của cả làng:
-    // Cóng p2 (14) + phạt p3 (4 lá + 5 lá thối 2 = 9) + bài p4 (2 lá) = 25 lá!
+    // Cóng p2 (14) + phạt p3 (8) + bài p4 (2 lá) = 24 lá!
     expect(score.p4.isDenLang).toBe(true);
-    expect(score.p4.penaltyCards).toBe(25);
-    expect(score.p4.netCards).toBe(-25);
+    expect(score.p4.penaltyCards).toBe(24);
+    expect(score.p4.netCards).toBe(-24);
 
-    // p1: Người về nhất ăn trọn 25 lá từ p4
+    // p1: Người về nhất ăn trọn 24 lá từ p4
     expect(score.p1.isWinner).toBe(true);
-    expect(score.p1.netCards).toBe(25);
+    expect(score.p1.netCards).toBe(24);
 
     // Zero-sum
     const totalNet = Object.values(score).reduce((acc, p) => acc + p.netCards, 0);

@@ -174,3 +174,74 @@ export function hasHigherSingleCard(playedCards: Card[], handBeforePlay: Card[])
   return handBeforePlay.some((c) => c.rank > playedRank);
 }
 
+export type InstantWinType = 'FOUR_TWOS' | 'FIVE_PAIRS' | 'SAME_COLOR';
+
+export interface InstantWinCheck {
+  isInstantWin: boolean;
+  priority: number; // 3: Tứ quý 2, 2: 5 đôi, 1: Full đỏ/đen
+  type?: InstantWinType;
+  reason?: string;
+}
+
+/**
+ * Kiểm tra các trường hợp Tới Trắng (Auto thắng ăn 30 lá):
+ * 1. Tứ quý 2 (4 con Heo) - Độ ưu tiên 3
+ * 2. 5 đôi - Độ ưu tiên 2
+ * 3. Đồng màu (Full Đỏ hoặc Full Đen) - Độ ưu tiên 1
+ */
+export function checkInstantWin(hand: Card[]): InstantWinCheck {
+  if (!hand || hand.length !== 10) {
+    return { isInstantWin: false, priority: 0 };
+  }
+
+  // 1. Tứ quý 2 (4 con Heo)
+  const twos = hand.filter((c) => c.rank === 15);
+  if (twos.length === 4) {
+    return {
+      isInstantWin: true,
+      priority: 3,
+      type: 'FOUR_TWOS',
+      reason: 'Tứ quý 2 (4 con Heo)',
+    };
+  }
+
+  // 2. 5 đôi
+  const rankCounts: Record<number, number> = {};
+  for (const c of hand) {
+    rankCounts[c.rank] = (rankCounts[c.rank] || 0) + 1;
+  }
+  let pairCount = 0;
+  for (const count of Object.values(rankCounts)) {
+    pairCount += Math.floor(count / 2);
+  }
+  if (pairCount === 5) {
+    return {
+      isInstantWin: true,
+      priority: 2,
+      type: 'FIVE_PAIRS',
+      reason: '5 đôi',
+    };
+  }
+
+  // 3. Full đỏ / full đen
+  const allRed = hand.every((c) => c.suit === 'hearts' || c.suit === 'diamonds');
+  if (allRed) {
+    return {
+      isInstantWin: true,
+      priority: 1,
+      type: 'SAME_COLOR',
+      reason: 'Đồng màu (Full Đỏ)',
+    };
+  }
+  const allBlack = hand.every((c) => c.suit === 'spades' || c.suit === 'clubs');
+  if (allBlack) {
+    return {
+      isInstantWin: true,
+      priority: 1,
+      type: 'SAME_COLOR',
+      reason: 'Đồng màu (Full Đen)',
+    };
+  }
+
+  return { isInstantWin: false, priority: 0 };
+}

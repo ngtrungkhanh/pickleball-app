@@ -36,6 +36,8 @@ export interface PlayerScoreDetail {
   playerId: string;
   playerName: string;
   isWinner: boolean;
+  isInstantWin?: boolean;  // Tới trắng (Tứ quý 2, 5 đôi, full đỏ/đen)
+  instantWinReason?: string;
   isSamSuccess?: boolean;
   isSamFailed?: boolean;
   isDenLang?: boolean;     // Đền làng (do thả bài/không xả cây to nhất khi người sau báo 1 lá)
