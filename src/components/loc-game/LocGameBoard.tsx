@@ -54,6 +54,24 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   const [showScoreHistory, setShowScoreHistory] = useState(false);
   const [showPlayHistoryModal, setShowPlayHistoryModal] = useState(false);
   const [showDebugModal, setShowDebugModal] = useState(false);
+  const [confirmExitType, setConfirmExitType] = useState<'to_waiting' | 'leave_room' | null>(null);
+
+  const handleBackClick = () => {
+    if (status !== 'waiting') {
+      setConfirmExitType('to_waiting');
+    } else {
+      setConfirmExitType('leave_room');
+    }
+  };
+
+  const handleConfirmExit = () => {
+    if (confirmExitType === 'to_waiting') {
+      onEndRoundToWaiting?.();
+    } else if (confirmExitType === 'leave_room') {
+      onLeaveRoom();
+    }
+    setConfirmExitType(null);
+  };
   const [now, setNow] = useState<number>(() => Date.now());
   const [isRotated, setIsRotated] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -320,7 +338,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
         <div className="flex items-center gap-2 sm:gap-3">
           <button
             type="button"
-            onClick={onLeaveRoom}
+            onClick={handleBackClick}
             className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#4a1024] hover:bg-[#5e162f] border border-white/20 flex items-center justify-center text-white shadow-lg active:scale-95 transition cursor-pointer"
             title="Rời bàn"
           >
@@ -559,7 +577,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
                     {/* Nút Rời phòng */}
                     <button
                       type="button"
-                      onClick={onLeaveRoom}
+                      onClick={handleBackClick}
                       className="py-1.5 px-3 rounded-lg text-[11px] sm:text-xs font-bold bg-slate-800/90 hover:bg-rose-950/80 text-rose-300 hover:text-rose-200 border border-rose-500/30 flex items-center justify-center gap-1 active:scale-95 transition cursor-pointer ml-auto"
                     >
                       🚪 Rời phòng
@@ -648,12 +666,12 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
                 {status === 'playing' && currentRecentPlays.length > 0 && (
                   <div
                     onClick={() => setShowPlayHistoryModal(true)}
-                    className="relative flex flex-col items-center justify-center cursor-pointer group p-1 rounded-xl transition hover:brightness-105 active:scale-95"
+                    className="relative flex flex-col items-center justify-center cursor-pointer group p-1 rounded-xl transition hover:brightness-105 active:scale-95 scale-80 sm:scale-85 md:scale-90 origin-center"
                     title="Bấm để xem toàn bộ lịch sử đánh bài của ván này"
                   >
                     {/* Hàng 1 (lượt cũ hơn): nằm phía trên lùi lại, mờ nhẹ */}
                     {currentRecentPlays.length === 2 && (
-                      <div className="flex items-center justify-center -mb-8 sm:-mb-12 md:-mb-15 opacity-60 scale-90 transition-all z-10 drop-shadow-md pointer-events-none">
+                      <div className="flex items-center justify-center -mb-14 sm:-mb-18 md:-mb-22 opacity-85 transition-all z-10 drop-shadow-md pointer-events-none">
                         {currentRecentPlays[0].combo.cards.map((c, idx) => (
                           <div
                             key={`prev_${c.id}`}
@@ -764,6 +782,48 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
           records={tableState.roundPlayRecords || []}
           onClose={() => setShowPlayHistoryModal(false)}
         />
+      )}
+
+      {/* MODAL XÁC NHẬN KHI ẤN "TRỞ VỀ" */}
+      {confirmExitType && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-sm w-full p-5 shadow-2xl flex flex-col items-center text-center">
+            <div className="w-12 h-12 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-2xl mb-3">
+              {confirmExitType === 'to_waiting' ? '⏸️' : '🚪'}
+            </div>
+
+            <h3 className="font-black text-base sm:text-lg text-white mb-1.5">
+              {confirmExitType === 'to_waiting' ? 'Quay về phòng chờ?' : 'Rời khỏi phòng?'}
+            </h3>
+
+            <p className="text-xs sm:text-sm text-slate-300 mb-5 leading-relaxed">
+              {confirmExitType === 'to_waiting'
+                ? 'Bạn có chắc chắn muốn dừng ván đấu hiện tại và đưa mọi người quay về phòng chờ?'
+                : 'Bạn có chắc chắn muốn rời khỏi phòng chơi này và quay ra danh sách phòng?'}
+            </p>
+
+            <div className="flex items-center gap-3 w-full">
+              <button
+                type="button"
+                onClick={() => setConfirmExitType(null)}
+                className="flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmExit}
+                className={`flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white transition cursor-pointer ${
+                  confirmExitType === 'to_waiting'
+                    ? 'bg-amber-600 hover:bg-amber-500'
+                    : 'bg-rose-600 hover:bg-rose-500'
+                }`}
+              >
+                Đồng ý
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
