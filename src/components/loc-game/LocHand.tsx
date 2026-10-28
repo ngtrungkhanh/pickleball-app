@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardCombo } from '@/lib/loc-game/types';
 import { LocCard } from './LocCard';
-import { getSmartHint } from '@/lib/loc-game/smart-hint';
+import { getBotHintForSelection } from '@/lib/loc-game/bot';
 import { sortCards } from '@/lib/loc-game/deck';
 
 interface LocHandProps {
@@ -15,8 +15,9 @@ interface LocHandProps {
   disabled?: boolean;
   playerName?: string;
   dimHintCardIds?: string[];
-  isUrgentHint?: boolean;
+  isAiHintEnabled?: boolean;
   turnSecondsLeft?: number | null;
+  
 }
 
 export const LocHand: React.FC<LocHandProps> = ({
@@ -28,15 +29,30 @@ export const LocHand: React.FC<LocHandProps> = ({
   disabled = false,
   playerName = 'You',
   dimHintCardIds = [],
-  isUrgentHint = false,
+  isAiHintEnabled = true,
   turnSecondsLeft = null,
+  
 }) => {
-  const [highlightedCardIds, setHighlightedCardIds] = useState<string[]>([]);
   const sortedHand = useMemo(() => sortCards(hand), [hand]);
 
   const selectedSet = useMemo(() => new Set(selectedCardIds), [selectedCardIds]);
-  const highlightedSet = useMemo(() => new Set(highlightedCardIds), [highlightedCardIds]);
   const dimHintSet = useMemo(() => new Set(dimHintCardIds), [dimHintCardIds]);
+
+  const selectedCards = useMemo(() => {
+    return hand.filter((c) => selectedSet.has(c.id));
+  }, [hand, selectedSet]);
+
+  // GỢI Ý THÔNG MINH DỰA TRÊN TỔ HỢP LÁ ĐÃ CHỌN BẰNG BOT AI
+  // Khi chọn 1 hay nhiều cây, bot đưa ra gợi ý theo tổ hợp đã chọn. Nếu chọn sai lá -> không sáng lá nào.
+  const selectionHintCards = useMemo(() => {
+    if (!isAiHintEnabled || selectedCards.length === 0) return [];
+    return getBotHintForSelection(selectedCards, hand, tableCombo);
+  }, [isAiHintEnabled, selectedCards, hand, tableCombo]);
+
+  const selectionHintSet = useMemo(
+    () => new Set(selectionHintCards.map((c) => c.id)),
+    [selectionHintCards]
+  );
 
   const isOneCardLeft = hand.length === 1;
 
@@ -49,29 +65,15 @@ export const LocHand: React.FC<LocHandProps> = ({
     if (isAlreadySelected) {
       const newSelected = selectedCardIds.filter((id) => id !== card.id);
       onSelectionChange(newSelected);
-
-      if (newSelected.length === 1) {
-        const remainingCard = hand.find((c) => c.id === newSelected[0]);
-        if (remainingCard) {
-          const hints = getSmartHint(remainingCard, hand, tableCombo);
-          setHighlightedCardIds(hints.map((c) => c.id));
-        }
-      } else if (newSelected.length === 0) {
-        setHighlightedCardIds([]);
-      }
     } else {
       const newSelected = [...selectedCardIds, card.id];
       onSelectionChange(newSelected);
-
-      const hints = getSmartHint(card, hand, tableCombo);
-      setHighlightedCardIds(hints.map((c) => c.id));
     }
   };
 
   // Nút Sắp Xếp
   const handleSortClick = () => {
     onSelectionChange([]);
-    setHighlightedCardIds([]);
   };
 
   return (
@@ -100,12 +102,12 @@ export const LocHand: React.FC<LocHandProps> = ({
                   : 'bg-emerald-500 text-slate-950 border-emerald-300'
               }`}
             >
-              ⏱️{turnSecondsLeft}s
+              ⏱️ {turnSecondsLeft}s
             </div>
           </div>
         )}
 
-        {/* Chibi Avatar Bạn gái kính cận */}
+        {/* Chibi Avatar Bạn gái kính râm/kính cận */}
         <div className="relative w-9 h-9 sm:w-12 sm:h-12 md:w-14 md:h-14 my-0.5 flex items-center justify-center">
           <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow">
             <path d="M 20 100 C 20 70 80 70 80 100 Z" fill="#f43f5e" />
@@ -125,11 +127,11 @@ export const LocHand: React.FC<LocHandProps> = ({
             <path d="M 45 61 Q 50 66 55 61" stroke="#e11d48" strokeWidth="2" fill="none" />
           </svg>
 
-          {/* CHỮ "BÁO 1" 3D NỔI BẬT NẾU BẠN CÒN 1 LÁ (Chuẩn ảnh mẫu) */}
+          {/* CHỮ "BÁO 1" 3D NỔI BẬT NẾU BẠN CÒN 1 LÁ */}
           {isOneCardLeft && (
-            <div className="absolute -inset-2 flex items-center justify-center z-30 pointer-events-none">
+            <div className="absolute -inset-1 flex items-center justify-center z-20 pointer-events-none">
               <div
-                className="text-center font-black text-xs sm:text-sm tracking-wider uppercase px-2 py-0.5 rounded-lg bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 text-amber-950 border-2 border-white shadow-[0_4px_15px_rgba(234,179,8,1)] animate-bounce"
+                className="text-center font-black text-[10px] sm:text-xs md:text-sm tracking-wider uppercase px-1 sm:px-2 py-0.5 rounded bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 text-amber-950 border-2 border-white shadow-[0_4px_12px_rgba(234,179,8,0.9)] animate-bounce"
                 style={{
                   textShadow: '0 1px 2px rgba(255,255,255,0.8), 0 -1px 1px rgba(0,0,0,0.4)',
                 }}
@@ -142,25 +144,26 @@ export const LocHand: React.FC<LocHandProps> = ({
 
         {/* Xu vàng */}
         <div className="w-full flex items-center justify-center gap-1 bg-black/50 rounded py-0.5">
-          <span className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-gradient-to-tr from-amber-600 to-yellow-300 border border-yellow-200 flex items-center justify-center text-[8px] sm:text-[9px] font-black text-amber-950 shadow-xs">
+          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-gradient-to-tr from-amber-600 to-yellow-300 border border-yellow-200 flex items-center justify-center text-[7px] sm:text-[8px] font-black text-amber-950 shadow-xs">
             €
           </span>
-          <span className="text-[10px] sm:text-xs font-bold text-amber-300 font-mono">
+          <span className="text-[10px] sm:text-[11px] font-bold text-amber-300 font-mono">
             {hand.length * 25}
           </span>
         </div>
       </div>
 
-      {/* 2. DÃY LÁ BÀI TRÊN TAY: XẾP XÒE GỐI ĐÈ NHAU CHUẨN ZINGPLAY (LÁ TO VƯỢT TRỘI, ĐỘ MỜ = 0) */}
+      {/* 2. DÃY LÁ BÀI TRÊN TAY: XẾP XÒE GỐI ĐÈ NHAU CHUẨN ZINGPLAY */}
       <div className="flex-1 flex justify-center items-end px-1 sm:px-4 max-w-full overflow-visible">
         <div className="flex items-end justify-center select-none pb-0">
           {sortedHand.map((card, index) => {
             const isSelected = selectedSet.has(card.id);
-            const isHighlighted = highlightedSet.has(card.id) || (isUrgentHint && dimHintSet.has(card.id));
-            const isDimHint = !isSelected && !isHighlighted && dimHintSet.has(card.id) && selectedSet.size === 0;
+            // Sáng nổi bật khi là lá được gợi ý theo tổ hợp đang chọn
+            const isHighlighted = isAiHintEnabled && selectionHintSet.has(card.id);
+            // Sáng nhô nhẹ khi tới lượt (chưa chọn lá nào)
+            const isDimHint =
+              isAiHintEnabled && !isSelected && !isHighlighted && dimHintSet.has(card.id) && selectedSet.size === 0;
 
-            // Tính khoảng gối đè nhau dựa theo số lượng lá bài:
-            // 8-10 lá: đè che kín phần lá dưới, chỉ lộ cột số và chất ở mép trái
             let overlapClass = '';
             if (index > 0) {
               if (hand.length >= 8) {
@@ -188,7 +191,7 @@ export const LocHand: React.FC<LocHandProps> = ({
                   isHighlighted={isHighlighted}
                   isDimHint={isDimHint}
                   disabled={disabled}
-                  size="md"
+                  size="xl"
                   onClick={() => handleCardClick(card)}
                 />
               </div>
@@ -197,12 +200,12 @@ export const LocHand: React.FC<LocHandProps> = ({
         </div>
       </div>
 
-      {/* 3. NÚT "SẮP XẾP" (Góc dưới phải chuẩn ZingPlay: Màu cyan sáng, bo góc mềm mại) */}
+      {/* 3. NÚT "SẮP XẾP" */}
       <div className="shrink-0">
         <button
           type="button"
           onClick={handleSortClick}
-          className="px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl font-black text-xs sm:text-sm md:text-base text-white bg-[#29b6f6] hover:bg-[#039be5] active:scale-95 transition shadow-[0_4px_15px_rgba(41,182,246,0.6)] border border-white/30 select-none cursor-pointer"
+          className="px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-black text-xs sm:text-sm text-white bg-gradient-to-r from-sky-400 to-cyan-500 hover:from-sky-300 hover:to-cyan-400 active:scale-95 transition shadow-[0_4px_15px_rgba(14,165,233,0.6)] border border-white/20 select-none cursor-pointer"
         >
           Sắp Xếp
         </button>

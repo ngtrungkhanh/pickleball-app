@@ -80,13 +80,19 @@ export default function DanhLocPage() {
     // Kênh gửi tin nhắn ra Lobby
     const lobbySub = subscribeLobby(() => {});
 
+    // Kênh phát sóng của Host: vừa dispatch nội bộ cho chính Host để cập nhật UI, vừa gửi qua mạng
+    const hostBroadcast = (event: BroadcastEvent) => {
+      handleIncomingRoomEvent(event);
+      sub.send(event);
+    };
+
     // Khởi tạo HostGameEngine
     const engine = new HostGameEngine(
       roomId,
       roomName,
       playerId,
       playerName.trim() || 'Chủ phòng',
-      sub.send,
+      hostBroadcast,
       lobbySub.send
     );
     hostEngineRef.current = engine;
@@ -94,6 +100,7 @@ export default function DanhLocPage() {
 
     // Cập nhật state ban đầu
     setTableState(engine.getState());
+    setMyHand(engine.getPlayerHand(playerId));
   };
 
   // 2. VÀO PHÒNG CÓ SẴN (Client hoặc Spectator)
@@ -231,11 +238,11 @@ export default function DanhLocPage() {
       setTableState(event.state);
       // Nếu là Host: tự đồng bộ bài của Host
       if (hostEngineRef.current) {
-        setMyHand(hostEngineRef.current.getPlayerHand(playerId));
+        setMyHand([...hostEngineRef.current.getPlayerHand(playerId)]);
       }
     } else if (event.type === 'SYNC_HAND' && event.targetPlayerId === playerId) {
       // Client nhận bài riêng từ Host
-      setMyHand(event.hand);
+      setMyHand([...event.hand]);
     }
   };
 
@@ -337,18 +344,24 @@ export default function DanhLocPage() {
   const handleStartGame = () => {
     if (hostEngineRef.current) {
       hostEngineRef.current.startGame();
+      setTableState({ ...hostEngineRef.current.getState() });
+      setMyHand([...hostEngineRef.current.getPlayerHand(playerId)]);
     }
   };
 
   const handleNextRound = () => {
     if (hostEngineRef.current) {
       hostEngineRef.current.startGame();
+      setTableState({ ...hostEngineRef.current.getState() });
+      setMyHand([...hostEngineRef.current.getPlayerHand(playerId)]);
     }
   };
 
   const handlePlayerReady = (isReady: boolean) => {
     if (hostEngineRef.current) {
       hostEngineRef.current.handlePlayerReady(playerId, isReady);
+      setTableState({ ...hostEngineRef.current.getState() });
+      setMyHand([...hostEngineRef.current.getPlayerHand(playerId)]);
     } else if (sendRoomEventRef.current && currentRoomId) {
       sendRoomEventRef.current({
         type: 'PLAYER_READY',
@@ -362,6 +375,8 @@ export default function DanhLocPage() {
   const handleEndRoundToWaiting = () => {
     if (hostEngineRef.current) {
       hostEngineRef.current.endRoundToWaiting();
+      setTableState({ ...hostEngineRef.current.getState() });
+      setMyHand([]);
     } else if (sendRoomEventRef.current && currentRoomId) {
       sendRoomEventRef.current({
         type: 'END_ROUND_WAITING',

@@ -11,7 +11,7 @@ interface LocCardProps {
   isHighlighted?: boolean;
   isDimHint?: boolean;
   disabled?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   onClick?: () => void;
   className?: string;
 }
@@ -57,6 +57,7 @@ export const LocCard: React.FC<LocCardProps> = ({
     sm: 'w-10 sm:w-12 md:w-14 aspect-[2.5/3.5] rounded-md shadow-xs',
     md: 'w-18 sm:w-22 md:w-26 lg:w-30 aspect-[2.5/3.5] rounded-lg sm:rounded-xl shadow-md',
     lg: 'w-22 sm:w-26 md:w-32 aspect-[2.5/3.5] rounded-xl shadow-lg',
+    xl: 'w-24 sm:w-28 md:w-36 aspect-[2.5/3.5] rounded-xl shadow-xl',
   }[size];
 
   // 1. MẶT LƯNG BÀI: Xanh dương kẻ quả trám, vòng tròn ghi số lá còn lại (Chuẩn ZingPlay)

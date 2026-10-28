@@ -250,7 +250,7 @@ export class BotBrain {
       }
 
       // Nếu không có rác thường, nhưng có Heo (2) lẻ:
-      const twoCard = beatingSingles.find((c) => c.rank === 15);
+      const twoCard = botHand.find((c) => c.rank === 15);
       if (twoCard) {
         const twosInHand = botHand.filter((c) => c.rank === 15).length;
         const hasWinningCombos = partition.straights.length > 0 || partition.pairs.length >= 2;

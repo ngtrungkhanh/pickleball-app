@@ -3,6 +3,7 @@ import { Card, Rank, Suit } from '../loc-game/types';
 import { partitionHand, evaluateSamPossibility } from '../loc-game/bot/hand-evaluator';
 import { CardTracker } from '../loc-game/bot/card-tracker';
 import { BotBrain } from '../loc-game/bot/bot-brain';
+import { getBotHintForSelection } from '../loc-game/bot/selection-hint';
 import { TableState } from '../loc-game/network-types';
 import { analyzeCombo } from '../loc-game/analyzer';
 
@@ -286,5 +287,74 @@ describe('Loc Bot AI - Bot Brain Decisions', () => {
     expect(decision.action).toBe('PLAY');
     expect(decision.cards[0].rank).toBe(15);
     expect(decision.reason).toContain('Cầm nhiều Heo');
+  });
+});
+
+describe('Loc Bot AI - Contextual Selection Hint', () => {
+  it('gợi ý đúng các lá còn lại của sảnh khi người chơi chọn một phần sảnh đè bàn', () => {
+    // Bàn đang đánh sảnh 3 lá: 3-4-5
+    const tableCombo = analyzeCombo([createCard(3), createCard(4), createCard(5)]);
+
+    // Tay người chơi có sảnh 6-7-8 và rác 10
+    const hand: Card[] = [
+      createCard(6),
+      createCard(7),
+      createCard(8),
+      createCard(10),
+    ];
+
+    // Người chơi bấm chọn lá 6
+    const hints = getBotHintForSelection([hand[0]], hand, tableCombo);
+    // Bot gợi ý sáng lá 7 và lá 8 để thành sảnh 6-7-8 đè được 3-4-5
+    expect(hints.map((c) => c.rank)).toEqual([7, 8]);
+  });
+
+  it('không sáng lá nào nếu người chơi chọn sai lá không thể tạo bộ đè bàn', () => {
+    // Bàn đang đánh Đôi 9
+    const tableCombo = analyzeCombo([createCard(9, 'spades'), createCard(9, 'hearts')]);
+
+    // Tay người chơi có Đôi 8 (nhỏ hơn 9) và 1 lá K (không có đôi K)
+    const hand: Card[] = [
+      createCard(8, 'spades'),
+      createCard(8, 'clubs'),
+      createCard(13, 'diamonds'), // K lẻ
+    ];
+
+    // Người chơi chọn lá 8 (quá nhỏ không đè được đôi 9)
+    const hints1 = getBotHintForSelection([hand[0]], hand, tableCombo);
+    expect(hints1).toEqual([]);
+
+    // Người chơi chọn lá K (không có đôi K)
+    const hints2 = getBotHintForSelection([hand[2]], hand, tableCombo);
+    expect(hints2).toEqual([]);
+  });
+
+  it('khi bàn trống: gợi ý đúng sảnh dài khi người chơi chọn 1 lá thuộc sảnh', () => {
+    // Tay người chơi có sảnh 5-6-7-8 và đôi 10
+    const hand: Card[] = [
+      createCard(5),
+      createCard(6),
+      createCard(7),
+      createCard(8),
+      createCard(10, 'spades'),
+      createCard(10, 'hearts'),
+    ];
+
+    // Người chơi chọn lá 6
+    const hints = getBotHintForSelection([hand[1]], hand, null);
+    // Gợi ý sáng các lá 5, 7, 8 còn lại của sảnh
+    expect(hints.map((c) => c.rank).sort((a, b) => a - b)).toEqual([5, 7, 8]);
+  });
+
+  it('khi bàn trống: không sáng thêm lá nào nếu chọn các lá cọc cạch không ghép được bộ', () => {
+    const hand: Card[] = [
+      createCard(3),
+      createCard(9),
+      createCard(12),
+    ];
+
+    // Người chơi chọn lá 3 và lá 9 cọc cạch
+    const hints = getBotHintForSelection([hand[0], hand[1]], hand, null);
+    expect(hints).toEqual([]);
   });
 });

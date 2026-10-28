@@ -13,7 +13,7 @@ import { LocRoundOverModal } from './LocRoundOverModal';
 import { LocScoreHistoryModal } from './LocScoreHistoryModal';
 import { LocDebugModal } from './LocDebugModal';
 import { LocPlayHistoryModal } from './LocPlayHistoryModal';
-import { ArrowLeft, HelpCircle, Volume2, Users, RotateCcw, Bot } from 'lucide-react';
+import { ArrowLeft, HelpCircle, Volume2, Users, RotateCcw, Bot, Lightbulb } from 'lucide-react';
 
 interface LocGameBoardProps {
   tableState: TableState;
@@ -55,6 +55,21 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   const [showPlayHistoryModal, setShowPlayHistoryModal] = useState(false);
   const [showDebugModal, setShowDebugModal] = useState(false);
   const [confirmExitType, setConfirmExitType] = useState<'to_waiting' | 'leave_room' | null>(null);
+  const [isAiHintEnabled, setIsAiHintEnabled] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('loc_ai_hint_enabled');
+      return saved !== 'false';
+    }
+    return true;
+  });
+
+  const handleToggleAiHint = () => {
+    const next = !isAiHintEnabled;
+    setIsAiHintEnabled(next);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('loc_ai_hint_enabled', String(next));
+    }
+  };
 
   const confirmExitTypeRef = useRef(confirmExitType);
   const showPlayHistoryModalRef = useRef(showPlayHistoryModal);
@@ -304,23 +319,7 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
     return suggestedDecision.cards.map((c) => c.id);
   }, [suggestedDecision]);
 
-  // 5. GỢI Ý BÀI NẾU SAU 15S TRONG LƯỢT KHÔNG ĐÁNH
-  const [isTurnOver15s, setIsTurnOver15s] = useState<boolean>(false);
-  useEffect(() => {
-    if (!isMyTurn || status !== 'playing') {
-      return;
-    }
-    const timer = setTimeout(() => {
-      setIsTurnOver15s(true);
-    }, 15000); // Đủ 15 giây mới kích hoạt gợi ý
-    return () => {
-      clearTimeout(timer);
-      setIsTurnOver15s(false);
-    };
-  }, [isMyTurn, status, currentTurnPlayerId]);
-
-  const showAiHint = isMyTurn && isTurnOver15s;
-
+  
   // Danh sách đối thủ
   const opponents = useMemo(() => {
     return players.filter((p) => p.id !== myPlayerId);
@@ -432,6 +431,23 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
 
         <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Nút Xem Sổ Nợ / Kết quả */}
+          {/* Nút Bật/Tắt Gợi ý AI */}
+          <button
+            type="button"
+            onClick={handleToggleAiHint}
+            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-full text-xs font-bold transition shadow-md cursor-pointer active:scale-95 ${
+              isAiHintEnabled
+                ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/50 shadow-[0_0_10px_rgba(245,158,11,0.25)]'
+                : 'bg-black/60 hover:bg-black/80 text-slate-400 border border-white/10'
+            }`}
+            title={isAiHintEnabled ? 'Gợi ý bài: Đang BẬT (Bấm để tắt)' : 'Gợi ý bài: Đang TẮT (Bấm để bật)'}
+          >
+            <Lightbulb className={`w-3.5 h-3.5 ${isAiHintEnabled ? 'text-amber-400 fill-amber-400' : 'text-slate-400'}`} />
+            <span className="text-[11px] sm:text-xs">
+              Gợi ý: {isAiHintEnabled ? 'BẬT' : 'TẮT'}
+            </span>
+          </button>
+
           <button
             type="button"
             onClick={() => setShowScoreHistory(true)}
@@ -741,6 +757,21 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
                   </div>
                 )}
 
+                {/* Nhãn gợi ý nước đi tối ưu từ Bot AI khi bật gợi ý và chưa chọn bài */}
+                {isAiHintEnabled && isMyTurn && status === 'playing' && !isSpectator && selectedCardIds.length === 0 && suggestedDecision?.action === 'PLAY' && suggestedDecision.reason && (
+                  <div className="mb-2 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCardIds(suggestedCardIds)}
+                      className="px-2.5 py-1 rounded-full bg-amber-500/25 hover:bg-amber-500/35 border border-amber-400/50 text-amber-300 text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 shadow cursor-pointer max-w-[85vw] truncate animate-fade-in"
+                      title="Nhấn để tự động chọn các lá bài AI gợi ý"
+                    >
+                      <span className="truncate">💡 AI: {suggestedDecision.reason}</span>
+                      <span className="text-[10px] underline font-bold text-amber-200 shrink-0">(Chọn bài)</span>
+                    </button>
+                  </div>
+                )}
+
                 {status === 'playing' && currentRecentPlays.length > 0 && (
                   <div
                     onClick={() => setShowPlayHistoryModal(true)}
@@ -820,8 +851,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
             onSelectionChange={setSelectedCardIds}
             disabled={status !== 'playing' || !isMyTurn || isSpectator}
             playerName={myPlayer?.name || 'You'}
-            dimHintCardIds={showAiHint ? suggestedCardIds : []}
-            isUrgentHint={showAiHint}
+            dimHintCardIds={isAiHintEnabled && isMyTurn ? suggestedCardIds : []}
+            isAiHintEnabled={isAiHintEnabled}
             turnSecondsLeft={isMyTurn ? turnSecondsLeft : null}
           />
         </div>
