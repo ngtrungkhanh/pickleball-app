@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { LocGameBoard } from '@/components/loc-game/LocGameBoard';
 import { TableState } from '../loc-game/network-types';
 import { hasAnyPlayableMove } from '../loc-game/smart-hint';
@@ -32,9 +32,11 @@ beforeEach(() => { vi.useFakeTimers(); vi.mocked(hasAnyPlayableMove).mockReturnV
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('Lốc auto bỏ lượt', () => {
-  it('bỏ lượt đúng sau 500ms khi không có bài chặn', () => {
-    const p = props(); render(<LocGameBoard {...p} />);
-    act(() => { vi.advanceTimersByTime(499); });
+  it('ẩn nút bỏ qua và tự bỏ lượt đúng sau 2 giây khi không có bài chặn', () => {
+    const p = props(); const view = render(<LocGameBoard {...p} />);
+    expect(view.queryByRole('button', { name: 'Cho Qua' })).toBeNull();
+    expect(view.queryByRole('button', { name: 'Sắp Xếp' })).toBeNull();
+    act(() => { vi.advanceTimersByTime(1999); });
     expect(p.onPassTurn).not.toHaveBeenCalled();
     act(() => { vi.advanceTimersByTime(1); });
     expect(p.onPassTurn).toHaveBeenCalledTimes(1);
@@ -43,17 +45,39 @@ describe('Lốc auto bỏ lượt', () => {
     const p = props(); const view = render(<LocGameBoard {...p} />);
     act(() => { vi.advanceTimersByTime(250); });
     view.rerender(<LocGameBoard {...p} tableState={{ ...table, currentTurnPlayerId: 'other' }} />);
-    act(() => { vi.advanceTimersByTime(500); });
+    act(() => { vi.advanceTimersByTime(2000); });
     expect(p.onPassTurn).not.toHaveBeenCalled();
   });
   it('không tự bỏ khi có bài chặn hoặc đang mở vòng', () => {
     const p = props(); vi.mocked(hasAnyPlayableMove).mockReturnValue(true);
     const view = render(<LocGameBoard {...p} />);
-    act(() => { vi.advanceTimersByTime(600); });
+    act(() => { vi.advanceTimersByTime(2100); });
     vi.mocked(hasAnyPlayableMove).mockReturnValue(false);
     view.rerender(<LocGameBoard {...p} tableState={{ ...table, lastPlay: null }} />);
-    act(() => { vi.advanceTimersByTime(600); });
+    act(() => { vi.advanceTimersByTime(2100); });
     expect(p.onPassTurn).not.toHaveBeenCalled();
+  });
+  it('đóng lịch sử mới tiếp tục phần delay còn lại, không tính thời gian tạm dừng', () => {
+    const p = { ...props(), onHistoryViewChange: vi.fn() };
+    const view = render(<LocGameBoard {...p} />);
+    act(() => { vi.advanceTimersByTime(700); });
+    fireEvent.click(view.getByTitle('Bấm để xem toàn bộ lịch sử đánh bài của ván này'));
+    expect(p.onHistoryViewChange).toHaveBeenLastCalledWith(true);
+    act(() => { vi.advanceTimersByTime(60000); });
+    expect(p.onPassTurn).not.toHaveBeenCalled();
+    fireEvent.click(view.getByRole('button', { name: 'Đóng' }));
+    expect(p.onHistoryViewChange).toHaveBeenLastCalledWith(false);
+    act(() => { vi.advanceTimersByTime(1299); });
+    expect(p.onPassTurn).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(p.onPassTurn).toHaveBeenCalledTimes(1);
+  });
+  it('bản cập nhật đồng hồ không kéo dài delay auto bỏ lượt', () => {
+    const p = props(); const view = render(<LocGameBoard {...p} />);
+    act(() => { vi.advanceTimersByTime(1000); });
+    view.rerender(<LocGameBoard {...p} onPassTurn={() => p.onPassTurn()} tableState={{ ...table, lastPlay: { ...table.lastPlay! } }} />);
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(p.onPassTurn).toHaveBeenCalledTimes(1);
   });
 });
 
