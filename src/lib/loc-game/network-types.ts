@@ -1,4 +1,5 @@
 import { Card, CardCombo, PlayerScoreDetail } from './types';
+import { CompletedRoundSummary } from './debug-types';
 
 export type RoomStatus = 'waiting' | 'sam_calling' | 'playing' | 'round_ended';
 
@@ -47,6 +48,8 @@ export interface TableState {
     timestamp: number;
   }[];
   roundResult: Record<string, PlayerScoreDetail> | null;
+  completedRounds?: CompletedRoundSummary[];
+  locSessionId?: string | null;
 }
 
 /**

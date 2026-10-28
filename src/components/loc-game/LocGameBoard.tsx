@@ -10,6 +10,8 @@ import { LocHand } from './LocHand';
 import { LocOpponent } from './LocOpponent';
 import { LocCard } from './LocCard';
 import { LocRoundOverModal } from './LocRoundOverModal';
+import { LocScoreHistoryModal } from './LocScoreHistoryModal';
+import { LocDebugModal } from './LocDebugModal';
 import { ArrowLeft, HelpCircle, Volume2, Users, RotateCcw, Bot } from 'lucide-react';
 
 interface LocGameBoardProps {
@@ -48,6 +50,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   onRemoveBot,
 }) => {
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
+  const [showScoreHistory, setShowScoreHistory] = useState(false);
+  const [showDebugModal, setShowDebugModal] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
   const [isRotated, setIsRotated] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -311,7 +315,33 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Nút Xem Sổ Nợ / Kết quả */}
+          <button
+            type="button"
+            onClick={() => setShowScoreHistory(true)}
+            className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-bold bg-black/60 hover:bg-black/80 text-emerald-300 border border-emerald-400/40 shadow-md cursor-pointer transition active:scale-95"
+            title="Xem Sổ nợ & Lịch sử ván"
+          >
+            <span>📊</span>
+            <span className="text-[11px] sm:text-xs">
+              Sổ nợ{tableState.completedRounds && tableState.completedRounds.length > 0 ? ` (${tableState.completedRounds.length})` : ''}
+            </span>
+          </button>
+
+          {/* Nút Debug cho Host */}
+          {isHost && (
+            <button
+              type="button"
+              onClick={() => setShowDebugModal(true)}
+              className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-full text-xs font-bold bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-500/40 shadow-md cursor-pointer transition active:scale-95"
+              title="Xem nhật ký & debug Bot AI (Chủ phòng)"
+            >
+              <span>🐞</span>
+              <span className="text-[11px] hidden sm:inline">Debug</span>
+            </button>
+          )}
+
           {/* Nút Xoay ngang 90 độ (Chủ động xoay hoặc tự động khi màn hình dọc) */}
           <button
             type="button"
@@ -565,8 +595,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
             {status === 'playing' && lastPlay && (
               <div className="flex flex-col items-center">
                 <div className="flex items-center justify-center gap-1 sm:gap-2 drop-shadow-[0_10px_16px_rgba(0,0,0,0.7)]">
-                  {lastPlay.combo.cards.map((c) => (
-                    <LocCard key={c.id} card={c} size="md" className="shadow-xl" />
+                  {lastPlay.combo.cards.map((c, idx) => (
+                    <div key={c.id} className={idx > 0 ? "-ml-6 sm:-ml-8 md:-ml-10" : ""} style={{ zIndex: 10 + idx }}><LocCard card={c} size="md" className="shadow-2xl" /></div>
                   ))}
                 </div>
               </div>
@@ -694,6 +724,22 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
           onNextRound={onNextRound || (() => {})}
           onEndRoundToWaiting={onEndRoundToWaiting}
           onLeaveRoom={onLeaveRoom}
+        />
+      )}
+
+      {/* POPUP SỔ NỢ & LỊCH SỬ CÁC VÁN TRONG PHÒNG */}
+      {showScoreHistory && (
+        <LocScoreHistoryModal
+          tableState={tableState}
+          onClose={() => setShowScoreHistory(false)}
+        />
+      )}
+
+      {/* POPUP DEBUG NHẬT KÝ ĐÁNH BÀI CHO HOST */}
+      {showDebugModal && (
+        <LocDebugModal
+          roomId={tableState.roomId}
+          onClose={() => setShowDebugModal(false)}
         />
       )}
     </div>

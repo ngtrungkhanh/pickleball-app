@@ -5,6 +5,9 @@ import { analyzeCombo, canBeat, hasHigherSingleCard } from './analyzer';
 import { calculateRoundScores, ChopEvent } from './scoring';
 import { Card } from './types';
 import { BotBrain } from './bot';
+import { RoundDebugLog, CompletedRoundSummary } from './debug-types';
+import { saveRoundDebugLog } from './debug-storage';
+import { createSessionForRoom, syncRoundToLocSession } from './loc-sync';
 
 type EventCallback = (event: BroadcastEvent) => void;
 
@@ -160,6 +163,10 @@ export class HostGameEngine {
   private bots: Map<string, BotBrain> = new Map();
   private botTimers: Map<string, NodeJS.Timeout> = new Map();
   private potentialDenLang: { attackerId: string; targetBaoId: string } | null = null;
+  private roundIndex = 0;
+  private completedRounds: CompletedRoundSummary[] = [];
+  private currentRoundDebugLog: RoundDebugLog | null = null;
+  private locSessionId: string | null = null;
 
   constructor(
     roomId: string,
@@ -195,7 +202,22 @@ export class HostGameEngine {
       samState: null,
       playHistory: [],
       roundResult: null,
+      completedRounds: [],
+      locSessionId: null,
     };
+    void this.ensureLocSession();
+  }
+
+  private async ensureLocSession(): Promise<string | null> {
+    if (this.locSessionId) return this.locSessionId;
+    const players = this.state.players.map((p) => ({ id: p.id, name: p.name }));
+    const sid = await createSessionForRoom(this.state.roomName, players);
+    if (sid) {
+      this.locSessionId = sid;
+      this.state.locSessionId = sid;
+      this.broadcastState();
+    }
+    return sid;
   }
 
   public getState(): TableState {
@@ -569,6 +591,19 @@ export class HostGameEngine {
     this.chopEvents = [];
     this.lastPlayedCardsOfWinner = [];
     this.potentialDenLang = null;
+    this.roundIndex++;
+
+    this.currentRoundDebugLog = {
+      id: `${this.state.roomId}_r${this.roundIndex}`,
+      roomId: this.state.roomId,
+      roundNumber: this.roundIndex,
+      timestamp: Date.now(),
+      players: this.state.players.map((p) => ({ id: p.id, name: p.name, isBot: !!p.isBot })),
+      initialHands: JSON.parse(JSON.stringify(deal.playerHands)),
+      turns: [],
+      finalResult: {},
+    };
+    void this.ensureLocSession();
 
     for (const p of this.state.players) {
       p.cardsRemaining = 10;
@@ -740,9 +775,9 @@ export class HostGameEngine {
           const botHand = this.hands[currentId] || [];
           const decision = brain.decideMove(currentId, botHand, this.state);
           if (decision.action === 'PLAY' && decision.cards.length > 0) {
-            this.handlePlayCards(currentId, decision.cards);
+            this.handlePlayCards(currentId, decision.cards, decision.reason);
           } else {
-            this.handlePassTurn(currentId);
+            this.handlePassTurn(currentId, decision.reason);
           }
         }, botDelay);
         this.botTimers.set(currentId, timer);
@@ -801,7 +836,7 @@ export class HostGameEngine {
   /**
    * Người chơi đánh bài
    */
-  public handlePlayCards(playerId: string, cards: Card[]) {
+  public handlePlayCards(playerId: string, cards: Card[], botReason?: string) {
     if (this.state.status !== 'playing') return;
     if (this.state.currentTurnPlayerId !== playerId) return;
 
@@ -877,6 +912,22 @@ export class HostGameEngine {
       timestamp: Date.now(),
     });
 
+    // Ghi debug log cho nước đánh
+    if (this.currentRoundDebugLog) {
+      const isBot = Boolean(player?.isBot);
+      this.currentRoundDebugLog.turns.push({
+        turnIndex: this.currentRoundDebugLog.turns.length + 1,
+        playerId,
+        playerName,
+        isBot,
+        action: 'PLAY',
+        cardsPlayed: [...cards],
+        combo,
+        botLog: isBot && botReason ? { handBefore: handBeforePlay, reason: botReason } : undefined,
+        timestamp: Date.now(),
+      });
+    }
+
     // Gửi cập nhật bài riêng cho người đó
     this.sendHandToPlayer(playerId);
 
@@ -903,7 +954,7 @@ export class HostGameEngine {
   /**
    * Người chơi Bỏ lượt
    */
-  public handlePassTurn(playerId: string) {
+  public handlePassTurn(playerId: string, botReason?: string) {
     if (this.state.status !== 'playing') return;
     if (this.state.currentTurnPlayerId !== playerId) return;
     if (this.state.roundLeaderPlayerId === playerId) {
@@ -921,6 +972,20 @@ export class HostGameEngine {
       text: `${player?.name || 'Người chơi'} đã bỏ lượt.`,
       timestamp: Date.now(),
     });
+
+    if (this.currentRoundDebugLog) {
+      const isBot = Boolean(player?.isBot);
+      this.currentRoundDebugLog.turns.push({
+        turnIndex: this.currentRoundDebugLog.turns.length + 1,
+        playerId,
+        playerName: player?.name || '',
+        isBot,
+        action: 'PASS',
+        cardsPlayed: [],
+        botLog: isBot && botReason ? { handBefore: this.hands[playerId] || [], reason: botReason } : undefined,
+        timestamp: Date.now(),
+      });
+    }
 
     // Chuyển lượt
     this.passTurnToNext(playerId);
@@ -1002,7 +1067,35 @@ export class HostGameEngine {
 
     this.state.roundResult = scoreboard;
 
+    if (this.currentRoundDebugLog) {
+      this.currentRoundDebugLog.finalResult = scoreboard;
+      if (this.state.samState) {
+        this.currentRoundDebugLog.samState = {
+          callerId: this.state.samState.samCallerId,
+          success: samSuccess,
+          failed: samFailed,
+        };
+      }
+      void saveRoundDebugLog(this.currentRoundDebugLog);
+    }
+
+
     const winnerName = this.state.players.find((p) => p.id === winnerId)?.name || '';
+    const summary: CompletedRoundSummary = {
+      roundNumber: this.roundIndex,
+      winnerId,
+      winnerName,
+      reason: isSam ? (samSuccess ? 'Ăn Sâm' : 'Đền Sâm') : (denLangPlayerId ? 'Đền Làng' : 'Tới Nhất'),
+      timestamp: Date.now(),
+      scores: scoreboard,
+    };
+    this.completedRounds.push(summary);
+    this.state.completedRounds = [...this.completedRounds];
+
+    if (this.locSessionId) {
+      void syncRoundToLocSession(this.locSessionId, winnerId, scoreboard);
+    }
+
     if (denLangPlayerId) {
       const denLangPlayer = this.state.players.find((p) => p.id === denLangPlayerId);
       this.state.playHistory.push({
