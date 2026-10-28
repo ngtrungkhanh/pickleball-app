@@ -15,7 +15,7 @@ function findAllStraightsOfLength(hand: Card[], targetLen: number): Card[][] {
   }
 
   const results: Card[][] = [];
-  const uniqueRanks = Array.from(byRank.keys()).sort((a, b) => a - b).filter((r) => r !== 15);
+  const uniqueRanks: Rank[] = Array.from(byRank.keys()).sort((a, b) => a - b).filter((r) => r !== 15);
 
   // Sảnh chuẩn liên tiếp
   for (let i = 0; i <= uniqueRanks.length - targetLen; i++) {
@@ -30,7 +30,7 @@ function findAllStraightsOfLength(hand: Card[], targetLen: number): Card[][] {
     if (isConsecutive) {
       // Lấy 1 lá cho mỗi rank trong chuỗi liên tiếp
       const segmentRanks = uniqueRanks.slice(i, i + targetLen);
-      results.push(segmentRanks.map((r) => byRank.get(r)![0]));
+      results.push(segmentRanks.map((r: Rank) => byRank.get(r)![0]));
     }
   }
 
