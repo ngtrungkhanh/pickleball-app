@@ -2,8 +2,9 @@
 
 import React from 'react';
 import { RoomPlayer } from '@/lib/loc-game/network-types';
+import { Card, PlayerScoreDetail } from '@/lib/loc-game/types';
 import { LocCard } from './LocCard';
-import { Crown } from 'lucide-react';
+import { Crown, Trophy, Flame, AlertTriangle } from 'lucide-react';
 
 interface LocOpponentProps {
   player: RoomPlayer;
@@ -13,6 +14,9 @@ interface LocOpponentProps {
   cardPosition?: 'left' | 'right';
   turnSecondsLeft?: number | null;
   className?: string;
+  isRoundEnded?: boolean;
+  remainingCards?: Card[] | null;
+  scoreDetail?: PlayerScoreDetail | null;
 }
 
 // Hàm sinh màu tóc / phụ kiện avatar theo ID người chơi để mỗi người có 1 ngoại hình chibi riêng
@@ -39,16 +43,22 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
   cardPosition = 'right',
   turnSecondsLeft = null,
   className = '',
+  isRoundEnded = false,
+  remainingCards = null,
+  scoreDetail = null,
 }) => {
   const isPassed = Boolean(isRoundPlaying && player.hasPassed);
   const isOneCardLeft = player.cardsRemaining === 1;
   const avatar = getAvatarProps(player.id);
+  const isWinner = Boolean(scoreDetail?.isWinner);
 
   // Khung Avatar nhân vật
   const avatarBox = (
     <div
       className={`relative flex flex-col items-center justify-between w-18 sm:w-20 md:w-22 p-1 rounded-xl transition-all duration-200 select-none shadow-xl ${
-        isCurrentTurn
+        isWinner
+          ? 'bg-amber-950/90 ring-3 ring-amber-400 border-amber-300 shadow-[0_0_25px_rgba(251,191,36,0.8)]'
+          : isCurrentTurn
           ? 'bg-black/85 ring-3 sm:ring-4 ring-emerald-400 border-emerald-300 shadow-[0_0_25px_rgba(52,211,153,0.7),inset_0_0_15px_rgba(52,211,153,0.2)] animate-pulse'
           : isPassed
           ? 'bg-slate-900/90 border border-slate-700/80 grayscale opacity-60 contrast-90 shadow-none'
@@ -58,7 +68,7 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
       }`}
     >
       {/* Bộ đếm 30s khi tới lượt của đối thủ */}
-      {isCurrentTurn && turnSecondsLeft !== null && (
+      {isCurrentTurn && turnSecondsLeft !== null && !isRoundEnded && (
         <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
           <div
             className={`px-2 py-0.5 rounded-full font-black text-[11px] font-mono shadow-xl border flex items-center gap-1 ${
@@ -87,8 +97,11 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
       {/* Hình Chibi Avatar */}
       <div className="relative w-11 h-11 sm:w-13 sm:h-13 my-0.5 flex items-center justify-center">
         {/* Vòng hào quang sáng khi đang chơi */}
-        {isCurrentTurn && (
+        {isCurrentTurn && !isRoundEnded && (
           <div className="absolute inset-0 rounded-full bg-emerald-400/25 blur-sm animate-pulse pointer-events-none" />
+        )}
+        {isWinner && (
+          <div className="absolute inset-0 rounded-full bg-amber-400/30 blur-sm animate-pulse pointer-events-none" />
         )}
 
         <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow">
@@ -129,8 +142,18 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
           </div>
         )}
 
+        {/* HUY HIỆU NGƯỜI THẮNG CUỘC KHI KẾT THÚC VÁN */}
+        {isRoundEnded && isWinner && (
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none whitespace-nowrap">
+            <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-tight bg-gradient-to-r from-amber-400 to-yellow-300 text-amber-950 border border-white shadow-[0_2px_10px_rgba(251,191,36,0.9)] flex items-center gap-1 animate-bounce">
+              <Trophy className="w-3 h-3 fill-amber-950" />
+              {scoreDetail?.isSamSuccess ? 'Ăn Sâm' : 'Về Nhất'}
+            </span>
+          </div>
+        )}
+
         {/* CHỮ "BÁO 1" 3D VÀNG KIM LOẠI NHẤP NHÁY (Chuẩn 100% ảnh mẫu) */}
-        {isOneCardLeft && (
+        {!isRoundEnded && isOneCardLeft && (
           <div className="absolute -inset-1 flex items-center justify-center z-20 pointer-events-none">
             <div
               className="text-center font-black text-xs sm:text-sm tracking-wider uppercase px-1.5 py-0.5 rounded bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 text-amber-950 border-2 border-white shadow-[0_4px_12px_rgba(234,179,8,0.9)] animate-bounce"
@@ -144,7 +167,7 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
         )}
 
         {/* CHỮ "QUA LƯỢT" Ở GÓC DƯỚI ICON KHI BỎ LƯỢT */}
-        {isPassed && (
+        {!isRoundEnded && isPassed && (
           <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 z-20 pointer-events-none whitespace-nowrap">
             <span className="px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-tight bg-slate-800/95 text-slate-300 border border-slate-500 shadow-md">
               Qua lượt
@@ -153,7 +176,7 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
         )}
 
         {/* CHỮ "CHUẨN BỊ" Ở GÓC DƯỚI ICON KHI CHUẨN BỊ ĐÁNH */}
-        {isNextTurn && !isCurrentTurn && !isPassed && (
+        {!isRoundEnded && isNextTurn && !isCurrentTurn && !isPassed && (
           <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 z-20 pointer-events-none whitespace-nowrap">
             <span className="px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-tight bg-gradient-to-r from-sky-500 to-blue-600 text-white border border-sky-300 shadow-[0_2px_8px_rgba(14,165,233,0.6)] animate-pulse">
               Chuẩn bị
@@ -162,20 +185,71 @@ export const LocOpponent: React.FC<LocOpponentProps> = ({
         )}
       </div>
 
-      {/* Số tiền/điểm xu vàng phía dưới avatar */}
-      <div className="w-full flex items-center justify-center gap-1 bg-black/40 rounded py-0.5">
-        <span className="w-3.5 h-3.5 rounded-full bg-gradient-to-tr from-amber-600 to-yellow-300 border border-yellow-200 flex items-center justify-center text-[8px] font-black text-amber-950 shadow-xs">
-          €
-        </span>
-        <span className="text-[10px] sm:text-[11px] font-bold text-amber-300 font-mono">
-          {player.cardsRemaining * 25}
-        </span>
-      </div>
+      {/* Số lá thực nhận / phạt khi kết thúc ván, hoặc số tiền xu vàng khi đang chơi */}
+      {isRoundEnded && scoreDetail ? (
+        <div className="w-full flex flex-col items-center justify-center gap-0.5 rounded py-0.5 bg-black/60 border border-white/10">
+          <span
+            className={`text-[11px] sm:text-xs font-black font-mono leading-none ${
+              scoreDetail.netCards > 0
+                ? 'text-emerald-300'
+                : scoreDetail.netCards === 0
+                ? 'text-slate-300'
+                : 'text-rose-400'
+            }`}
+          >
+            {scoreDetail.netCards > 0 ? `+${scoreDetail.netCards}` : scoreDetail.netCards} lá
+          </span>
+          {/* Tag phạt nhỏ */}
+          {scoreDetail.isBurned && (
+            <span className="text-[8px] font-bold text-rose-300 flex items-center leading-none">
+              <Flame className="w-2 h-2 fill-rose-400" /> Cóng
+            </span>
+          )}
+          {scoreDetail.twosRemaining > 0 && (
+            <span className="text-[8px] font-bold text-orange-300 leading-none">
+              Thối {scoreDetail.twosRemaining} heo
+            </span>
+          )}
+          {scoreDetail.isDenLang && (
+            <span className="text-[8px] font-bold text-rose-400 flex items-center leading-none">
+              <AlertTriangle className="w-2 h-2" /> Đền làng
+            </span>
+          )}
+          {scoreDetail.isSamFailed && (
+            <span className="text-[8px] font-bold text-rose-400 leading-none">
+              Đền sâm
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="w-full flex items-center justify-center gap-1 bg-black/40 rounded py-0.5">
+          <span className="w-3.5 h-3.5 rounded-full bg-gradient-to-tr from-amber-600 to-yellow-300 border border-yellow-200 flex items-center justify-center text-[8px] font-black text-amber-950 shadow-xs">
+            €
+          </span>
+          <span className="text-[10px] sm:text-[11px] font-bold text-amber-300 font-mono">
+            {player.cardsRemaining * 25}
+          </span>
+        </div>
+      )}
     </div>
   );
 
-  // Lá bài úp hiển thị số lượng lá bài còn lại
-  const cardBox = (
+  // Lá bài của đối thủ: Khi kết thúc ván thì NGỬA BÀI, khi đang chơi thì ÚP BÀI
+  const cardBox = isRoundEnded && remainingCards ? (
+    <div className="flex items-center justify-center -space-x-4 sm:-space-x-5 max-w-[120px] sm:max-w-[160px] overflow-visible">
+      {remainingCards.length > 0 ? (
+        remainingCards.map((c, idx) => (
+          <div key={c.id} style={{ zIndex: 10 + idx }}>
+            <LocCard card={c} size="sm" className="shadow-md scale-85 sm:scale-90" />
+          </div>
+        ))
+      ) : (
+        <span className="text-[11px] font-extrabold text-amber-300/90 px-2 py-1 rounded bg-black/50 border border-amber-400/30">
+          ✓ Hết bài
+        </span>
+      )}
+    </div>
+  ) : (
     <div className={isPassed ? 'opacity-60 grayscale transition-opacity' : 'transition-opacity'}>
       <LocCard
         faceDown

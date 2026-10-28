@@ -288,6 +288,127 @@ describe('Loc Bot AI - Bot Brain Decisions', () => {
     expect(decision.cards[0].rank).toBe(15);
     expect(decision.reason).toContain('Cầm nhiều Heo');
   });
+
+  it('cầm sảnh to (10-J-Q-K-A) và rác nhỏ lẻ (3, 5, 8) khi đi đầu: đánh rác nhỏ thăm dò, KHÔNG đánh thẳng sảnh to đi luôn', () => {
+    // Bot cầm sảnh to tới A và 3 lá rác rời rạc không tạo bộ (3, 5, 8)
+    const botHand: Card[] = [
+      createCard(3),
+      createCard(5),
+      createCard(8),
+      createCard(10),
+      createCard(11),
+      createCard(12),
+      createCard(13),
+      createCard(14), // Sảnh 10-J-Q-K-A
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    // KHÔNG được ném sảnh 10-J-Q-K-A đi ngay đầu ván! Phải đánh rác nhỏ (3, 5 hoặc 8) để thăm dò
+    expect(decision.cards.length).toBe(1);
+    expect([3, 5, 8]).toContain(decision.cards[0].rank);
+  });
+
+  it('cầm đôi to (Đôi K) và rác nhỏ (3, 5, 7) khi đi đầu: đánh rác nhỏ thăm dò, KHÔNG đánh thẳng đôi to đi luôn', () => {
+    // Bot cầm 1 đôi to (Đôi K) và 3 rác nhỏ lẻ
+    const botHand: Card[] = [
+      createCard(3),
+      createCard(5),
+      createCard(7),
+      createCard(13, 'spades'),
+      createCard(13, 'hearts'), // Đôi K
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    // Phải đánh rác nhỏ thăm dò, không được ném đôi K đi đầu tiên
+    expect(decision.cards.length).toBe(1);
+    expect([3, 5, 7]).toContain(decision.cards[0].rank);
+  });
+
+  it('bàn đánh rác nhỏ (con 8) ở đầu ván (đối thủ còn 9 lá) và bot không có rác đè được, còn nhiều rác nhỏ: bot chọn PASS để giữ Heo', () => {
+    mockTableState.players[1].cardsRemaining = 9; // Đối thủ còn nguyên 9 lá
+    mockTableState.lastPlay = {
+      playerId: 'human_1',
+      playerName: 'Human',
+      combo: analyzeCombo([createCard(8)]), // Đối thủ đánh rác 8
+    };
+
+    // Bot có đôi 4, đôi 5, rác 7 (đều < 8), và Heo 2 (duy nhất > 8)
+    const botHand: Card[] = [
+      createCard(4, 'spades'), createCard(4, 'hearts'),
+      createCard(5, 'spades'), createCard(5, 'hearts'),
+      createCard(7), // Rác 7 < 8 (không đè được)
+      createCard(15, 'spades'), // Heo 2
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    // Không có rác đè được và còn nhiều bài ở đầu ván: Bot chọn PASS để giữ Heo an toàn, không chém Heo
+    expect(decision.action).toBe('PASS');
+  });
+
+  it('cầm [Đôi 4, Heo 2]: ưu tiên đánh Heo trước cướp cái để về bằng đôi 4 an toàn, không bị thối 2', () => {
+    const botHand: Card[] = [
+      createCard(4, 'spades'),
+      createCard(4, 'hearts'), // Đôi 4
+      createCard(15, 'diamonds'), // Heo 2
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    // Phải đánh Heo 2 trước cướp cái để con cuối về bằng Đôi 4, không được để Heo 2 về cuối bị phạt thối
+    expect(decision.cards.length).toBe(1);
+    expect(decision.cards[0].rank).toBe(15);
+  });
+
+  it('bàn đánh Đôi Q, bot có Sáp K (3 con K): bot biết trích đôi K từ sáp để đè đôi Q', () => {
+    mockTableState.lastPlay = {
+      playerId: 'human_1',
+      playerName: 'Human',
+      combo: analyzeCombo([createCard(12, 'spades'), createCard(12, 'hearts')]), // Đôi Q
+    };
+
+    // Bot có Sáp K (3 con K) và rác 6
+    const botHand: Card[] = [
+      createCard(6),
+      createCard(13, 'spades'),
+      createCard(13, 'hearts'),
+      createCard(13, 'clubs'), // Sáp K
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    expect(decision.cards.length).toBe(2);
+    expect(decision.cards[0].rank).toBe(13); // Trích đôi K đè đôi Q
+  });
+
+  it('có sảnh nhỏ [3, 4, 5] và sảnh to [10, J, Q, K, A]: ưu tiên xả sảnh nhỏ trước để giữ sảnh to làm chốt', () => {
+    const botHand: Card[] = [
+      createCard(3), createCard(4), createCard(5), // Sảnh nhỏ 3-4-5
+      createCard(10), createCard(11), createCard(12), createCard(13), createCard(14), // Sảnh to 10-J-Q-K-A
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    // Phải xả sảnh nhỏ 3-4-5 trước, không được đánh thẳng sảnh to 10-J-Q-K-A
+    expect(decision.cards.length).toBe(3);
+    expect(decision.cards.map((c) => c.rank)).toEqual([3, 4, 5]);
+  });
+
+  it('người sau còn 1 lá, bot có Đôi 4 và Đôi K: bot đánh Đôi 4 thay vì ném Đôi K to', () => {
+    mockTableState.players[1].cardsRemaining = 1; // Người sau còn 1 lá
+
+    const botHand: Card[] = [
+      createCard(4, 'spades'), createCard(4, 'hearts'), // Đôi 4
+      createCard(13, 'spades'), createCard(13, 'hearts'), // Đôi K
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    expect(decision.cards.length).toBe(2);
+    // Đánh đôi nhỏ (đôi 4) vì người 1 lá cũng không đỡ được, giữ lại đôi K to
+    expect(decision.cards[0].rank).toBe(4);
+  });
 });
 
 describe('Loc Bot AI - Contextual Selection Hint', () => {

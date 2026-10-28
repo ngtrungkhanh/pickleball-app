@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Card, CardCombo } from '@/lib/loc-game/types';
+import { Card, CardCombo, PlayerScoreDetail } from '@/lib/loc-game/types';
 import { LocCard } from './LocCard';
 import { getBotHintForSelection } from '@/lib/loc-game/bot';
 import { sortCards } from '@/lib/loc-game/deck';
+import { Trophy, Flame, AlertTriangle } from 'lucide-react';
 
 interface LocHandProps {
   hand: Card[];
@@ -19,6 +20,8 @@ interface LocHandProps {
   turnSecondsLeft?: number | null;
   hasPassed?: boolean;
   isNextTurn?: boolean;
+  isRoundEnded?: boolean;
+  scoreDetail?: PlayerScoreDetail | null;
 }
 
 export const LocHand: React.FC<LocHandProps> = ({
@@ -34,7 +37,10 @@ export const LocHand: React.FC<LocHandProps> = ({
   turnSecondsLeft = null,
   hasPassed = false,
   isNextTurn = false,
+  isRoundEnded = false,
+  scoreDetail = null,
 }) => {
+  const isWinner = Boolean(scoreDetail?.isWinner);
   const sortedHand = useMemo(() => sortCards(hand), [hand]);
 
   const selectedSet = useMemo(() => new Set(selectedCardIds), [selectedCardIds]);
@@ -83,11 +89,13 @@ export const LocHand: React.FC<LocHandProps> = ({
       {/* 1. KHUNG AVATAR CỦA BẠN ("You" - Góc dưới trái chuẩn ZingPlay) */}
       <div
         className={`relative flex flex-col items-center justify-between w-12 sm:w-16 md:w-20 p-1 sm:p-1.5 rounded-xl transition-all duration-200 shadow-xl shrink-0 ${
-          isMyTurn
+          isWinner
+            ? 'bg-amber-950/90 ring-3 ring-amber-400 border-amber-300 shadow-[0_0_25px_rgba(251,191,36,0.8)]'
+            : isMyTurn && !isRoundEnded
             ? 'bg-black/85 ring-3 sm:ring-4 ring-emerald-400 border-emerald-300 shadow-[0_0_25px_rgba(52,211,153,0.7),inset_0_0_15px_rgba(52,211,153,0.2)] animate-pulse'
-            : hasPassed
+            : hasPassed && !isRoundEnded
             ? 'bg-slate-900/90 border border-slate-700/80 grayscale opacity-60 contrast-90 shadow-none'
-            : isNextTurn
+            : isNextTurn && !isRoundEnded
             ? 'bg-black/80 border border-sky-400/60 shadow-[0_0_15px_rgba(56,189,248,0.35)]'
             : 'bg-black/80 border border-white/10'
         }`}
@@ -98,8 +106,8 @@ export const LocHand: React.FC<LocHandProps> = ({
           </span>
         </div>
 
-        {/* Bộ đếm 30s khi tới lượt của bạn */}
-        {isMyTurn && turnSecondsLeft !== null && (
+        {/* Bộ đếm 30s khi tới lượt của bạn (nếu chưa tích hợp ở giữa) */}
+        {isMyTurn && turnSecondsLeft !== null && !isRoundEnded && (
           <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
             <div
               className={`px-1.5 sm:px-2 py-0.5 rounded-full font-black text-[10px] sm:text-xs font-mono shadow-xl border flex items-center gap-1 ${
@@ -116,8 +124,11 @@ export const LocHand: React.FC<LocHandProps> = ({
         {/* Chibi Avatar Bạn gái kính râm/kính cận */}
         <div className="relative w-9 h-9 sm:w-12 sm:h-12 md:w-14 md:h-14 my-0.5 flex items-center justify-center">
           {/* Vòng hào quang sáng khi đang chơi */}
-          {isMyTurn && (
+          {isMyTurn && !isRoundEnded && (
             <div className="absolute inset-0 rounded-full bg-emerald-400/25 blur-sm animate-pulse pointer-events-none" />
+          )}
+          {isWinner && (
+            <div className="absolute inset-0 rounded-full bg-amber-400/30 blur-sm animate-pulse pointer-events-none" />
           )}
 
           <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow">
@@ -138,8 +149,18 @@ export const LocHand: React.FC<LocHandProps> = ({
             <path d="M 45 61 Q 50 66 55 61" stroke="#e11d48" strokeWidth="2" fill="none" />
           </svg>
 
+          {/* HUY HIỆU NGƯỜI THẮNG CUỘC KHI KẾT THÚC VÁN */}
+          {isRoundEnded && isWinner && (
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none whitespace-nowrap">
+              <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[11px] font-black uppercase tracking-tight bg-gradient-to-r from-amber-400 to-yellow-300 text-amber-950 border border-white shadow-[0_2px_10px_rgba(251,191,36,0.9)] flex items-center gap-1 animate-bounce">
+                <Trophy className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-amber-950" />
+                {scoreDetail?.isSamSuccess ? 'Ăn Sâm' : 'Về Nhất'}
+              </span>
+            </div>
+          )}
+
           {/* CHỮ "BÁO 1" 3D NỔI BẬT NẾU BẠN CÒN 1 LÁ */}
-          {isOneCardLeft && (
+          {!isRoundEnded && isOneCardLeft && (
             <div className="absolute -inset-1 flex items-center justify-center z-20 pointer-events-none">
               <div
                 className="text-center font-black text-[10px] sm:text-xs md:text-sm tracking-wider uppercase px-1 sm:px-2 py-0.5 rounded bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 text-amber-950 border-2 border-white shadow-[0_4px_12px_rgba(234,179,8,0.9)] animate-bounce"
@@ -153,7 +174,7 @@ export const LocHand: React.FC<LocHandProps> = ({
           )}
 
           {/* CHỮ "QUA LƯỢT" Ở GÓC DƯỚI ICON KHI BỎ LƯỢT */}
-          {hasPassed && (
+          {!isRoundEnded && hasPassed && (
             <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 z-20 pointer-events-none whitespace-nowrap">
               <span className="px-1 sm:px-1.5 py-0.2 rounded-full text-[8px] sm:text-[9px] md:text-[10px] font-black uppercase tracking-tight bg-slate-800/95 text-slate-300 border border-slate-500 shadow-md">
                 Qua lượt
@@ -162,7 +183,7 @@ export const LocHand: React.FC<LocHandProps> = ({
           )}
 
           {/* CHỮ "CHUẨN BỊ" Ở GÓC DƯỚI ICON KHI CHUẨN BỊ ĐÁNH */}
-          {isNextTurn && !isMyTurn && !hasPassed && (
+          {!isRoundEnded && isNextTurn && !isMyTurn && !hasPassed && (
             <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 z-20 pointer-events-none whitespace-nowrap">
               <span className="px-1 sm:px-1.5 py-0.2 rounded-full text-[8px] sm:text-[9px] md:text-[10px] font-black uppercase tracking-tight bg-gradient-to-r from-sky-500 to-blue-600 text-white border border-sky-300 shadow-[0_2px_8px_rgba(14,165,233,0.6)] animate-pulse">
                 Chuẩn bị
@@ -171,15 +192,51 @@ export const LocHand: React.FC<LocHandProps> = ({
           )}
         </div>
 
-        {/* Xu vàng */}
-        <div className="w-full flex items-center justify-center gap-1 bg-black/50 rounded py-0.5">
-          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-gradient-to-tr from-amber-600 to-yellow-300 border border-yellow-200 flex items-center justify-center text-[7px] sm:text-[8px] font-black text-amber-950 shadow-xs">
-            €
-          </span>
-          <span className="text-[10px] sm:text-[11px] font-bold text-amber-300 font-mono">
-            {hand.length * 25}
-          </span>
-        </div>
+        {/* Số lá thực nhận / phạt khi kết thúc ván, hoặc số tiền xu vàng khi đang chơi */}
+        {isRoundEnded && scoreDetail ? (
+          <div className="w-full flex flex-col items-center justify-center gap-0.5 rounded py-0.5 bg-black/60 border border-white/10">
+            <span
+              className={`text-[10px] sm:text-[11px] font-black font-mono leading-none ${
+                scoreDetail.netCards > 0
+                  ? 'text-emerald-300'
+                  : scoreDetail.netCards === 0
+                  ? 'text-slate-300'
+                  : 'text-rose-400'
+              }`}
+            >
+              {scoreDetail.netCards > 0 ? `+${scoreDetail.netCards}` : scoreDetail.netCards} lá
+            </span>
+            {scoreDetail.isBurned && (
+              <span className="text-[8px] font-bold text-rose-300 flex items-center leading-none">
+                <Flame className="w-2 h-2 fill-rose-400" /> Cóng
+              </span>
+            )}
+            {scoreDetail.twosRemaining > 0 && (
+              <span className="text-[8px] font-bold text-orange-300 leading-none">
+                Thối {scoreDetail.twosRemaining} heo
+              </span>
+            )}
+            {scoreDetail.isDenLang && (
+              <span className="text-[8px] font-bold text-rose-400 flex items-center leading-none">
+                <AlertTriangle className="w-2 h-2" /> Đền làng
+              </span>
+            )}
+            {scoreDetail.isSamFailed && (
+              <span className="text-[8px] font-bold text-rose-400 leading-none">
+                Đền sâm
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="w-full flex items-center justify-center gap-1 bg-black/50 rounded py-0.5">
+            <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-gradient-to-tr from-amber-600 to-yellow-300 border border-yellow-200 flex items-center justify-center text-[7px] sm:text-[8px] font-black text-amber-950 shadow-xs">
+              €
+            </span>
+            <span className="text-[10px] sm:text-[11px] font-bold text-amber-300 font-mono">
+              {hand.length * 25}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 2. DÃY LÁ BÀI TRÊN TAY: XẾP XÒE GỐI ĐÈ NHAU CHUẨN ZINGPLAY */}

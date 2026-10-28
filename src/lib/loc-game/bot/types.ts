@@ -24,3 +24,10 @@ export interface BotDecision {
   combo?: CardCombo;
   reason: string;
 }
+
+export interface CandidateMove {
+  action: BotAction;
+  cards: Card[];
+  combo?: CardCombo;
+  description: string;
+}

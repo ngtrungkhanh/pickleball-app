@@ -599,6 +599,7 @@ export class HostGameEngine {
     this.chopEvents = [];
     this.lastPlayedCardsOfWinner = [];
     this.potentialDenLang = null;
+    this.state.remainingHands = undefined;
     this.roundIndex++;
 
     this.currentRoundDebugLog = {
@@ -933,9 +934,11 @@ export class HostGameEngine {
         } else {
           // Đánh hợp lệ (lá to nhất hoặc đánh bộ)
           this.potentialDenLang = null;
+    this.state.remainingHands = undefined;
         }
       } else {
         this.potentialDenLang = null;
+    this.state.remainingHands = undefined;
       }
     }
 
@@ -1132,6 +1135,7 @@ export class HostGameEngine {
     });
 
     this.state.roundResult = scoreboard;
+    this.state.remainingHands = JSON.parse(JSON.stringify(this.hands));
 
     if (this.currentRoundDebugLog) {
       this.currentRoundDebugLog.finalResult = scoreboard;

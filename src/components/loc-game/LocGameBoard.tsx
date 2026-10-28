@@ -13,7 +13,15 @@ import { LocRoundOverModal } from './LocRoundOverModal';
 import { LocScoreHistoryModal } from './LocScoreHistoryModal';
 import { LocDebugModal } from './LocDebugModal';
 import { LocPlayHistoryModal } from './LocPlayHistoryModal';
-import { ArrowLeft, HelpCircle, Volume2, Users, RotateCcw, Bot, Lightbulb } from 'lucide-react';
+import {
+  ArrowLeft,
+  Users,
+  RotateCcw,
+  Bot,
+  Lightbulb,
+  HelpCircle,
+  Volume2,
+} from 'lucide-react';
 
 interface LocGameBoardProps {
   tableState: TableState;
@@ -51,6 +59,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   onRemoveBot,
 }) => {
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showRoundOverModal, setShowRoundOverModal] = useState(false);
   const [showScoreHistory, setShowScoreHistory] = useState(false);
   const [showPlayHistoryModal, setShowPlayHistoryModal] = useState(false);
   const [showDebugModal, setShowDebugModal] = useState(false);
@@ -72,6 +82,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   };
 
   const confirmExitTypeRef = useRef(confirmExitType);
+  const showSettingsModalRef = useRef(showSettingsModal);
+  const showRoundOverModalRef = useRef(showRoundOverModal);
   const showPlayHistoryModalRef = useRef(showPlayHistoryModal);
   const showScoreHistoryRef = useRef(showScoreHistory);
   const showDebugModalRef = useRef(showDebugModal);
@@ -80,6 +92,8 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
 
   useEffect(() => {
     confirmExitTypeRef.current = confirmExitType;
+    showSettingsModalRef.current = showSettingsModal;
+    showRoundOverModalRef.current = showRoundOverModal;
     showPlayHistoryModalRef.current = showPlayHistoryModal;
     showScoreHistoryRef.current = showScoreHistory;
     showDebugModalRef.current = showDebugModal;

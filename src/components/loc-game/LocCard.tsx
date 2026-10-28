@@ -100,11 +100,11 @@ export const LocCard: React.FC<LocCardProps> = ({
       onClick={!disabled ? onClick : undefined}
       className={`relative select-none cursor-pointer bg-white opacity-100 transition-all duration-150 flex flex-col justify-between p-1.5 sm:p-2 border border-slate-300 overflow-hidden ${
         isSelected
-          ? '-translate-y-6 sm:-translate-y-8 shadow-xl ring-3 ring-yellow-400 border-yellow-500'
+          ? '-translate-y-6 sm:-translate-y-8 shadow-2xl ring-4 ring-yellow-400 border-yellow-500 z-30'
           : isHighlighted
-          ? 'ring-3 ring-yellow-400 border-yellow-400 shadow-md'
+          ? '-translate-y-3 sm:-translate-y-4 ring-3 ring-amber-300 border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.95),0_0_35px_rgba(234,179,8,0.5)] z-20'
           : isDimHint
-          ? 'ring-2 ring-yellow-400/80 border-yellow-400/90 shadow-sm'
+          ? '-translate-y-2.5 sm:-translate-y-3.5 ring-3 ring-amber-400 border-amber-400 shadow-[0_0_18px_rgba(251,191,36,0.9),0_0_30px_rgba(245,158,11,0.45)] z-20'
           : 'hover:-translate-y-1 hover:shadow-md'
       } ${disabled ? 'opacity-60 cursor-not-allowed' : ''} ${sizeClasses} ${className}`}
       style={{
@@ -114,6 +114,11 @@ export const LocCard: React.FC<LocCardProps> = ({
           : '0 4px 8px rgba(0, 0, 0, 0.35)',
       }}
     >
+      {/* Ánh sáng vàng dịu nhẹ phủ mặt bài khi AI gợi ý */}
+      {(isHighlighted || isDimHint) && !isSelected && (
+        <div className="absolute inset-0 bg-amber-300/15 pointer-events-none animate-pulse border-t-2 border-amber-400/80" />
+      )}
+
       {/* CỘT SỐ VÀ CHẤT Ở GÓC TRÊN BÊN TRÁI: TO RÕ, NÉT ĐẬM */}
       <div className={`flex flex-col items-center leading-none self-start select-none ${colorClass}`}>
         <span className="font-black text-xl sm:text-2xl md:text-3xl tracking-tighter leading-none">

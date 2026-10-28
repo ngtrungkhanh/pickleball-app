@@ -6,8 +6,9 @@ import { HandPartition } from './types';
  * Tìm các sảnh liên tiếp khả dĩ từ các lá bài
  * Chỉ sinh các sảnh tối đại (maximal) và các cặp phân tách hợp lệ nếu sảnh dài (>= 6)
  * để tránh bùng nổ tổ hợp (chỉ tối đa 3-6 sảnh).
+ * `includeA23`: Chỉ cho phép sảnh A-2-3 khi cờ này bật (mặc định tắt để tránh nuốt mất con 2)
  */
-function findPossibleStraights(cards: Card[]): Card[][] {
+function findPossibleStraights(cards: Card[], includeA23: boolean = false): Card[][] {
   const sorted = sortCards(cards);
   const byRank = new Map<Rank, Card[]>();
   for (const c of sorted) {
@@ -45,8 +46,8 @@ function findPossibleStraights(cards: Card[]): Card[][] {
     i = j;
   }
 
-  // Sảnh A-2-3 đặc biệt
-  if (byRank.has(3) && byRank.has(14) && byRank.has(15)) {
+  // Sảnh A-2-3 đặc biệt: chỉ cho phép khi includeA23 = true (ví dụ khi đánh giá Báo Sâm)
+  if (includeA23 && byRank.has(3) && byRank.has(14) && byRank.has(15)) {
     result.push([
       byRank.get(3)![0],
       byRank.get(14)![0],
@@ -95,7 +96,7 @@ function scorePartition(partition: HandPartition): number {
  * Phân rã bài tối ưu (Hand Partitioning) bằng thuật toán nhánh cận / tìm kiếm
  * Đảm bảo không xé vụn sảnh đẹp hay tứ quý.
  */
-export function partitionHand(hand: Card[]): HandPartition {
+export function partitionHand(hand: Card[], includeA23: boolean = false): HandPartition {
   if (hand.length === 0) {
     return { quads: [], straights: [], triples: [], pairs: [], singles: [] };
   }
@@ -119,6 +120,9 @@ export function partitionHand(hand: Card[]): HandPartition {
       remainingCards.push(...cards);
     }
   }
+
+  // Sắp xếp tứ quý tăng dần theo rank
+  quads.sort((a, b) => a[0].rank - b[0].rank);
 
   // 2. Tìm các tổ hợp Sảnh khả dĩ từ số lá còn lại
   let bestPartition: HandPartition = {
@@ -148,6 +152,10 @@ export function partitionHand(hand: Card[]): HandPartition {
       else singles.push(...grp);
     }
 
+    // Sắp xếp triples và pairs tăng dần theo rank để dễ dàng lấy đôi/sáp nhỏ nhất
+    triples.sort((a, b) => a[0].rank - b[0].rank);
+    pairs.sort((a, b) => a[0].rank - b[0].rank);
+
     const current: HandPartition = {
       quads,
       straights: stList,
@@ -167,7 +175,7 @@ export function partitionHand(hand: Card[]): HandPartition {
   evaluateRemaining([], remainingCards);
 
   // Thử các tập hợp sảnh không xung đột
-  const possibleStraights = findPossibleStraights(remainingCards);
+  const possibleStraights = findPossibleStraights(remainingCards, includeA23);
 
   // Sắp xếp sảnh dài lên trước để ưu tiên sảnh dài
   possibleStraights.sort((a, b) => b.length - a.length);
@@ -211,7 +219,7 @@ export function partitionHand(hand: Card[]): HandPartition {
 export function evaluateSamPossibility(hand: Card[]): boolean {
   if (hand.length < 10) return false;
 
-  const partition = partitionHand(hand);
+  const partition = partitionHand(hand, true); // Cho phép kiểm tra sảnh A-2-3 khi báo Sâm
 
   // 1. Sảnh 9 hoặc 10 lá
   const hasMegaStraight = partition.straights.some((st) => st.length >= 9);

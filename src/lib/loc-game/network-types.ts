@@ -60,6 +60,7 @@ export interface TableState {
     timestamp: number;
   }[];
   roundResult: Record<string, PlayerScoreDetail> | null;
+  remainingHands?: Record<string, Card[]>;
   completedRounds?: CompletedRoundSummary[];
   locSessionId?: string | null;
 }
