@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { TableState } from '@/lib/loc-game/network-types';
 import { Card } from '@/lib/loc-game/types';
 import { analyzeCombo, canBeat } from '@/lib/loc-game/analyzer';
@@ -56,8 +56,23 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   const [showDebugModal, setShowDebugModal] = useState(false);
   const [confirmExitType, setConfirmExitType] = useState<'to_waiting' | 'leave_room' | null>(null);
 
+  const confirmExitTypeRef = useRef(confirmExitType);
+  const showPlayHistoryModalRef = useRef(showPlayHistoryModal);
+  const showScoreHistoryRef = useRef(showScoreHistory);
+  const showDebugModalRef = useRef(showDebugModal);
+  const statusRef = useRef(tableState.status);
+  const isExitingRef = useRef(false);
+
+  useEffect(() => {
+    confirmExitTypeRef.current = confirmExitType;
+    showPlayHistoryModalRef.current = showPlayHistoryModal;
+    showScoreHistoryRef.current = showScoreHistory;
+    showDebugModalRef.current = showDebugModal;
+    statusRef.current = tableState.status;
+  });
+
   const handleBackClick = () => {
-    if (status !== 'waiting') {
+    if (tableState.status !== 'waiting') {
       setConfirmExitType('to_waiting');
     } else {
       setConfirmExitType('leave_room');
@@ -68,36 +83,100 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
     if (confirmExitType === 'to_waiting') {
       onEndRoundToWaiting?.();
     } else if (confirmExitType === 'leave_room') {
+      isExitingRef.current = true;
       onLeaveRoom();
     }
     setConfirmExitType(null);
   };
+
+  // CHẶN NÚT BACK CỦA ANDROID / TRÌNH DUYỆT ĐỂ KHÔNG BỊ OUT RA BXH
+  useEffect(() => {
+    // Đẩy 1 dummy state vào lịch sử duyệt web để chặn nút Back
+    window.history.pushState({ inLocGameRoom: true }, '');
+
+    const handlePopState = () => {
+      if (isExitingRef.current) return;
+
+      // Giữ lại state để không bị back ra trang trước (BXH)
+      window.history.pushState({ inLocGameRoom: true }, '');
+
+      // 1. Nếu đang mở modal nào đó -> đóng modal đó trước
+      if (confirmExitTypeRef.current) {
+        setConfirmExitType(null);
+        return;
+      }
+      if (showPlayHistoryModalRef.current) {
+        setShowPlayHistoryModal(false);
+        return;
+      }
+      if (showScoreHistoryRef.current) {
+        setShowScoreHistory(false);
+        return;
+      }
+      if (showDebugModalRef.current) {
+        setShowDebugModal(false);
+        return;
+      }
+
+      // 2. Nếu đang trong ván đấu -> hiện popup xác nhận về phòng chờ
+      if (statusRef.current !== 'waiting') {
+        setConfirmExitType('to_waiting');
+        return;
+      }
+
+      // 3. Nếu đang ở phòng chờ -> hiện popup xác nhận rời phòng
+      setConfirmExitType('leave_room');
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
   const [now, setNow] = useState<number>(() => Date.now());
+
+  // TỰ ĐỘNG XOAY NGANG 90 ĐỘ KHI MÀN HÌNH DỌC (ĐIỆN THOẠI CẦM DỌC)
   const [isRotated, setIsRotated] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
-      // Nếu màn hình vốn đã là khổ ngang (desktop, tablet ngang), tuyệt đối KHÔNG xoay
+      // Màn hình ngang thật (desktop, tablet ngang, điện thoại xoay ngang): không xoay ảo
       if (window.innerWidth >= window.innerHeight) {
-        sessionStorage.removeItem('loc_force_rotated');
         return false;
       }
-      const saved = sessionStorage.getItem('loc_force_rotated');
-      if (saved !== null) return saved === 'true';
+      // Màn hình dọc (điện thoại cầm dọc): MẶC ĐỊNH TỰ ĐỘNG XOAY!
+      const manualPref = sessionStorage.getItem('loc_manual_rotate_pref');
+      if (manualPref !== null) return manualPref === 'true';
+      return true;
     }
     return false;
   });
 
-  // Tự động nhận biết thay đổi kích thước cửa sổ
+  // Tự động nhận biết thay đổi kích thước cửa sổ & xoay thiết bị
   useEffect(() => {
     const handleResize = () => {
-      // Khi ở màn hình ngang (như Desktop), luôn reset về chế độ chuẩn, không xoay
-      if (window.innerWidth >= window.innerHeight) {
+      const isLandscape = window.innerWidth >= window.innerHeight;
+      if (isLandscape) {
+        // Điện thoại đã quay ngang hoặc trên PC: reset về chế độ chuẩn
         setIsRotated(false);
-        sessionStorage.removeItem('loc_force_rotated');
+        sessionStorage.removeItem('loc_manual_rotate_pref');
+      } else {
+        // Điện thoại đang cầm dọc: tự động xoay ngang 90 độ
+        const manualPref = sessionStorage.getItem('loc_manual_rotate_pref');
+        if (manualPref !== null) {
+          setIsRotated(manualPref === 'true');
+        } else {
+          setIsRotated(true);
+        }
       }
     };
 
+    handleResize();
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
   }, []);
 
   // Khóa cuộn trang khi xoay 90 độ để bàn chơi cố định tuyệt đối
@@ -118,12 +197,11 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
   const handleToggleRotate = () => {
     if (typeof window !== 'undefined') {
       if (window.innerWidth >= window.innerHeight) {
-        alert('Màn hình của bạn đã ở chế độ ngang tối ưu, không cần xoay!');
         return;
       }
       const next = !isRotated;
       setIsRotated(next);
-      sessionStorage.setItem('loc_force_rotated', String(next));
+      sessionStorage.setItem('loc_manual_rotate_pref', String(next));
     }
   };
 
