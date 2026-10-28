@@ -1,8 +1,11 @@
-import { Card, Rank } from '../types';
+import { Card, CardCombo, Rank } from '../types';
 import { RoomPlayer } from '../network-types';
 
 export class CardTracker {
   private playedCards: Card[] = [];
+  // Ghi nhận mức rank mà từng đối thủ đã từng BỎ LƯỢT (PASS) để suy đoán khoảng bài
+  private passedSingleRanks: Map<string, number> = new Map();
+  private passedPairRanks: Map<string, number> = new Map();
 
   constructor() {}
 
@@ -11,6 +14,8 @@ export class CardTracker {
    */
   public reset(): void {
     this.playedCards = [];
+    this.passedSingleRanks.clear();
+    this.passedPairRanks.clear();
   }
 
   /**
@@ -23,6 +28,37 @@ export class CardTracker {
         this.playedCards.push(card);
       }
     }
+  }
+
+  /**
+   * Ghi nhận hành vi BỎ LƯỢT (PASS) của đối thủ để đoán bài:
+   * Nếu đối thủ PASS lá Single 10 -> Đối thủ khả năng cao không có rác lẻ > 10 (trừ Heo 2)
+   */
+  public recordPass(playerId: string, tableCombo: CardCombo | null): void {
+    if (!tableCombo) return;
+    if (tableCombo.type === 'SINGLE') {
+      const cur = this.passedSingleRanks.get(playerId) || 0;
+      this.passedSingleRanks.set(playerId, Math.max(cur, tableCombo.highestRank));
+    } else if (tableCombo.type === 'PAIR') {
+      const cur = this.passedPairRanks.get(playerId) || 0;
+      this.passedPairRanks.set(playerId, Math.max(cur, tableCombo.highestRank));
+    }
+  }
+
+  /**
+   * Suy đoán xem một lá rác hoặc đôi có an toàn trước các đối thủ hay không
+   */
+  public isRankSafeFromOpponents(rank: number, type: 'SINGLE' | 'PAIR', opponents: RoomPlayer[]): boolean {
+    if (opponents.length === 0) return false;
+    let safeCount = 0;
+    const map = type === 'SINGLE' ? this.passedSingleRanks : this.passedPairRanks;
+    for (const opp of opponents) {
+      const passedRank = map.get(opp.id);
+      if (passedRank && passedRank >= rank) {
+        safeCount++;
+      }
+    }
+    return safeCount >= Math.ceil(opponents.length / 2);
   }
 
   /**

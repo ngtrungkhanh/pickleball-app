@@ -22,8 +22,8 @@ interface SimulationGameResult {
   playLog: string[];
 }
 
-describe('Loc Bot AI - 50 Match Simulation (5 Bots Arena)', () => {
-  it('mô phỏng 50 ván đấu giữa 5 Bot AI, ghi log chi tiết và đánh giá trí tuệ', () => {
+describe('Loc Bot AI - 200 Match Simulation (5 Bots Arena)', () => {
+  it('mô phỏng 200 ván đấu giữa 5 Bot AI, ghi log chi tiết và đánh giá trí tuệ', () => {
     const botConfigs: { id: string; name: string; personality: 'aggressive' | 'conservative' | 'balanced' }[] = [
       { id: 'bot_1', name: 'Bot 1 (Sát Thủ ⚡ - Liều)', personality: 'aggressive' },
       { id: 'bot_2', name: 'Bot 2 (Gà Con 🐣 - Thủ)', personality: 'conservative' },
@@ -40,7 +40,34 @@ describe('Loc Bot AI - 50 Match Simulation (5 Bots Arena)', () => {
     const gameResults: SimulationGameResult[] = [];
     let previousWinnerId: string = 'bot_1';
 
-    for (let gameIdx = 1; gameIdx <= 50; gameIdx++) {
+    // Thống kê xuyên suốt 200 ván
+    const stats: Record<string, {
+      wins: number;
+      netCards: number;
+      samCalls: number;
+      samSuccess: number;
+      samFailed: number;
+      thoi2Count: number;
+      chopVictimCount: number;
+      chopperCount: number;
+      burnedCount: number;
+    }> = {};
+
+    for (const b of botConfigs) {
+      stats[b.id] = {
+        wins: 0,
+        netCards: 0,
+        samCalls: 0,
+        samSuccess: 0,
+        samFailed: 0,
+        thoi2Count: 0,
+        chopVictimCount: 0,
+        chopperCount: 0,
+        burnedCount: 0,
+      };
+    }
+
+    for (let gameIdx = 1; gameIdx <= 200; gameIdx++) {
       // 1. Reset trackers cho tất cả các bot
       for (const b of botConfigs) {
         brains[b.id].getTracker().reset();
@@ -64,6 +91,7 @@ describe('Loc Bot AI - 50 Match Simulation (5 Bots Arena)', () => {
       for (const b of botConfigs) {
         if (brains[b.id].decideSamCall(hands[b.id])) {
           samCallerId = b.id;
+          stats[b.id].samCalls++;
           break; // Người báo sâm đầu tiên
         }
       }
@@ -151,6 +179,8 @@ describe('Loc Bot AI - 50 Match Simulation (5 Bots Arena)', () => {
               victimId: lastPlay.playerId,
               count: 1,
             });
+            stats[currentTurnId].chopperCount++;
+            stats[lastPlay.playerId].chopVictimCount++;
             playLog.push(`💥 [Chặt Heo] ${currentBotName} dùng Tứ Quý ${combo.highestRank} chặt Heo 2 của ${lastPlay.playerName}!`);
           }
 
@@ -196,6 +226,12 @@ describe('Loc Bot AI - 50 Match Simulation (5 Bots Arena)', () => {
         } else {
           // Bỏ lượt (PASS)
           passedPlayers.add(currentTurnId);
+          // Ghi nhận pass vào CardTracker của các bot khác để phán đoán bài đối thủ
+          for (const b of botConfigs) {
+            if (b.id !== currentTurnId) {
+              brains[b.id].getTracker().recordPass(currentTurnId, tableCombo);
+            }
+          }
           playLog.push(`Turn ${turnStep}: ${currentBotName} BỎ LƯỢT (PASS) - Lý do: ${decision.reason}`);
         }
 
@@ -237,10 +273,27 @@ describe('Loc Bot AI - 50 Match Simulation (5 Bots Arena)', () => {
         chopEvents,
       });
 
+      // Cập nhật thống kê điểm số và sự kiện
+      stats[winnerId!].wins++;
+      if (samCallerId) {
+        if (samCallerId === winnerId) {
+          stats[samCallerId].samSuccess++;
+        } else {
+          stats[samCallerId].samFailed++;
+        }
+      }
+
       const burnedPlayers: string[] = [];
       const denLangPlayers: string[] = [];
-      for (const [, detail] of Object.entries(scores)) {
-        if (detail.isBurned) burnedPlayers.push(detail.playerName);
+      for (const [pid, detail] of Object.entries(scores)) {
+        stats[pid].netCards += detail.netCards;
+        if (detail.twosRemaining > 0) {
+          stats[pid].thoi2Count += detail.twosRemaining;
+        }
+        if (detail.isBurned) {
+          stats[pid].burnedCount++;
+          burnedPlayers.push(detail.playerName);
+        }
         if (detail.isDenLang) denLangPlayers.push(detail.playerName);
       }
 
@@ -267,10 +320,9 @@ describe('Loc Bot AI - 50 Match Simulation (5 Bots Arena)', () => {
     // IN BÁO CÁO TỔNG HỢP VÀ THỐNG KÊ CHI TIẾT
     // =========================================================================
     console.log('\n======================================================================');
-    console.log('              KẾT QUẢ MÔ PHỎNG 50 VÁN ĐẤU GIỮA 5 BOT AI');
+    console.log('              KẾT QUẢ MÔ PHỎNG 200 VÁN ĐẤU GIỮA 5 BOT AI');
     console.log('======================================================================\n');
 
-    const winCounts: Record<string, number> = {};
     let totalTurns = 0;
     let totalChops = 0;
     let totalEndedWithTwo = 0;
@@ -279,12 +331,7 @@ describe('Loc Bot AI - 50 Match Simulation (5 Bots Arena)', () => {
     let totalSamCalls = 0;
     let totalSamWins = 0;
 
-    for (const b of botConfigs) {
-      winCounts[b.name] = 0;
-    }
-
     for (const res of gameResults) {
-      winCounts[res.winnerName] = (winCounts[res.winnerName] || 0) + 1;
       totalTurns += res.turnsCount;
       totalChops += res.chopCount;
       if (res.hasEndedWithTwo) totalEndedWithTwo++;
@@ -296,15 +343,27 @@ describe('Loc Bot AI - 50 Match Simulation (5 Bots Arena)', () => {
         totalSamCalls++;
         if (samInfo.includes(res.winnerName)) totalSamWins++;
       }
-
-      console.log(`Ván ${res.gameIndex.toString().padStart(2, ' ')}: Thắng: ${res.winnerName.padEnd(20, ' ')} | Nước kết: [${res.winnerCombo?.type} rank ${res.winnerCombo?.highestRank}] | Số lượt: ${res.turnsCount.toString().padStart(2, ' ')} | Chặt: ${res.chopCount} | Cóng: ${res.burnedPlayers.length > 0 ? res.burnedPlayers.join(',') : 'Không'}${samInfo ? ' | [CÓ BÁO SÂM]' : ''}`);
     }
 
-    console.log('\n----------------------------------------------------------------------');
-    console.log('THỐNG KÊ TỔNG THỂ 50 VÁN:');
-    console.log(`- Tổng số ván mô phỏng: 50`);
-    console.log(`- Số lượt đánh trung bình mỗi ván: ${(totalTurns / 50).toFixed(1)} lượt`);
-    console.log(`- Tỷ lệ thắng giữa các Bot:`, winCounts);
+    console.log('---------------------------------------------------------------------------------------------------------');
+    console.log('| Bot Name                  | Tính cách      | Thắng (Win%) | Tổng netCards | Net/ván | Báo Sâm | Thối 2 | Chặt / Bị | Cóng |');
+    console.log('---------------------------------------------------------------------------------------------------------');
+
+    for (const b of botConfigs) {
+      const s = stats[b.id];
+      const winRate = ((s.wins / 200) * 100).toFixed(1) + '%';
+      const netPerGame = (s.netCards / 200).toFixed(2);
+      const samStr = `${s.samSuccess}/${s.samCalls}`;
+      const chopStr = `${s.chopperCount}/${s.chopVictimCount}`;
+      console.log(
+        `| ${b.name.padEnd(25, ' ')} | ${b.personality.padEnd(14, ' ')} | ${s.wins.toString().padStart(4, ' ')} (${winRate.padStart(5, ' ')}) | ${s.netCards.toString().padStart(13, ' ')} | ${netPerGame.padStart(7, ' ')} | ${samStr.padStart(7, ' ')} | ${s.thoi2Count.toString().padStart(6, ' ')} | ${chopStr.padStart(9, ' ')} | ${s.burnedCount.toString().padStart(4, ' ')} |`
+      );
+    }
+    console.log('---------------------------------------------------------------------------------------------------------');
+
+    console.log('\nTHỐNG KÊ TỔNG THỂ 200 VÁN:');
+    console.log(`- Tổng số ván mô phỏng: 200`);
+    console.log(`- Số lượt đánh trung bình mỗi ván: ${(totalTurns / 200).toFixed(1)} lượt`);
     console.log(`- Số lần Báo Sâm: ${totalSamCalls} lần (Thành công: ${totalSamWins}/${totalSamCalls})`);
     console.log(`- Số pha Chặt Heo bằng Tứ quý: ${totalChops} lần`);
     console.log(`- Số ván về bằng Heo 2 (bị phạt 5 lá nhưng vẫn thắng): ${totalEndedWithTwo} ván`);
@@ -313,7 +372,13 @@ describe('Loc Bot AI - 50 Match Simulation (5 Bots Arena)', () => {
     console.log('----------------------------------------------------------------------\n');
 
     // Kiểm tra tính hợp lệ cơ bản
-    expect(gameResults.length).toBe(50);
+    expect(gameResults.length).toBe(200);
     expect(totalDenLang).toBe(0); // Bot tuyệt đối không được phạm luật đền làng
+    for (const b of botConfigs) {
+      // Mỗi bot phải có tỷ lệ thắng sêm sêm hợp lý (bàn 5 người thì tỷ lệ bình quân 20%, mỗi bot >= 10% và <= 35%)
+      const winRate = stats[b.id].wins / 200;
+      expect(winRate).toBeGreaterThanOrEqual(0.10);
+      expect(winRate).toBeLessThanOrEqual(0.35);
+    }
   });
 });
