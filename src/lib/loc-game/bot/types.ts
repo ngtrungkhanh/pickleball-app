@@ -18,6 +18,8 @@ export interface CardTrackerState {
 
 export type BotAction = 'PLAY' | 'PASS';
 
+export type BotPersonality = 'aggressive' | 'conservative' | 'balanced';
+
 export interface BotDecision {
   action: BotAction;
   cards: Card[];

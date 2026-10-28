@@ -664,4 +664,55 @@ describe('Loc Bot AI - Utility Evaluator & Independent Generator Refinements', (
   });
 });
 
+describe('Loc Bot AI - Personalities & Calculated Risk Sam Call', () => {
+  it('Aggressive bot dám mạo hiểm Báo Sâm khi cầm sảnh 7 lá tới Át + Heo 2', () => {
+    // Sảnh 8-9-10-J-Q-K-A (7 lá tới Át) + Heo 2 + Đôi 4
+    const hand: Card[] = [
+      createCard(8), createCard(9), createCard(10), createCard(11),
+      createCard(12), createCard(13), createCard(14), // Sảnh tới A
+      createCard(15), // Heo 2
+      createCard(4, 'spades'), createCard(4, 'hearts'), // Đôi 4
+    ];
+
+    // Aggressive bot: Dám mạo hiểm Báo Sâm có cơ sở
+    expect(evaluateSamPossibility(hand, 'aggressive')).toBe(true);
+
+    // Conservative bot: Quá thận trọng -> Không dám báo Sâm
+    expect(evaluateSamPossibility(hand, 'conservative')).toBe(false);
+
+    // Balanced bot: Với sảnh 7 lá có Heo 2 + Đôi bảo kê -> Báo sâm
+    expect(evaluateSamPossibility(hand, 'balanced')).toBe(true);
+  });
+
+  it('Conservative bot chỉ Báo Sâm khi cầm bài gần như bất bại 99%', () => {
+    // Sảnh 9 lá 3..J + Heo 2
+    const megaHand: Card[] = [
+      createCard(3), createCard(4), createCard(5), createCard(6), createCard(7),
+      createCard(8), createCard(9), createCard(10), createCard(11),
+      createCard(15),
+    ];
+    expect(evaluateSamPossibility(megaHand, 'conservative')).toBe(true);
+  });
+
+  it('BotBrain lưu đúng tính cách và áp dụng vào quyết định Báo Sâm', () => {
+    const aggressiveBrain = new BotBrain(undefined, 'aggressive');
+    const conservativeBrain = new BotBrain(undefined, 'conservative');
+
+    expect(aggressiveBrain.getPersonality()).toBe('aggressive');
+    expect(conservativeBrain.getPersonality()).toBe('conservative');
+
+    // Sảnh 7 lá tới Át + Heo 2 + 2 rác nhỏ
+    const riskyHand: Card[] = [
+      createCard(8), createCard(9), createCard(10), createCard(11),
+      createCard(12), createCard(13), createCard(14),
+      createCard(15),
+      createCard(3), createCard(5),
+    ];
+
+    expect(aggressiveBrain.decideSamCall(riskyHand)).toBe(true);
+    expect(conservativeBrain.decideSamCall(riskyHand)).toBe(false);
+  });
+});
+
+
 

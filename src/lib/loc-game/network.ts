@@ -238,10 +238,22 @@ export class HostGameEngine {
     if (this.state.status !== 'waiting') return;
     if (this.state.players.length >= 5) return;
 
-    const botIndex = this.state.players.filter((p) => p.isBot).length + 1;
     const botId = `bot_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const botNames = ['Bot Gà Con 🐣', 'Bot Sát Thủ ⚡', 'Bot Thần Bài 🃏', 'Bot Bá Đạo 🔥'];
-    const botName = botNames[(botIndex - 1) % botNames.length] || `Bot ${botIndex}`;
+    const personalities: ('aggressive' | 'conservative' | 'balanced')[] = [
+      'aggressive',
+      'conservative',
+      'balanced',
+    ];
+    const personality = personalities[Math.floor(Math.random() * personalities.length)];
+
+    const personalityNames = {
+      aggressive: ['Bot Sát Thủ ⚡', 'Bot Bá Đạo 🔥', 'Bot Chiến Thần ⚔️'],
+      conservative: ['Bot Gà Con 🐣', 'Bot Cụ Rùa 🐢', 'Bot Thủ Hiểm 🛡️'],
+      balanced: ['Bot Thần Bài 🃏', 'Bot Cao Thủ 👑', 'Bot Vô Địch 🏆'],
+    };
+
+    const namesForType = personalityNames[personality];
+    const botName = namesForType[Math.floor(Math.random() * namesForType.length)];
 
     this.state.players.push({
       id: botId,
@@ -249,12 +261,13 @@ export class HostGameEngine {
       isHost: false,
       isSpectator: false,
       isBot: true,
+      botPersonality: personality,
       cardsRemaining: 0,
       hasPassed: false,
       isReady: true,
     });
 
-    this.bots.set(botId, new BotBrain());
+    this.bots.set(botId, new BotBrain(undefined, personality));
     this.broadcastState();
   }
 

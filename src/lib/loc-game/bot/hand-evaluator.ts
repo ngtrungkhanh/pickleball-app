@@ -1,6 +1,6 @@
 import { Card, Rank } from '../types';
 import { sortCards } from '../deck';
-import { HandPartition } from './types';
+import { HandPartition, BotPersonality } from './types';
 
 /**
  * Tìm các sảnh liên tiếp khả dĩ từ các lá bài
@@ -211,34 +211,105 @@ export function partitionHand(hand: Card[], includeA23: boolean = false): HandPa
 
 /**
  * Đánh giá xem tay bài có đủ tiêu chuẩn để Báo Sâm hay không
- * Luật: Báo Sâm nếu không ai chặn được bất kỳ lá nào sẽ ăn cả làng. Bị chặn 1 lá thì đền làng.
- * Do đó, chỉ Báo Sâm khi tay bài:
- * - Sảnh 9-10 lá (gần như bất bại).
- * - Hoặc toàn bộ bài chỉ gồm 1 sảnh dài + lá trùm (A, 2 hoặc tứ quý) mà không có bất kỳ rác nhỏ nào hở ra.
+ * Hỗ trợ các trường phái tính cách (Bot Personality):
+ * - Conservative (Cẩn trọng): Chỉ báo khi sảnh 9-10 lá hoặc bài sạch 99% bất bại.
+ * - Balanced (Cân bằng): Báo sâm khi sảnh >= 8 lá tới Át hoặc sảnh 7 lá tới Át + Đôi/Heo bảo kê.
+ * - Aggressive (Hiếu chiến): Dám mạo hiểm có cơ sở khi sảnh 6-7 lá tới Át + Đôi to / Đôi 2 / Heo 2.
  */
-export function evaluateSamPossibility(hand: Card[]): boolean {
+export function evaluateSamPossibility(
+  hand: Card[],
+  personality: BotPersonality = 'balanced'
+): boolean {
   if (hand.length < 10) return false;
 
   const partition = partitionHand(hand, true); // Cho phép kiểm tra sảnh A-2-3 khi báo Sâm
 
-  // 1. Sảnh 9 hoặc 10 lá
+  // =========================================================================
+  // 1. CẤP ĐỘ AN TOÀN CAO NHẤT (Mọi bot, kể cả Conservative đều báo)
+  // =========================================================================
+  // 1.1. Sảnh 9 hoặc 10 lá (bất khả chiến bại)
   const hasMegaStraight = partition.straights.some((st) => st.length >= 9);
   if (hasMegaStraight) return true;
 
-  // 2. Sảnh 8 lá và 2 lá còn lại là 2 con to (Đôi 2, hoặc 2 và A)
-  const straight8 = partition.straights.find((st) => st.length >= 8);
-  if (straight8) {
-    const remaining = hand.filter((c) => !straight8.some((sc) => sc.id === c.id));
-    const allBig = remaining.every((c) => c.rank >= 14); // A hoặc 2
-    if (allBig) return true;
-  }
-
-  // 3. Tứ quý 2 hoặc bài sạch hoàn toàn không có rác <= 13
+  // 1.2. Tứ quý 2 và rác <= 1 lá A
   const hasQuad2 = partition.quads.some((q) => q[0].rank === 15);
   if (hasQuad2) {
-    // Có tứ quý 2 -> nếu số rác còn lại <= 1 lá và là A thì cực mạnh
     if (partition.singles.length <= 1 && partition.singles.every((c) => c.rank >= 14)) {
       return true;
+    }
+  }
+
+  // 1.3. Hai sảnh hoàn chỉnh ghép đủ 10 lá và có ít nhất 1 sảnh tới Át để đi đầu an toàn
+  if (partition.straights.length >= 2) {
+    const totalStraightCards = partition.straights.reduce((s, st) => s + st.length, 0);
+    if (totalStraightCards === 10) {
+      const hasAceStraight = partition.straights.some((st) => st.some((c) => c.rank === 14));
+      if (hasAceStraight) return true;
+    }
+  }
+
+  // Nếu là Bot Conservative (Ăn chắc mặc bền), chỉ thêm trường hợp Sảnh 8 lá + 2 lá A/2
+  if (personality === 'conservative') {
+    const straight8 = partition.straights.find((st) => st.length >= 8);
+    if (straight8) {
+      const remaining = hand.filter((c) => !straight8.some((sc) => sc.id === c.id));
+      const allBig = remaining.every((c) => c.rank >= 14);
+      if (allBig) return true;
+    }
+    return false;
+  }
+
+  // =========================================================================
+  // 2. MẠO HIỂM CÓ CƠ SỞ (Dành cho Balanced và Aggressive)
+  // =========================================================================
+  // 2.1. Sảnh dài (>= 8 lá) có rank cao nhất là Át (14):
+  // Sảnh này khi đi đầu 100% làng không ai chặn được vì không có sảnh nào dài hơn hoặc to hơn Át!
+  const aceStraight8 = partition.straights.find(
+    (st) => st.length >= 8 && st.some((c) => c.rank === 14)
+  );
+  if (aceStraight8) {
+    const remaining = hand.filter((c) => !aceStraight8.some((sc) => sc.id === c.id));
+    const hasTwo = remaining.some((c) => c.rank === 15);
+    const isPair = remaining.length === 2 && remaining[0].rank === remaining[1].rank;
+    // Còn lại: Heo 2, hoặc Đôi bất kỳ -> Đánh sảnh 8 lá trước, sau đó ném Heo/Đôi về nhất
+    if (hasTwo || isPair) return true;
+  }
+
+  // 2.2. Sảnh 7 lá tới Át (Unbeatable 7-card straight):
+  const aceStraight7 = partition.straights.find(
+    (st) => st.length >= 7 && st.some((c) => c.rank === 14)
+  );
+  if (aceStraight7) {
+    const remaining = hand.filter((c) => !aceStraight7.some((sc) => sc.id === c.id));
+    const twosCount = remaining.filter((c) => c.rank === 15).length;
+
+    // A. Còn lại Đôi 2 + 1 lá rác bất kỳ (Đôi 2 không thể bị chặn -> ném rác cuối về nhất 100%)
+    if (twosCount >= 2) return true;
+
+    // B. Còn lại 1 Heo 2 + 1 Đôi thường (Sảnh tới Át -> Heo 2 cướp cái -> Đôi về nhất)
+    const rankCounts = new Map<number, number>();
+    for (const c of remaining) rankCounts.set(c.rank, (rankCounts.get(c.rank) || 0) + 1);
+    const hasPairInRemaining = Array.from(rankCounts.values()).some((cnt) => cnt >= 2);
+    if (twosCount === 1 && hasPairInRemaining) return true;
+
+    // C. Dành riêng cho Aggressive: Sảnh 7 lá tới Át + 1 Heo 2 (chỉ cần Heo cướp cái là dứt điểm)
+    if (personality === 'aggressive' && twosCount >= 1) {
+      return true;
+    }
+  }
+
+  // =========================================================================
+  // 3. ĐẶC BIỆT DÀNH CHO AGGRESSIVE (Liều lĩnh / Khát khao dứt điểm)
+  // =========================================================================
+  if (personality === 'aggressive') {
+    // Sảnh 6 lá tới Át + Đôi 2 + Đôi to (>= 12)
+    const aceStraight6 = partition.straights.find(
+      (st) => st.length >= 6 && st.some((c) => c.rank === 14)
+    );
+    if (aceStraight6) {
+      const remaining = hand.filter((c) => !aceStraight6.some((sc) => sc.id === c.id));
+      const twosCount = remaining.filter((c) => c.rank === 15).length;
+      if (twosCount >= 2) return true; // Đôi 2 bất bại bảo hiểm
     }
   }
 

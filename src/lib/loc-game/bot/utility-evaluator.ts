@@ -3,7 +3,7 @@ import { TableState } from '../network-types';
 import { analyzeCombo } from '../analyzer';
 import { sortCards } from '../deck';
 import { CardTracker } from './card-tracker';
-import { CandidateMove, HandPartition } from './types';
+import { CandidateMove, HandPartition, BotPersonality } from './types';
 import { partitionHand } from './hand-evaluator';
 
 export interface EvaluatedMove {
@@ -148,7 +148,8 @@ export function evaluateCandidateMove(
   botHand: Card[],
   tableState: TableState,
   tracker: CardTracker,
-  botId: string
+  botId: string,
+  personality: BotPersonality = 'balanced'
 ): EvaluatedMove {
   const isRoundLeader = !tableState.lastPlay;
   const isNextPlayerSingle = tracker.isNextPlayerSingle(botId, tableState.players);
@@ -240,7 +241,8 @@ export function evaluateCandidateMove(
       reasons.push('Bài đè rất mạnh giữ cái, chấp nhận rủi ro còn Heo 2');
     } else {
       // Nước đi bình thường để lại Heo trơ trọi -> Rủi ro bị kẹt thối 2 nếu mất lượt
-      score -= 350;
+      const isolatedTwoPenalty = personality === 'aggressive' ? 200 : personality === 'conservative' ? 500 : 350;
+      score -= isolatedTwoPenalty;
       reasons.push('Rủi ro để lại Heo đơn độc nếu mất lượt');
     }
   }
@@ -362,7 +364,8 @@ export function evaluateCandidateMove(
 
   if (controlCost > 0 && fodderCount >= 2) {
     // Đem bài to ra phang trong khi trong tay còn >= 2 rác nhỏ
-    const penalty = controlCost * fodderCount * 2.5;
+    const controlMultiplier = personality === 'aggressive' ? 1.6 : personality === 'conservative' ? 3.5 : 2.5;
+    const penalty = controlCost * fodderCount * controlMultiplier;
     score -= penalty;
     reasons.push(`Giữ lại bài to (${combo.highestRank}) bảo vệ ${fodderCount} lá rác nhỏ yếu`);
   }
@@ -414,13 +417,15 @@ export function evaluateCandidateMove(
 
       // A. Bàn đánh bài to (A rank 14 hoặc K rank 13) -> Cướp cái xứng đáng
       if (tableCombo.highestRank >= 13) {
-        score += 80;
+        const stealBonus = personality === 'aggressive' ? 120 : personality === 'conservative' ? 60 : 80;
+        score += stealBonus;
         reasons.push(`Dùng Heo 2 cướp cái khi đối thủ ra lá to (${tableCombo.highestRank})`);
       }
 
       // B. Bàn chỉ đánh rác nhỏ (<= 9) -> Phạt vì phí Heo (trừ khi đối thủ sắp về hoặc cầm nhiều heo)
       if (tableCombo.highestRank <= 9 && minOpponentCards > 4 && twosInHand < 2) {
-        score -= 150;
+        const wastePenalty = personality === 'aggressive' ? 100 : personality === 'conservative' ? 250 : 150;
+        score -= wastePenalty;
         reasons.push('Tránh lãng phí Heo 2 vào lá rác nhỏ của đối thủ');
       }
 

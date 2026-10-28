@@ -5,7 +5,7 @@ import { CardTracker } from './card-tracker';
 import { evaluateSamPossibility } from './hand-evaluator';
 import { generateCandidateMoves } from './candidate-generator';
 import { evaluateCandidateMove } from './utility-evaluator';
-import { BotDecision } from './types';
+import { BotDecision, BotPersonality } from './types';
 import { sortCards } from '../deck';
 
 /**
@@ -15,23 +15,34 @@ import { sortCards } from '../deck';
  * - Tự động bảo toàn các bộ chốt chặn (Sảnh to, Đôi to, Heo 2) khi còn nhiều rác nhỏ
  * - Chỉ sử dụng Heo 2 khi an toàn hoặc mang tính quyết định
  * - Bảo vệ tuyệt đối luật đền bài (người kế tiếp 1 lá) và luật thối Heo 2 cuối ván
+ * - Hỗ trợ các phong cách tính cách (Personality): 'aggressive' | 'conservative' | 'balanced'
  */
 export class BotBrain {
   private tracker: CardTracker;
+  private personality: BotPersonality;
 
-  constructor(tracker?: CardTracker) {
+  constructor(tracker?: CardTracker, personality: BotPersonality = 'balanced') {
     this.tracker = tracker || new CardTracker();
+    this.personality = personality;
   }
 
   public getTracker(): CardTracker {
     return this.tracker;
   }
 
+  public getPersonality(): BotPersonality {
+    return this.personality;
+  }
+
+  public setPersonality(personality: BotPersonality): void {
+    this.personality = personality;
+  }
+
   /**
-   * Quyết định có Báo Sâm hay không ở đầu ván
+   * Quyết định có Báo Sâm hay không ở đầu ván (có tính đến tính cách Bot)
    */
   public decideSamCall(botHand: Card[]): boolean {
-    return evaluateSamPossibility(botHand);
+    return evaluateSamPossibility(botHand, this.personality);
   }
 
   /**
@@ -66,9 +77,9 @@ export class BotBrain {
       return { action: 'PASS', cards: [], reason: 'Không có nước đi hợp lệ' };
     }
 
-    // 2. Chấm điểm tiện ích cho từng nước đi ứng viên
+    // 2. Chấm điểm tiện ích cho từng nước đi ứng viên theo tính cách của Bot
     const evaluatedMoves = candidates.map((cand) =>
-      evaluateCandidateMove(cand, botHand, tableState, this.tracker, botId)
+      evaluateCandidateMove(cand, botHand, tableState, this.tracker, botId, this.personality)
     );
 
     // 3. Ưu tiên tuyệt đối nước đi VỀ ĐÍCH (Terminal Win)

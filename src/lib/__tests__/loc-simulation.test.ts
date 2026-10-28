@@ -22,25 +22,25 @@ interface SimulationGameResult {
   playLog: string[];
 }
 
-describe('Loc Bot AI - 20 Match Simulation (5 Bots Arena)', () => {
-  it('mô phỏng 20 ván đấu giữa 5 Bot AI, ghi log chi tiết và đánh giá trí tuệ', () => {
-    const botConfigs = [
-      { id: 'bot_1', name: 'Bot 1 (Gà Con 🐣)' },
-      { id: 'bot_2', name: 'Bot 2 (Sát Thủ ⚡)' },
-      { id: 'bot_3', name: 'Bot 3 (Thần Bài 🃏)' },
-      { id: 'bot_4', name: 'Bot 4 (Bá Đạo 🔥)' },
-      { id: 'bot_5', name: 'Bot 5 (Vô Địch 🏆)' },
+describe('Loc Bot AI - 50 Match Simulation (5 Bots Arena)', () => {
+  it('mô phỏng 50 ván đấu giữa 5 Bot AI, ghi log chi tiết và đánh giá trí tuệ', () => {
+    const botConfigs: { id: string; name: string; personality: 'aggressive' | 'conservative' | 'balanced' }[] = [
+      { id: 'bot_1', name: 'Bot 1 (Sát Thủ ⚡ - Liều)', personality: 'aggressive' },
+      { id: 'bot_2', name: 'Bot 2 (Gà Con 🐣 - Thủ)', personality: 'conservative' },
+      { id: 'bot_3', name: 'Bot 3 (Thần Bài 🃏 - Cân bằng)', personality: 'balanced' },
+      { id: 'bot_4', name: 'Bot 4 (Bá Đạo 🔥 - Liều)', personality: 'aggressive' },
+      { id: 'bot_5', name: 'Bot 5 (Cụ Rùa 🐢 - Thủ)', personality: 'conservative' },
     ];
 
     const brains: Record<string, BotBrain> = {};
     for (const b of botConfigs) {
-      brains[b.id] = new BotBrain();
+      brains[b.id] = new BotBrain(undefined, b.personality);
     }
 
     const gameResults: SimulationGameResult[] = [];
     let previousWinnerId: string = 'bot_1';
 
-    for (let gameIdx = 1; gameIdx <= 20; gameIdx++) {
+    for (let gameIdx = 1; gameIdx <= 50; gameIdx++) {
       // 1. Reset trackers cho tất cả các bot
       for (const b of botConfigs) {
         brains[b.id].getTracker().reset();
@@ -267,7 +267,7 @@ describe('Loc Bot AI - 20 Match Simulation (5 Bots Arena)', () => {
     // IN BÁO CÁO TỔNG HỢP VÀ THỐNG KÊ CHI TIẾT
     // =========================================================================
     console.log('\n======================================================================');
-    console.log('              KẾT QUẢ MÔ PHỎNG 20 VÁN ĐẤU GIỮA 5 BOT AI');
+    console.log('              KẾT QUẢ MÔ PHỎNG 50 VÁN ĐẤU GIỮA 5 BOT AI');
     console.log('======================================================================\n');
 
     const winCounts: Record<string, number> = {};
@@ -276,6 +276,8 @@ describe('Loc Bot AI - 20 Match Simulation (5 Bots Arena)', () => {
     let totalEndedWithTwo = 0;
     let totalBurned = 0;
     let totalDenLang = 0;
+    let totalSamCalls = 0;
+    let totalSamWins = 0;
 
     for (const b of botConfigs) {
       winCounts[b.name] = 0;
@@ -289,33 +291,29 @@ describe('Loc Bot AI - 20 Match Simulation (5 Bots Arena)', () => {
       totalBurned += res.burnedPlayers.length;
       totalDenLang += res.denLangPlayers.length;
 
-      console.log(`Ván ${res.gameIndex.toString().padStart(2, ' ')}: Thắng: ${res.winnerName.padEnd(20, ' ')} | Nước kết: [${res.winnerCombo?.type} rank ${res.winnerCombo?.highestRank}] | Số lượt: ${res.turnsCount.toString().padStart(2, ' ')} | Chặt: ${res.chopCount} | Cóng: ${res.burnedPlayers.length > 0 ? res.burnedPlayers.join(',') : 'Không'}`);
+      const samInfo = res.playLog.find((l) => l.includes('BÁO SÂM!'));
+      if (samInfo) {
+        totalSamCalls++;
+        if (samInfo.includes(res.winnerName)) totalSamWins++;
+      }
+
+      console.log(`Ván ${res.gameIndex.toString().padStart(2, ' ')}: Thắng: ${res.winnerName.padEnd(20, ' ')} | Nước kết: [${res.winnerCombo?.type} rank ${res.winnerCombo?.highestRank}] | Số lượt: ${res.turnsCount.toString().padStart(2, ' ')} | Chặt: ${res.chopCount} | Cóng: ${res.burnedPlayers.length > 0 ? res.burnedPlayers.join(',') : 'Không'}${samInfo ? ' | [CÓ BÁO SÂM]' : ''}`);
     }
 
     console.log('\n----------------------------------------------------------------------');
-    console.log('THỐNG KÊ TỔNG THỂ:');
-    console.log(`- Tổng số ván mô phỏng: 20`);
-    console.log(`- Số lượt đánh trung bình mỗi ván: ${(totalTurns / 20).toFixed(1)} lượt`);
+    console.log('THỐNG KÊ TỔNG THỂ 50 VÁN:');
+    console.log(`- Tổng số ván mô phỏng: 50`);
+    console.log(`- Số lượt đánh trung bình mỗi ván: ${(totalTurns / 50).toFixed(1)} lượt`);
     console.log(`- Tỷ lệ thắng giữa các Bot:`, winCounts);
+    console.log(`- Số lần Báo Sâm: ${totalSamCalls} lần (Thành công: ${totalSamWins}/${totalSamCalls})`);
     console.log(`- Số pha Chặt Heo bằng Tứ quý: ${totalChops} lần`);
     console.log(`- Số ván về bằng Heo 2 (bị phạt 5 lá nhưng vẫn thắng): ${totalEndedWithTwo} ván`);
     console.log(`- Số lượt bị Cóng (cháy 14 lá): ${totalBurned} lượt`);
     console.log(`- Số lượt bị Đền Làng: ${totalDenLang} lượt`);
     console.log('----------------------------------------------------------------------\n');
 
-    // In chi tiết Log của Ván 1 (diễn biến điển hình) và Ván 4 (ván có cướp cái dứt điểm)
-    console.log('--- CHI TIẾT LOG VÁN 1 ---');
-    console.log(gameResults[0].playLog.slice(0, 25).join('\n'));
-    console.log('...\n[Các lượt cuối Ván 1]:');
-    console.log(gameResults[0].playLog.slice(-10).join('\n'));
-
-    console.log('\n--- CHI TIẾT LOG VÁN 7 (Ván thắng bằng Sảnh to dứt điểm) ---');
-    console.log(gameResults[6].playLog.slice(0, 20).join('\n'));
-    console.log('...\n[Các lượt cuối Ván 7]:');
-    console.log(gameResults[6].playLog.slice(-8).join('\n'));
-
     // Kiểm tra tính hợp lệ cơ bản
-    expect(gameResults.length).toBe(20);
+    expect(gameResults.length).toBe(50);
     expect(totalDenLang).toBe(0); // Bot tuyệt đối không được phạm luật đền làng
   });
 });
