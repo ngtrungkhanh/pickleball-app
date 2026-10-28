@@ -5,7 +5,12 @@ import { act, cleanup, render } from '@testing-library/react';
 import { LocGameBoard } from '@/components/loc-game/LocGameBoard';
 import { TableState } from '../loc-game/network-types';
 import { hasAnyPlayableMove } from '../loc-game/smart-hint';
+import { HostGameEngine } from '../loc-game/network';
 
+vi.mock('../loc-game/loc-sync', () => ({
+  createSessionForRoom: vi.fn(async () => null),
+  syncRoundToLocSession: vi.fn(async () => true),
+}));
 vi.mock('../loc-game/smart-hint', () => ({ hasAnyPlayableMove: vi.fn(() => false) }));
 vi.mock('../loc-game/bot', () => ({ BotBrain: class {
   getTracker() { return { recordPlay() {}, reset() {} }; }
@@ -49,5 +54,37 @@ describe('Lốc auto bỏ lượt', () => {
     view.rerender(<LocGameBoard {...p} tableState={{ ...table, lastPlay: null }} />);
     act(() => { vi.advanceTimersByTime(600); });
     expect(p.onPassTurn).not.toHaveBeenCalled();
+  });
+});
+
+describe('Lốc cập nhật ghế khi thêm người', () => {
+  it.each(['bot', 'player'])('hiện đủ 5 ghế khi thêm %s vào bàn 4 người', (kind) => {
+    let published: TableState | null = null;
+    const engine = new HostGameEngine('offline-seats', 'Test', 'me', 'me', event => {
+      if (event.type === 'SYNC_TABLE_STATE') published = event.state;
+    });
+    try {
+      engine.addBot();
+      engine.addBot();
+      engine.addBot();
+      const p = props();
+      const view = render(<LocGameBoard {...p} tableState={engine.getState()} />);
+      expect(view.container.querySelectorAll('.loc-opponent-avatar')).toHaveLength(3);
+
+      if (kind === 'bot') engine.addBot();
+      else engine.handleJoin({ id: 'fifth', name: 'Người thứ năm', isSpectator: false });
+      expect(published).not.toBeNull();
+      view.rerender(<LocGameBoard {...p} tableState={published!} />);
+      expect(view.container.querySelectorAll('.loc-opponent-avatar')).toHaveLength(4);
+
+      engine.removeBot(engine.getState().players.find(player => player.isBot)!.id);
+      view.rerender(<LocGameBoard {...p} tableState={published!} />);
+      expect(view.container.querySelectorAll('.loc-opponent-avatar')).toHaveLength(3);
+      engine.addBot();
+      view.rerender(<LocGameBoard {...p} tableState={published!} />);
+      expect(view.container.querySelectorAll('.loc-opponent-avatar')).toHaveLength(4);
+    } finally {
+      engine.destroy();
+    }
   });
 });

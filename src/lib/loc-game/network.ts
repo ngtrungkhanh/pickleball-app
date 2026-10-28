@@ -344,7 +344,13 @@ export class HostGameEngine {
     this.sendFn({
       type: 'SYNC_TABLE_STATE',
       roomId: this.state.roomId,
-      state: { ...this.state },
+      // Host dispatches locally without serialization; publish fresh roster
+      // references so React derives the seats again after joins/addBot.
+      state: {
+        ...this.state,
+        players: this.state.players.map(player => ({ ...player })),
+        spectators: this.state.spectators.map(player => ({ ...player })),
+      },
     });
   }
 

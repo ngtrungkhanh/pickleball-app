@@ -2,7 +2,32 @@ import { describe, it, expect, vi } from 'vitest';
 import { HostGameEngine } from '../loc-game/network';
 import { BroadcastEvent } from '../loc-game/network-types';
 
+vi.mock('../loc-game/loc-sync', () => ({
+  createSessionForRoom: vi.fn(async () => null),
+  syncRoundToLocSession: vi.fn(async () => true),
+}));
+
 describe('HostGameEngine State & Network Protocol', () => {
+  it('phát danh sách người chơi độc lập khi thêm người trực tiếp trên máy host', () => {
+    const sentEvents: BroadcastEvent[] = [];
+    const engine = new HostGameEngine('offline-roster', 'Test', 'host', 'Host', event => sentEvents.push(event));
+    try {
+      engine.addBot();
+      const first = sentEvents.find(event => event.type === 'SYNC_TABLE_STATE');
+      expect(first?.type).toBe('SYNC_TABLE_STATE');
+      if (first?.type !== 'SYNC_TABLE_STATE') throw new Error('Missing table state');
+      engine.addBot();
+      const latest = sentEvents.filter(event => event.type === 'SYNC_TABLE_STATE').at(-1);
+      if (latest?.type !== 'SYNC_TABLE_STATE') throw new Error('Missing updated table state');
+      expect(first.state.players).toHaveLength(2);
+      expect(latest.state.players).toHaveLength(3);
+      expect(latest.state.players).not.toBe(first.state.players);
+      expect(latest.state.players[0]).not.toBe(engine.getState().players[0]);
+    } finally {
+      engine.destroy();
+    }
+  });
+
   it('quản lý vòng đời phòng chơi từ Lobby đến Kết thúc ván', () => {
     const sentEvents: BroadcastEvent[] = [];
     const mockSend = vi.fn((e: BroadcastEvent) => {
