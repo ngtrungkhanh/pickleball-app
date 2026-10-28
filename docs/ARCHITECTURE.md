@@ -186,8 +186,8 @@ trong page render thông thường.
 
 Mức kiểm tra theo loại tác vụ nằm trong `AGENTS.md`. Tác vụ chỉ đọc/tài liệu
 không cần build hoặc deploy. Với UI nhỏ không đổi logic, có thể dùng build
-Vercel Preview thành công thay build local. Thay đổi logic hoặc rủi ro cao
-phải build local theo bảng kiểm tra và xác nhận Preview trước nghiệm thu.
+Vercel thành công thay build local. Thay đổi logic hoặc rủi ro cao
+phải build local theo bảng kiểm tra và xác nhận deployment trước nghiệm thu.
 
 Dashboard và Analysis không cần query Postgres trong prerender vì là static
 shell. Route động/Admin/API vẫn cần env hợp lệ khi được chạy.

@@ -71,10 +71,9 @@ nguồn sự thật cao nhất.
 
 ## Branch và deploy
 
-- `main` là production.
-- `dev` là nhánh làm việc chung và tạo Vercel Preview.
+- `main` là production, `dev` là preview/staging.
+- Làm việc trên nhánh nào thì commit và push lên nhánh đó (đang trên `main` thì up lên `main`, đang trên `dev` thì up lên `dev`).
 - Preview và Production dùng database riêng.
-- Chỉ merge `dev` vào `main` sau khi người dùng xác nhận release.
 - Không commit secret hoặc `.env.local`.
 
 UI nhỏ được review trên mobile và desktop liên quan. Đổi layout chung hoặc

@@ -5,8 +5,8 @@
 - Luôn giao tiếp và lập kế hoạch bằng tiếng Việt.
 - Trình bày ngắn, trực tiếp, nêu rõ file đã đổi và cách đã kiểm tra.
 - **Người dùng không tự chạy lệnh hay thao tác code.** Agent tự thao tác Git,
-  kiểm tra và đưa thay đổi ứng dụng lên Vercel Preview khi cần nghiệm thu.
-  Tác vụ chỉ đọc hoặc chỉ sửa tài liệu không cần deploy. Production cần xác nhận release.
+  kiểm tra và đưa thay đổi ứng dụng lên remote/Vercel theo nhánh đang làm việc khi cần nghiệm thu.
+  Tác vụ chỉ đọc hoặc chỉ sửa tài liệu không cần deploy.
 - Không dùng tài liệu Markdown như nhật ký chat hoặc nơi lưu prompt bàn giao.
 
 ## Đọc trước khi làm
@@ -45,10 +45,9 @@ cùng thay đổi.
 
 ## Quy trình Git và deploy
 
-- `main` là production.
-- `dev` là nhánh làm việc chung và tạo Vercel Preview.
-- Không commit trực tiếp lên `main`.
-- Không tự merge `dev` vào `main`; chỉ release khi người dùng xác nhận.
+- Làm việc trực tiếp trên nhánh hiện tại (`main` hoặc `dev` theo trạng thái làm việc của người dùng).
+- Nếu người dùng đang làm việc trên `main`, commit và push trực tiếp lên `main`.
+- Nếu đang làm việc trên `dev`, commit và push lên `dev`.
 - Trước khi pull, switch branch hoặc merge, kiểm tra working tree và không làm
   mất thay đổi chưa commit của người dùng.
 - Production và Preview dùng database riêng. Merge code không merge dữ liệu.
@@ -85,13 +84,13 @@ Chọn kiểm tra theo ảnh hưởng thực tế; ít file đổi không đồn
 | --- | --- |
 | Chỉ đọc, rà soát, đề xuất | Kiểm chứng nguồn liên quan; không test/build/deploy |
 | Chỉ Markdown | Diff, liên kết nội bộ, UTF-8 không BOM; không test/build/deploy ứng dụng |
-| Text/CSS/UI nhỏ, không đổi logic | ESLint file source đổi; TypeScript nếu đổi TS/TSX; review UI liên quan; xác nhận build Vercel Preview thành công |
+| Text/CSS/UI nhỏ, không đổi logic | ESLint file source đổi; TypeScript nếu đổi TS/TSX; review UI liên quan; xác nhận build Vercel thành công |
 | Logic ứng dụng | Test liên quan, ESLint file đổi, TypeScript, build local |
 | ELO/ranking, write/cache, schema, dependency/config build | Test hồi quy trong phạm vi ảnh hưởng (toàn suite nếu ảnh hưởng chung), ESLint, TypeScript, build local; audit chuyên biệt khi liên quan |
 
-Nếu đổi ứng dụng, agent tự đưa lên Preview và kiểm tra trạng thái deployment.
-UI nhỏ có thể dùng build Preview thay build local; nếu không xem được kết quả
-Preview thì chạy build local và báo giới hạn nghiệm thu. Production vẫn cần xác nhận.
+Nếu đổi ứng dụng, agent tự đưa lên remote theo nhánh đang làm việc và kiểm tra trạng thái deployment.
+UI nhỏ có thể dùng build Vercel thay build local; nếu không xem được kết quả
+thì chạy build local và báo giới hạn nghiệm thu.
 
 Các lệnh dưới đây là lựa chọn theo bảng, không phải checklist cho mọi task:
 
