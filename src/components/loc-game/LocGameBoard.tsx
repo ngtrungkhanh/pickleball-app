@@ -134,6 +134,14 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
         setConfirmExitType(null);
         return;
       }
+      if (showSettingsModalRef.current) {
+        setShowSettingsModal(false);
+        return;
+      }
+      if (showRoundOverModalRef.current) {
+        setShowRoundOverModal(false);
+        return;
+      }
       if (showPlayHistoryModalRef.current) {
         setShowPlayHistoryModal(false);
         return;
@@ -381,6 +389,16 @@ export const LocGameBoard: React.FC<LocGameBoardProps> = ({
       rightOpponent: opponents[3] || null,
     };
   }, [opponents]);
+
+  // Xác định hướng xuất phát của bài vừa đánh (để chạy animation bay bài)
+  const flyDirection = useMemo(() => {
+    if (!lastPlay) return null;
+    if (lastPlay.playerId === myPlayerId) return 'bottom';
+    if (leftOpponent && lastPlay.playerId === leftOpponent.id) return 'left';
+    if (rightOpponent && lastPlay.playerId === rightOpponent.id) return 'right';
+    if (topOpponents.some((p) => p && p.id === lastPlay.playerId)) return 'top';
+    return 'bottom';
+  }, [lastPlay, myPlayerId, leftOpponent, rightOpponent, topOpponents]);
 
   // Phân tích bộ bài đang chọn
   const selectedCards = useMemo(() => {
