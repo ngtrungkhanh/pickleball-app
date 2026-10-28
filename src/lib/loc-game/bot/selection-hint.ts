@@ -223,11 +223,19 @@ export function getBotHintForSelection(
   );
 
   if (straightInPartition) {
-    return straightInPartition.filter((c) => !selectedIds.has(c.id));
+    const missing = straightInPartition.filter((c) => !selectedIds.has(c.id));
+    // Nếu người chơi đã chọn ĐỦ sảnh này trong partition rồi -> Không gợi ý thêm để tránh xé các bộ khác
+    return missing;
   }
 
-  // 2.3. Nếu không thuộc sảnh chuẩn trong partition, tìm xem có thể tạo thành bất kỳ sảnh hợp lệ nào không
-  // (Tìm sảnh dài nhất khả dĩ chứa toàn bộ selectedCards)
+  // 2.3. Nếu không thuộc sảnh chuẩn trong partition, tìm xem có thể tạo thành sảnh hợp lệ nào không
+  // Không được tự ý xé Đôi, Sáp, Tứ quý của người chơi để mở rộng sảnh
+  const comboRanks = new Set([
+    ...partition.pairs.map((p) => p[0].rank),
+    ...partition.triples.map((t) => t[0].rank),
+    ...partition.quads.map((q) => q[0].rank),
+  ]);
+
   const byRank = new Map<Rank, Card[]>();
   for (const c of myHand) {
     if (!byRank.has(c.rank)) byRank.set(c.rank, []);
@@ -248,14 +256,14 @@ export function getBotHintForSelection(
   }
 
   if (canFormStraight && minRank !== 15 && maxRank !== 15) {
-    // Mở rộng sảnh dài nhất có thể
+    // Chỉ mở rộng sang các lá rác lẻ, KHÔNG xé Đôi/Sáp/Tứ quý của người chơi
     let startR: number = minRank;
-    while (startR > 3 && byRank.has((startR - 1) as Rank)) {
+    while (startR > 3 && byRank.has((startR - 1) as Rank) && !comboRanks.has((startR - 1) as Rank)) {
       startR = startR - 1;
     }
 
     let endR: number = maxRank;
-    while (endR < 14 && byRank.has((endR + 1) as Rank)) {
+    while (endR < 14 && byRank.has((endR + 1) as Rank) && !comboRanks.has((endR + 1) as Rank)) {
       endR = endR + 1;
     }
 

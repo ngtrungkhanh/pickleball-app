@@ -479,6 +479,32 @@ describe('Loc Bot AI - Contextual Selection Hint', () => {
     const hints = getBotHintForSelection([hand[0], hand[1]], hand, null);
     expect(hints).toEqual([]);
   });
+
+  it('khi đã chọn sảnh 7-8-9, không gợi ý sáng thêm lá 6 nếu 6 đang nằm trong Đôi 6-6', () => {
+    // Bài thực tế của người dùng: 3, 4, 4, 6, 6, 7, 8, 9, K, 2
+    const hand: Card[] = [
+      createCard(3),
+      createCard(4, 'spades'), createCard(4, 'hearts'),
+      createCard(6, 'spades'), createCard(6, 'hearts'), // Đôi 6
+      createCard(7),
+      createCard(8),
+      createCard(9), // Sảnh 7-8-9
+      createCard(13), // K
+      createCard(15), // 2
+    ];
+
+    const c7 = hand.find((c) => c.rank === 7)!;
+    const c8 = hand.find((c) => c.rank === 8)!;
+    const c9 = hand.find((c) => c.rank === 9)!;
+
+    // Khi người chơi chọn 7 và 8: Gợi ý sáng lá 9 để hoàn thành sảnh 7-8-9
+    const hints1 = getBotHintForSelection([c7, c8], hand, null);
+    expect(hints1.map((c) => c.rank)).toEqual([9]);
+
+    // Khi người chơi đã chọn đủ 7-8-9: KHÔNG gợi ý thêm lá 6 (vì 6 nằm trong Đôi 6)
+    const hints2 = getBotHintForSelection([c7, c8, c9], hand, null);
+    expect(hints2).toEqual([]);
+  });
 });
 
 describe('Loc Bot AI - Utility Evaluator & Independent Generator Refinements', () => {

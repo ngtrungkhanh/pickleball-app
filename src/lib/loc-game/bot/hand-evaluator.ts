@@ -31,14 +31,12 @@ function findPossibleStraights(cards: Card[], includeA23: boolean = false): Card
     }
 
     if (segment.length >= 3) {
-      // 1. Sảnh tối đại (toàn bộ đoạn liên tiếp)
-      result.push(segment.map((r) => byRank.get(r)![0]));
-
-      // 2. Nếu đoạn dài >= 6, có thể tách làm 2 sảnh riêng biệt (ví dụ 6 lá = 3 lá + 3 lá)
-      if (segment.length >= 6) {
-        for (let split = 3; split <= segment.length - 3; split++) {
-          result.push(segment.slice(0, split).map((r) => byRank.get(r)![0]));
-          result.push(segment.slice(split).map((r) => byRank.get(r)![0]));
+      // Sinh sảnh tối đại và tất cả các sảnh con khả dĩ từ 3 lá trở lên
+      // Giúp partitionHand có thể chọn sảnh ngắn hơn nếu việc đó bảo toàn được Đôi / Sáp
+      for (let len = 3; len <= segment.length; len++) {
+        for (let start = 0; start <= segment.length - len; start++) {
+          const subRanks = segment.slice(start, start + len);
+          result.push(subRanks.map((r) => byRank.get(r)![0]));
         }
       }
     }
@@ -222,7 +220,7 @@ export function evaluateSamPossibility(
 ): boolean {
   if (hand.length < 10) return false;
 
-  const partition = partitionHand(hand, true); // Cho phép kiểm tra sảnh A-2-3 khi báo Sâm
+  const partition = partitionHand(hand, false); // Mặc định giữ Át và 2 độc lập để bảo toàn sảnh dài tới Át
 
   // =========================================================================
   // 1. CẤP ĐỘ AN TOÀN CAO NHẤT (Mọi bot, kể cả Conservative đều báo)
