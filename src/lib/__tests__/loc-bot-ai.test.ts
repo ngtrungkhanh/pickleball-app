@@ -738,6 +738,44 @@ describe('Loc Bot AI - Personalities & Calculated Risk Sam Call', () => {
     expect(aggressiveBrain.decideSamCall(riskyHand)).toBe(true);
     expect(conservativeBrain.decideSamCall(riskyHand)).toBe(false);
   });
+
+  it('với bài [3, 4, 4, 6, 6, 7, 8, 9, K, 2] khi đi đầu: bot ưu tiên đánh Đôi 4 để giải phóng đôi liệt trước thay vì xả sảnh 7-8-9', () => {
+    const brain = new BotBrain();
+    const hand: Card[] = [
+      createCard(3),
+      createCard(4, 'spades'), createCard(4, 'hearts'),
+      createCard(6, 'spades'), createCard(6, 'hearts'),
+      createCard(7),
+      createCard(8),
+      createCard(9),
+      createCard(13), // K
+      createCard(15), // 2
+    ];
+
+    const tableState: TableState = {
+      roomId: 'room_1',
+      roomName: 'Test Room',
+      hostId: 'bot_1',
+      status: 'playing',
+      players: [
+        { id: 'bot_1', name: 'Bot', isHost: true, isSpectator: false, cardsRemaining: 10, hasPassed: false },
+        { id: 'p2', name: 'P2', isHost: false, isSpectator: false, cardsRemaining: 10, hasPassed: false },
+      ],
+      spectators: [],
+      currentTurnPlayerId: 'bot_1',
+      roundLeaderPlayerId: 'bot_1',
+      turnDeadline: Date.now() + 30000,
+      lastPlay: null,
+      samState: null,
+      playHistory: [],
+      roundResult: null,
+    };
+
+    const decision = brain.decideMove('bot_1', hand, tableState);
+    expect(decision.action).toBe('PLAY');
+    // Nước đi thông minh nhất: xả đôi 4 (đôi liệt không tự đè được ai)
+    expect(decision.cards.map((c) => c.rank)).toEqual([4, 4]);
+  });
 });
 
 

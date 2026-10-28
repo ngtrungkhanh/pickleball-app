@@ -374,16 +374,28 @@ export function evaluateCandidateMove(
   // 6. CHIẾN THUẬT LÀM CHỦ VÒNG (Round Leader / Bàn trống)
   // ---------------------------------------------------------------------------
   if (isRoundLeader) {
-    // 6.1. Nếu bài có sảnh nhỏ (highestRank <= 9) -> Xả trước để giải phóng quân
-    if (combo.type === 'STRAIGHT' && combo.highestRank <= 9) {
-      score += 60;
-      reasons.push('Xả sảnh nhỏ trước để thăm dò và giải phóng quân yếu');
+    // 6.1. Xả đôi nhỏ yếu / đôi liệt (rank <= 6 như Đôi 3, Đôi 4, Đôi 5, Đôi 6):
+    // Các đôi này cực khó tự đè bài ai được (Đôi 4 chỉ đè được duy nhất đôi 3).
+    // Khi có cái, xả đôi nhỏ liệt là cơ hội vàng để giải phóng bộ yếu nhất của bài!
+    if (combo.type === 'PAIR' && combo.highestRank <= 6) {
+      score += 75 + (7 - combo.highestRank) * 5;
+      reasons.push(`Xả đôi nhỏ yếu (${combo.highestRank}) để giải phóng bộ liệt khi đang có cái`);
+    } else if (combo.type === 'PAIR' && combo.highestRank <= 9) {
+      score += 45;
+      reasons.push('Xả đôi trung bình để thăm dò làng');
     }
 
-    // 6.2. Nếu có đôi nhỏ (rank <= 9) -> Xả thăm dò
-    if (combo.type === 'PAIR' && combo.highestRank <= 9) {
-      score += 40;
-      reasons.push('Xả đôi nhỏ để thăm dò');
+    // 6.2. Xả sảnh nhỏ thực sự (highestRank <= 6 như 3-4-5, 4-5-6):
+    // Sảnh này không đè được ai, nên xả sớm khi có cái.
+    // Với sảnh trung bình (rank 7..9 như 7-8-9), nó có khả năng bắt được 3-4 loại sảnh khác nên có tính phòng thủ tốt hơn.
+    if (combo.type === 'STRAIGHT') {
+      if (combo.highestRank <= 6) {
+        score += 65;
+        reasons.push('Xả sảnh nhỏ yếu (rank <= 6) để giải phóng quân');
+      } else if (combo.highestRank <= 9) {
+        score += 40;
+        reasons.push('Xả sảnh trung bình để thăm dò và rút ngắn bài');
+      }
     }
 
     // 6.3. Nếu là rác nhỏ (rank <= 8) và trong tay có bài to bảo kê -> Đánh rác nhỏ thăm dò
