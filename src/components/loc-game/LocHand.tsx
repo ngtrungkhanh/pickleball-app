@@ -75,7 +75,7 @@ export const LocHand: React.FC<LocHandProps> = ({
   };
 
   return (
-    <div className="w-full flex items-end justify-between px-2 sm:px-6 pb-1 select-none relative z-20">
+    <div className="w-full flex items-end justify-between px-2 sm:px-6 select-none relative z-20">
       {/* 1. KHUNG AVATAR CỦA BẠN ("You" - Góc dưới trái chuẩn ZingPlay) */}
       <div
         className={`relative flex flex-col items-center justify-between w-12 sm:w-16 md:w-20 p-1 sm:p-1.5 rounded-xl bg-black/80 border border-white/10 transition-all duration-200 shadow-xl shrink-0 ${
@@ -151,29 +151,26 @@ export const LocHand: React.FC<LocHandProps> = ({
         </div>
       </div>
 
-      {/* 2. DÃY LÁ BÀI TRÊN TAY: XẾP XÒE GỐI ĐÈ NHAU CHUẨN ZINGPLAY (LÁ TO RÕ, ĐẸP MẮT) */}
-      <div className="flex-1 flex justify-center items-end px-2 sm:px-6 max-w-full overflow-visible">
-        <div className="flex items-end justify-center select-none">
+      {/* 2. DÃY LÁ BÀI TRÊN TAY: XẾP XÒE GỐI ĐÈ NHAU CHUẨN ZINGPLAY (LÁ TO VƯỢT TRỘI, ĐỘ MỜ = 0) */}
+      <div className="flex-1 flex justify-center items-end px-1 sm:px-4 max-w-full overflow-visible">
+        <div className="flex items-end justify-center select-none pb-0">
           {sortedHand.map((card, index) => {
             const isSelected = selectedSet.has(card.id);
             const isHighlighted = highlightedSet.has(card.id) || (isUrgentHint && dimHintSet.has(card.id));
             const isDimHint = !isSelected && !isHighlighted && dimHintSet.has(card.id) && selectedSet.size === 0;
 
-            // Tính khoảng gối lên nhau (overlap) dựa theo số lượng lá bài:
-            // 8-10 lá: đè khoảng 55% (-ml-8 đến -ml-11)
-            // 5-7 lá: đè khoảng 40% (-ml-6 đến -ml-8)
-            // 3-4 lá: đè nhẹ (-ml-4 đến -ml-6)
-            // 1-2 lá: đứng độc lập cạnh nhau (ml-3)
+            // Tính khoảng gối đè nhau dựa theo số lượng lá bài:
+            // 8-10 lá: đè che kín phần lá dưới, chỉ lộ cột số và chất ở mép trái
             let overlapClass = '';
             if (index > 0) {
               if (hand.length >= 8) {
-                overlapClass = '-ml-7 sm:-ml-9 md:-ml-12';
+                overlapClass = '-ml-11 sm:-ml-14 md:-ml-17 lg:-ml-20';
               } else if (hand.length >= 5) {
-                overlapClass = '-ml-6 sm:-ml-8 md:-ml-10';
+                overlapClass = '-ml-9 sm:-ml-12 md:-ml-14 lg:-ml-17';
               } else if (hand.length >= 3) {
-                overlapClass = '-ml-4 sm:-ml-6 md:-ml-8';
+                overlapClass = '-ml-6 sm:-ml-8 md:-ml-10 lg:-ml-12';
               } else {
-                overlapClass = 'ml-3 sm:ml-5';
+                overlapClass = 'ml-4 sm:ml-6';
               }
             }
 
@@ -182,7 +179,7 @@ export const LocHand: React.FC<LocHandProps> = ({
                 key={card.id}
                 className={`transition-all duration-150 shrink-0 ${overlapClass}`}
                 style={{
-                  zIndex: isSelected ? 45 : 10 + index,
+                  zIndex: 10 + index,
                 }}
               >
                 <LocCard

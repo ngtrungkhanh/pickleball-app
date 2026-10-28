@@ -25,6 +25,16 @@ export interface RoomPlayer {
   isReady?: boolean;
 }
 
+export interface RoundPlayRecord {
+  id: string;
+  turnIndex: number;
+  playerId: string;
+  playerName: string;
+  cards: Card[];
+  combo: CardCombo;
+  timestamp: number;
+}
+
 export interface TableState {
   roomId: string;
   roomName: string;
@@ -36,6 +46,8 @@ export interface TableState {
   roundLeaderPlayerId: string | null;
   turnDeadline: number | null; // Timestamp đếm ngược 30s cho mỗi lượt đánh
   lastPlay: { playerId: string; playerName: string; combo: CardCombo } | null;
+  recentPlays?: { playerId: string; playerName: string; combo: CardCombo }[];
+  roundPlayRecords?: RoundPlayRecord[];
   samState: {
     samCallerId: string | null;
     samCallerName: string | null;

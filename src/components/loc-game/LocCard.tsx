@@ -52,11 +52,11 @@ export const LocCard: React.FC<LocCardProps> = ({
   onClick,
   className = '',
 }) => {
-  // Kích thước lá bài to rõ, chuẩn tỉ lệ 2.5 : 3.5 của ZingPlay
+  // Kích thước lá bài TO LỚN vượt trội, tận dụng tối đa chiều ngang và chiều cao cả Mobile ngang và PC
   const sizeClasses = {
-    sm: 'w-8 sm:w-10 aspect-[2.5/3.5] rounded shadow-xs',
-    md: 'w-14 sm:w-16 md:w-20 aspect-[2.5/3.5] rounded-md sm:rounded-lg shadow-md',
-    lg: 'w-16 sm:w-20 aspect-[2.5/3.5] rounded-lg shadow-lg',
+    sm: 'w-10 sm:w-12 md:w-14 aspect-[2.5/3.5] rounded-md shadow-xs',
+    md: 'w-18 sm:w-22 md:w-26 lg:w-30 aspect-[2.5/3.5] rounded-lg sm:rounded-xl shadow-md',
+    lg: 'w-22 sm:w-26 md:w-32 aspect-[2.5/3.5] rounded-xl shadow-lg',
   }[size];
 
   // 1. MẶT LƯNG BÀI: Xanh dương kẻ quả trám, vòng tròn ghi số lá còn lại (Chuẩn ZingPlay)
@@ -64,13 +64,13 @@ export const LocCard: React.FC<LocCardProps> = ({
     return (
       <div
         onClick={!disabled ? onClick : undefined}
-        className={`relative select-none border-2 border-white/90 flex items-center justify-center overflow-hidden transition-transform shadow-md ${sizeClasses} ${className}`}
+        className={`relative select-none border-2 border-white/90 flex items-center justify-center overflow-hidden transition-transform shadow-md bg-[#0284c7] opacity-100 ${sizeClasses} ${className}`}
         style={{
           background: 'linear-gradient(135deg, #38bdf8 0%, #0284c7 50%, #0369a1 100%)',
         }}
       >
         <div
-          className="absolute inset-0.5 rounded border border-white/30 opacity-40"
+          className="absolute inset-0.5 rounded border border-white/30 opacity-40 pointer-events-none"
           style={{
             backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.4) 5px, rgba(255,255,255,0.4) 10px),
                               repeating-linear-gradient(-45deg, transparent, transparent 5px, rgba(255,255,255,0.4) 5px, rgba(255,255,255,0.4) 10px)`,
@@ -78,8 +78,8 @@ export const LocCard: React.FC<LocCardProps> = ({
         />
 
         {remainingCount !== undefined && (
-          <div className="relative z-10 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-sky-950/80 border border-white/90 flex items-center justify-center shadow-inner">
-            <span className="font-extrabold text-white text-[10px] sm:text-xs drop-shadow">
+          <div className="relative z-10 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-sky-950/90 border-2 border-white flex items-center justify-center shadow-inner">
+            <span className="font-extrabold text-white text-xs sm:text-sm drop-shadow">
               {remainingCount}
             </span>
           </div>
@@ -88,7 +88,7 @@ export const LocCard: React.FC<LocCardProps> = ({
     );
   }
 
-  // 2. MẶT TRƯỚC LÁ BÀI (Chuẩn 100% ZingPlay: Cột số + chất to ở góc trên trái, biểu tượng chất 3D ở giữa/dưới)
+  // 2. MẶT TRƯỚC LÁ BÀI (Độ mờ = 0, che tuyệt đối phần lá dưới, số và chất to rõ ràng)
   const { rank, suit } = card;
   const suitInfo = SUIT_ICONS[suit];
   const rankLabel = formatRank(rank);
@@ -97,56 +97,50 @@ export const LocCard: React.FC<LocCardProps> = ({
   return (
     <div
       onClick={!disabled ? onClick : undefined}
-      className={`relative select-none cursor-pointer bg-white transition-all duration-150 flex flex-col justify-between p-1 sm:p-1.5 border border-slate-300 overflow-hidden ${
+      className={`relative select-none cursor-pointer bg-white opacity-100 transition-all duration-150 flex flex-col justify-between p-1.5 sm:p-2 border border-slate-300 overflow-hidden ${
         isSelected
-          ? '-translate-y-5 sm:-translate-y-7 shadow-2xl ring-3 ring-yellow-400 z-40 border-yellow-500 scale-105'
+          ? '-translate-y-6 sm:-translate-y-8 shadow-xl ring-3 ring-yellow-400 border-yellow-500'
           : isHighlighted
-          ? 'ring-3 ring-yellow-400 animate-pulse shadow-xl -translate-y-2 border-yellow-400'
+          ? 'ring-3 ring-yellow-400 border-yellow-400 shadow-md'
           : isDimHint
-          ? 'ring-2 ring-yellow-400/70 border-yellow-400/80 shadow-md -translate-y-1'
-          : 'hover:-translate-y-1.5 hover:shadow-lg'
+          ? 'ring-2 ring-yellow-400/80 border-yellow-400/90 shadow-sm'
+          : 'hover:-translate-y-1 hover:shadow-md'
       } ${disabled ? 'opacity-60 cursor-not-allowed' : ''} ${sizeClasses} ${className}`}
       style={{
+        backgroundColor: '#ffffff', // Trắng đặc 100%, không xuyên thấu
         boxShadow: isSelected
-          ? '0 16px 28px -4px rgba(0, 0, 0, 0.6), 0 6px 10px -2px rgba(0, 0, 0, 0.3)'
-          : '0 3px 6px rgba(0,0,0,0.35)',
+          ? '0 20px 35px -5px rgba(0, 0, 0, 0.7), 0 8px 12px -3px rgba(0, 0, 0, 0.4)'
+          : '0 4px 8px rgba(0, 0, 0, 0.35)',
       }}
     >
-      {/* CỘT SỐ VÀ CHẤT Ở GÓC TRÊN BÊN TRÁI (LUÔN LỘ RA KHI XẾP XÒE GỐI ĐÈ NHAU) */}
-      <div className={`flex flex-col items-center leading-none self-start ${colorClass}`}>
-        <span className="font-black text-base sm:text-xl md:text-2xl tracking-tighter leading-none">
+      {/* CỘT SỐ VÀ CHẤT Ở GÓC TRÊN BÊN TRÁI: TO RÕ, NÉT ĐẬM */}
+      <div className={`flex flex-col items-center leading-none self-start select-none ${colorClass}`}>
+        <span className="font-black text-xl sm:text-2xl md:text-3xl tracking-tighter leading-none">
           {rankLabel}
         </span>
-        <span className="text-xs sm:text-sm md:text-base leading-none mt-0.5">
+        <span className="text-sm sm:text-lg md:text-xl leading-none mt-0.5">
           {suitInfo.symbol}
         </span>
       </div>
 
-      {/* BIỂU TƯỢNG CHẤT 3D Ở GIỮA / DƯỚI (LỘ RA TRỌN VẸN Ở LÁ BÀI CUỐI VÀ KHI CHỌN BÀI) */}
+      {/* BIỂU TƯỢNG CHẤT 3D Ở GÓC DƯỚI BÊN PHẢI (LỘ RA TRỌN VẸN Ở LÁ BÀI CUỐI VÀ KHI CHỌN BÀI) */}
       <div className="self-end mt-auto flex items-center justify-center pointer-events-none pr-0.5 pb-0.5">
         {suit === 'diamonds' ? (
-          <div className="w-3.5 h-3.5 sm:w-5 sm:h-5 md:w-6 md:h-6 rotate-45 bg-gradient-to-br from-red-500 via-rose-600 to-red-700 shadow-xs rounded-[1px]" />
+          <div className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 rotate-45 bg-gradient-to-br from-red-500 via-rose-600 to-red-700 shadow-xs rounded-[2px]" />
         ) : suit === 'hearts' ? (
-          <span className="text-xl sm:text-2xl md:text-3xl text-red-600 font-bold select-none leading-none drop-shadow-xs">
+          <span className="text-2xl sm:text-3xl md:text-4xl text-red-600 font-bold select-none leading-none drop-shadow-xs">
             ♥
           </span>
         ) : suit === 'clubs' ? (
-          <span className="text-xl sm:text-2xl md:text-3xl text-slate-900 font-bold select-none leading-none drop-shadow-xs">
+          <span className="text-2xl sm:text-3xl md:text-4xl text-slate-900 font-bold select-none leading-none drop-shadow-xs">
             ♣
           </span>
         ) : (
-          <span className="text-xl sm:text-2xl md:text-3xl text-slate-900 font-bold select-none leading-none drop-shadow-xs">
+          <span className="text-2xl sm:text-3xl md:text-4xl text-slate-900 font-bold select-none leading-none drop-shadow-xs">
             ♠
           </span>
         )}
       </div>
-
-      {/* Chấm vàng nhỏ báo hiệu lá được gợi ý */}
-      {isHighlighted && !isSelected && (
-        <div className="absolute top-1 right-1 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-yellow-400 rounded-full border border-white shadow-xs flex items-center justify-center">
-          <span className="w-1 h-1 bg-amber-700 rounded-full animate-ping" />
-        </div>
-      )}
     </div>
   );
 };

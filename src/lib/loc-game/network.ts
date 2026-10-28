@@ -1,5 +1,5 @@
 import { getSupabaseClient } from './supabase';
-import { BroadcastEvent, TableState, RoomSummary } from './network-types';
+import { BroadcastEvent, TableState, RoomSummary, RoundPlayRecord } from './network-types';
 import { dealCards } from './deck';
 import { analyzeCombo, canBeat, hasHigherSingleCard } from './analyzer';
 import { calculateRoundScores, ChopEvent } from './scoring';
@@ -199,6 +199,8 @@ export class HostGameEngine {
       roundLeaderPlayerId: null,
       turnDeadline: null,
       lastPlay: null,
+      recentPlays: [],
+      roundPlayRecords: [],
       samState: null,
       playHistory: [],
       roundResult: null,
@@ -499,6 +501,9 @@ export class HostGameEngine {
     this.state.turnDeadline = null;
     this.state.currentTurnPlayerId = null;
     this.state.lastPlay = null;
+    this.state.recentPlays = [];
+    this.state.roundPlayRecords = [];
+
     this.state.roundResult = null;
     this.state.samState = null;
     this.state.status = 'waiting';
@@ -549,6 +554,9 @@ export class HostGameEngine {
     this.state.turnDeadline = null;
     this.state.currentTurnPlayerId = null;
     this.state.lastPlay = null;
+    this.state.recentPlays = [];
+    this.state.roundPlayRecords = [];
+
     this.state.roundResult = null;
     this.state.samState = null;
     this.state.status = 'waiting';
@@ -626,6 +634,9 @@ export class HostGameEngine {
       deadline: null,
     };
     this.state.lastPlay = null;
+    this.state.recentPlays = [];
+    this.state.roundPlayRecords = [];
+
     this.state.roundResult = null;
     this.state.playHistory = [{
       id: Math.random().toString(),
@@ -713,6 +724,11 @@ export class HostGameEngine {
 
       this.samTimer = setTimeout(() => {
         if (this.state.status === 'sam_calling') {
+          for (const p of this.state.players) {
+            if (!this.state.samState?.skipPlayerIds.includes(p.id)) {
+              this.state.samState?.skipPlayerIds.push(p.id);
+            }
+          }
           this.enterPlayingPhase();
         }
       }, 60000);
@@ -741,6 +757,9 @@ export class HostGameEngine {
     this.state.currentTurnPlayerId = firstTurn;
     this.state.roundLeaderPlayerId = firstTurn;
     this.state.lastPlay = null;
+    this.state.recentPlays = [];
+    this.state.roundPlayRecords = [];
+
 
     const firstPlayerName = this.state.players.find((p) => p.id === firstTurn)?.name || 'Người chơi';
     this.state.playHistory.push({
@@ -903,8 +922,21 @@ export class HostGameEngine {
     }
 
     const playerName = player?.name || '';
-    this.state.lastPlay = { playerId, playerName, combo };
+    const currentPlay = { playerId, playerName, combo };
+    this.state.lastPlay = currentPlay;
+    this.state.recentPlays = [...(this.state.recentPlays || []), currentPlay].slice(-2);
     this.state.roundLeaderPlayerId = playerId;
+
+    const playRecord: RoundPlayRecord = {
+      id: `${playerId}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      turnIndex: (this.state.roundPlayRecords?.length || 0) + 1,
+      playerId,
+      playerName,
+      cards: [...cards],
+      combo,
+      timestamp: Date.now(),
+    };
+    this.state.roundPlayRecords = [...(this.state.roundPlayRecords || []), playRecord];
 
     this.state.playHistory.push({
       id: Math.random().toString(),
@@ -1009,6 +1041,7 @@ export class HostGameEngine {
         p.hasPassed = false;
       });
       this.state.lastPlay = null;
+      this.state.recentPlays = [];
       this.state.roundLeaderPlayerId = winnerOfTrick.id;
       this.state.currentTurnPlayerId = winnerOfTrick.id;
 
