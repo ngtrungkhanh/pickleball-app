@@ -2,7 +2,7 @@ import { Card } from '../types';
 import { TableState } from '../network-types';
 import { analyzeCombo } from '../analyzer';
 import { CardTracker } from './card-tracker';
-import { partitionHand, evaluateSamPossibility } from './hand-evaluator';
+import { evaluateSamPossibility } from './hand-evaluator';
 import { generateCandidateMoves } from './candidate-generator';
 import { evaluateCandidateMove } from './utility-evaluator';
 import { BotDecision } from './types';
@@ -47,11 +47,10 @@ export class BotBrain {
       return { action: 'PASS', cards: [], reason: 'Hết bài' };
     }
 
-    const partition = partitionHand(botHand);
     const tableCombo = tableState.lastPlay ? tableState.lastPlay.combo : null;
 
-    // 1. Sinh toàn bộ các nước đi ứng viên hợp lệ
-    const candidates = generateCandidateMoves(botHand, tableCombo, partition);
+    // 1. Sinh toàn bộ các nước đi ứng viên hợp lệ độc lập với phân rã tĩnh
+    const candidates = generateCandidateMoves(botHand, tableCombo);
 
     if (candidates.length === 0) {
       if (!tableCombo) {
@@ -72,10 +71,28 @@ export class BotBrain {
       evaluateCandidateMove(cand, botHand, tableState, this.tracker, botId)
     );
 
-    // 3. Sắp xếp theo điểm số giảm dần
+    // 3. Ưu tiên tuyệt đối nước đi VỀ ĐÍCH (Terminal Win)
+    // Nước đi đánh hết toàn bộ số lá trên tay luôn đảm bảo kết thúc ván đấu
+    const terminalMoves = evaluatedMoves.filter(
+      (m) => m.candidate.action === 'PLAY' && m.candidate.cards.length === botHand.length
+    );
+
+    if (terminalMoves.length > 0) {
+      // Ưu tiên về sạch (+10000) hơn về có Heo 2 (+9700)
+      terminalMoves.sort((a, b) => b.score - a.score);
+      const chosenTerminal = terminalMoves[0];
+      return {
+        action: chosenTerminal.candidate.action,
+        cards: chosenTerminal.candidate.cards,
+        combo: chosenTerminal.candidate.combo || analyzeCombo(chosenTerminal.candidate.cards),
+        reason: chosenTerminal.reason,
+      };
+    }
+
+    // 4. Nếu không có nước về đích: Sắp xếp theo điểm số tiện ích giảm dần
     evaluatedMoves.sort((a, b) => b.score - a.score);
 
-    // 4. Chọn nước đi có điểm tiện ích cao nhất
+    // 5. Chọn nước đi có điểm tiện ích cao nhất
     const bestMove = evaluatedMoves[0];
 
     const combo =

@@ -1,7 +1,7 @@
-import { Card, CardCombo } from '../types';
+import { Card, CardCombo, Rank } from '../types';
 import { analyzeCombo, canBeat } from '../analyzer';
 import { sortCards } from '../deck';
-import { HandPartition, CandidateMove } from './types';
+import { CandidateMove } from './types';
 
 /**
  * Sinh chuỗi định danh duy nhất cho một tập hợp lá bài để lọc trùng
@@ -40,19 +40,62 @@ function deduplicateCandidates(candidates: CandidateMove[]): CandidateMove[] {
 }
 
 /**
- * Trích xuất tất cả sảnh con có độ dài targetLen từ một sảnh dài
+ * Nhóm các lá bài theo Rank
  */
-function extractSubStraights(straight: Card[], targetLen: number): Card[][] {
-  if (straight.length < targetLen || targetLen < 3) return [];
-  const results: Card[][] = [];
-  const sorted = sortCards(straight);
+function groupCardsByRank(cards: Card[]): Map<Rank, Card[]> {
+  const byRank = new Map<Rank, Card[]>();
+  const sorted = sortCards(cards);
+  for (const c of sorted) {
+    if (!byRank.has(c.rank)) byRank.set(c.rank, []);
+    byRank.get(c.rank)!.push(c);
+  }
+  return byRank;
+}
 
-  for (let i = 0; i <= sorted.length - targetLen; i++) {
-    const sub = sorted.slice(i, i + targetLen);
-    const combo = analyzeCombo(sub);
-    if (combo.type === 'STRAIGHT') {
-      results.push(sub);
+/**
+ * Tìm tất cả các sảnh khả dĩ từ botHand
+ * Sinh mọi đoạn liên tiếp từ 3 lá trở lên (bao gồm cả các sảnh con và sảnh đặc biệt A-2-3 khi mở vòng)
+ */
+function findAllStraights(cards: Card[], includeA23: boolean = true): Card[][] {
+  const byRank = groupCardsByRank(cards);
+  const results: Card[][] = [];
+
+  // 1. Sảnh liên tiếp thông thường từ 3..14 (không chứa 2)
+  const uniqueRanks = Array.from(byRank.keys())
+    .sort((a, b) => a - b)
+    .filter((r) => r !== 15);
+
+  let i = 0;
+  while (i < uniqueRanks.length) {
+    const segment: Rank[] = [uniqueRanks[i]];
+    let j = i + 1;
+    while (j < uniqueRanks.length && uniqueRanks[j] === uniqueRanks[j - 1] + 1) {
+      segment.push(uniqueRanks[j]);
+      j++;
     }
+
+    // Với mỗi chuỗi liên tiếp dài >= 3, sinh TẤT CẢ các sảnh con có độ dài từ 3 đến segment.length
+    if (segment.length >= 3) {
+      for (let len = 3; len <= segment.length; len++) {
+        for (let start = 0; start <= segment.length - len; start++) {
+          const subRanks = segment.slice(start, start + len);
+          const straightCards = subRanks.map((r) => byRank.get(r)![0]);
+          results.push(straightCards);
+        }
+      }
+    }
+
+    i = j;
+  }
+
+  // 2. Sảnh đặc biệt A-2-3 (highestRank = 3 theo analyzer.ts)
+  // Chỉ sinh khi includeA23 = true (chủ yếu khi bàn trống)
+  if (includeA23 && byRank.has(3) && byRank.has(14) && byRank.has(15)) {
+    results.push([
+      byRank.get(3)![0],
+      byRank.get(14)![0],
+      byRank.get(15)![0],
+    ]);
   }
 
   return results;
@@ -60,104 +103,79 @@ function extractSubStraights(straight: Card[], targetLen: number): Card[][] {
 
 /**
  * Sinh danh sách tất cả các nước đi khả thi (Candidate Moves)
+ * Quét trực tiếp trên toàn bộ botHand theo đúng luật chơi, không phụ thuộc vào một phân rã tĩnh
  */
 export function generateCandidateMoves(
   botHand: Card[],
-  tableCombo: CardCombo | null,
-  partition: HandPartition
+  tableCombo: CardCombo | null
 ): CandidateMove[] {
   if (!botHand || botHand.length === 0) {
     return [{ action: 'PASS', cards: [], description: 'Hết bài' }];
   }
 
   const candidates: CandidateMove[] = [];
+  const byRank = groupCardsByRank(botHand);
 
   // ===========================================================================
   // TÌNH HUỐNG 1: BÀN TRỐNG (Bot làm chủ vòng - Round Leader)
   // ===========================================================================
   if (!tableCombo || tableCombo.type === 'INVALID') {
-    // 1.1. Các Sảnh (Straights)
-    for (const st of partition.straights) {
+    // 1.1. Sinh lá đơn từ MỌI rank có trong tay (kể cả rank thuộc sảnh, đôi, sáp, tứ quý)
+    for (const [rank, cards] of byRank) {
+      candidates.push({
+        action: 'PLAY',
+        cards: [cards[0]],
+        combo: analyzeCombo([cards[0]]),
+        description: `Rác ${rank}`,
+      });
+    }
+
+    // 1.2. Sinh mọi Đôi khả dĩ (mọi rank có >= 2 lá)
+    for (const [rank, cards] of byRank) {
+      if (cards.length >= 2) {
+        const pair = cards.slice(0, 2);
+        candidates.push({
+          action: 'PLAY',
+          cards: pair,
+          combo: analyzeCombo(pair),
+          description: `Đôi ${rank}`,
+        });
+      }
+    }
+
+    // 1.3. Sinh mọi Sáp khả dĩ (mọi rank có >= 3 lá)
+    for (const [rank, cards] of byRank) {
+      if (cards.length >= 3) {
+        const triple = cards.slice(0, 3);
+        candidates.push({
+          action: 'PLAY',
+          cards: triple,
+          combo: analyzeCombo(triple),
+          description: `Sáp ${rank}`,
+        });
+      }
+    }
+
+    // 1.4. Sinh mọi Tứ quý khả dĩ (mọi rank có = 4 lá)
+    for (const [rank, cards] of byRank) {
+      if (cards.length === 4) {
+        candidates.push({
+          action: 'PLAY',
+          cards,
+          combo: analyzeCombo(cards),
+          description: `Tứ quý ${rank}`,
+        });
+      }
+    }
+
+    // 1.5. Sinh mọi đoạn Sảnh hợp lệ (từ 3 lá trở lên, bao gồm A-2-3)
+    const straights = findAllStraights(botHand, true);
+    for (const st of straights) {
       candidates.push({
         action: 'PLAY',
         cards: st,
         combo: analyzeCombo(st),
-        description: `Sảnh dài ${st.length} lá`,
-      });
-
-      // Nếu sảnh dài (>= 6 lá), thêm lựa chọn tách sảnh để tăng tính linh hoạt
-      if (st.length >= 6) {
-        const sub3 = extractSubStraights(st, 3);
-        for (const sub of sub3) {
-          candidates.push({
-            action: 'PLAY',
-            cards: sub,
-            combo: analyzeCombo(sub),
-            description: `Sảnh 3 lá trích từ sảnh dài`,
-          });
-        }
-      }
-    }
-
-    // 1.2. Các Tứ quý (Quads)
-    for (const q of partition.quads) {
-      candidates.push({
-        action: 'PLAY',
-        cards: q,
-        combo: analyzeCombo(q),
-        description: `Tứ quý ${q[0].rank}`,
-      });
-    }
-
-    // 1.3. Các Sáp (Triples)
-    for (const tr of partition.triples) {
-      candidates.push({
-        action: 'PLAY',
-        cards: tr,
-        combo: analyzeCombo(tr),
-        description: `Sáp ${tr[0].rank}`,
-      });
-    }
-
-    // 1.4. Các Đôi (Pairs)
-    for (const p of partition.pairs) {
-      candidates.push({
-        action: 'PLAY',
-        cards: p,
-        combo: analyzeCombo(p),
-        description: `Đôi ${p[0].rank}`,
-      });
-    }
-
-    // Nếu có Sáp, có thể trích 1 đôi từ Sáp
-    for (const tr of partition.triples) {
-      const pairFromTriple = tr.slice(0, 2);
-      candidates.push({
-        action: 'PLAY',
-        cards: pairFromTriple,
-        combo: analyzeCombo(pairFromTriple),
-        description: `Đôi ${tr[0].rank} trích từ sáp`,
-      });
-    }
-
-    // 1.5. Các lá Rác lẻ (Singles)
-    for (const s of partition.singles) {
-      candidates.push({
-        action: 'PLAY',
-        cards: [s],
-        combo: analyzeCombo([s]),
-        description: `Rác ${s.rank}`,
-      });
-    }
-
-    // Nếu không có rác lẻ nào (bài toàn bộ/đôi), trích 1 lá từ đôi nhỏ nhất để có phương án xả lẻ
-    if (partition.singles.length === 0 && partition.pairs.length > 0) {
-      const smallestPair = partition.pairs[0];
-      candidates.push({
-        action: 'PLAY',
-        cards: [smallestPair[0]],
-        combo: analyzeCombo([smallestPair[0]]),
-        description: `Trích 1 lá từ đôi ${smallestPair[0].rank} để xả lẻ`,
+        description: `Sảnh ${st.length} lá`,
       });
     }
 
@@ -179,49 +197,28 @@ export function generateCandidateMoves(
   if (tableCombo.type === 'SINGLE') {
     // Nếu bàn là Heo 2 (rank 15) -> Chỉ có Tứ quý mới chặt được
     if (tableCombo.highestRank === 15) {
-      for (const q of partition.quads) {
-        candidates.push({
-          action: 'PLAY',
-          cards: q,
-          combo: analyzeCombo(q),
-          description: `Tứ quý ${q[0].rank} chặt Heo 2`,
-        });
+      for (const [rank, cards] of byRank) {
+        if (cards.length === 4) {
+          candidates.push({
+            action: 'PLAY',
+            cards,
+            combo: analyzeCombo(cards),
+            description: `Tứ quý ${rank} chặt Heo 2`,
+          });
+        }
       }
       return deduplicateCandidates(candidates);
     }
 
     // Bàn là rác thường (< 15)
-    // - Các lá đơn trong singles có rank lớn hơn
-    for (const s of partition.singles) {
-      if (s.rank > tableCombo.highestRank) {
+    // Sinh lá đơn từ MỌI rank trong bài có rank > tableCombo.highestRank (kể cả Heo 2)
+    for (const [rank, cards] of byRank) {
+      if (rank > tableCombo.highestRank) {
         candidates.push({
           action: 'PLAY',
-          cards: [s],
-          combo: analyzeCombo([s]),
-          description: `Rác ${s.rank} đè rác ${tableCombo.highestRank}`,
-        });
-      }
-    }
-
-    // - Heo 2 (rank 15) nếu có trong tay
-    const twos = botHand.filter((c) => c.rank === 15);
-    if (twos.length > 0) {
-      candidates.push({
-        action: 'PLAY',
-        cards: [twos[0]],
-        combo: analyzeCombo([twos[0]]),
-        description: `Heo 2 đè rác ${tableCombo.highestRank}`,
-      });
-    }
-
-    // - Nếu cần xé bài (ví dụ từ đôi nhỏ để tranh cái hoặc thoát cóng):
-    for (const p of partition.pairs) {
-      if (p[0].rank > tableCombo.highestRank && p[0].rank !== 15) {
-        candidates.push({
-          action: 'PLAY',
-          cards: [p[0]],
-          combo: analyzeCombo([p[0]]),
-          description: `Xé 1 lá từ đôi ${p[0].rank} đè rác`,
+          cards: [cards[0]],
+          combo: analyzeCombo([cards[0]]),
+          description: rank === 15 ? 'Heo 2 đè rác' : `Lá đơn ${rank} đè rác ${tableCombo.highestRank}`,
         });
       }
     }
@@ -232,45 +229,21 @@ export function generateCandidateMoves(
   // 2.2. Bàn là PAIR
   if (tableCombo.type === 'PAIR') {
     if (tableCombo.highestRank === 15) {
-      // Đôi 2 không thể chặn
+      // Luật: Đôi 2 không thể bị chặn
       return deduplicateCandidates(candidates);
     }
 
-    // Các đôi lớn hơn từ partition.pairs
-    for (const p of partition.pairs) {
-      if (p[0].rank > tableCombo.highestRank) {
+    // Sinh mọi đôi từ các rank có >= 2 lá và rank > tableCombo.highestRank
+    for (const [rank, cards] of byRank) {
+      if (cards.length >= 2 && rank > tableCombo.highestRank) {
+        const pair = cards.slice(0, 2);
         candidates.push({
           action: 'PLAY',
-          cards: p,
-          combo: analyzeCombo(p),
-          description: `Đôi ${p[0].rank} đè đôi ${tableCombo.highestRank}`,
+          cards: pair,
+          combo: analyzeCombo(pair),
+          description: rank === 15 ? 'Đôi Heo 2 đè đôi bàn' : `Đôi ${rank} đè đôi ${tableCombo.highestRank}`,
         });
       }
-    }
-
-    // Các đôi trích từ Sáp (Triples)
-    for (const tr of partition.triples) {
-      if (tr[0].rank > tableCombo.highestRank) {
-        const pairFromTriple = tr.slice(0, 2);
-        candidates.push({
-          action: 'PLAY',
-          cards: pairFromTriple,
-          combo: analyzeCombo(pairFromTriple),
-          description: `Đôi ${tr[0].rank} (trích từ sáp) đè đôi ${tableCombo.highestRank}`,
-        });
-      }
-    }
-
-    // Đôi Heo 2 nếu có
-    const twos = botHand.filter((c) => c.rank === 15);
-    if (twos.length >= 2) {
-      const pair2 = twos.slice(0, 2);
-      candidates.push({
-        action: 'PLAY',
-        cards: pair2,
-        combo: analyzeCombo(pair2),
-        description: `Đôi Heo 2 đè đôi ${tableCombo.highestRank}`,
-      });
     }
 
     return deduplicateCandidates(candidates);
@@ -278,42 +251,29 @@ export function generateCandidateMoves(
 
   // 2.3. Bàn là TRIPLE
   if (tableCombo.type === 'TRIPLE') {
-    for (const tr of partition.triples) {
-      if (tr[0].rank > tableCombo.highestRank) {
+    for (const [rank, cards] of byRank) {
+      if (cards.length >= 3 && rank > tableCombo.highestRank) {
+        const triple = cards.slice(0, 3);
         candidates.push({
           action: 'PLAY',
-          cards: tr,
-          combo: analyzeCombo(tr),
-          description: `Sáp ${tr[0].rank} đè sáp ${tableCombo.highestRank}`,
+          cards: triple,
+          combo: analyzeCombo(triple),
+          description: `Sáp ${rank} đè sáp ${tableCombo.highestRank}`,
         });
       }
     }
-
-    // Trích sáp từ Tứ quý nếu có
-    for (const q of partition.quads) {
-      if (q[0].rank > tableCombo.highestRank) {
-        const tripleFromQuad = q.slice(0, 3);
-        candidates.push({
-          action: 'PLAY',
-          cards: tripleFromQuad,
-          combo: analyzeCombo(tripleFromQuad),
-          description: `Sáp ${q[0].rank} (trích từ tứ quý) đè sáp`,
-        });
-      }
-    }
-
     return deduplicateCandidates(candidates);
   }
 
   // 2.4. Bàn là QUAD
   if (tableCombo.type === 'QUAD') {
-    for (const q of partition.quads) {
-      if (q[0].rank > tableCombo.highestRank) {
+    for (const [rank, cards] of byRank) {
+      if (cards.length === 4 && rank > tableCombo.highestRank) {
         candidates.push({
           action: 'PLAY',
-          cards: q,
-          combo: analyzeCombo(q),
-          description: `Tứ quý ${q[0].rank} đè tứ quý ${tableCombo.highestRank}`,
+          cards,
+          combo: analyzeCombo(cards),
+          description: `Tứ quý ${rank} đè tứ quý ${tableCombo.highestRank}`,
         });
       }
     }
@@ -323,9 +283,10 @@ export function generateCandidateMoves(
   // 2.5. Bàn là STRAIGHT
   if (tableCombo.type === 'STRAIGHT') {
     const targetLen = tableCombo.length;
-
-    // Kiểm tra các sảnh cùng độ dài từ partition.straights
-    for (const st of partition.straights) {
+    // Tìm các sảnh có cùng độ dài targetLen
+    // Sảnh A-2-3 không thể đè bất kỳ sảnh 3 lá nào vì highestRank = 3 là nhỏ nhất -> includeA23 = false khi đè
+    const straights = findAllStraights(botHand, false);
+    for (const st of straights) {
       if (st.length === targetLen) {
         const combo = analyzeCombo(st);
         if (canBeat(combo, tableCombo)) {
@@ -336,23 +297,8 @@ export function generateCandidateMoves(
             description: `Sảnh ${targetLen} lá đè sảnh bàn`,
           });
         }
-      } else if (st.length > targetLen) {
-        // Sảnh trong tay dài hơn bàn -> trích các sảnh con có độ dài bằng targetLen
-        const subStraights = extractSubStraights(st, targetLen);
-        for (const sub of subStraights) {
-          const combo = analyzeCombo(sub);
-          if (canBeat(combo, tableCombo)) {
-            candidates.push({
-              action: 'PLAY',
-              cards: sub,
-              combo,
-              description: `Sảnh ${targetLen} lá (trích từ sảnh dài) đè sảnh bàn`,
-            });
-          }
-        }
       }
     }
-
     return deduplicateCandidates(candidates);
   }
 

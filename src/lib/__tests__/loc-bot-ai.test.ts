@@ -3,6 +3,7 @@ import { Card, Rank, Suit } from '../loc-game/types';
 import { partitionHand, evaluateSamPossibility } from '../loc-game/bot/hand-evaluator';
 import { CardTracker } from '../loc-game/bot/card-tracker';
 import { BotBrain } from '../loc-game/bot/bot-brain';
+import { generateCandidateMoves } from '../loc-game/bot/candidate-generator';
 import { getBotHintForSelection } from '../loc-game/bot/selection-hint';
 import { TableState } from '../loc-game/network-types';
 import { analyzeCombo } from '../loc-game/analyzer';
@@ -479,3 +480,188 @@ describe('Loc Bot AI - Contextual Selection Hint', () => {
     expect(hints).toEqual([]);
   });
 });
+
+describe('Loc Bot AI - Utility Evaluator & Independent Generator Refinements', () => {
+  let brain: BotBrain;
+  let mockTableState: TableState;
+
+  beforeEach(() => {
+    brain = new BotBrain();
+    mockTableState = {
+      roomId: 'room_1',
+      roomName: 'Test Room',
+      hostId: 'host_1',
+      status: 'playing',
+      players: [
+        { id: 'bot_1', name: 'Bot', isHost: false, isSpectator: false, cardsRemaining: 6, hasPassed: false },
+        { id: 'human_1', name: 'Human', isHost: true, isSpectator: false, cardsRemaining: 5, hasPassed: false },
+      ],
+      spectators: [],
+      currentTurnPlayerId: 'bot_1',
+      roundLeaderPlayerId: 'bot_1',
+      turnDeadline: Date.now() + 30000,
+      lastPlay: null,
+      samState: null,
+      playHistory: [],
+      roundResult: null,
+    };
+  });
+
+  it('bot chỉ còn 1 Heo 2, bàn đánh A -> PLAY Heo 2 về đích (không PASS)', () => {
+    mockTableState.lastPlay = {
+      playerId: 'human_1',
+      playerName: 'Human',
+      combo: analyzeCombo([createCard(14)]), // Lá A
+    };
+    const botHand: Card[] = [createCard(15, 'spades')]; // 1 Heo 2 duy nhất
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    expect(decision.cards.length).toBe(1);
+    expect(decision.cards[0].rank).toBe(15);
+    expect(decision.reason).toContain('về nhất ván đấu');
+  });
+
+  it('bot chỉ còn [A, 2, 3], bàn trống -> PLAY sảnh A-2-3 về đích', () => {
+    const botHand: Card[] = [
+      createCard(3, 'hearts'),
+      createCard(14, 'spades'), // A
+      createCard(15, 'diamonds'), // 2
+    ];
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    expect(decision.cards.length).toBe(3);
+    expect(decision.combo?.type).toBe('STRAIGHT');
+    expect(decision.reason).toContain('về nhất ván đấu');
+  });
+
+  it('bàn đánh sảnh 3-4-5 -> bot không sinh hoặc không chọn sảnh A-2-3 để đè', () => {
+    mockTableState.lastPlay = {
+      playerId: 'human_1',
+      playerName: 'Human',
+      combo: analyzeCombo([createCard(3), createCard(4), createCard(5)]),
+    };
+    // Bot có A-2-3 và không có sảnh khác
+    const botHand: Card[] = [
+      createCard(3, 'hearts'),
+      createCard(14, 'spades'),
+      createCard(15, 'diamonds'),
+      createCard(7),
+    ];
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PASS');
+  });
+
+  it('bot có [3, A, A, A], người sau báo 1 lá, bàn đánh 9 -> PLAY A to nhất để chặn, không PASS', () => {
+    mockTableState.players[1].cardsRemaining = 1; // Human còn 1 lá
+    mockTableState.lastPlay = {
+      playerId: 'human_1',
+      playerName: 'Human',
+      combo: analyzeCombo([createCard(9)]),
+    };
+    const botHand: Card[] = [
+      createCard(3),
+      createCard(14, 'spades'),
+      createCard(14, 'hearts'),
+      createCard(14, 'diamonds'), // Sáp A
+    ];
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    expect(decision.cards.length).toBe(1);
+    expect(decision.cards[0].rank).toBe(14);
+  });
+
+  it('bot có [Đôi A, Heo 2], bàn đánh Đôi K -> PLAY Đôi A đè bài, không bị ép PASS', () => {
+    mockTableState.lastPlay = {
+      playerId: 'human_1',
+      playerName: 'Human',
+      combo: analyzeCombo([createCard(13, 'spades'), createCard(13, 'hearts')]), // Đôi K
+    };
+    const botHand: Card[] = [
+      createCard(14, 'spades'),
+      createCard(14, 'hearts'), // Đôi A
+      createCard(15, 'diamonds'), // Heo 2
+    ];
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    expect(decision.cards.length).toBe(2);
+    expect(decision.cards[0].rank).toBe(14);
+  });
+
+  it('candidate generator quét độc lập mọi bộ khả dĩ từ botHand', () => {
+    const hand: Card[] = [
+      createCard(4, 'spades'),
+      createCard(4, 'hearts'),
+      createCard(5),
+      createCard(6),
+      createCard(7),
+    ];
+    const moves = generateCandidateMoves(hand, null);
+    // Đảm bảo có Single 4, Đôi 4, Sảnh 4-5-6-7, Sảnh 5-6-7, Sảnh 4-5-6
+    const pair4 = moves.find((m) => m.combo?.type === 'PAIR' && m.combo.highestRank === 4);
+    const straight4 = moves.find((m) => m.combo?.type === 'STRAIGHT' && m.combo.length === 4);
+    const straight3 = moves.find((m) => m.combo?.type === 'STRAIGHT' && m.combo.length === 3);
+
+    expect(pair4).toBeDefined();
+    expect(straight4).toBeDefined();
+    expect(straight3).toBeDefined();
+  });
+
+  it('bot có Tứ quý 8, bàn đánh rác 7 ở đầu ván -> bot chọn PASS, không xé 1 lá 8 phá tứ quý', () => {
+    mockTableState.players[1].cardsRemaining = 9; // Đầu ván
+    mockTableState.lastPlay = {
+      playerId: 'human_1',
+      playerName: 'Human',
+      combo: analyzeCombo([createCard(7)]),
+    };
+    const botHand: Card[] = [
+      createCard(8, 'spades'),
+      createCard(8, 'clubs'),
+      createCard(8, 'diamonds'),
+      createCard(8, 'hearts'), // Tứ quý 8
+      createCard(5), // Rác 5 < 7
+    ];
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    // Bot không được xé 1 lá 8 ra đè 7 vì chi phí phá tứ quý rất lớn
+    expect(decision.action).toBe('PASS');
+  });
+
+  it('bot có Sáp 9, bàn đánh rác 8 ở đầu ván -> bot chọn PASS, không xé 1 lá 9 phá sáp', () => {
+    mockTableState.players[1].cardsRemaining = 9; // Đầu ván
+    mockTableState.lastPlay = {
+      playerId: 'human_1',
+      playerName: 'Human',
+      combo: analyzeCombo([createCard(8)]),
+    };
+    const botHand: Card[] = [
+      createCard(9, 'spades'),
+      createCard(9, 'clubs'),
+      createCard(9, 'diamonds'), // Sáp 9
+      createCard(4), // Rác 4 < 8
+    ];
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PASS');
+  });
+
+  it('bot có sảnh 4-5-6-7-8 và rác K, bàn đánh 6 -> bot đánh K đè 6, KHÔNG xé lá trong sảnh', () => {
+    mockTableState.lastPlay = {
+      playerId: 'human_1',
+      playerName: 'Human',
+      combo: analyzeCombo([createCard(6)]),
+    };
+    const botHand: Card[] = [
+      createCard(4),
+      createCard(5),
+      createCard(6),
+      createCard(7),
+      createCard(8), // Sảnh 4-5-6-7-8
+      createCard(13), // Rác K
+    ];
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    expect(decision.cards.length).toBe(1);
+    // Phải đánh con K (13), không xé con 7 hay con 8 từ sảnh 4-5-6-7-8
+    expect(decision.cards[0].rank).toBe(13);
+  });
+});
+
+
