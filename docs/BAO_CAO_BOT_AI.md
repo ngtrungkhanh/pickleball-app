@@ -347,63 +347,199 @@ Phần review này là đánh giá kỹ thuật và đề xuất phạm vi tiế
 
 ---
 
-## 9. PHẢN HỒI CỦA AGENT VÀ LỘ TRÌNH THỰC THI (AGENT RESPONSE & ACTION PLAN)
+## 9. ĐỀ XUẤT PHƯƠNG ÁN KỸ THUẬT CHI TIẾT ĐỂ CHỐT PHƯƠNG ÁN VỚI GPT (TECHNICAL SPECIFICATION)
 
-> **Thời gian phản hồi:** 28/10/2026  
-> **Người phản hồi:** Coding Agent (Antigravity)  
-> **Trạng thái:** Tiếp thu toàn bộ góp ý, thống nhất giải pháp kỹ thuật và sẵn sàng triển khai.
-
-### 9.1. Đánh giá chung về bản review độc lập (Mục 8)
-Bản review tại Mục 8 rất sâu sắc, chính xác và chỉ ra đúng các lỗ hổng chiến thuật tiềm ẩn nghiêm trọng mà hệ thống heuristic hiện tại chưa bao quát được. Đặc biệt:
-- Nhận định về việc **Bot bỏ chiến thắng vì phạt thối 2 gán điểm `-15000`** (Mục 8.2.A) là một phát hiện cực kỳ chuẩn xác và có giá trị cao.
-- Việc **Candidate Generator bị phụ thuộc vào 1 phân rã tĩnh của `partitionHand`** (Mục 8.2.B) đã làm bot bị "mù nước đi" trong các tình huống cần xé bài chặn chốt.
-- Việc **Tắt hẳn sảnh A–2–3** (Mục 8.2.C) làm mất nước về đích khi tay chỉ còn đúng 3 lá `[A, 2, 3]`.
-
-Agent đồng thuận 100% với các phân tích này và cam kết thực hiện lộ trình khắc phục theo đúng thứ tự ưu tiên đề xuất.
+> **Mục tiêu:** Thống nhất giải pháp kiến trúc và công thức toán học với reviewer độc lập (GPT) trước khi tiến hành code và đẩy lên remote.  
+> **Trọng tâm giải quyết:** 3 vấn đề ưu tiên cao (A, B, C) và 3 vấn đề phương pháp luận (D, E, F) được chỉ ra tại Mục 8.
 
 ---
 
-### 9.2. Phương án kỹ thuật khắc phục chi tiết
+### 9.1. Giải pháp kỹ thuật cho Vấn đề A: Đánh giá nước Về Nhất có Heo 2
 
-#### 1. Khắc phục Vấn đề A: Đánh giá nước kết thúc ván bằng Heo 2 (Ưu tiên 1)
-* **Vấn đề:** Gán `-15000` khiến bot coi về bằng Heo 2 là "điều cấm kỵ", dẫn đến việc bot thà chọn `PASS` (điểm `0`) để đối thủ về trước thay vì tự mình về nhất.
-* **Nguyên tắc sửa:**
-  - Về đích luôn là mục tiêu cao nhất của ván đấu. Trong engine tính điểm (`scoring.ts`), người về nhất ăn điểm phạt của tất cả người thua (thường từ $+15$ đến $+40$ lá), trừ đi $5$ lá phạt thối Heo 2 thì điểm ròng thực tế **vẫn là một khoản thắng lớn (dương điểm)**.
-  - Sửa điểm tiện ích tại `utility-evaluator.ts`:
-    - Về nhất bình thường (không có Heo): $+10000$ điểm.
-    - Về nhất bằng Heo (Heo đơn, Đôi Heo, hoặc sảnh A-2-3): $+8000$ điểm (vẫn là điểm thưởng cực lớn, vượt xa điểm $0$ của `PASS` hay bất kỳ nước đi nào khác, chỉ bị trừ nhẹ một lượng tượng trưng cho khoản phạt 5 lá so với về bài sạch).
-  - Khái niệm "Tránh thối Heo 2" chỉ áp dụng khi **sau nước đi đó bot chưa về đích mà để lại Heo đơn độc** khiến lượt sau bị đối thủ bắt chẹt.
+#### 1. Nguyên lý tính toán dựa trên Engine thực tế (`scoring.ts`):
+Trong engine tính điểm của game:
+- Người về nhất ăn số lá còn lại của tất cả người thua: $\text{GrossWin} = \sum_{p \in \text{losers}} \text{cardsRemaining}_p$ (trung bình từ $15$ đến $35$ lá).
+- Nếu lá kết thúc chứa Heo 2 (Single 2, Đôi 2, Sảnh A-2-3): Bị trừ đúng $5$ lá phạt thối Heo ($\text{Penalty}_{\text{Thối2}} = 5$).
+- **Điểm ròng thực tế:**
+  $$\text{NetScore} = \text{GrossWin} - \text{Penalty}_{\text{Thối2}} \ge 15 - 5 = +10 \text{ lá} > 0$$
+- Do đó, về nhất bằng Heo **vẫn là một kết quả thắng lớn**, vượt trội hoàn toàn so với việc `PASS` (điểm $0$) hoặc tiếp tục ôm bài chịu rủi ro bị người khác về trước (bị phạt số lá trên tay + phạt thối Heo 2 = mất $10 + 5 = 15$ lá).
 
-#### 2. Khắc phục Vấn đề B: Mở rộng độ bao phủ của Candidate Generator (Ưu tiên 2)
-* **Vấn đề:** Generator hiện tại chỉ lấy từ `partitionHand` nên bỏ sót các nước xé sáp/tứ quý/sảnh ra đè rác hoặc đè đôi.
-* **Nguyên tắc sửa:**
-  - Trong `candidate-generator.ts`:
-    - **Nhánh Single:** Cho phép trích xuất lá đơn từ **tất cả các rank lớn hơn trong tay bài** (kể cả rank đang nằm trong Đôi, Sáp, Tứ quý hay Sảnh).
-    - **Nhánh Pair:** Cho phép trích xuất đôi từ **Sáp** và **Tứ quý**, cũng như từ các lá trùng rank trong bài.
-    - **Nhánh Straight:** Trích xuất sảnh con hợp lệ từ bất kỳ chuỗi liên tiếp nào trong tay bài.
-  - Việc "có nên xé bộ hay không" sẽ do **Hàm Evaluator chấm điểm dựa trên chi phí phá bộ ($\text{BreakComboCost}$)** thay vì Generator tự ý giấu nước đi.
+#### 2. Công thức chấm điểm trong `utility-evaluator.ts`:
+Thay vì gán cứng `-15000` (coi như nước đi cấm), hàm đánh giá sẽ tính điểm nước về đích (`handAfter.length === 0`) như sau:
 
-#### 3. Khắc phục Vấn đề C: Tái tích hợp sảnh A–2–3 vào không gian ứng viên (Ưu tiên 2)
-* **Vấn đề:** Tắt cờ `includeA23` khiến tay còn `[A, 2, 3]` không thể đánh ra cả sảnh để về đích.
-* **Nguyên tắc sửa:**
-  - Bật lại sảnh `A-2-3` trong Candidate Generator như một nước đi hợp lệ theo đúng luật Lốc.
-  - Trong Evaluator: Đánh giá sảnh A-2-3 có $\text{ControlCost} = 60$ (vì làm mất Heo 2), do đó bot sẽ tự động không đánh A-2-3 ở đầu ván khi còn rác nhỏ, nhưng khi tay bài chỉ còn đúng 3 lá `[A, 2, 3]` thì bot sẽ lập tức đánh sảnh này để về ván (với điểm thưởng về đích $+8000$ trừ 5 lá phạt).
+```typescript
+if (handAfter.length === 0) {
+  const containsTwo = combo.cards.some((c) => c.rank === 15);
+  
+  if (containsTwo) {
+    // Về nhất có chứa Heo 2 (Heo đơn, Đôi Heo, hoặc sảnh A-2-3):
+    // Vẫn là chiến thắng tối thượng, chỉ trừ một lượng điểm tương ứng với 5 lá phạt
+    const penaltyWeight = 300; // Tương đương giá trị 5 lá phạt
+    return {
+      candidate,
+      score: 10000 - penaltyWeight, // = +9700 điểm (VƯỢT XA điểm 0 của PASS)
+      reason: 'Đánh hết bài về nhất ván đấu (chấp nhận phạt 5 lá thối Heo vì điểm ròng vẫn thắng lớn)',
+    };
+  }
 
-#### 4. Hiệu đính báo cáo và chuẩn hóa thuật ngữ (Mục 8.5)
-- Điều chỉnh các phát biểu: Thay thế các khẳng định "tối ưu tuyệt đối", "nhìn trước tương lai", "bảo đảm 100%" bằng thuật ngữ chính xác: **"Heuristic cấu trúc tay bài và nhịp chơi (Hand Pattern & Pacing Heuristic)"**.
-- Đính chính số lượng test case kiểm chứng chuyên biệt ở Mục 5.1 là **8 tình huống** (thay vì 7).
-- Lược bỏ các so sánh chưa kiểm chứng liên quan tới ZingPlay/Tencent; tập trung hoàn toàn vào kiến trúc nội tại của codebase.
-
----
-
-### 9.3. Lộ trình triển khai (Action Items)
-
-```mermaid
-flowchart TD
-    Step1["Bước 1: Sửa Evaluator nước về bằng Heo 2<br/>(Thưởng +8000, không bao giờ thấp hơn PASS)"] --> Step2["Bước 2: Mở rộng Generator sinh đủ nước đè bài<br/>(Trích lá từ sáp/tứ quý, hỗ trợ sảnh A-2-3)"]
-    Step2 --> Step3["Bước 3: Viết Test hồi quy cho các ca biên vừa nêu<br/>(Ca chỉ còn 2 về nhất, ca xé sáp cứu ván, ca A-2-3 về đích)"]
-    Step3 --> Step4["Bước 4: Chạy kiểm tra tuần tự<br/>(Vitest suite, ESLint, TypeScript, Vercel Build)"]
+  // Về nhất sạch sẽ (không chứa Heo):
+  return {
+    candidate,
+    score: 10000,
+    reason: 'Đánh hết bài để về nhất ván đấu hoàn hảo!',
+  };
+}
 ```
 
-1. **Giai đoạn 1 (Ngay lập tức):** Thực hiện sửa code cho 3 vấn đề cốt lõi A, B, C; viết test hồi quy bổ sung trong `src/lib/__tests__/loc-bot-ai.test.ts`.
-2. **Giai đoạn 2:** Chạy toàn bộ test suite đảm bảo không hồi quy, kiểm tra TypeScript/ESLint và đưa lên remote.
+#### 3. Phân biệt rõ hai trạng thái liên quan đến Heo 2:
+- **Trạng thái 1 (Về đích ngay):** Đánh Heo 2 và **hết sạch bài** $\rightarrow$ Điểm $+9700$ (LUÔN CHỌN VỀ).
+- **Trạng thái 2 (Để lại Heo đơn độc):** Đánh bài khác và sau đó **trên tay chỉ còn trơ trọi 1 con Heo 2** (chưa về được, lượt sau buộc phải đánh Heo) $\rightarrow$ Phạt nặng $-12000$ (để bot không đi nước cờ tự sát này).
+
+---
+
+### 9.2. Giải pháp kỹ thuật cho Vấn đề B: Mở rộng Candidate Generator không phụ thuộc vào 1 partition tĩnh
+
+#### 1. Nguyên nhân gốc rễ:
+Hiện tại `candidate-generator.ts` nhận vào `partition = partitionHand(botHand)`. Do `partitionHand` chỉ trả về **duy nhất một cách chia tối ưu cục bộ**, các lá bài đã bị gom vào Sáp/Tứ quý/Sảnh sẽ bị Generator bỏ qua, không sinh ra nước đánh lẻ để cứu ván.
+
+#### 2. Thiết kế lại Generator độc lập trực tiếp từ `botHand`:
+Generator sẽ quét trực tiếp trên tập lá bài `botHand` theo luật của `analyzer.ts` và `canBeat()`:
+
+```typescript
+export function generateCandidateMoves(
+  botHand: Card[],
+  tableCombo: CardCombo | null,
+  partition: HandPartition
+): CandidateMove[] {
+  const candidates: CandidateMove[] = [];
+  
+  // Nước PASS luôn có mặt khi bàn có bài
+  if (tableCombo && tableCombo.type !== 'INVALID') {
+    candidates.push({ action: 'PASS', cards: [], description: 'Bỏ lượt' });
+  }
+
+  // BÀN ĐÁNH 1 LÁ (SINGLE):
+  if (!tableCombo || tableCombo.type === 'SINGLE') {
+    // Quét TOÀN BỘ các lá trong botHand lớn hơn tableCombo
+    const targetRank = tableCombo ? tableCombo.highestRank : 0;
+    
+    // Nhóm theo rank để biết lá này thuộc nhóm nào (đơn lẻ, đôi, sáp, tứ quý)
+    const byRank = groupCardsByRank(botHand);
+    
+    for (const [rank, cards] of byRank) {
+      if (rank > targetRank) {
+        // Sinh ứng viên đánh 1 lá từ rank này
+        candidates.push({
+          action: 'PLAY',
+          cards: [cards[0]],
+          combo: analyzeCombo([cards[0]]),
+          description: `Đánh lá ${rank} (từ nhóm ${cards.length} lá)`,
+        });
+      }
+    }
+
+    // Nếu bàn là Heo 2 (rank 15) -> sinh tất cả Tứ quý có thể chặt
+    if (tableCombo && tableCombo.highestRank === 15) {
+      for (const [rank, cards] of byRank) {
+        if (cards.length === 4) {
+          candidates.push({
+            action: 'PLAY',
+            cards,
+            combo: analyzeCombo(cards),
+            description: `Tứ quý ${rank} chặt Heo 2`,
+          });
+        }
+      }
+    }
+  }
+
+  // BÀN ĐÁNH ĐÔI (PAIR):
+  if (!tableCombo || tableCombo.type === 'PAIR') {
+    const targetRank = tableCombo ? tableCombo.highestRank : 0;
+    const byRank = groupCardsByRank(botHand);
+    
+    for (const [rank, cards] of byRank) {
+      // Bất kỳ rank nào có >= 2 lá và lớn hơn targetRank đều có thể tạo Đôi
+      if (cards.length >= 2 && rank > targetRank) {
+        const pairCards = cards.slice(0, 2);
+        candidates.push({
+          action: 'PLAY',
+          cards: pairCards,
+          combo: analyzeCombo(pairCards),
+          description: `Đôi ${rank} (trích từ nhóm ${cards.length} lá)`,
+        });
+      }
+    }
+  }
+
+  // BÀN ĐÁNH SÁP (TRIPLE) & TỨ QUÝ (QUAD):
+  // Tương tự, trích xuất từ tất cả các rank có length >= 3 và length === 4.
+
+  // BÀN ĐÁNH SẢNH (STRAIGHT):
+  // Tìm tất cả các đoạn liên tiếp hợp lệ trong botHand có độ dài đúng bằng tableCombo.length
+  // (kể cả sảnh trích từ sảnh dài, hoặc tạo từ các lá trùng rank).
+}
+```
+
+#### 3. Đánh giá chi phí phá bộ ($\text{BreakComboCost}$) trong Evaluator:
+Sau khi Generator sinh đủ nước đi, Evaluator sẽ tính toán xem việc lấy lá bài đó có làm nát bài không:
+- Lấy 1 lá từ Sáp (còn lại Đôi): $\text{Cost} = 15$ (phạt nhẹ vì đôi vẫn dùng được).
+- Lấy 1 lá từ Đôi (còn lại rác): $\text{Cost} = 30$ (phạt vừa).
+- Lấy 1 lá từ Tứ quý (mất Tứ quý): $\text{Cost} = 80$ (phạt nặng).
+- **Giảm trừ chi phí phá bộ:** Khi người kế tiếp còn $\le 1$ lá hoặc có đối thủ còn $\le 3$ lá, $\text{BreakComboCost}$ được **giảm 70%** để ưu tiên việc xé bài cứu ván / thoát cóng / bắt chốt!
+
+---
+
+### 9.3. Giải pháp kỹ thuật cho Vấn đề C: Tái tích hợp sảnh A–2–3
+
+1. **Khôi phục sảnh A–2–3 trong Generator:**
+   - Trong `candidate-generator.ts`, nếu `botHand` có chứa `3`, `A (rank 14)` và `2 (rank 15)`, sảnh `[3, 14, 15]` luôn được sinh ra như một Candidate hợp lệ khi bàn trống hoặc khi bàn đánh sảnh 3 lá.
+2. **Kiểm soát ở Evaluator thay vì cấm ở Generator:**
+   - Khi bot làm chủ vòng ở đầu ván (còn nhiều lá):
+     Sảnh A-2-3 có chứa Heo 2, nên gán $\text{ControlCost} = 60$. Nếu trên tay còn $\ge 2$ rác nhỏ, công thức phạt "Nướng bài to" sẽ tự động trừ điểm nặng nước đi này. Bot sẽ **không bao giờ đánh A-2-3 đầu ván**.
+   - Khi tay bot chỉ còn đúng 3 lá `[A, 2, 3]`:
+     Nước đi đánh cả sảnh `[A, 2, 3]` đưa `handAfter.length === 0`. Evaluator kích hoạt nhánh Về Nhất $\rightarrow$ Chấm điểm **$+9700$** $\rightarrow$ Bot **lập tức đánh sảnh A-2-3 về nhất ván đấu**.
+
+---
+
+### 9.4. Bảng ma trận quyết định hoàn chỉnh (Decision Matrix)
+
+| Tình huống bài của Bot | Bài trên bàn | Hành động mong muốn | Điểm Utility kỳ vọng | Lý do chiến thuật |
+|---|---|:---:|:---:|---|
+| Còn đúng 1 Heo 2 | Đối thủ đánh lá A | **PLAY Heo 2** | $+9700$ | Về nhất ván đấu (chấp nhận trừ 5 lá phạt thối 2) |
+| Còn đúng `[A, 2, 3]` | Bàn trống | **PLAY Sảnh A-2-3** | $+9700$ | Về nhất ván đấu ngay lập tức |
+| Cầm `[3, A, A, A]`, người sau báo 1 lá | Đối thủ đánh con 9 | **PLAY 1 lá A** | $+350$ | Xé sáp lấy 1 lá A chặn chốt, cứu ván tránh đền làng |
+| Cầm Sảnh to `10-J-Q-K-A` và rác `3, 5, 8` | Bàn trống | **PLAY Rác 3** | $+45$ | Thăm dò, giữ sảnh to bảo vệ 2 rác còn lại |
+| Cầm Đôi K và rác `3, 5, 7` | Bàn trống | **PLAY Rác 3** | $+35$ | Thăm dò, không ném Đôi K cướp cái đi sớm |
+| Cầm `[Đôi 4, Đôi 5, Rác 7, Heo 2]` | Đối thủ đánh con 8 (đầu ván) | **PASS** | $0$ | Giữ Heo an toàn, không chém Heo vào rác 8 |
+| Cầm `[Sảnh 3-4-5-6-7, Heo 2]` | Đối thủ đánh con 8 | **PLAY Heo 2** | $+380$ | Cướp cái dứt điểm: nước sau xả sảnh 5 cây về nhất |
+| Cầm `[Đôi 4, Heo 2]` | Bàn trống | **PLAY Heo 2** | $+4000$ | Cướp cái trước để về bằng Đôi 4, triệt tiêu thối 2 |
+
+---
+
+### 9.5. Kế hoạch kiểm chứng độc lập (Verification & Benchmarking Plan)
+
+Nhằm đáp ứng yêu cầu kiểm chứng chặt chẽ tại Mục 8.3:
+
+1. **Bộ test đối chứng (Oracle Test bằng Brute-force Subsets):**
+   - Viết một test helper sinh toàn bộ tập con hợp lệ của 10 lá bài ($2^{10} - 1 = 1023$ tập con), lọc qua `analyzeCombo` và `canBeat`.
+   - Đối chiếu danh sách này với `generateCandidateMoves` để đảm bảo **không có bất kỳ lớp nước đi hợp lệ nào bị bỏ sót**.
+2. **Bộ test hồi quy cho 3 ca biên mới:**
+   - Ca 1: Bot chỉ còn 1 Heo 2 và đối thủ đánh A $\rightarrow$ Test assert `action === 'PLAY'`, `cards = [Heo 2]`.
+   - Ca 2: Bot chỉ còn `[A, 2, 3]` bàn trống $\rightarrow$ Test assert `action === 'PLAY'`, `combo.type === 'STRAIGHT'`.
+   - Ca 3: Bot có `[3, A, A, A]`, người sau báo 1 lá, bàn đánh 9 $\rightarrow$ Test assert `action === 'PLAY'`, `cards = [A]`.
+3. **Mô phỏng 100 ván đối đầu với bot cũ (Fixed-seed Simulation):**
+   - Đo lường 3 chỉ số then chốt:
+     - **Net Points (Điểm ròng trung bình/ván):** Mục tiêu tăng trưởng $\ge +15\%$.
+     - **Tỷ lệ Cháy bài (Cóng):** Giảm thiểu tối đa.
+     - **Tỷ lệ Thối Heo 2:** Giảm $\ge 50\%$.
+
+---
+
+### 9.6. Câu hỏi chốt với GPT Reviewer
+
+Xin gửi 3 câu hỏi này để GPT thẩm định phương án:
+1. *"Việc gán điểm về nhất có chứa Heo 2 là $+9700$ (so với về sạch $+10000$ và PASS $0$) đã giải quyết triệt để vấn đề bot bỏ chiến thắng chưa? Có cần bù trừ động theo số lá của các đối thủ trên bàn không?"*
+2. *"Cơ chế tách Generator quét toàn bộ `botHand` kết hợp với Evaluator phạt $\text{BreakComboCost}$ (thay vì gò bó trong 1 partition) đã đủ để bảo đảm tính đầy đủ của không gian nước đi chưa?"*
+3. *"Các trọng số chi phí phá bộ ($\text{Cost} = 15$ cho sáp, $30$ cho đôi, $80$ cho tứ quý, giảm $70\%$ khi cứu ván) đã hợp lý về mặt chiến thuật Lốc chưa?"*
+
