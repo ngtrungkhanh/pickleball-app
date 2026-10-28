@@ -14,6 +14,8 @@ export function LocDebtMatrix({ players, matrix, directList }: LocDebtMatrixProp
   const [viewMode, setViewMode] = useState<'matrix' | 'list'>('matrix');
   const [highlightedPlayerId, setHighlightedPlayerId] = useState<string | null>(null);
 
+  const exampleDebt = directList.find(d => d.cards > 0);
+
   return (
     <div className="rounded-2xl bg-slate-900/90 border border-white/10 p-3.5 space-y-3">
       {/* Title & View Toggle */}
@@ -58,13 +60,15 @@ export function LocDebtMatrix({ players, matrix, directList }: LocDebtMatrixProp
           Chưa có ván đấu nào hoặc điểm nợ đang bằng 0
         </div>
       ) : viewMode === 'matrix' ? (
-        <div className="space-y-2">
-          <div className="overflow-x-auto pb-1">
-            <table className="w-full text-xs border-collapse">
+        <div className="space-y-3">
+          <div className="overflow-x-auto pb-1 -mx-1 px-1">
+            <table className="w-full min-w-[320px] text-xs border-collapse">
               <thead>
                 <tr>
-                  <th className="p-2 text-left text-[11px] font-bold text-white/40 uppercase tracking-wider border-b border-white/10">
-                    Nợ ➔ Được
+                  <th className="p-2 text-left border-b border-white/10 min-w-[85px]">
+                    <div className="text-[10px] font-black text-amber-400 uppercase tracking-wider leading-tight">
+                      Hàng nợ ↓ \ Cột nhận →
+                    </div>
                   </th>
                   {players.map(colPlayer => (
                     <th
@@ -72,12 +76,17 @@ export function LocDebtMatrix({ players, matrix, directList }: LocDebtMatrixProp
                       className={`p-2 text-center border-b border-white/10 transition-colors ${
                         highlightedPlayerId === colPlayer.id
                           ? 'bg-amber-500/20 text-amber-300 font-black'
-                          : 'text-white/70 font-bold'
+                          : 'text-white/80 font-bold'
                       }`}
                       title={colPlayer.name}
                     >
-                      <div className="w-6 h-6 mx-auto rounded-full bg-white/10 flex items-center justify-center font-bold text-[11px]">
-                        {colPlayer.name.charAt(0).toUpperCase()}
+                      <div className="text-center min-w-[55px]">
+                        <span className="text-xs font-bold text-emerald-400 block truncate max-w-[80px] mx-auto leading-tight">
+                          {colPlayer.name}
+                        </span>
+                        <span className="text-[9px] text-white/40 block font-normal mt-0.5">
+                          (Nhận)
+                        </span>
                       </div>
                     </th>
                   ))}
@@ -100,7 +109,12 @@ export function LocDebtMatrix({ players, matrix, directList }: LocDebtMatrixProp
                     >
                       {/* Tên người nợ (hàng dọc) */}
                       <td className="p-2 text-left font-bold text-white/90 border-b border-white/5 truncate max-w-[100px]">
-                        <span className="truncate">{rowPlayer.name}</span>
+                        <span className="text-xs font-bold text-white/90 truncate block leading-tight">
+                          {rowPlayer.name}
+                        </span>
+                        <span className="text-[9px] text-red-400/60 block font-normal mt-0.5">
+                          (Nợ)
+                        </span>
                       </td>
 
                       {/* Các ô số lá nợ */}
@@ -143,9 +157,24 @@ export function LocDebtMatrix({ players, matrix, directList }: LocDebtMatrixProp
               </tbody>
             </table>
           </div>
-          <div className="flex items-center justify-between text-[11px] text-white/40 pt-1 border-t border-white/5">
-            <span>* Hàng dọc nợ Cột ngang</span>
-            <span>Chạm hàng để soi quan hệ</span>
+
+          {/* Hướng dẫn & Ví dụ thực tế rõ ràng */}
+          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1.5">
+            <div className="flex items-center gap-1.5 font-bold text-amber-300 text-xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              <span>Quy ước ma trận: HÀNG DỌC (trái) NỢ CỘT NGANG (trên)</span>
+            </div>
+            <p className="text-white/80 text-[11px] leading-relaxed">
+              {exampleDebt ? (
+                <>
+                  👉 <strong>Ví dụ thực tế:</strong> Hàng <strong>{exampleDebt.fromName}</strong> gióng sang cột <strong>{exampleDebt.toName}</strong> có số <strong>{exampleDebt.cards}</strong> ➔ nghĩa là <strong>{exampleDebt.fromName} nợ {exampleDebt.toName} {exampleDebt.cards} lá</strong>.
+                </>
+              ) : (
+                <>
+                  👉 <strong>Ví dụ:</strong> Gióng từ người ở hàng bên trái sang cột người bên trên có số <strong>2</strong> ➔ nghĩa là <strong>Người hàng trái nợ Người cột trên 2 lá</strong>.
+                </>
+              )}
+            </p>
           </div>
         </div>
       ) : (

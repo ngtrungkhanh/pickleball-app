@@ -60,18 +60,6 @@ export function LocAddRoundModal({
     handleCardChange(loserId, val);
   };
 
-  const handleDenSamPreset = (loserId: string) => {
-    // Đền sâm = 20 * (số người - 1)
-    const amount = 20 * Math.max(1, players.length - 1);
-    setLoserCards(prev => {
-      const next = { ...prev };
-      losers.forEach(l => {
-        next[l.id] = l.id === loserId ? amount : 0;
-      });
-      return next;
-    });
-  };
-
   const handleAllEatSamPreset = () => {
     // Ăn sâm = mỗi nhà đền 20 lá
     setLoserCards(prev => {
@@ -144,10 +132,10 @@ export function LocAddRoundModal({
 
           {/* Bước 1: Chọn người thắng */}
           <div>
-            <label className="block text-xs font-semibold text-white/60 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-white/60 uppercase tracking-wider mb-1.5">
               1. Ai về nhất? (Người thắng)
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className={`grid gap-1.5 ${players.length <= 4 ? 'grid-cols-4' : 'grid-cols-3 sm:grid-cols-5'}`}>
               {players.map(p => {
                 const isSelected = p.id === winnerId;
                 return (
@@ -155,20 +143,20 @@ export function LocAddRoundModal({
                     key={p.id}
                     type="button"
                     onClick={() => setWinnerId(p.id)}
-                    className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition-all ${
+                    className={`flex items-center justify-center gap-1 py-2 px-1.5 rounded-xl border text-center transition-all ${
                       isSelected
-                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold shadow-[0_0_15px_rgba(16,185,129,0.2)]'
-                        : 'bg-white/[0.03] border-white/10 text-white/80 hover:bg-white/[0.08]'
+                        ? 'bg-emerald-500/25 border-emerald-500 text-emerald-300 font-bold shadow-[0_0_12px_rgba(16,185,129,0.25)]'
+                        : 'bg-white/[0.03] border-white/10 text-white/75 hover:bg-white/[0.08]'
                     }`}
                   >
-                    <div
-                      className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs ${
-                        isSelected ? 'bg-emerald-500 text-black' : 'bg-white/10 text-white/70'
-                      }`}
-                    >
-                      {isSelected ? <Trophy className="w-3.5 h-3.5" /> : p.name.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="truncate text-sm">{p.name}</span>
+                    {isSelected ? (
+                      <Trophy className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    ) : (
+                      <span className="w-4 h-4 rounded-full bg-white/10 text-white/60 text-[10px] font-bold flex items-center justify-center shrink-0">
+                        {p.name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    <span className="truncate text-xs font-bold">{p.name}</span>
                   </button>
                 );
               })}
@@ -241,59 +229,34 @@ export function LocAddRoundModal({
                       </div>
                     </div>
 
-                    {/* Phím bấm nhanh số lá */}
-                    <div className="flex flex-wrap gap-1">
-                      {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
-                        <button
-                          key={num}
-                          type="button"
-                          onClick={() => handleQuickPreset(loser.id, num)}
-                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${
-                            cards === num
-                              ? 'bg-red-500 text-white font-black'
-                              : 'bg-white/5 hover:bg-white/10 text-white/70 border border-white/5'
-                          }`}
-                        >
-                          {num}
-                        </button>
-                      ))}
+                    {/* Bàn phím số 0-20 (7 cột x 3 hàng, số 14 được tô màu viền nổi bật) */}
+                    <div className="grid grid-cols-7 gap-1">
+                      {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(num => {
+                        const isSelected = cards === num;
+                        const is14 = num === 14;
 
-                      {/* Phím tắt trường hợp đặc biệt */}
-                      <button
-                        type="button"
-                        onClick={() => handleQuickPreset(loser.id, 14)}
-                        className={`px-2 h-7 rounded-lg text-[11px] font-bold border transition-all ${
-                          cards === 14
-                            ? 'bg-sky-500 text-white border-sky-400'
-                            : 'bg-sky-500/10 text-sky-300 border-sky-500/30 hover:bg-sky-500/20'
-                        }`}
-                      >
-                        14 (Úng)
-                      </button>
+                        let btnClass = 'h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center ';
+                        if (is14) {
+                          btnClass += isSelected
+                            ? 'bg-amber-500 text-slate-950 font-black border border-amber-300 ring-2 ring-amber-400'
+                            : 'bg-amber-500/15 text-amber-300 border border-amber-400/80 font-black hover:bg-amber-500/25';
+                        } else if (isSelected) {
+                          btnClass += 'bg-red-500 text-white font-black border border-red-400';
+                        } else {
+                          btnClass += 'bg-white/5 hover:bg-white/10 text-white/70 border border-white/5';
+                        }
 
-                      <button
-                        type="button"
-                        onClick={() => handleQuickPreset(loser.id, 20)}
-                        className={`px-2 h-7 rounded-lg text-[11px] font-bold border transition-all ${
-                          cards === 20
-                            ? 'bg-amber-500 text-black border-amber-400'
-                            : 'bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20'
-                        }`}
-                      >
-                        20 (Sâm)
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleDenSamPreset(loser.id)}
-                        className={`px-2 h-7 rounded-lg text-[11px] font-bold border transition-all ${
-                          cards >= 40
-                            ? 'bg-red-600 text-white border-red-500'
-                            : 'bg-red-500/10 text-red-300 border-red-500/30 hover:bg-red-500/20'
-                        }`}
-                      >
-                        Đền sâm ({20 * Math.max(1, players.length - 1)})
-                      </button>
+                        return (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => handleQuickPreset(loser.id, num)}
+                            className={btnClass}
+                          >
+                            {num}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 );
