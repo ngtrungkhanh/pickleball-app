@@ -1,6 +1,6 @@
 # Sản phẩm và UI
 
-Đọc file này khi thay đổi hành vi người dùng, route, wording, responsive layout
+Chỉ đọc mục liên quan khi thay đổi hành vi người dùng, route, wording, responsive layout
 hoặc thao tác quản trị. Không ghi chi tiết implementation có thể đọc trực tiếp
 từ code.
 
@@ -176,7 +176,8 @@ Hall of Fame độc lập với season filter:
 ## Quy tắc UI
 
 - Mobile-first; không sửa desktop làm overflow hoặc giảm tap target trên mobile.
-- Review lần lượt mobile, Full HD, 2K, 4K.
+- Sửa UI nhỏ: review mobile và desktop liên quan. Đổi layout chung/responsive:
+  review lần lượt mobile, Full HD, 2K, 4K. Kiểm tra màn hình khác nếu có dấu hiệu hồi quy.
 - Phong cách tối, gọn, thiên về công cụ nội bộ; tránh hero/decoration quá lớn.
 - Card chính ưu tiên bo góc mềm, mật độ cao nhưng vẫn đọc được.
 - Không tạo nested scroll cho leaderboard nhỏ; để trang cuộn tự nhiên.

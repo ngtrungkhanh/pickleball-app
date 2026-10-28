@@ -1,6 +1,12 @@
 # Kế hoạch Di chuyển Thuật toán ELO: Lựa chọn Mô hình C & Mô hình D
 
-Tài liệu này tổng hợp toàn bộ các phân tích phản biện độc lập, số liệu mô phỏng thực tế qua 2 mùa giải (Season 1 & Season 2) và cung cấp mã nguồn hoàn chỉnh của cả **hai phương án tối ưu nhất (Mô hình C và Mô hình D)** để bạn lựa chọn và tự triển khai tiếp theo tại nhà.
+> Tài liệu phương án tham khảo, không phải quy trình agent hoặc mô tả thuật toán
+> đang chạy. Không đọc mặc định, không tự triển khai theo tài liệu này. Số liệu
+> là snapshot mô phỏng trong tài liệu, không phải dữ liệu mùa hiện tại. Khi được
+> giao đổi ELO, phải đối chiếu code/test hiện hành và kiểm chứng lại số liệu.
+
+Tài liệu so sánh Mô hình C và D, giữ mã nguồn phương án để tham khảo. Người dùng
+chọn định hướng; agent chịu trách nhiệm triển khai và kiểm tra theo `../AGENTS.md`.
 
 ---
 
@@ -56,9 +62,11 @@ Tài liệu này tổng hợp toàn bộ các phân tích phản biện độc l
 
 ---
 
-## III. Mã nguồn Sửa đổi File [analysis-core.ts](file:///d:/Pickleball%20App/src/lib/analysis-core.ts)
+## III. Mã nguồn phương án cho [analysis-core.ts](../src/lib/analysis-core.ts)
 
-Tùy theo quyết định lựa chọn mô hình, bạn hãy copy-paste một trong hai phương án code dưới đây vào file `src/lib/analysis-core.ts`:
+Các đoạn dưới đây là phương án chưa được xác nhận với code hiện hành. Agent
+phải tích hợp theo cấu trúc thực tế và bổ sung test, không thay nguyên file bằng
+code mẫu. Các chỉ dẫn giao diện bên dưới chỉ áp dụng khi người dùng giao triển khai.
 
 ### PHƯƠNG ÁN 1: MÃ NGUỒN MÔ HÌNH D (Balanced Weighted ELO - KHUYẾN NGHỊ)
 

@@ -1,0 +1,290 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { Card, Rank, Suit } from '../loc-game/types';
+import { partitionHand, evaluateSamPossibility } from '../loc-game/bot/hand-evaluator';
+import { CardTracker } from '../loc-game/bot/card-tracker';
+import { BotBrain } from '../loc-game/bot/bot-brain';
+import { TableState } from '../loc-game/network-types';
+import { analyzeCombo } from '../loc-game/analyzer';
+
+function createCard(rank: Rank, suit: Suit = 'spades'): Card {
+  return { id: `${rank}_${suit}`, rank, suit };
+}
+
+describe('Loc Bot AI - Hand Evaluator', () => {
+  it('phân rã chính xác sảnh dài, đôi và rác lẻ mà không làm nát bài', () => {
+    const hand: Card[] = [
+      createCard(3, 'hearts'),
+      createCard(4, 'clubs'),
+      createCard(5, 'diamonds'),
+      createCard(6, 'spades'),
+      createCard(7, 'hearts'), // Sảnh 3-4-5-6-7
+      createCard(9, 'clubs'),
+      createCard(9, 'diamonds'), // Đôi 9
+      createCard(11, 'hearts'), // Rác J (rank 11)
+      createCard(15, 'spades'), // Rác 2 (rank 15)
+    ];
+
+    const partition = partitionHand(hand);
+
+    expect(partition.straights.length).toBe(1);
+    expect(partition.straights[0].length).toBe(5);
+    expect(partition.pairs.length).toBe(1);
+    expect(partition.pairs[0][0].rank).toBe(9);
+    expect(partition.singles.map((c) => c.rank)).toEqual([11, 15]);
+  });
+
+  it('bảo toàn Tứ Quý khi có 4 lá cùng rank', () => {
+    const hand: Card[] = [
+      createCard(8, 'hearts'),
+      createCard(8, 'clubs'),
+      createCard(8, 'diamonds'),
+      createCard(8, 'spades'), // Tứ quý 8
+      createCard(10, 'hearts'),
+      createCard(12, 'spades'),
+    ];
+
+    const partition = partitionHand(hand);
+    expect(partition.quads.length).toBe(1);
+    expect(partition.quads[0].length).toBe(4);
+    expect(partition.quads[0][0].rank).toBe(8);
+  });
+
+  it('đánh giá đúng khi nào nên và không nên Báo Sâm', () => {
+    // Sảnh 10 lá từ 3 đến Q
+    const straight10Hand: Card[] = [
+      createCard(3), createCard(4), createCard(5), createCard(6), createCard(7),
+      createCard(8), createCard(9), createCard(10), createCard(11), createCard(12),
+    ];
+    expect(evaluateSamPossibility(straight10Hand)).toBe(true);
+
+    // Bài lộn xộn, nhiều rác nhỏ -> Không nên báo Sâm
+    const badHand: Card[] = [
+      createCard(3), createCard(5), createCard(7), createCard(9),
+      createCard(11), createCard(12), createCard(13), createCard(14),
+      createCard(4), createCard(6),
+    ];
+    expect(evaluateSamPossibility(badHand)).toBe(false);
+  });
+});
+
+describe('Loc Bot AI - Card Tracker', () => {
+  let tracker: CardTracker;
+
+  beforeEach(() => {
+    tracker = new CardTracker();
+  });
+
+  it('theo dõi chính xác số lượng Heo (2) còn lại ngoài tay bot', () => {
+    const botHand: Card[] = [createCard(15, 'hearts')]; // Bot cầm 1 con 2
+
+    // Bàn đã ra 2 con 2
+    tracker.recordPlay([createCard(15, 'spades'), createCard(15, 'clubs')]);
+
+    // Còn lại: 4 - 2 (đã ra) - 1 (trên tay bot) = 1 con 2
+    expect(tracker.getRemainingTwosCount(botHand)).toBe(1);
+  });
+
+  it('phát hiện chuẩn xác người chơi kế tiếp có báo 1 lá hay không', () => {
+    const players = [
+      { id: 'bot_1', name: 'Bot', isHost: false, isSpectator: false, cardsRemaining: 5, hasPassed: false },
+      { id: 'player_next', name: 'Bob', isHost: false, isSpectator: false, cardsRemaining: 1, hasPassed: false },
+      { id: 'player_prev', name: 'Alice', isHost: true, isSpectator: false, cardsRemaining: 4, hasPassed: false },
+    ];
+
+    expect(tracker.isNextPlayerSingle('bot_1', players)).toBe(true);
+    expect(tracker.isNextPlayerSingle('player_next', players)).toBe(false);
+  });
+});
+
+describe('Loc Bot AI - Bot Brain Decisions', () => {
+  let brain: BotBrain;
+  let mockTableState: TableState;
+
+  beforeEach(() => {
+    brain = new BotBrain();
+    mockTableState = {
+      roomId: 'room_1',
+      roomName: 'Test Room',
+      hostId: 'host_1',
+      status: 'playing',
+      players: [
+        { id: 'bot_1', name: 'Bot', isHost: false, isSpectator: false, cardsRemaining: 6, hasPassed: false },
+        { id: 'human_1', name: 'Human', isHost: true, isSpectator: false, cardsRemaining: 5, hasPassed: false },
+      ],
+      spectators: [],
+      currentTurnPlayerId: 'bot_1',
+      roundLeaderPlayerId: 'bot_1',
+      turnDeadline: Date.now() + 30000,
+      lastPlay: null,
+      samState: null,
+      playHistory: [],
+      roundResult: null,
+    };
+  });
+
+  it('khi đi đầu: ưu tiên xả sảnh dài nhất trước', () => {
+    const botHand: Card[] = [
+      createCard(3), createCard(4), createCard(5), createCard(6), // Sảnh 3-4-5-6
+      createCard(8), createCard(8), // Đôi 8
+      createCard(11), // Rác J
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    expect(decision.cards.length).toBe(4);
+    expect(decision.cards.map((c) => c.rank)).toEqual([3, 4, 5, 6]);
+  });
+
+  it('khi đi đầu và người kế tiếp còn 1 lá: ưu tiên đánh sảnh/bộ để đối thủ không đỡ được', () => {
+    mockTableState.players[1].cardsRemaining = 1; // Human sau lưng còn 1 lá
+    brain.getTracker().recordPlay([]); // Sync
+
+    const botHand: Card[] = [
+      createCard(4), createCard(4), // Đôi 4
+      createCard(7), // Rác 7
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    // Đánh đôi 4 thay vì đánh rác 7 (vì đánh rác 7 có thể bị người 1 lá đè về luôn)
+    expect(decision.cards.length).toBe(2);
+    expect(decision.cards[0].rank).toBe(4);
+  });
+
+  it('khi đi đầu và người kế tiếp còn 1 lá, nếu chỉ còn rác: bắt buộc đánh lá to nhất để chặn đầu', () => {
+    mockTableState.players[1].cardsRemaining = 1; // Human còn 1 lá
+
+    const botHand: Card[] = [
+      createCard(5),
+      createCard(9),
+      createCard(14), // Lá A (rank 14)
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    // Phải đánh A (14), không được đánh 5 hay 9 tránh bị đền bài
+    expect(decision.cards[0].rank).toBe(14);
+  });
+
+  it('không xé sảnh đẹp chỉ để đỡ một lá rác lẻ', () => {
+    // Bàn đang đánh con 6
+    mockTableState.lastPlay = {
+      playerId: 'human_1',
+      playerName: 'Human',
+      combo: analyzeCombo([createCard(6)]),
+    };
+
+    // Bot chỉ có sảnh 7-8-9-10-J và không có rác lẻ nào đỡ được 6
+    const botHand: Card[] = [
+      createCard(7), createCard(8), createCard(9), createCard(10), createCard(11),
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    // Bot khôn sẽ PASS để giữ nguyên vẹn sảnh 5 cây, không xé con 7 hay con 8 ra đỡ
+    expect(decision.action).toBe('PASS');
+  });
+
+  it('dùng Tứ Quý chặt 2 khi đối thủ quẳng 2', () => {
+    // Bàn đang đánh con 2 (rank 15)
+    mockTableState.lastPlay = {
+      playerId: 'human_1',
+      playerName: 'Human',
+      combo: analyzeCombo([createCard(15)]),
+    };
+
+    // Bot có Tứ quý 9
+    const botHand: Card[] = [
+      createCard(9, 'spades'), createCard(9, 'clubs'),
+      createCard(9, 'diamonds'), createCard(9, 'hearts'),
+      createCard(4),
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    expect(decision.cards.length).toBe(4);
+    expect(decision.cards[0].rank).toBe(9);
+  });
+
+  it('khi còn 2 lá [1 lá thường, 1 con 2]: ưu tiên đánh con 2 trước để tránh thối 2 khi về ván', () => {
+    const botHand: Card[] = [
+      createCard(4, 'hearts'),
+      createCard(15, 'spades'), // Heo 2
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    // Phải đánh con 2 trước cướp cái để con cuối về bằng lá 4, không được để con 2 về cuối
+    expect(decision.cards[0].rank).toBe(15);
+  });
+
+  it('khi đối thủ sắp về (còn 2 lá) và bot còn nguyên 10 lá: bot phải xé bài đè để thoát Cóng', () => {
+    mockTableState.players[1].cardsRemaining = 2; // Human sắp về
+
+    mockTableState.lastPlay = {
+      playerId: 'human_1',
+      playerName: 'Human',
+      combo: analyzeCombo([createCard(5)]),
+    };
+
+    // Bot còn nguyên 10 lá, ghép thành 5 đôi (đôi 6, 7, 8, 9, 10), không có rác lẻ
+    const botHand: Card[] = [
+      createCard(6, 'spades'), createCard(6, 'clubs'),
+      createCard(7, 'spades'), createCard(7, 'clubs'),
+      createCard(8, 'spades'), createCard(8, 'clubs'),
+      createCard(9, 'spades'), createCard(9, 'clubs'),
+      createCard(10, 'spades'), createCard(10, 'clubs'),
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    // Thay vì PASS như bình thường, bot rơi vào trạng thái cấp cứu thoát cóng và đánh 1 lá đè con 5
+    expect(decision.action).toBe('PLAY');
+    expect(decision.cards.length).toBe(1);
+    expect(decision.cards[0].rank).toBeGreaterThan(5);
+  });
+
+  it('xả Heo (2) khẩn cấp khi đối thủ còn ít bài (<= 4 lá) để tránh thối 2 ôm Heo', () => {
+    mockTableState.players[1].cardsRemaining = 4; // Đối thủ còn 4 lá (nguy cơ về sảnh)
+
+    // Bàn đang đánh con 10
+    mockTableState.lastPlay = {
+      playerId: 'human_1',
+      playerName: 'Human',
+      combo: analyzeCombo([createCard(10)]),
+    };
+
+    // Bot chỉ có rác 6 và Heo 2 (không có rác thường nào > 10)
+    const botHand: Card[] = [
+      createCard(6),
+      createCard(15, 'diamonds'), // Heo 2
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    // Bot khôn sẽ quẳng con 2 ra đè ngay, tránh ôm con 2 chờ chết
+    expect(decision.action).toBe('PLAY');
+    expect(decision.cards[0].rank).toBe(15);
+    expect(decision.reason).toContain('Xả Heo khẩn cấp');
+  });
+
+  it('cầm >= 2 con Heo và đối thủ còn <= 6 lá: chủ động xả bớt 1 Heo tránh thối chùm', () => {
+    mockTableState.players[1].cardsRemaining = 5;
+
+    // Bàn đang đánh con J (11)
+    mockTableState.lastPlay = {
+      playerId: 'human_1',
+      playerName: 'Human',
+      combo: analyzeCombo([createCard(11)]),
+    };
+
+    // Bot cầm 2 con 2 và rác 7 (không có rác thường > 11)
+    const botHand: Card[] = [
+      createCard(7),
+      createCard(15, 'spades'),
+      createCard(15, 'hearts'),
+    ];
+
+    const decision = brain.decideMove('bot_1', botHand, mockTableState);
+    expect(decision.action).toBe('PLAY');
+    expect(decision.cards[0].rank).toBe(15);
+    expect(decision.reason).toContain('Cầm nhiều Heo');
+  });
+});

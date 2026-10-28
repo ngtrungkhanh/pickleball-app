@@ -1,6 +1,6 @@
 # Kiến trúc và dữ liệu
 
-Đọc file này khi thay đổi database, server action, cache, localStorage,
+Chỉ đọc mục liên quan khi thay đổi database, server action, cache, localStorage,
 revalidation, backup/restore hoặc Vercel.
 
 ## Thành phần
@@ -184,9 +184,28 @@ trong page render thông thường.
 
 ## Build local
 
+Mức kiểm tra theo loại tác vụ nằm trong `AGENTS.md`. Tác vụ chỉ đọc/tài liệu
+không cần build hoặc deploy. Với UI nhỏ không đổi logic, có thể dùng build
+Vercel Preview thành công thay build local. Thay đổi logic hoặc rủi ro cao
+phải build local theo bảng kiểm tra và xác nhận Preview trước nghiệm thu.
+
 Dashboard và Analysis không cần query Postgres trong prerender vì là static
 shell. Route động/Admin/API vẫn cần env hợp lệ khi được chạy.
 
 Nếu build lỗi kết nối Postgres trong prerender hoặc tool vận hành, kiểm tra
 `.env.local` đang dùng pooled URL thay vì direct URL. Không sửa hoặc commit secret
 chỉ để làm build qua.
+
+## Bảo vệ tài nguyên kiểm tra
+
+`npm run test` và `npm run build` đi qua `scripts/run-resource-guard.mjs`, dùng
+chung khóa tài nguyên. Wrapper chuyển tiếp tham số: `npm run test -- <test-file>`
+chạy test liên quan; `npm run test` chạy toàn bộ suite. Không gọi trực tiếp Vitest
+hoặc Next build, không chạy test đồng thời build.
+
+Giữ build Webpack, `webpackMemoryOptimizations`, `cpus: 1` và timeout 2 phút.
+Turbopack từng kẹt compile và làm cạn pagefile local. Wrapper kiểm tra RAM/commit
+headroom trước khi chạy; watchdog Windows dừng sớm khi host tiến gần vùng paging
+nặng, giới hạn cây Node của test ở 640 MB và build ở 1,8 GB private memory.
+Test dùng một worker-thread. Lỗi thiếu tài nguyên phải được xử lý theo nguyên
+nhân; không bỏ guard hoặc lặp build trên cùng điều kiện lỗi.

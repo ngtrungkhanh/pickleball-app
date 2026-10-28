@@ -4,19 +4,35 @@
 
 - Luôn giao tiếp và lập kế hoạch bằng tiếng Việt.
 - Trình bày ngắn, trực tiếp, nêu rõ file đã đổi và cách đã kiểm tra.
-- **Người dùng không tự chạy lệnh hay thao tác code trên máy cá nhân.** Agent phải tự thao tác Git, tự chạy test và deploy. Người dùng chỉ nghiệm thu UI/UX trên web preview (Vercel) hoặc production.
+- **Người dùng không tự chạy lệnh hay thao tác code.** Agent tự thao tác Git,
+  kiểm tra và đưa thay đổi ứng dụng lên Vercel Preview khi cần nghiệm thu.
+  Tác vụ chỉ đọc hoặc chỉ sửa tài liệu không cần deploy. Production cần xác nhận release.
 - Không dùng tài liệu Markdown như nhật ký chat hoặc nơi lưu prompt bàn giao.
 
 ## Đọc trước khi làm
 
-1. Đọc `README.md`.
-2. Đọc file chuyên sâu đúng với phạm vi công việc:
+1. Đọc `README.md` một lần trong chat; đọc lại phần liên quan khi file thay đổi.
+2. Dùng `rg` định vị code và chỉ đọc mục tài liệu liên quan:
    - `docs/PRODUCT.md` khi đổi hành vi, luồng người dùng hoặc giao diện.
    - `docs/ARCHITECTURE.md` khi đổi database, server action, cache hoặc deploy.
-   - Khi đổi ELO, radar, Network hoặc Hub insights, đọc trực tiếp
-     `src/lib/analysis-core.ts`, `src/lib/insights.ts` và audit script liên quan.
+   - Khi đổi ELO, radar, Network hoặc Hub insights, đọc hàm liên quan trong
+     `src/lib/analysis-core.ts`, `src/lib/insights.ts` và audit script cần dùng.
 3. Chỉ đọc `CHANGELOG.md` khi cần lịch sử thay đổi.
-4. Dùng `rg` và đọc code liên quan trước khi tin vào mô tả trong tài liệu.
+4. Không đọc toàn bộ repo, backup hay log dài khi đã đủ thông tin. Mở rộng phạm
+   vi khi có dependency, lỗi kiểm tra hoặc bằng chứng cụ thể.
+
+## Phạm vi và điều kiện hoàn thành
+
+- Phân loại: chỉ đọc, tài liệu, UI nhỏ, logic hoặc thay đổi rủi ro cao.
+- Tác vụ nhẹ chỉ cần một câu nêu cách làm; tác vụ nhiều bước dùng kế hoạch ngắn trong chat.
+- Hoàn thành yêu cầu đã giao; không tự thêm refactor, audit toàn repo hoặc backlog.
+- Chỉ dùng sub-agent khi người dùng yêu cầu; không tự tạo chat/automation mới.
+- Tận dụng kết quả đã đọc/kiểm tra. Không chạy lại trên cùng trạng thái đã đạt,
+  trừ khi có thay đổi mới hoặc nghi ngờ kết quả không còn hợp lệ.
+- Khi đủ yêu cầu và kiểm tra phù hợp đã đạt, báo kết quả rồi kết thúc. Nếu bị
+  chặn, nêu nguyên nhân và phần còn thiếu; không lặp một thao tác lỗi vô hạn.
+- README hướng dẫn người dùng ở `docs/agent-workflow/README.md` không phải tài
+  liệu bắt buộc đọc mỗi task. Không tự đổi model/cấu hình tài khoản.
 
 Thứ tự nguồn sự thật:
 
@@ -49,7 +65,8 @@ cùng thay đổi.
 
 ## Bất biến sản phẩm
 
-- Ứng dụng mobile-first. Thứ tự review UI: mobile, Full HD, 2K, 4K.
+- Ứng dụng mobile-first. Sửa UI nhỏ: mobile và desktop liên quan. Đổi layout
+  chung/responsive: review mobile, Full HD, 2K, 4K theo thứ tự này.
 - Postgres là nguồn dữ liệu chuẩn; IndexedDB chỉ là cache có thể thay thế.
 - Dashboard là điểm đồng bộ manifest chính; Analysis ưu tiên cache local.
 - Không thêm polling nền nếu chưa có lý do rõ ràng.
@@ -62,10 +79,24 @@ cùng thay đổi.
 
 ## Kiểm tra
 
-Chọn mức kiểm tra theo phạm vi thay đổi:
+Chọn kiểm tra theo ảnh hưởng thực tế; ít file đổi không đồng nghĩa ít rủi ro:
+
+| Phạm vi | Kiểm tra cần chạy |
+| --- | --- |
+| Chỉ đọc, rà soát, đề xuất | Kiểm chứng nguồn liên quan; không test/build/deploy |
+| Chỉ Markdown | Diff, liên kết nội bộ, UTF-8 không BOM; không test/build/deploy ứng dụng |
+| Text/CSS/UI nhỏ, không đổi logic | ESLint file source đổi; TypeScript nếu đổi TS/TSX; review UI liên quan; xác nhận build Vercel Preview thành công |
+| Logic ứng dụng | Test liên quan, ESLint file đổi, TypeScript, build local |
+| ELO/ranking, write/cache, schema, dependency/config build | Test hồi quy trong phạm vi ảnh hưởng (toàn suite nếu ảnh hưởng chung), ESLint, TypeScript, build local; audit chuyên biệt khi liên quan |
+
+Nếu đổi ứng dụng, agent tự đưa lên Preview và kiểm tra trạng thái deployment.
+UI nhỏ có thể dùng build Preview thay build local; nếu không xem được kết quả
+Preview thì chạy build local và báo giới hạn nghiệm thu. Production vẫn cần xác nhận.
+
+Các lệnh dưới đây là lựa chọn theo bảng, không phải checklist cho mọi task:
 
 ```bash
-npm run test
+npm run test -- <test-file>
 npx eslint <changed-files>
 npx tsc --noEmit
 npm run build
@@ -74,13 +105,8 @@ npm run build
 - `npm run test` và `npm run build` đã có khóa tài nguyên dùng chung, giới hạn
   heap và số worker. Không gọi trực tiếp `vitest`, `next build` hoặc bỏ qua
   wrapper trong `scripts/run-resource-guard.mjs`.
-- Build được cố định ở Webpack vì Turbopack từng kẹt tại bước compile và làm cạn
-  pagefile trên máy local. Giữ `webpackMemoryOptimizations`, `cpus: 1` và timeout
-  2 phút. Wrapper phải kiểm tra RAM/commit headroom trước khi chạy; watchdog
-  Windows dừng sớm khi host tiến gần vùng paging nặng, đồng thời giới hạn cây
-  Node của test ở 640 MB và build ở 1,8 GB private memory. Test phải dùng một
-  worker-thread để tránh nhân đôi heap.
-- Luôn chạy test, ESLint, TypeScript và build **tuần tự**. Không chạy song song
+- Giữ cấu hình bảo vệ tài nguyên hiện có; chi tiết ở `docs/ARCHITECTURE.md`.
+- Những lệnh kiểm tra được chọn phải chạy **tuần tự**. Không chạy song song
   các lệnh kiểm tra nặng; đặc biệt không chạy test đồng thời với build.
 - Test logic mặc định dùng môi trường Node. Chỉ file test component thật sự cần
   DOM mới được khai báo `// @vitest-environment jsdom` tại chính file đó.
@@ -88,7 +114,7 @@ npm run build
 - Hệ thống dùng Vitest để tự động hóa test. Khi sửa đổi logic cốt lõi (ELO, Ranking) hoặc thêm tính năng xử lý dữ liệu phức tạp (như xử lý text nhận diện giọng nói), BẮT BUỘC phải viết test vào thư mục `src/lib/__tests__/`.
 - Repo có thể còn lint debt cũ; ưu tiên ESLint đúng các file đã sửa.
 - Với lịch sử trận đấu, có thể dùng `npm run visual:test:history`.
-- Với Hub insights, dùng
+- Khi đổi logic chọn/nội dung Hub insights, dùng
   `npm run audit:insights -- <backup.json> --seeds 1000`.
 - Build local cần pooled Postgres URL nếu route được kiểm tra phải truy cập DB.
 
@@ -98,6 +124,8 @@ npm run build
 - `AGENTS.md`: luật ổn định dành cho coding agent.
 - `docs/PRODUCT.md`: hành vi người dùng và UI hiện hành.
 - `docs/ARCHITECTURE.md`: kiến trúc, dữ liệu, cache và write flow.
+- `docs/agent-workflow/README.md`: hướng dẫn người dùng giao việc và chọn model.
+- `docs/ELO_MIGRATION_PLAN.md`: phương án tham khảo; không tự coi là task triển khai.
 - `CHANGELOG.md`: các thay đổi đáng chú ý, không lưu snapshot commit/branch.
 
 Không tạo file `PLAN.md`, `HANDOFF.md`, `CONTEXT.md` hoặc bản audit lâu dài nếu

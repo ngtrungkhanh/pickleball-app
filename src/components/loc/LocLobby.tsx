@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { LocSession, LocPlayer, getShortNameMap } from '@/lib/loc-core';
-import { Plus, Users, Clock, Sparkles, ChevronRight, X, UserPlus, ArrowLeft } from 'lucide-react';
+import { Plus, Users, Clock, Sparkles, ChevronRight, X, UserPlus, ArrowLeft, Gamepad2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface LocLobbyProps {
@@ -84,16 +84,27 @@ export function LocLobby({
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            setIsCreating(true);
-            setTitle(`Buổi chơi ${new Date().toLocaleDateString('vi-VN')}`);
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider transition-all shadow-md shadow-emerald-500/20 active:scale-95"
-        >
-          <Plus className="w-3.5 h-3.5 stroke-[3]" />
-          <span>Tạo mới</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/danhloc"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95"
+            title="Đánh bài Sâm Lốc Online thời gian thực"
+          >
+            <Gamepad2 className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Chơi Online</span>
+            <span className="sm:hidden">Online</span>
+          </Link>
+          <button
+            onClick={() => {
+              setIsCreating(true);
+              setTitle(`Buổi chơi ${new Date().toLocaleDateString('vi-VN')}`);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider transition-all shadow-md shadow-emerald-500/20 active:scale-95"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[3]" />
+            <span>Tạo mới</span>
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 max-w-lg w-full mx-auto p-4 space-y-4">

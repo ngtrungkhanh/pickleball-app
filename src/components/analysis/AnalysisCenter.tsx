@@ -5,7 +5,7 @@ import { filterSeasonMatches, selectAnalysisPlayers, selectLeaderboardPlayers } 
 import { useEffect, useMemo, useRef, useState, Fragment, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
-  ArrowLeft, RefreshCw, Database,
+  ArrowLeft, RefreshCw, Database, Gamepad2,
   LayoutGrid, User, Swords, History,
   TrendingUp, TrendingDown, Flame, Trophy, Target,
   Star, Zap, Award, Crown, Medal, CalendarDays,
@@ -319,6 +319,14 @@ export function AnalysisCenter({
           
             {/* Header Controls */}
             <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-end lg:shrink-0">
+              <Link
+                href="/danhloc"
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors shadow-sm"
+                title="Đánh Lốc Online trực tiếp"
+              >
+                <Gamepad2 className="w-3.5 h-3.5 text-amber-400" />
+                <span>Đánh Lốc</span>
+              </Link>
               <Link
                 href="/loc"
                 className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-white/[0.08] bg-slate-900 px-2.5 text-xs font-semibold text-white/60 hover:bg-amber-500/10 hover:text-amber-300 hover:border-amber-500/30 transition-colors"

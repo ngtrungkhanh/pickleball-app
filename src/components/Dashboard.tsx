@@ -2,7 +2,7 @@
 import { useState, useEffect, useSyncExternalStore, useMemo, useRef, useCallback, type MouseEvent, type MutableRefObject } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BarChart3, CalendarDays, Crown, RefreshCw, Settings, Sparkles, X } from 'lucide-react';
+import { BarChart3, CalendarDays, Crown, Gamepad2, RefreshCw, Settings, Sparkles, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SummaryGrid } from './dashboard/SummaryGrid';
 import { Leaderboard } from './dashboard/Leaderboard';
@@ -693,6 +693,10 @@ export default function Dashboard({
                   <span className="min-w-0 truncate">{sharedData.syncMessage}</span>
                 </div>
               ) : null}
+              <Link href="/danhloc" className="inline-flex h-9 items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/[0.08] px-3 text-xs font-black text-amber-300 transition-all hover:border-amber-400/50 hover:bg-amber-500/20 hover:text-amber-200 active:scale-95 shadow-sm">
+                <Gamepad2 className="h-4 w-4 text-amber-400" />
+                <span className="hidden xl:inline">Đánh Lốc</span>
+              </Link>
               <Link href="/analysis" onClick={openAnalysis} className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white/70 transition-all hover:border-primary/35 hover:bg-primary/10 hover:text-primary active:scale-95">
                 <BarChart3 className="h-4 w-4" />
                 <span className="hidden xl:inline">Phân tích</span>
@@ -880,6 +884,10 @@ export default function Dashboard({
           </div>
         ) : null}
         <div className="ml-auto flex items-center justify-end gap-2">
+          <Link href="/danhloc" className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-2.5 py-2 text-xs font-black text-amber-300 hover:border-amber-400/50 hover:bg-amber-500/20 transition-colors active:scale-95 shadow-sm">
+            <Gamepad2 className="w-4 h-4 text-amber-400" />
+            <span>Đánh Lốc</span>
+          </Link>
           <Link href="/analysis" onClick={openAnalysis} className="inline-flex items-center gap-2 rounded-xl border border-slate-500/25 bg-[#142034]/90 px-3 py-2 text-xs font-black text-slate-300/85 hover:border-primary/40 hover:text-primary transition-colors active:scale-95">
             <BarChart3 className="w-4 h-4" />
             Trung tâm phân tích
