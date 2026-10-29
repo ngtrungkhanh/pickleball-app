@@ -34,7 +34,7 @@ afterEach(() => { engines.splice(0).forEach(engine => engine.destroy()); vi.rest
 function start(withBot = false) {
   const engine = new HostGameEngine('offline-pause', 'Test', 'me', 'me', () => {});
   engines.push(engine);
-  if (withBot) engine.addBot();
+  if (withBot) engine.addBot('legacy');
   else engine.handleJoin({ id: 'p2', name: 'p2', isSpectator: false });
   engine.handleJoin({ id: 'p3', name: 'p3', isSpectator: false });
   engine.startGame();

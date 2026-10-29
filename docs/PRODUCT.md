@@ -36,6 +36,11 @@ nghìn trận:
 ## Game đánh Lốc
 
 - Bàn chơi hỗ trợ 3–5 người, tối ưu điện thoại ngang và màn dọc tự xoay 90°.
+- Bot thêm mới mặc định dùng Monte Carlo để cân nhắc diễn biến tiếp theo từ bài
+  mình và lịch sử công khai; tính toán chạy trên máy host, hỗ trợ cả luyện tập
+  offline. Bot cũ được giữ riêng dưới tên legacy để đối chiếu.
+- Bot có giới hạn thời gian suy nghĩ và nước dự phòng nếu bộ tính toán không
+  khả dụng; thao tác xem lịch sử vẫn tạm dừng bot như các lượt khác.
 - Bài trên tay được sắp xếp tự động. Nút Xoay nằm ở cạnh dưới bàn; nút Báo Sâm,
   Huỷ Sâm và thao tác đánh/bỏ lượt dùng chung vùng phía trên bộ bài.
 - Khi không có bài chặn, ẩn thao tác đánh/bỏ lượt và tự qua sau 1,5 giây,

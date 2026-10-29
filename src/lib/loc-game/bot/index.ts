@@ -4,4 +4,6 @@ export * from './hand-evaluator';
 export * from './candidate-generator';
 export * from './utility-evaluator';
 export * from './bot-brain';
+export { BotBrain as LegacyBotBrain } from './bot-brain';
+export * from './monte-carlo-brain';
 export * from './selection-hint';

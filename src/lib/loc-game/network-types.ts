@@ -20,6 +20,7 @@ export interface RoomPlayer {
   isHost: boolean;
   isSpectator: boolean;
   isBot?: boolean;
+  botVersion?: 'legacy' | 'monte-carlo';
   botPersonality?: 'aggressive' | 'conservative' | 'balanced';
   cardsRemaining: number;
   hasPassed: boolean;

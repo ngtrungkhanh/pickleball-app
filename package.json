@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "node scripts/run-resource-guard.mjs test",
     "test:watch": "node scripts/run-resource-guard.mjs test:watch",
+    "test:loc-bots": "node scripts/run-loc-bot-arena.mjs",
     "audit:insights": "node scripts/audit-insight-selection.mjs",
     "visual:test:history": "node scripts/visual-test-history.mjs"
   },

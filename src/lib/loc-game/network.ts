@@ -5,6 +5,7 @@ import { analyzeCombo, canBeat, hasHigherSingleCard, checkInstantWin } from './a
 import { calculateRoundScores, ChopEvent } from './scoring';
 import { Card } from './types';
 import { BotBrain } from './bot';
+import { BotWorkerClient } from './bot/worker-client';
 import { RoundDebugLog, CompletedRoundSummary } from './debug-types';
 import { saveRoundDebugLog } from './debug-storage';
 import { createSessionForRoom, syncRoundToLocSession } from './loc-sync';
@@ -163,6 +164,8 @@ export class HostGameEngine {
   private previousWinnerId: string | null = null;
   private bots: Map<string, BotBrain> = new Map();
   private botTimers: Map<string, NodeJS.Timeout> = new Map();
+  private botWorker = new BotWorkerClient();
+  private botTurnRevision = 0;
   private potentialDenLang: { attackerId: string; targetBaoId: string } | null = null;
   private roundIndex = 0;
   private completedRounds: CompletedRoundSummary[] = [];
@@ -234,7 +237,7 @@ export class HostGameEngine {
   /**
    * Thêm người chơi Bot vào phòng (tối đa 5 người)
    */
-  public addBot(): void {
+  public addBot(version: 'legacy' | 'monte-carlo' = 'monte-carlo'): void {
     if (this.state.status !== 'waiting') return;
     if (this.state.players.length >= 5) return;
 
@@ -261,6 +264,7 @@ export class HostGameEngine {
       isHost: false,
       isSpectator: false,
       isBot: true,
+      botVersion: version,
       botPersonality: personality,
       cardsRemaining: 0,
       hasPassed: false,
@@ -287,6 +291,7 @@ export class HostGameEngine {
   }
 
   private clearAllBotTimers(): void {
+    this.botWorker.cancel();
     for (const [, timer] of this.botTimers) {
       clearTimeout(timer);
     }
@@ -713,10 +718,14 @@ export class HostGameEngine {
       if (!brain) continue;
 
       const delay = 1000 + Math.floor(Math.random() * 1500);
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
         if (this.state.status !== 'sam_calling') return;
+        const revision = this.botTurnRevision;
         const hand = this.hands[botId] || [];
-        const callSam = brain.decideSamCall(hand);
+        const callSam = player.botVersion === 'legacy'
+          ? brain.decideSamCall(hand)
+          : await this.botWorker.sam(botId, hand, this.state);
+        if (revision !== this.botTurnRevision || this.state.status !== 'sam_calling' || this.state.samState?.skipPlayerIds.includes(botId)) return;
         if (callSam) {
           this.handleCallSam(botId);
         } else {
@@ -872,10 +881,14 @@ export class HostGameEngine {
       if (brain) {
         const botDelay = remainingBotMs ?? (800 + Math.floor(Math.random() * 800));
         this.botTurnDeadline = Date.now() + botDelay;
-        const timer = setTimeout(() => {
+        const revision = this.botTurnRevision;
+        const timer = setTimeout(async () => {
           if (this.state.status !== 'playing' || this.state.historyPause || this.state.currentTurnPlayerId !== currentId) return;
           const botHand = this.hands[currentId] || [];
-          const decision = brain.decideMove(currentId, botHand, this.state);
+          const decision = currentPlayer.botVersion === 'legacy'
+            ? brain.decideMove(currentId, botHand, this.state)
+            : await this.botWorker.move(currentId, botHand, this.state);
+          if (revision !== this.botTurnRevision || this.state.status !== 'playing' || this.state.historyPause || this.state.currentTurnPlayerId !== currentId) return;
           if (decision.action === 'PLAY' && decision.cards.length > 0) {
             this.handlePlayCards(currentId, decision.cards, decision.reason);
           } else {
@@ -893,6 +906,8 @@ export class HostGameEngine {
   }
 
   private stopTurnTimer() {
+    this.botTurnRevision++;
+    this.botWorker.cancelPending();
     this.botTurnDeadline = null;
     if (this.turnTimer) {
       clearTimeout(this.turnTimer);

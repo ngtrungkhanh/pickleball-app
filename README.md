@@ -23,6 +23,7 @@ Các lệnh thường dùng:
 
 ```bash
 npm run test -- <test-file>
+npm run test:loc-bots
 npx eslint <changed-files>
 npx tsc --noEmit
 npm run build

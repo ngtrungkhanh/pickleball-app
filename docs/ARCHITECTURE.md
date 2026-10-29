@@ -170,6 +170,31 @@ Các key hiện hành:
 
 Không dùng localStorage làm nguồn leaderboard hoặc match history chia sẻ.
 
+## Bot đánh Lốc
+
+Host điều phối bot Monte Carlo bằng một Web Worker dùng lại giữa các lượt.
+Worker chỉ nhận bài của bot và trạng thái công khai, không nhận bài thật của
+đối thủ, debug hay kết quả ván trước. Bài chưa thấy được lấy mẫu vào tay đối thủ
+theo số lá còn lại và phần bài dư chưa chia.
+
+Mô hình tìm kiếm dùng số lượng từng rank vì luật Lốc không so chất. Mỗi nước
+được thử trên cùng các mẫu bài ẩn và chấm bằng `calculateRoundScores`; chỉ các
+vòng so sánh đầy đủ mới được ghi nhận. Rollout của từng người chỉ dùng tay người
+đó và thông tin công khai. Đây là Monte Carlo lấy mẫu, không phải mô hình đã
+huấn luyện hay tìm kiếm ISMCTS.
+
+Ngân sách, giới hạn mẫu và timeout worker nằm trong source bot. Khi worker lỗi,
+không hỗ trợ hoặc quá hạn, host dùng nước dự phòng không chạy mô phỏng. Pause,
+đổi lượt và destroy vô hiệu hóa kết quả cũ; worker đang tính bị hủy. Cache tìm
+kiếm giới hạn theo từng quyết định, không giữ cây tìm kiếm qua nhiều ván.
+
+`BotBrain` cũ giữ nguyên hành vi và có alias `LegacyBotBrain`. `addBot('legacy')`
+cho phép dùng lại; mặc định thêm bot Monte Carlo. `npm run test:loc-bots` chạy
+200 ván trên HostGameEngine thật, 100 bộ bài được đổi loại bot giữa các ghế,
+và xuất báo cáo JSON vào thư mục tạm (hoặc `LOC_BOT_ARENA_REPORT`). Bộ arena
+không gọi database; test thường bỏ qua lần đấu dài này. Các test mô hình đối
+chiếu từng lượt và kết toán với engine thật trên bàn 3–5 người.
+
 ## Deploy và môi trường
 
 - `main` deploy Production với Production database.
