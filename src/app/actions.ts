@@ -580,9 +580,20 @@ export async function addPlayerAction(formData: FormData) {
       if (!seasons.rows.length) throw new Error('Mùa không tồn tại.');
       const id = 'P' + crypto.randomUUID().replaceAll('-', '').slice(0, 9);
       await client.sql`INSERT INTO players (id, name, active) VALUES (${id}, ${name}, true)`;
-      await client.sql`INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden) VALUES (${id}, ${season}, true, true, false)`;
+      await client.sql`
+        INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden)
+        SELECT ${id}, s.name, true, true, false
+        FROM seasons s
+        WHERE s.archived = false
+        ON CONFLICT (player_id, season) DO NOTHING
+      `;
+      await client.sql`
+        INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden)
+        VALUES (${id}, ${season}, true, true, false)
+        ON CONFLICT (player_id, season) DO NOTHING
+      `;
     });
-    await logAudit('ADD_PLAYER', 'Added ' + name + ' to ' + season);
+    await logAudit('ADD_PLAYER', 'Added ' + name + ' to all seasons');
     await bumpDataVersions(['players', 'playerSeasonSettings', 'admin']);
     revalidatePath('/'); revalidatePath('/analysis');
     return { success: true };
@@ -1265,14 +1276,14 @@ export async function getAppDataPartsAction(parts?: string[]) {
                 INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden, deleted_at)
                 SELECT
                   p.id,
-                  c.value,
+                  s.name,
                   CASE WHEN p.id = '__GUEST__' THEN true ELSE COALESCE(p.active, true) END,
                   CASE WHEN p.id = '__GUEST__' THEN false ELSE COALESCE(p.pay_fine, true) END,
                   CASE WHEN p.id = '__GUEST__' THEN true ELSE COALESCE(p.hidden, false) END,
                   NULL
                 FROM players p
-                CROSS JOIN config c
-                WHERE c.key = 'active_season'
+                CROSS JOIN seasons s
+                WHERE s.archived = false
                   AND p.deleted_at IS NULL
                 ON CONFLICT (player_id, season) DO NOTHING
               `;

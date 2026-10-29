@@ -33,9 +33,12 @@ describe('season roster rules', () => {
     expect(snapshot.elo.rating.get('B')).toBe(buildAnalysisSnapshot(players,[match]).elo.rating.get('B'));
     expect(ids(selectAnalysisPlayers(players,[match]))).toContain('A');
   });
-  it('does not enroll a globally active player in an unrelated season', () => {
-    expect(selectScorePlayers(players,'S5',[],[match])).toEqual([]);
+  it('shares all players across all seasons, with per-season overrides', () => {
+    expect(ids(selectScorePlayers(players,'S5',[],[match]))).toEqual(['A','B','C','D']);
     expect(ids(applyPlayerSeasonSettings(players,'S1',[],[match]))).toEqual(['A','B','C','D']);
+    const s5Inactive = [{ player_id: 'A', season: 'S5', active: false }];
+    expect(ids(selectScorePlayers(players,'S5',s5Inactive,[match]))).not.toContain('A');
+    expect(ids(selectScorePlayers(players,'S1',s5Inactive,[match]))).toContain('A');
   });
   it('aggregate unions visibility instead of borrowing current season flags', () => {
     const s = changed('A','S2',{ active:false, hidden:true, deleted_at:'2026-01-02' });

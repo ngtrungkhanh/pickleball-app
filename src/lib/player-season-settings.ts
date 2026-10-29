@@ -15,19 +15,18 @@ export function matchPlayerIds(match: SeasonMatch) {
 }
 
 // Legacy backups infer membership only from actual participation, never global flags.
-export function applyPlayerSeasonSettings<T extends SeasonAwarePlayer>(
-  players: readonly T[], season: string, settings: readonly SeasonSetting[], matches: readonly SeasonMatch[] = [],
-) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function applyPlayerSeasonSettings<T extends SeasonAwarePlayer>(players: readonly T[], season: string, settings: readonly SeasonSetting[] = [], _matches: readonly SeasonMatch[] = []) {
   const byPlayer = new Map(settings.filter(s => s.season === season).map(s => [s.player_id, s]));
-  const participants = new Set(matches.filter(m => (m.season || 'Season 1') === season).flatMap(matchPlayerIds));
-  return players.filter(p => p.id && (byPlayer.has(p.id) || participants.has(p.id) || isGuestId(p.id))).map(player => {
+  return players.filter(p => p.id && !p.deleted_at).map(player => {
     const setting = byPlayer.get(player.id!);
+    const isGuest = isGuestId(player.id);
     return {
       ...player,
-      active: setting ? setting.active !== false : player.active !== false,
-      pay_fine: setting ? setting.pay_fine !== false : player.pay_fine !== false,
-      hidden: setting ? setting.hidden === true : player.hidden === true,
-      deleted_at: setting?.deleted_at || player.deleted_at || null,
+      active: isGuest ? true : (setting?.active !== undefined ? setting.active !== false : player.active !== false),
+      pay_fine: isGuest ? false : (setting?.pay_fine !== undefined ? setting.pay_fine !== false : player.pay_fine !== false),
+      hidden: isGuest ? true : (setting?.hidden !== undefined ? setting.hidden === true : player.hidden === true),
+      deleted_at: isGuest ? null : (setting?.deleted_at || null),
     };
   });
 }
