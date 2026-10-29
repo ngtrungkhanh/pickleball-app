@@ -760,13 +760,41 @@ export async function createSeasonAction(formData: FormData) {
       await client.sql`SELECT pg_advisory_xact_lock(720242)`;
       const existing = await client.sql`SELECT id FROM seasons WHERE name = ${name} OR id = ${name}`;
       if (existing.rows.length) throw new Error('Tên mùa đã tồn tại.');
-      const previous = await client.sql`SELECT name FROM seasons WHERE archived = false ORDER BY start_date DESC, created_at DESC, id DESC LIMIT 1`;
+
+      const activeSeasonRow = await client.sql`SELECT name FROM seasons WHERE active = true AND archived = false LIMIT 1`;
+      let previousSeasonName = activeSeasonRow.rows[0]?.name;
+      if (!previousSeasonName) {
+        const configRow = await client.sql`SELECT value FROM config WHERE key = 'active_season' LIMIT 1`;
+        previousSeasonName = configRow.rows[0]?.value;
+      }
+      if (!previousSeasonName) {
+        const latestRow = await client.sql`SELECT name FROM seasons WHERE archived = false ORDER BY start_date DESC NULLS LAST, created_at DESC NULLS LAST, id DESC LIMIT 1`;
+        previousSeasonName = latestRow.rows[0]?.name;
+      }
+
       await client.sql`UPDATE seasons SET active = false, end_date = NOW() WHERE active = true`;
       await client.sql`INSERT INTO seasons (id, name, start_date, active) VALUES (${name}, ${name}, NOW(), true)`;
-      if (previous.rows[0]) {
-        await client.sql`INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden, deleted_at)
-          SELECT player_id, ${name}, active, pay_fine, hidden, deleted_at FROM player_season_settings WHERE season = ${previous.rows[0].name}`;
-      }
+
+      await client.sql`
+        INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden, deleted_at)
+        SELECT
+          p.id,
+          ${name},
+          CASE WHEN p.id = '__GUEST__' THEN true ELSE COALESCE(prev.active, p.active, true) END,
+          CASE WHEN p.id = '__GUEST__' THEN false ELSE COALESCE(prev.pay_fine, p.pay_fine, true) END,
+          CASE WHEN p.id = '__GUEST__' THEN true ELSE COALESCE(prev.hidden, p.hidden, false) END,
+          CASE WHEN p.id = '__GUEST__' THEN NULL ELSE prev.deleted_at END
+        FROM players p
+        LEFT JOIN player_season_settings prev
+          ON prev.player_id = p.id AND prev.season = ${previousSeasonName || ''}
+        WHERE p.deleted_at IS NULL
+        ON CONFLICT (player_id, season) DO UPDATE SET
+          active = EXCLUDED.active,
+          pay_fine = EXCLUDED.pay_fine,
+          hidden = EXCLUDED.hidden,
+          deleted_at = EXCLUDED.deleted_at
+      `;
+
       await client.sql`INSERT INTO config (key, value) VALUES ('active_season', ${name}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`;
     });
     await bumpDataVersions(['seasons', 'config', 'playerSeasonSettings', 'admin']);
@@ -783,15 +811,31 @@ export async function setActiveSeasonAction(formData: FormData) {
     const name = String(formData.get('name') || '').trim();
     if (!name) return { error: 'Season không hợp lệ' };
 
-    await sql`UPDATE seasons SET active = false, end_date = NOW() WHERE active = true`;
-    await sql`UPDATE seasons SET active = false`;
-    await sql`
-      INSERT INTO seasons (id, name, active)
-      VALUES (${name}, ${name}, true)
-      ON CONFLICT (id) DO UPDATE SET active = true, archived = false, end_date = NULL
-    `;
-    await setConfigValue('active_season', name);
-    await bumpDataVersions(['seasons', 'config', 'admin']);
+    await withTransaction(async client => {
+      await client.sql`SELECT pg_advisory_xact_lock(720242)`;
+      await client.sql`UPDATE seasons SET active = false, end_date = NOW() WHERE active = true`;
+      await client.sql`UPDATE seasons SET active = false`;
+      await client.sql`
+        INSERT INTO seasons (id, name, active)
+        VALUES (${name}, ${name}, true)
+        ON CONFLICT (id) DO UPDATE SET active = true, archived = false, end_date = NULL
+      `;
+      await client.sql`
+        INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden, deleted_at)
+        SELECT
+          p.id,
+          ${name},
+          CASE WHEN p.id = '__GUEST__' THEN true ELSE COALESCE(p.active, true) END,
+          CASE WHEN p.id = '__GUEST__' THEN false ELSE COALESCE(p.pay_fine, true) END,
+          CASE WHEN p.id = '__GUEST__' THEN true ELSE COALESCE(p.hidden, false) END,
+          NULL
+        FROM players p
+        WHERE p.deleted_at IS NULL
+        ON CONFLICT (player_id, season) DO NOTHING
+      `;
+      await client.sql`INSERT INTO config (key, value) VALUES ('active_season', ${name}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`;
+    });
+    await bumpDataVersions(['seasons', 'config', 'playerSeasonSettings', 'admin']);
     revalidatePath('/');
     revalidatePath('/analysis');
     return { success: true };
@@ -1214,11 +1258,33 @@ export async function getAppDataPartsAction(parts?: string[]) {
     }
     if (requestedParts.includes('playerSeasonSettings')) {
       queries.push(
-        sql`SELECT * FROM player_season_settings`
-          .then((result) => { response.playerSeasonSettings = normalizePlayerSeasonSettingRows(result.rows); })
-          .catch((error) => {
-            console.error('Fetch player season settings part failed:', error);
-          })
+        (async () => {
+          if (!shouldBlockPreviewWrites()) {
+            try {
+              await sql`
+                INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden, deleted_at)
+                SELECT
+                  p.id,
+                  c.value,
+                  CASE WHEN p.id = '__GUEST__' THEN true ELSE COALESCE(p.active, true) END,
+                  CASE WHEN p.id = '__GUEST__' THEN false ELSE COALESCE(p.pay_fine, true) END,
+                  CASE WHEN p.id = '__GUEST__' THEN true ELSE COALESCE(p.hidden, false) END,
+                  NULL
+                FROM players p
+                CROSS JOIN config c
+                WHERE c.key = 'active_season'
+                  AND p.deleted_at IS NULL
+                ON CONFLICT (player_id, season) DO NOTHING
+              `;
+            } catch (err) {
+              console.error('Failed to ensure active season roster in getAppDataPartsAction:', err);
+            }
+          }
+          const result = await sql`SELECT * FROM player_season_settings`;
+          response.playerSeasonSettings = normalizePlayerSeasonSettingRows(result.rows);
+        })().catch((error) => {
+          console.error('Fetch player season settings part failed:', error);
+        })
       );
     }
 

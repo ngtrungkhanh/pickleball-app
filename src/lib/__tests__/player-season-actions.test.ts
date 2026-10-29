@@ -17,7 +17,7 @@ vi.mock('@vercel/blob',()=>({del:vi.fn(),put:vi.fn()}));
 vi.mock('../environment',()=>({shouldBlockPreviewWrites:()=>mocks.blocked,previewWriteBlockedResult:()=>({error:'blocked'})}));
 vi.mock('../data-version',()=>({APP_DATA_PARTS:[],bumpDataVersions:vi.fn(),ensureConfigTable:vi.fn(),getAppManifest:vi.fn(),nextDataVersion:vi.fn()}));
 vi.mock('../data-delta',()=>({ensureDeltaLogAfterFallback:vi.fn(),readAppDataChanges:vi.fn(),recordAppDataReset:vi.fn()}));
-import { addPlayerAction, createSeasonAction, setPlayerSeasonDeletedAction, updatePlayerAction, updatePlayerSeasonSettingsAction } from '../../app/actions';
+import { addPlayerAction, createSeasonAction, setActiveSeasonAction, setPlayerSeasonDeletedAction, updatePlayerAction, updatePlayerSeasonSettingsAction } from '../../app/actions';
 const form = (values:Record<string,string>) => {const fd=new FormData();Object.entries(values).forEach(([k,v])=>fd.set(k,v));return fd;};
 beforeEach(()=>{mocks.queries=[];mocks.values=[];mocks.rows=[];mocks.blocked=false;mocks.count=1;});
 
@@ -53,10 +53,18 @@ describe('player season writes',()=>{
     expect(await createSeasonAction(form({name:'S2'}))).toEqual({success:true});
     expect(mocks.queries).toContain('BEGIN');
     expect(mocks.queries).toContain('COMMIT');
-    const index=mocks.queries.findIndex(q=>q.includes('SELECT player_id,'));
-    expect(mocks.queries[index]).toContain('active, pay_fine, hidden, deleted_at FROM player_season_settings');
+    const index=mocks.queries.findIndex(q=>q.includes('FROM players p'));
+    expect(mocks.queries[index]).toContain('LEFT JOIN player_season_settings prev');
+    expect(mocks.queries[index]).toContain('prev.deleted_at');
     expect(mocks.values[index]).toEqual(['S2','S1']);
-    expect(mocks.queries[index]).not.toContain('deleted_at IS NULL');
+  });
+  it('ensures roster from players table when activating a season',async()=>{
+    expect(await setActiveSeasonAction(form({name:'S7'}))).toEqual({success:true});
+    expect(mocks.queries).toContain('BEGIN');
+    expect(mocks.queries).toContain('COMMIT');
+    const index=mocks.queries.findIndex(q=>q.includes('INSERT INTO player_season_settings') && q.includes('FROM players p'));
+    expect(index).toBeGreaterThanOrEqual(0);
+    expect(mocks.values[index]).toEqual(['S7']);
   });
   it('keeps preview write guard for all player mutations',async()=>{
     mocks.blocked=true;
