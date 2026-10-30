@@ -4,7 +4,7 @@ import { useSwipeable } from 'react-swipeable';
 import { motion } from 'framer-motion';
 
 import { applyPlayerSeasonSettings } from '@/lib/player-season-settings';
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
@@ -13,6 +13,7 @@ import {
   Image as ImageIcon,
   Loader2,
   Lock,
+  Save,
   ShieldCheck,
   Trash2,
   Trophy,
@@ -25,14 +26,13 @@ import {
   addPlayerAction,
   createSeasonAction,
   deleteChampionImageAction,
-  deletePlayerAction,
-  setPlayerSeasonDeletedAction,
   deleteSeasonAction,
   endSeasonAction,
   setActiveSeasonAction,
   updatePlayerAction,
   uploadChampionImageAction,
-  updatePlayerSeasonSettingsAction,
+  savePlayerSeasonSettingsBatchAction,
+  type PlayerSeasonBatchUpdateItem,
   updateSeasonFineAction,
 } from '@/app/actions';
 import { cn } from '@/lib/utils';
@@ -189,6 +189,22 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
   const [isRefreshing, startTransition] = useTransition();
   const isPending = isSaving || isRefreshing;
 
+  type PlayerSeasonDraftItem = {
+    active?: boolean;
+    pay_fine?: boolean;
+    hidden?: boolean;
+    deleted?: boolean;
+  };
+
+  type ExitAction =
+    | { type: 'close' }
+    | { type: 'tab'; tab: (typeof tabs)[number]['id'] }
+    | { type: 'season'; season: string };
+
+  const [draftMap, setDraftMap] = useState<Record<string, PlayerSeasonDraftItem>>({});
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [pendingExit, setPendingExit] = useState<ExitAction | null>(null);
+
   const [selectedConfigSeason, setSelectedConfigSeason] = useState<string>(
     getGlobalSelectedSeason(config.active_season || '') || config.active_season || ''
   );
@@ -226,13 +242,173 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
     const resetId = window.setTimeout(() => {
       setTab(canEdit ? 'players' : 'access');
       setFeedback(null);
+      setDraftMap({});
+      setShowDiscardDialog(false);
+      setPendingExit(null);
     }, 0);
 
     return () => window.clearTimeout(resetId);
   }, [open, canEdit]);
 
+  const baseSeasonPlayers = useMemo(
+    () => applyPlayerSeasonSettings(players, selectedConfigSeason, playerSeasonSettings, matches),
+    [players, selectedConfigSeason, playerSeasonSettings, matches],
+  );
+
+  const dirtyUpdates = useMemo(() => {
+    const updates: PlayerSeasonBatchUpdateItem[] = [];
+    for (const p of baseSeasonPlayers) {
+      if (!p.id || isGuestId(p.id)) continue;
+      const draft = draftMap[p.id];
+      if (!draft) continue;
+
+      const baseActive = p.active !== false;
+      const basePayFine = p.pay_fine !== false;
+      const baseHidden = p.hidden === true;
+      const baseDeleted = !!p.deleted_at;
+
+      const activeChanged = draft.active !== undefined && draft.active !== baseActive;
+      const payFineChanged = draft.pay_fine !== undefined && draft.pay_fine !== basePayFine;
+      const hiddenChanged = draft.hidden !== undefined && draft.hidden !== baseHidden;
+      const deletedChanged = draft.deleted !== undefined && draft.deleted !== baseDeleted;
+
+      if (activeChanged || payFineChanged || hiddenChanged || deletedChanged) {
+        updates.push({
+          playerId: p.id,
+          active: draft.active !== undefined ? draft.active : baseActive,
+          pay_fine: draft.pay_fine !== undefined ? draft.pay_fine : basePayFine,
+          hidden: draft.hidden !== undefined ? draft.hidden : baseHidden,
+          deleted: draft.deleted !== undefined ? draft.deleted : baseDeleted,
+        });
+      }
+    }
+    return updates;
+  }, [baseSeasonPlayers, draftMap]);
+
+  const isDirty = dirtyUpdates.length > 0;
+
+  const handleToggleDraft = (playerId: string, field: 'active' | 'pay_fine' | 'hidden', value: boolean) => {
+    setDraftMap(prev => {
+      const existing = prev[playerId] || {};
+      return {
+        ...prev,
+        [playerId]: {
+          ...existing,
+          [field]: value,
+        },
+      };
+    });
+  };
+
+  const handleToggleDeletedDraft = (playerId: string, deleted: boolean) => {
+    setDraftMap(prev => {
+      const existing = prev[playerId] || {};
+      return {
+        ...prev,
+        [playerId]: {
+          ...existing,
+          deleted,
+        },
+      };
+    });
+  };
+
+  const handleSaveSeasonSettings = async (): Promise<boolean> => {
+    if (!isDirty || isPending) return false;
+    setFeedback({ target: 'save-season-settings', type: 'saving', text: 'Đang lưu...' });
+    setIsSaving(true);
+    try {
+      const res = await savePlayerSeasonSettingsBatchAction(selectedConfigSeason, dirtyUpdates);
+      const error = actionError(res);
+      if (error) {
+        setFeedback({ target: 'save-season-settings', type: 'error', text: error });
+        setIsSaving(false);
+        return false;
+      }
+
+      setFeedback({ target: 'save-season-settings', type: 'success', text: `Đã lưu (${dirtyUpdates.length})` });
+      setDraftMap({});
+      await onDataChanged?.(['playerSeasonSettings']);
+      startTransition(() => {
+        router.refresh();
+        setIsSaving(false);
+      });
+      return true;
+    } catch {
+      setFeedback({ target: 'save-season-settings', type: 'error', text: 'Lỗi khi lưu cài đặt' });
+      setIsSaving(false);
+      return false;
+    }
+  };
+
+  const executeExitAction = useCallback((action: ExitAction) => {
+    if (action.type === 'close') {
+      onClose();
+    } else if (action.type === 'tab') {
+      setTab(action.tab);
+    } else if (action.type === 'season') {
+      handleConfigSeasonChange(action.season);
+    }
+  }, [onClose]);
+
+  const requestExit = useCallback((action: ExitAction) => {
+    if (isDirty) {
+      setPendingExit(action);
+      setShowDiscardDialog(true);
+      return;
+    }
+    executeExitAction(action);
+  }, [isDirty, executeExitAction]);
+
+  const handleConfirmDiscard = () => {
+    setDraftMap({});
+    setShowDiscardDialog(false);
+    if (pendingExit) {
+      const action = pendingExit;
+      setPendingExit(null);
+      executeExitAction(action);
+    }
+  };
+
+  const handleSaveAndExit = async () => {
+    const ok = await handleSaveSeasonSettings();
+    if (ok) {
+      setShowDiscardDialog(false);
+      if (pendingExit) {
+        const action = pendingExit;
+        setPendingExit(null);
+        executeExitAction(action);
+      }
+    }
+  };
+
+  const handleCancelDiscard = () => {
+    setShowDiscardDialog(false);
+    setPendingExit(null);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (deleteTarget) {
+          setDeleteTarget(null);
+        } else if (deleteSeasonTarget) {
+          setDeleteSeasonTarget(null);
+        } else if (showDiscardDialog) {
+          setShowDiscardDialog(false);
+          setPendingExit(null);
+        } else {
+          requestExit({ type: 'close' });
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, deleteTarget, deleteSeasonTarget, showDiscardDialog, requestExit]);
+
   const swipeHandlers = useSwipeable({
-    onSwipedDown: onClose,
+    onSwipedDown: () => requestExit({ type: 'close' }),
     preventScrollOnSwipe: false,
     trackMouse: true
   });
@@ -354,7 +530,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
     <div className="fixed inset-0 z-[500] flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-md animate-in fade-in duration-300"
-        onClick={onClose}
+        onClick={() => requestExit({ type: 'close' })}
       />
       <div 
         {...swipeHandlers}
@@ -367,7 +543,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
               {canEdit ? 'Đang có quyền chỉnh sửa' : 'Nhập mật khẩu để mở khóa'}
             </p>
           </div>
-          <motion.button whileTap={{ scale: 0.9 }} onClick={onClose} className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] flex items-center justify-center text-slate-300/80 transition-all">
+          <motion.button whileTap={{ scale: 0.9 }} onClick={() => requestExit({ type: 'close' })} className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] flex items-center justify-center text-slate-300/80 transition-all">
             <X className="w-5 h-5" />
           </motion.button>
         </div>
@@ -380,7 +556,7 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                 <motion.button
                   whileTap={{ scale: 0.95 }}
                   key={id}
-                  onClick={() => setTab(id)}
+                  onClick={() => requestExit({ type: 'tab', tab: id })}
                   className={cn(
                     'flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-4 rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-black uppercase tracking-[0.15em] sm:tracking-[0.2em] transition-all',
                     activeTab === id 
@@ -417,7 +593,12 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                 <select
                   value={selectedConfigSeason}
                   disabled={isPending}
-                  onChange={(e) => handleConfigSeasonChange(e.target.value)}
+                  onChange={(e) => {
+                  const next = e.target.value;
+                  if (next !== selectedConfigSeason) {
+                    requestExit({ type: 'season', season: next });
+                  }
+                }}
                   className="rounded-xl bg-[#0f1a2c] border border-slate-500/25 px-4 py-2 text-xs font-bold text-white outline-none focus:border-primary/50 transition-all min-w-44"
                 >
                   {seasons.map(s => (
@@ -500,7 +681,16 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
               <div className="space-y-4">
                   <div className="space-y-2">
                     <div className="text-[10px] font-black text-slate-300/65 uppercase tracking-[0.2em] px-1">Thêm thành viên</div>
-                    <form action={(fd) => submit(addPlayerAction, fd, 'add-player', 'Đã thêm', ['players', 'playerSeasonSettings'])} className="flex gap-2">
+                    <form
+                      action={(fd) => {
+                        if (isDirty) {
+                          setFeedback({ target: 'add-player', type: 'error', text: 'Vui lòng lưu cài đặt trước khi thêm' });
+                          return;
+                        }
+                        submit(addPlayerAction, fd, 'add-player', 'Đã thêm', ['players', 'playerSeasonSettings']);
+                      }}
+                      className="flex gap-2"
+                    >
                       <input type="hidden" name="season" value={selectedConfigSeason} />
                       <input name="name" placeholder="Tên thành viên..." className="flex-1 rounded-xl bg-[#0f1a2c] border border-slate-500/25 px-4 py-2.5 text-sm text-white outline-none focus:border-primary/50 transition-all" />
                       <button disabled={isPending} className="rounded-xl bg-primary px-5 py-2.5 text-[10px] font-black text-black uppercase tracking-widest active:scale-95 transition-all">Thêm</button>
@@ -509,110 +699,191 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                   </div>
 
                   <div className="space-y-2">
-                    <div className="text-[10px] font-black text-slate-300/65 uppercase tracking-[0.2em] px-1">Danh sách thành viên</div>
-                    <div className="grid grid-cols-1 gap-1" key={selectedConfigSeason}>
-                      {applyPlayerSeasonSettings(players, selectedConfigSeason, playerSeasonSettings, matches)
-                        .sort((a, b) => Number(!!a.deleted_at) - Number(!!b.deleted_at))
-                        .map(p => (
-                          <div key={p.id} className={cn(
-                            "group flex flex-wrap items-center gap-2 rounded-xl border p-2 transition-all",
-                            !p.deleted_at
-                              ? "bg-white/[0.045] border-slate-500/20 hover:bg-white/[0.07]"
-                              : "bg-black/20 border-slate-500/12 opacity-55"
-                          )}>
-                            <div className="w-full sm:flex-1 flex items-center gap-2 min-w-0">
-                              <input 
-                                defaultValue={isGuestId(p.id) ? GUEST_NAME : p.name}
-                                disabled={isGuestId(p.id) || !!p.deleted_at || isPending}
-                                onBlur={(e) => {
-                                  if (!isGuestId(p.id) && e.target.value.trim() !== p.name) {
-                                    const fd = new FormData();
-                                    fd.append('id', p.id);
-                                    fd.append('name', e.target.value.trim());
-                                    submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu', ['players', 'playerSeasonSettings']);
-                                  }
-                                }}
-                                className="flex-1 bg-transparent px-2 py-0.5 text-sm font-bold text-white outline-none focus:text-primary transition-colors min-w-0 disabled:text-primary disabled:cursor-not-allowed" 
-                              />
-                              {!!p.deleted_at && <span className="text-[10px] text-slate-400">Đã xoá khỏi mùa</span>}
-                               <InlineFeedback feedback={feedback} target={`player-${p.id}`} />
-                            </div>
-                            
-                            <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0">
-                              <input 
-                                type="checkbox" 
-                                checked={p.active !== false}
-                                disabled={!!p.deleted_at || isPending}
-                                onChange={(e) => {
-                                  const isChecked = e.target.checked;
-                                  submitDirect(
-                                    () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, { active: isChecked }),
-                                    `player-${p.id}`,
-                                    'Đã lưu',
-                                    ['playerSeasonSettings']
-                                  );
-                                }}
-                                className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0" 
-                              />
-                              <span className="text-[9px] font-black text-slate-300/65 uppercase tracking-widest">Danh sách chọn</span>
-                            </label>
-
-                            {!isGuestId(p.id) && (
-                              <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0" title="Phạt tiền">
-                                <input 
-                                  type="checkbox" 
-                                  checked={p.pay_fine !== false}
-                                  disabled={!!p.deleted_at || isPending}
-                                  onChange={(e) => {
-                                    const isChecked = e.target.checked;
-                                    submitDirect(
-                                      () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, { pay_fine: isChecked }),
-                                      `player-${p.id}`,
-                                      'Đã lưu',
-                                      ['playerSeasonSettings']
-                                    );
-                                  }}
-                                  className="w-3.5 h-3.5 rounded border-amber-500/20 bg-white/5 text-amber-500 focus:ring-0 focus:ring-offset-0" 
-                                />
-                                <span className="text-[10px]">Phạt tiền</span>
-                              </label>
-                            )}
-
-                            {!isGuestId(p.id) && (
-                              <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0" title="Ẩn khỏi BXH">
-                                <input 
-                                  type="checkbox" 
-                                  checked={p.hidden === true}
-                                  disabled={!!p.deleted_at || isPending}
-                                  onChange={(e) => {
-                                    const isChecked = e.target.checked;
-                                    submitDirect(
-                                      () => updatePlayerSeasonSettingsAction(p.id, selectedConfigSeason, { hidden: isChecked }),
-                                      `player-${p.id}`,
-                                      'Đã lưu',
-                                      ['playerSeasonSettings']
-                                    );
-                                  }}
-                                  className="w-3.5 h-3.5 rounded border-slate-500/20 bg-white/5 text-slate-400 focus:ring-0 focus:ring-offset-0" 
-                                />
-                                <span className="text-[10px]">Ẩn BXH</span>
-                              </label>
-                            )}
-
-                            {!isGuestId(p.id) && (
-                              <button
-                                type="button"
-                                disabled={isPending}
-                                title={p.deleted_at ? 'Khôi phục' : 'Xoá khỏi mùa'}
-                                onClick={() => p.deleted_at ? submitDirect(() => setPlayerSeasonDeletedAction(p.id, selectedConfigSeason, false), `player-${p.id}`, 'Đã khôi phục', ['playerSeasonSettings']) : setDeleteTarget(p)}
-                                className="min-w-7 px-1 h-8 rounded-lg border border-red-500/10 bg-red-500/5 text-red-300 hover:text-red-200 hover:bg-red-500/15 flex items-center justify-center transition-all shrink-0"
-                              >
-                                <span className="text-[10px]">{p.deleted_at ? 'Khôi phục' : <Trash2 className="w-3 h-3" />}</span>
-                              </button>
-                            )}
-                          </div>
-                        ))}
+                    <div className="flex items-center justify-between px-1">
+                      <div className="flex items-center gap-2">
+                        <div className="text-[10px] font-black text-slate-300/65 uppercase tracking-[0.2em]">Danh sách thành viên</div>
+                        {isDirty && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[9px] font-bold">
+                            {dirtyUpdates.length} chưa lưu
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <InlineFeedback feedback={feedback} target="save-season-settings" />
+                        <button
+                          type="button"
+                          disabled={!isDirty || isPending}
+                          onClick={handleSaveSeasonSettings}
+                          className={cn(
+                            "flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
+                            isDirty
+                              ? "bg-primary text-black shadow-lg shadow-primary/25 hover:brightness-110 active:scale-95"
+                              : "bg-white/[0.05] text-slate-400/60 border border-white/5 opacity-50 cursor-not-allowed"
+                          )}
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Lưu cài đặt</span>
+                        </button>
+                      </div>
                     </div>
+
+                    <div className="grid grid-cols-1 gap-1" key={selectedConfigSeason}>
+                      {baseSeasonPlayers
+                        .slice()
+                        .sort((a, b) => {
+                          const aDel = draftMap[a.id]?.deleted !== undefined ? draftMap[a.id].deleted! : !!a.deleted_at;
+                          const bDel = draftMap[b.id]?.deleted !== undefined ? draftMap[b.id].deleted! : !!b.deleted_at;
+                          return Number(aDel) - Number(bDel);
+                        })
+                        .map(p => {
+                          const isGuest = isGuestId(p.id);
+                          const draft = draftMap[p.id];
+                          const isDeleted = draft?.deleted !== undefined ? draft.deleted! : !!p.deleted_at;
+                          const isActive = draft?.active !== undefined ? draft.active! : p.active !== false;
+                          const isPayFine = draft?.pay_fine !== undefined ? draft.pay_fine! : p.pay_fine !== false;
+                          const isHidden = draft?.hidden !== undefined ? draft.hidden! : p.hidden === true;
+
+                          const baseActive = p.active !== false;
+                          const basePayFine = p.pay_fine !== false;
+                          const baseHidden = p.hidden === true;
+                          const baseDeleted = !!p.deleted_at;
+
+                          const isPlayerDirty = !isGuest && (
+                            (draft?.active !== undefined && draft.active !== baseActive) ||
+                            (draft?.pay_fine !== undefined && draft.pay_fine !== basePayFine) ||
+                            (draft?.hidden !== undefined && draft.hidden !== baseHidden) ||
+                            (draft?.deleted !== undefined && draft.deleted !== baseDeleted)
+                          );
+
+                          return (
+                            <div
+                              key={p.id}
+                              className={cn(
+                                "group flex flex-wrap items-center gap-2 rounded-xl border p-2 transition-all",
+                                isPlayerDirty && "ring-1 ring-amber-400/40 border-amber-400/30",
+                                !isDeleted
+                                  ? "bg-white/[0.045] border-slate-500/20 hover:bg-white/[0.07]"
+                                  : "bg-black/20 border-slate-500/12 opacity-55"
+                              )}
+                            >
+                              <div className="w-full sm:flex-1 flex items-center gap-2 min-w-0">
+                                <input 
+                                  defaultValue={isGuest ? GUEST_NAME : p.name}
+                                  disabled={isGuest || isDeleted || isPending}
+                                  onBlur={(e) => {
+                                    if (!isGuest && e.target.value.trim() !== p.name) {
+                                      const fd = new FormData();
+                                      fd.append('id', p.id);
+                                      fd.append('name', e.target.value.trim());
+                                      submit(updatePlayerAction, fd, `player-${p.id}`, 'Đã lưu', ['players', 'playerSeasonSettings']);
+                                    }
+                                  }}
+                                  className="flex-1 bg-transparent px-2 py-0.5 text-sm font-bold text-white outline-none focus:text-primary transition-colors min-w-0 disabled:text-primary disabled:cursor-not-allowed" 
+                                />
+                                {isDeleted && (
+                                  <span className="text-[10px] text-amber-300/80 font-semibold">
+                                    {p.deleted_at ? 'Đã xoá khỏi mùa' : 'Chờ xoá (chưa lưu)'}
+                                  </span>
+                                )}
+                                {isPlayerDirty && !isDeleted && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Có thay đổi chưa lưu" />
+                                )}
+                                <InlineFeedback feedback={feedback} target={`player-${p.id}`} />
+                              </div>
+                              
+                              <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0">
+                                <input 
+                                  type="checkbox" 
+                                  checked={isActive}
+                                  disabled={isDeleted || isPending}
+                                  onChange={(e) => handleToggleDraft(p.id, 'active', e.target.checked)}
+                                  className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0" 
+                                />
+                                <span className="text-[9px] font-black text-slate-300/65 uppercase tracking-widest">Danh sách chọn</span>
+                              </label>
+
+                              {!isGuest && (
+                                <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0" title="Phạt tiền">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={isPayFine}
+                                    disabled={isDeleted || isPending}
+                                    onChange={(e) => handleToggleDraft(p.id, 'pay_fine', e.target.checked)}
+                                    className="w-3.5 h-3.5 rounded border-amber-500/20 bg-white/5 text-amber-500 focus:ring-0 focus:ring-offset-0" 
+                                  />
+                                  <span className="text-[10px]">Phạt tiền</span>
+                                </label>
+                              )}
+
+                              {!isGuest && (
+                                <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-white/[0.08] rounded-lg transition-colors shrink-0" title="Ẩn khỏi BXH">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={isHidden}
+                                    disabled={isDeleted || isPending}
+                                    onChange={(e) => handleToggleDraft(p.id, 'hidden', e.target.checked)}
+                                    className="w-3.5 h-3.5 rounded border-slate-500/20 bg-white/5 text-slate-400 focus:ring-0 focus:ring-offset-0" 
+                                  />
+                                  <span className="text-[10px]">Ẩn BXH</span>
+                                </label>
+                              )}
+
+                              {!isGuest && (
+                                <button
+                                  type="button"
+                                  disabled={isPending}
+                                  title={isDeleted ? 'Khôi phục' : 'Xoá khỏi mùa'}
+                                  onClick={() => {
+                                    if (isDeleted) {
+                                      handleToggleDeletedDraft(p.id, false);
+                                    } else {
+                                      setDeleteTarget(p);
+                                    }
+                                  }}
+                                  className={cn(
+                                    "min-w-7 px-1.5 h-8 rounded-lg border flex items-center justify-center transition-all shrink-0",
+                                    isDeleted
+                                      ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                                      : "border-red-500/10 bg-red-500/5 text-red-300 hover:text-red-200 hover:bg-red-500/15"
+                                  )}
+                                >
+                                  <span className="text-[10px] font-bold">{isDeleted ? 'Khôi phục' : <Trash2 className="w-3 h-3" />}</span>
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+
+                    {isDirty && (
+                      <div className="sticky bottom-0 z-20 flex items-center justify-between gap-3 p-3 rounded-2xl bg-[#0b1320]/95 backdrop-blur-md border border-primary/30 shadow-2xl animate-in slide-in-from-bottom-2 duration-200 mt-4">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping shrink-0" />
+                          <span className="text-xs font-bold text-slate-200 truncate">
+                            Có <span className="text-primary font-black">{dirtyUpdates.length}</span> thay đổi chưa lưu ({selectedConfigSeason})
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => setDraftMap({})}
+                            className="px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider text-slate-400 hover:text-white transition-all"
+                          >
+                            Hủy
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={handleSaveSeasonSettings}
+                            className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-primary text-black text-xs font-black uppercase tracking-wider shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>Lưu ngay</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
             )}
@@ -820,39 +1091,61 @@ export function SettingsModal({ open, onClose, canEdit, onUnlock, onLock, player
                   <button onClick={() => setDeleteTarget(null)} className="flex-1 rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] px-4 py-4 text-xs font-black text-slate-300/75 uppercase tracking-widest transition-all">Hủy</button>
                   <button
                     onClick={() => {
-                      if (isPending) return;
-                      const fd = new FormData();
-                      fd.append('id', deleteTarget.id);
-                      fd.append('season', selectedConfigSeason);
-                      setFeedback({ target: 'delete-player', type: 'saving', text: 'Đang xóa...' });
-                      setIsSaving(true);
-                      (async () => {
-                        try {
-                          const res = await deletePlayerAction(fd);
-                          const error = actionError(res);
-                          if (error) {
-                            setFeedback({ target: 'delete-player', type: 'error', text: error });
-                            setIsSaving(false);
-                            return;
-                          }
-                          setFeedback({ target: 'delete-player', type: 'success', text: 'Đã xóa' });
-                          setDeleteTarget(null);
-                          startTransition(() => {
-                            onDataChanged?.(['players', 'matches', 'playerSeasonSettings']);
-                            router.refresh();
-                            setIsSaving(false);
-                          });
-                        } catch {
-                          setIsSaving(false);
-                        }
-                      })();
+                      handleToggleDeletedDraft(deleteTarget.id, true);
+                      setDeleteTarget(null);
                     }}
                     className="flex-1 rounded-2xl bg-red-500 hover:bg-red-600 px-4 py-4 text-xs font-black text-white uppercase tracking-widest shadow-lg shadow-red-500/20 active:scale-95 transition-all"
                   >
-                    Xoá khỏi mùa
+                    Đánh dấu xoá
                   </button>
                 </div>
                 <InlineFeedback feedback={feedback} target="delete-player" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Unsaved Changes Discard Dialog */}
+        {showDiscardDialog && (
+          <div className="absolute inset-0 z-[650] flex items-center justify-center bg-black/75 backdrop-blur-md p-6">
+            <div className="w-full max-w-sm rounded-[2.5rem] border border-amber-500/25 bg-[#142034] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+              <div className="flex flex-col items-center text-center gap-5">
+                <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400">
+                  <AlertTriangle className="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-white tracking-tight">Cài đặt chưa được lưu</h3>
+                  <p className="mt-2 text-xs font-bold text-slate-300/70 leading-relaxed">
+                    Bạn có <span className="text-amber-400 font-black">{dirtyUpdates.length}</span> thay đổi cài đặt chưa lưu cho mùa <span className="text-white font-black">{selectedConfigSeason}</span>. Bạn có muốn lưu trước khi tiếp tục không?
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2.5 w-full pt-1">
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={handleSaveAndExit}
+                    className="w-full flex items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-xs font-black text-black uppercase tracking-widest shadow-lg shadow-primary/20 active:scale-95 transition-all"
+                  >
+                    <Save className="w-4 h-4" />
+                    Lưu & Tiếp tục
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={handleConfirmDiscard}
+                    className="w-full rounded-2xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 py-3 text-xs font-black text-red-300 uppercase tracking-widest transition-all"
+                  >
+                    Rời khỏi không lưu
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={handleCancelDiscard}
+                    className="w-full rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] py-3 text-xs font-black text-slate-400 uppercase tracking-widest transition-all"
+                  >
+                    Tiếp tục chỉnh sửa
+                  </button>
+                </div>
               </div>
             </div>
           </div>

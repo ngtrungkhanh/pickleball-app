@@ -1467,6 +1467,62 @@ export async function updatePlayerSeasonSettingsAction(
   } catch { return { error: 'Lỗi khi cập nhật tuỳ chọn.' }; }
 }
 
+export type PlayerSeasonBatchUpdateItem = {
+  playerId: string;
+  active?: boolean;
+  pay_fine?: boolean;
+  hidden?: boolean;
+  deleted?: boolean;
+};
+
+export async function savePlayerSeasonSettingsBatchAction(
+  season: string,
+  updates: PlayerSeasonBatchUpdateItem[],
+) {
+  if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
+  if (!season || !Array.isArray(updates) || updates.length === 0) {
+    return { error: 'Dữ liệu lưu không hợp lệ.' };
+  }
+
+  try {
+    await withTransaction(async client => {
+      await client.sql`SELECT pg_advisory_xact_lock(720241)`;
+      for (const item of updates) {
+        if (!item.playerId || isGuestId(item.playerId)) continue;
+        await client.sql`
+          INSERT INTO player_season_settings (player_id, season, active, pay_fine, hidden, deleted_at)
+          VALUES (
+            ${item.playerId},
+            ${season},
+            COALESCE(${item.active ?? null}::boolean, true),
+            COALESCE(${item.pay_fine ?? null}::boolean, true),
+            COALESCE(${item.hidden ?? null}::boolean, false),
+            CASE WHEN ${item.deleted === true} THEN CURRENT_TIMESTAMP ELSE NULL END
+          )
+          ON CONFLICT (player_id, season) DO UPDATE SET
+            active = COALESCE(${item.active ?? null}::boolean, player_season_settings.active),
+            pay_fine = COALESCE(${item.pay_fine ?? null}::boolean, player_season_settings.pay_fine),
+            hidden = COALESCE(${item.hidden ?? null}::boolean, player_season_settings.hidden),
+            deleted_at = CASE
+              WHEN ${item.deleted === true} THEN COALESCE(player_season_settings.deleted_at, CURRENT_TIMESTAMP)
+              WHEN ${item.deleted === false} THEN NULL
+              ELSE player_season_settings.deleted_at
+            END
+        `;
+      }
+    });
+
+    await logAudit('BATCH_UPDATE_PLAYER_SEASON_SETTINGS', `Updated ${updates.length} players in ${season}`);
+    await bumpDataVersions(['playerSeasonSettings', 'admin']);
+    revalidatePath('/');
+    revalidatePath('/analysis');
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to batch save player season settings:', error);
+    return { error: 'Lỗi khi lưu cài đặt thành viên.' };
+  }
+}
+
 export async function updateSeasonFineAction(seasonId: string, loseMoney: number) {
   if (shouldBlockPreviewWrites()) return previewWriteBlockedResult();
 

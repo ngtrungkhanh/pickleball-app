@@ -17,7 +17,7 @@ vi.mock('@vercel/blob',()=>({del:vi.fn(),put:vi.fn()}));
 vi.mock('../environment',()=>({shouldBlockPreviewWrites:()=>mocks.blocked,previewWriteBlockedResult:()=>({error:'blocked'})}));
 vi.mock('../data-version',()=>({APP_DATA_PARTS:[],bumpDataVersions:vi.fn(),ensureConfigTable:vi.fn(),getAppManifest:vi.fn(),nextDataVersion:vi.fn()}));
 vi.mock('../data-delta',()=>({ensureDeltaLogAfterFallback:vi.fn(),readAppDataChanges:vi.fn(),recordAppDataReset:vi.fn()}));
-import { addPlayerAction, createSeasonAction, setActiveSeasonAction, setPlayerSeasonDeletedAction, updatePlayerAction, updatePlayerSeasonSettingsAction } from '../../app/actions';
+import { addPlayerAction, createSeasonAction, setActiveSeasonAction, setPlayerSeasonDeletedAction, updatePlayerAction, updatePlayerSeasonSettingsAction, savePlayerSeasonSettingsBatchAction } from '../../app/actions';
 const form = (values:Record<string,string>) => {const fd=new FormData();Object.entries(values).forEach(([k,v])=>fd.set(k,v));return fd;};
 beforeEach(()=>{mocks.queries=[];mocks.values=[];mocks.rows=[];mocks.blocked=false;mocks.count=1;});
 
@@ -65,6 +65,26 @@ describe('player season writes',()=>{
     const index=mocks.queries.findIndex(q=>q.includes('INSERT INTO player_season_settings') && q.includes('FROM players p'));
     expect(index).toBeGreaterThanOrEqual(0);
     expect(mocks.values[index]).toEqual(['S7']);
+  });
+  it('saves batch player season settings atomically with upsert', async () => {
+    const res = await savePlayerSeasonSettingsBatchAction('S1', [
+      { playerId: 'A', active: false, pay_fine: true, hidden: false },
+      { playerId: 'B', active: true, pay_fine: false, hidden: true, deleted: true },
+      { playerId: '__GUEST__', active: false },
+    ]);
+    expect(res).toEqual({ success: true });
+    expect(mocks.queries).toContain('BEGIN');
+    expect(mocks.queries).toContain('COMMIT');
+    expect(mocks.queries.some(q => q.includes('pg_advisory_xact_lock(720241)'))).toBe(true);
+
+    const upsertQueries = mocks.queries.filter(q => q.includes('INSERT INTO player_season_settings'));
+    expect(upsertQueries.length).toBe(2); // Skipped guest-123
+    expect(upsertQueries[0]).toContain('ON CONFLICT (player_id, season) DO UPDATE SET');
+  });
+  it('guards batch player season settings against preview writes', async () => {
+    mocks.blocked = true;
+    expect(await savePlayerSeasonSettingsBatchAction('S1', [{ playerId: 'A', active: false }])).toEqual({ error: 'blocked' });
+    expect(mocks.queries).toEqual([]);
   });
   it('keeps preview write guard for all player mutations',async()=>{
     mocks.blocked=true;
