@@ -42,6 +42,11 @@ nghìn trận:
   và mặc định mở bù trừ tối ưu để dễ xem trên điện thoại dọc.
 - Danh sách buổi chơi có nút xóa riêng, yêu cầu xác nhận và cho phép hoàn tác
   lần xóa gần nhất khi còn ở danh sách. Xóa buổi chơi giữ lại dữ liệu các ván.
+- Bản ghi nhập riêng cho chặt 2 (bàn ít nhất 3 người, đủ người tham gia, chỉ
+  một người mất 20 điểm và mọi người khác bằng 0) tự nhận diện là điều chỉnh
+  điểm: vẫn tính công nợ/bù trừ nhưng không tính số ván, thắng, thua hay tỷ lệ
+  thắng. Áp dụng cả lịch sử cũ, không phụ thuộc nhãn tự động; lịch sử giữ bản ghi
+  và đánh dấu rõ “Chặt 2”.
 - Bàn chơi hỗ trợ 3–5 người, tối ưu điện thoại ngang và màn dọc tự xoay 90°.
 - Bot thêm mới mặc định dùng Monte Carlo để cân nhắc diễn biến tiếp theo từ bài
   mình và lịch sử công khai; tính toán chạy trên máy host, hỗ trợ cả luyện tập

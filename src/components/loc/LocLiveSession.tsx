@@ -8,6 +8,7 @@ import {
   calculatePairwiseDebts,
   calculateOptimizedSettlement,
   calculatePlayerStats,
+  isLocChopAdjustment,
   getShortNameMap,
   PlayerSessionStats,
 } from '@/lib/loc-core';
@@ -142,6 +143,8 @@ export function LocLiveSession({
     return calculateOptimizedSettlement(displayPlayers, rounds);
   }, [displayPlayers, rounds]);
 
+  const adjustmentCount = useMemo(() => rounds.filter(r => isLocChopAdjustment(r, session.players)).length, [rounds, session.players]);
+
   const handleShare = async () => {
     const url = window.location.href;
     if (navigator.share) {
@@ -199,7 +202,7 @@ export function LocLiveSession({
             </h1>
             <div className="flex items-center gap-1.5 text-[10px] text-white/50 mt-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <span>Trực tiếp · {rounds.length} ván</span>
+              <span>Trực tiếp · {rounds.length - adjustmentCount} ván{adjustmentCount > 0 && ` · ${adjustmentCount} chặt 2`}</span>
             </div>
           </div>
         </div>
@@ -356,6 +359,7 @@ export function LocLiveSession({
               [...rounds].reverse().map(round => {
                 const winnerName = shortNameMap.get(round.winnerId) || 'Người thắng';
                 const totalWon = round.debts.reduce((sum, d) => sum + (d.cards || 0), 0);
+                const isAdjustment = isLocChopAdjustment(round, session.players);
 
                 return (
                   <div
@@ -368,7 +372,7 @@ export function LocLiveSession({
                           #{round.roundNumber}
                         </span>
                         <span className="font-bold text-sm text-emerald-400">
-                          🏆 {winnerName} ăn (+{totalWon} điểm)
+                          {isAdjustment ? '⚔️ Chặt 2 ·' : '🏆'} {winnerName} {isAdjustment ? 'nhận' : 'ăn'} (+{totalWon} điểm)
                         </span>
                       </div>
 
@@ -382,6 +386,8 @@ export function LocLiveSession({
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
+
+                    {isAdjustment && <p className="text-[11px] text-amber-300/80">Điều chỉnh điểm · Không tính thắng/thua</p>}
 
                     {/* Chi tiết người thua */}
                     <div className="flex flex-wrap gap-1.5 pt-1">

@@ -330,6 +330,29 @@ export function calculateOptimizedSettlement(
 }
 
 /**
+ * Bản ghi chặt 2 nhập riêng: một người trả 20 điểm, những người còn lại bằng 0.
+ * Cần đủ người của bàn (ít nhất 3) để không nhầm ván thật chỉ có một khoản nợ.
+ * Nhận diện từ số điểm để áp dụng được cả dữ liệu cũ chưa có autoTag.
+ */
+export function isLocChopAdjustment(
+  round: Pick<LocRound, 'winnerId' | 'debts'>,
+  players: LocPlayer[]
+): boolean {
+  const playerIds = new Set(players.map(p => p.id));
+  if (playerIds.size < 3 || !playerIds.has(round.winnerId)) return false;
+  const expectedLosers = new Set([...playerIds].filter(id => id !== round.winnerId));
+  if (round.debts.length !== expectedLosers.size) return false;
+
+  let transfers = 0;
+  for (const debt of round.debts) {
+    if (!expectedLosers.delete(debt.loserId)) return false;
+    if (debt.cards === 20) transfers++;
+    else if (debt.cards !== 0) return false;
+  }
+  return transfers === 1;
+}
+
+/**
  * Thống kê chi tiết cho từng người chơi
  */
 export function calculatePlayerStats(
@@ -356,8 +379,9 @@ export function calculatePlayerStats(
   });
 
   rounds.forEach(r => {
+    const countsAsRound = !isLocChopAdjustment(r, players);
     const winnerStats = statsMap.get(r.winnerId);
-    if (winnerStats) {
+    if (winnerStats && countsAsRound) {
       winnerStats.totalRounds++;
       winnerStats.wins++;
     }
@@ -365,8 +389,10 @@ export function calculatePlayerStats(
     r.debts.forEach(d => {
       const loserStats = statsMap.get(d.loserId);
       if (loserStats) {
-        loserStats.totalRounds++;
-        loserStats.losses++;
+        if (countsAsRound) {
+          loserStats.totalRounds++;
+          loserStats.losses++;
+        }
         loserStats.netCards -= d.cards || 0;
 
         if (d.autoTag) {

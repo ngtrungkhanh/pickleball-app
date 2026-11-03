@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { LocPlayer, LocDebtItem, detectRoundTags } from '@/lib/loc-core';
+import { LocPlayer, LocDebtItem, detectRoundTags, isLocChopAdjustment } from '@/lib/loc-core';
 import { Trophy, X, Plus, Minus, Check, AlertCircle } from 'lucide-react';
 
 interface LocAddRoundModalProps {
@@ -46,6 +46,11 @@ export function LocAddRoundModal({
   const totalWon = useMemo(() => {
     return losers.reduce((sum, l) => sum + (loserCards[l.id] || 0), 0);
   }, [losers, loserCards]);
+
+  const isAdjustment = isLocChopAdjustment({
+    winnerId,
+    debts: losers.map(p => ({ loserId: p.id, cards: loserCards[p.id] || 0 })),
+  }, players);
 
   if (!isOpen) return null;
 
@@ -267,6 +272,7 @@ export function LocAddRoundModal({
 
         {/* Footer */}
         <div className="p-4 bg-slate-950 border-t border-white/10 space-y-2">
+          {isAdjustment && <p role="status" className="text-xs text-amber-300">⚔️ Chặt 2 · Chỉ điều chỉnh điểm, không tính thắng/thua.</p>}
           <div className="flex items-center justify-between text-sm">
             <span className="text-white/60">Người thắng nhận:</span>
             <span className="font-bold text-emerald-400 font-mono text-base">
@@ -289,7 +295,7 @@ export function LocAddRoundModal({
             ) : (
               <>
                 <Check className="w-4 h-4 stroke-[3]" />
-                <span>Xác nhận & Lưu ván</span>
+                <span>{isAdjustment ? 'Lưu chặt 2' : 'Xác nhận & Lưu ván'}</span>
               </>
             )}
           </button>
