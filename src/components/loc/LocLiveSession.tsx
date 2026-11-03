@@ -45,7 +45,7 @@ export function LocLiveSession({
 }: LocLiveSessionProps) {
   const [session, setSession] = useState<LocSession>(initialSession);
   const [rounds, setRounds] = useState<LocRound[]>(initialRounds);
-  const [activeTab, setActiveTab] = useState<'matrix' | 'settlement' | 'history'>('matrix');
+  const [activeTab, setActiveTab] = useState<'matrix' | 'settlement' | 'history'>('settlement');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedPlayerStats, setSelectedPlayerStats] = useState<PlayerSessionStats | null>(null);
   const [copied, setCopied] = useState(false);
@@ -70,6 +70,10 @@ export function LocLiveSession({
 
       try {
         const res = await fetch(`/api/loc/sync?sessionId=${session.id}`);
+        if (res.status === 404) {
+          onBackToLobby();
+          return;
+        }
         if (res.ok) {
           const body = await res.json();
           if (body.version && body.version > session.version) {
@@ -84,7 +88,7 @@ export function LocLiveSession({
     const timer = setInterval(checkSync, 2500);
 
     return () => clearInterval(timer);
-  }, [session.id, session.version, refresh]);
+  }, [session.id, session.version, refresh, onBackToLobby]);
 
   // BroadcastChannel cho cùng thiết bị
   useEffect(() => {
@@ -143,7 +147,7 @@ export function LocLiveSession({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Sổ Lốc: ${session.title}`,
+          title: `Tính điểm: ${session.title}`,
           url,
         });
         return;
@@ -178,9 +182,9 @@ export function LocLiveSession({
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col pb-24">
+    <div className="-mx-4 -mt-5 min-h-dvh bg-slate-950 text-white flex flex-col pb-24">
       {/* Top Bar */}
-      <div className="sticky top-0 z-30 bg-slate-950/95 backdrop-blur-md border-b border-white/10 px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2">
+      <div className="sticky top-0 z-30 bg-slate-950/95 backdrop-blur-md border-b border-white/10 px-3 sm:px-4 py-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
           <button
             onClick={onBackToLobby}
@@ -190,7 +194,7 @@ export function LocLiveSession({
             <ChevronLeft className="w-5 h-5" />
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="text-xs sm:text-sm font-bold text-white/95 leading-tight break-words">
+            <h1 title={session.title} className="text-[11px]! sm:text-sm! font-bold text-white/95 leading-tight truncate">
               {session.title}
             </h1>
             <div className="flex items-center gap-1.5 text-[10px] text-white/50 mt-0.5">
@@ -221,7 +225,9 @@ export function LocLiveSession({
       {/* Main Content */}
       <div className="flex-1 max-w-2xl w-full mx-auto p-2.5 sm:p-4 space-y-3 sm:space-y-4">
         {/* Scoreboard Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div>
+        <h2 className="mb-1.5 text-[10px] font-semibold text-white/50">Tổng hợp kết quả · {playerStats.length} người · điểm</h2>
+        <div className="grid gap-1 sm:gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(Math.max(playerStats.length, 1), 5)}, minmax(0, 1fr))` }}>
           {playerStats.map((p, idx) => {
             const isPositive = p.netCards > 0;
             const isZero = p.netCards === 0;
@@ -231,36 +237,26 @@ export function LocLiveSession({
                 key={p.id}
                 type="button"
                 onClick={() => setSelectedPlayerStats(p)}
-                className="p-3 rounded-2xl bg-slate-900 border border-white/10 text-left hover:border-amber-500/40 transition-all active:scale-[0.98] relative overflow-hidden group"
+                aria-label={`${p.name}: ${p.netCards > 0 ? '+' : ''}${p.netCards} điểm. Xem chi tiết`}
+                className="min-w-0 px-1 py-2 sm:p-3 rounded-xl bg-slate-900 border border-white/10 text-center hover:border-amber-500/40 transition-all active:scale-[0.98] relative overflow-hidden group"
               >
-                {idx === 0 && p.netCards > 0 && (
-                  <div className="absolute top-1.5 right-1.5 text-[10px] font-black uppercase text-amber-400 flex items-center gap-0.5">
-                    👑 Top 1
-                  </div>
-                )}
-                <div className="flex items-center gap-2 mb-1.5">
-                  <div className="w-6 h-6 rounded-full bg-white/10 text-white font-black text-xs flex items-center justify-center">
-                    {p.name.charAt(0).toUpperCase()}
-                  </div>
-                  <span className="font-bold text-xs text-white/90 truncate">{p.name}</span>
-                </div>
+                <div className={`truncate text-[10px] sm:text-xs font-bold ${idx === 0 && isPositive ? 'text-amber-300' : 'text-white/90'}`} title={p.name}>{p.name}</div>
 
                 <div
-                  className={`text-lg font-mono font-black ${
+                  className={`my-1 text-sm sm:text-lg font-mono font-black tracking-tight break-all ${
                     isPositive ? 'text-emerald-400' : isZero ? 'text-white/40' : 'text-red-400'
                   }`}
                 >
                   {isPositive ? `+${p.netCards}` : p.netCards}
-                  <span className="text-[11px] font-normal text-white/40 ml-1">lá</span>
                 </div>
 
-                <div className="text-[10px] text-white/40 mt-1 flex items-center justify-between">
-                  <span>{p.wins}W - {p.losses}L</span>
-                  <span className="text-amber-400/80 font-bold">{p.winRate}%</span>
+                <div className="text-[9px] sm:text-[10px] text-white/40 tabular-nums">
+                  <span title={`${p.wins} thắng · ${p.losses} bại`}>{p.wins}T · {p.losses}B</span>
                 </div>
               </button>
             );
           })}
+        </div>
         </div>
 
         {/* Tab Selection */}
@@ -268,7 +264,7 @@ export function LocLiveSession({
           <button
             type="button"
             onClick={() => setActiveTab('matrix')}
-            className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+            className={`flex-1 min-h-11 py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all ${
               activeTab === 'matrix'
                 ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                 : 'text-white/50 hover:text-white'
@@ -281,7 +277,7 @@ export function LocLiveSession({
           <button
             type="button"
             onClick={() => setActiveTab('settlement')}
-            className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+            className={`flex-1 min-h-11 py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all ${
               activeTab === 'settlement'
                 ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                 : 'text-white/50 hover:text-white'
@@ -294,7 +290,7 @@ export function LocLiveSession({
           <button
             type="button"
             onClick={() => setActiveTab('history')}
-            className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+            className={`flex-1 min-h-11 py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all ${
               activeTab === 'history'
                 ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                 : 'text-white/50 hover:text-white'
@@ -312,15 +308,15 @@ export function LocLiveSession({
 
         {/* Tab 2: Bù trừ tối ưu (Cấp độ 2) */}
         {activeTab === 'settlement' && (
-          <div className="rounded-2xl bg-slate-900/90 border border-white/10 p-4 space-y-3">
+          <div className="rounded-2xl bg-slate-900/90 border border-white/10 p-3 sm:p-4 space-y-2">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-sm font-bold text-white tracking-wide">
-                Bù trừ công nợ tối ưu nhất
+              <h3 className="text-xs sm:text-sm font-bold text-white">
+                Bù trừ tối ưu
               </h3>
             </div>
-            <p className="text-xs text-white/50 leading-relaxed">
-              Giải tán bàn chơi nhanh nhất với số lượt thanh toán tối thiểu:
+            <p className="text-[11px] text-white/50">
+              {settlements.length} lượt chuyển · Giảm số lần thanh toán
             </p>
 
             {settlements.length === 0 ? (
@@ -332,15 +328,15 @@ export function LocLiveSession({
                 {settlements.map((s, idx) => (
                   <div
                     key={`${s.fromId}-${s.toId}-${idx}`}
-                    className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/5"
+                    className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl bg-white/[0.03] border border-white/5"
                   >
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="font-bold text-red-400">{s.fromName}</span>
-                      <span className="text-white/40">chuyển cho</span>
-                      <span className="font-bold text-emerald-400">{s.toName}</span>
+                    <div className="flex min-w-0 items-center gap-1.5 text-xs sm:text-sm">
+                      <span className="font-bold text-red-400 break-words min-w-0">{s.fromName}</span>
+                      <span className="text-white/40 shrink-0" aria-label="chuyển cho">→</span>
+                      <span className="font-bold text-emerald-400 break-words min-w-0">{s.toName}</span>
                     </div>
-                    <div className="font-mono font-black text-amber-400 text-base">
-                      {s.cards} <span className="text-xs font-normal text-white/50">lá</span>
+                    <div className="shrink-0 font-mono font-black text-amber-400 text-sm sm:text-base">
+                      {s.cards} <span className="text-xs font-normal text-white/50">điểm</span>
                     </div>
                   </div>
                 ))}
@@ -372,7 +368,7 @@ export function LocLiveSession({
                           #{round.roundNumber}
                         </span>
                         <span className="font-bold text-sm text-emerald-400">
-                          🏆 {winnerName} ăn (+{totalWon} lá)
+                          🏆 {winnerName} ăn (+{totalWon} điểm)
                         </span>
                       </div>
 
@@ -424,7 +420,7 @@ export function LocLiveSession({
             className="w-full py-3.5 px-6 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_8px_30px_rgba(16,185,129,0.35)] active:scale-[0.98] transition-all"
           >
             <Plus className="w-5 h-5 stroke-[3]" />
-            <span>+ Ván mới</span>
+            <span>Ván mới</span>
           </button>
         </div>
       </div>

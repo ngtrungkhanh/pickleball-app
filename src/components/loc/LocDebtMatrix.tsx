@@ -117,7 +117,7 @@ export function LocDebtMatrix({ players, matrix, directList }: LocDebtMatrixProp
                         </span>
                       </td>
 
-                      {/* Các ô số lá nợ */}
+                      {/* Các ô số điểm nợ */}
                       {players.map(colPlayer => {
                         if (rowPlayer.id === colPlayer.id) {
                           return (
@@ -167,11 +167,11 @@ export function LocDebtMatrix({ players, matrix, directList }: LocDebtMatrixProp
             <p className="text-white/80 text-[11px] leading-relaxed">
               {exampleDebt ? (
                 <>
-                  👉 <strong>Ví dụ thực tế:</strong> Hàng <strong>{exampleDebt.fromName}</strong> gióng sang cột <strong>{exampleDebt.toName}</strong> có số <strong>{exampleDebt.cards}</strong> ➔ nghĩa là <strong>{exampleDebt.fromName} nợ {exampleDebt.toName} {exampleDebt.cards} lá</strong>.
+                  👉 <strong>Ví dụ thực tế:</strong> Hàng <strong>{exampleDebt.fromName}</strong> gióng sang cột <strong>{exampleDebt.toName}</strong> có số <strong>{exampleDebt.cards}</strong> ➔ nghĩa là <strong>{exampleDebt.fromName} nợ {exampleDebt.toName} {exampleDebt.cards} điểm</strong>.
                 </>
               ) : (
                 <>
-                  👉 <strong>Ví dụ:</strong> Gióng từ người ở hàng bên trái sang cột người bên trên có số <strong>2</strong> ➔ nghĩa là <strong>Người hàng trái nợ Người cột trên 2 lá</strong>.
+                  👉 <strong>Ví dụ:</strong> Gióng từ người ở hàng bên trái sang cột người bên trên có số <strong>2</strong> ➔ nghĩa là <strong>Người hàng trái nợ Người cột trên 2 điểm</strong>.
                 </>
               )}
             </p>
@@ -196,7 +196,7 @@ export function LocDebtMatrix({ players, matrix, directList }: LocDebtMatrixProp
               </span>
               <div className="flex items-center justify-end gap-1 font-mono font-black text-red-400 text-right">
                 <span>{item.cards}</span>
-                <span className="text-[10px] text-white/40 font-normal">lá</span>
+                <span className="text-[10px] text-white/40 font-normal">điểm</span>
               </div>
             </div>
           ))}

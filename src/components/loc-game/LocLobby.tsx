@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { RoomSummary } from '@/lib/loc-game/network-types';
 import { subscribeLobby } from '@/lib/loc-game/network';
-import { Users, Plus, Eye, Play, Bot } from 'lucide-react';
+import { PendingLink } from '@/components/PendingLink';
+import { Users, Plus, Eye, Play, Bot, Calculator } from 'lucide-react';
 
 interface LocLobbyProps {
   playerName: string;
@@ -108,13 +109,18 @@ export const LocLobby: React.FC<LocLobbyProps> = ({
       {/* Container chính */}
       <div className="w-full max-w-2xl flex flex-col gap-5 my-auto py-6">
         {/* Tiêu đề */}
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 bg-clip-text text-transparent">
-            GAME ĐÁNH LỐC
+        <div className="flex items-start justify-between gap-3">
+          <div>
+          <h1 className="text-2xl! md:text-3xl! font-extrabold tracking-tight bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 bg-clip-text text-transparent">
+            Chơi game
           </h1>
           <p className="text-xs md:text-sm text-slate-400">
-            Đồng bộ Realtime • Tối đa 5 người • Tính điểm quy ra lá
+            Sâm Lốc trực tuyến • Tối đa 5 người
           </p>
+          </div>
+          <PendingLink href="/loc" className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 text-xs font-bold text-emerald-300 transition-all hover:bg-emerald-500/20 active:scale-95">
+            <Calculator className="h-4 w-4" />Tính điểm
+          </PendingLink>
         </div>
 
         {/* Khung nhập tên người chơi */}
@@ -250,7 +256,7 @@ export const LocLobby: React.FC<LocLobbyProps> = ({
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="w-full max-w-sm p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-100 mb-3">Tạo phòng đánh Lốc</h3>
+            <h3 className="text-lg font-bold text-slate-100 mb-3">Tạo phòng chơi</h3>
             <form onSubmit={handleCreateSubmit} className="flex flex-col gap-4">
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Tên phòng:</label>

@@ -45,7 +45,7 @@ export function LocPlayerProfileModal({
           {/* Hero stats */}
           <div className="grid grid-cols-3 gap-2">
             <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 text-center">
-              <span className="text-[11px] font-semibold text-white/50 block">Tổng lá ròng</span>
+              <span className="text-[11px] font-semibold text-white/50 block">Tổng điểm ròng</span>
               <span
                 className={`text-lg font-mono font-black mt-0.5 block ${
                   isNetPositive
@@ -83,7 +83,7 @@ export function LocPlayerProfileModal({
 
             {playerStats.owes.length === 0 ? (
               <p className="text-xs text-white/40 italic p-2.5 rounded-lg bg-white/[0.02]">
-                Không nợ ai lá nào! 🎉
+                Không nợ ai điểm nào! 🎉
               </p>
             ) : (
               <div className="space-y-1.5">
@@ -96,7 +96,7 @@ export function LocPlayerProfileModal({
                       Nợ <strong className="text-white font-bold">{item.toName}</strong>
                     </span>
                     <span className="font-mono font-black text-red-400 text-sm">
-                      {item.cards} lá
+                      {item.cards} điểm
                     </span>
                   </div>
                 ))}
@@ -113,7 +113,7 @@ export function LocPlayerProfileModal({
 
             {playerStats.owedBy.length === 0 ? (
               <p className="text-xs text-white/40 italic p-2.5 rounded-lg bg-white/[0.02]">
-                Chưa ai nợ bạn lá nào
+                Chưa ai nợ bạn điểm nào
               </p>
             ) : (
               <div className="space-y-1.5">
@@ -126,7 +126,7 @@ export function LocPlayerProfileModal({
                       <strong className="text-white font-bold">{item.fromName}</strong> nợ
                     </span>
                     <span className="font-mono font-black text-emerald-400 text-sm">
-                      +{item.cards} lá
+                      +{item.cards} điểm
                     </span>
                   </div>
                 ))}

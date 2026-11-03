@@ -11,6 +11,7 @@ import {
   deleteLocRoundAction,
   getLocSessionAction,
   getLocSessionsListAction,
+  setLocSessionDeletedAction,
 } from '@/app/actions-loc';
 
 interface LocPageClientProps {
@@ -38,7 +39,15 @@ export function LocPageClient({
       setActiveSession(res.session);
       setRounds(res.rounds);
       router.push(`/loc?session=${sessionId}`);
+    } else {
+      throw new Error('Không thể mở buổi chơi. Buổi chơi có thể đã bị xóa hoặc kết nối đang lỗi.');
     }
+  };
+
+  const handleDeleteSession = async (session: LocSession, deleted: boolean) => {
+    const res = await setLocSessionDeletedAction(session.id, deleted, session.status);
+    if (!res.success) throw new Error(res.error);
+    setSessions(await getLocSessionsListAction());
   };
 
   const handleBackToLobby = async () => {
@@ -102,6 +111,7 @@ export function LocPageClient({
       availableClubPlayers={clubPlayers}
       onSelectSession={handleSelectSession}
       onCreateSession={handleCreateSession}
+      onDeleteSession={handleDeleteSession}
     />
   );
 }

@@ -37,7 +37,7 @@ export default async function LocPage({
     <Suspense
       fallback={
         <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white/50 text-sm">
-          Đang tải sổ Lốc...
+          Đang tải tính điểm...
         </div>
       }
     >

@@ -35,6 +35,13 @@ nghìn trận:
 
 ## Game đánh Lốc
 
+- Dashboard không hiển thị lối tắt game. Analysis có hai nút “Chơi game”
+  (`/danhloc`) và “Tính điểm” (`/loc`); hai trang này cũng có liên kết qua lại.
+- Tính điểm dùng đơn vị “điểm”, có phản hồi đang tải khi mở trang/buổi chơi.
+  Trong buổi chơi, tiêu đề gọn một dòng, kết quả tối đa 5 người nằm cùng hàng
+  và mặc định mở bù trừ tối ưu để dễ xem trên điện thoại dọc.
+- Danh sách buổi chơi có nút xóa riêng, yêu cầu xác nhận và cho phép hoàn tác
+  lần xóa gần nhất khi còn ở danh sách. Xóa buổi chơi giữ lại dữ liệu các ván.
 - Bàn chơi hỗ trợ 3–5 người, tối ưu điện thoại ngang và màn dọc tự xoay 90°.
 - Bot thêm mới mặc định dùng Monte Carlo để cân nhắc diễn biến tiếp theo từ bài
   mình và lịch sử công khai; tính toán chạy trên máy host, hỗ trợ cả luyện tập

@@ -40,6 +40,7 @@ export async function getLocSessionsListAction(): Promise<LocSession[]> {
       SELECT id, title, players, version, status,
              created_at as "createdAt", updated_at as "updatedAt"
       FROM loc_sessions
+      WHERE status <> 'deleted'
       ORDER BY updated_at DESC
       LIMIT 20;
     `;
@@ -68,7 +69,7 @@ export async function getLocSessionAction(sessionId: string): Promise<{
       SELECT id, title, players, version, status,
              created_at as "createdAt", updated_at as "updatedAt"
       FROM loc_sessions
-      WHERE id = ${sessionId}
+      WHERE id = ${sessionId} AND status <> 'deleted'
       LIMIT 1;
     `;
 
@@ -165,15 +166,18 @@ export async function addLocRoundAction(
     const nextRoundNumber = Number(countRes.rows?.[0]?.max_round || 0) + 1;
     const roundId = `round_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-    await sql`
+    const inserted = await sql`
       INSERT INTO loc_rounds (id, session_id, round_number, winner_id, debts, created_at)
-      VALUES (${roundId}, ${sessionId}, ${nextRoundNumber}, ${winnerId}, ${JSON.stringify(debts)}, NOW());
+      SELECT ${roundId}::varchar, id, ${nextRoundNumber}::int, ${winnerId}::varchar, ${JSON.stringify(debts)}::jsonb, NOW()
+      FROM loc_sessions
+      WHERE id = ${sessionId} AND status <> 'deleted';
     `;
+    if (!inserted.rowCount) return { success: false, error: 'Buổi chơi đã bị xóa hoặc không tồn tại' };
 
     await sql`
       UPDATE loc_sessions
       SET version = version + 1, updated_at = NOW()
-      WHERE id = ${sessionId};
+      WHERE id = ${sessionId} AND status <> 'deleted';
     `;
 
     return { success: true };
@@ -195,18 +199,47 @@ export async function deleteLocRoundAction(
     await ensureLocTables();
     await sql`
       DELETE FROM loc_rounds
-      WHERE id = ${roundId} AND session_id = ${sessionId};
+      WHERE id = ${roundId} AND session_id = ${sessionId}
+        AND EXISTS (SELECT 1 FROM loc_sessions WHERE id = ${sessionId} AND status <> 'deleted');
     `;
 
     await sql`
       UPDATE loc_sessions
       SET version = version + 1, updated_at = NOW()
-      WHERE id = ${sessionId};
+      WHERE id = ${sessionId} AND status <> 'deleted';
     `;
 
     return { success: true };
   } catch (error) {
     console.error('deleteLocRoundAction error:', error);
     return { success: false, error: 'Không thể xóa ván đấu' };
+  }
+}
+
+export async function setLocSessionDeletedAction(
+  sessionId: string,
+  deleted: boolean,
+  restoreStatus: LocSession['status'] = 'active'
+): Promise<{ success: boolean; error?: string }> {
+  if (shouldBlockPreviewWrites()) {
+    return { success: false, ...previewWriteBlockedResult() };
+  }
+  if (!sessionId || !['active', 'closed'].includes(restoreStatus)) {
+    return { success: false, error: 'Buổi chơi không hợp lệ' };
+  }
+
+  try {
+    await ensureLocTables();
+    const result = await sql`
+      UPDATE loc_sessions
+      SET status = ${deleted ? 'deleted' : restoreStatus}, version = version + 1, updated_at = NOW()
+      WHERE id = ${sessionId} AND (status = 'deleted') = ${!deleted}
+      RETURNING id;
+    `;
+    if (!result.rowCount) return { success: false, error: 'Buổi chơi đã thay đổi hoặc không tồn tại. Vui lòng tải lại.' };
+    return { success: true };
+  } catch (error) {
+    console.error('setLocSessionDeletedAction error:', error);
+    return { success: false, error: deleted ? 'Không thể xóa buổi chơi' : 'Không thể khôi phục buổi chơi' };
   }
 }

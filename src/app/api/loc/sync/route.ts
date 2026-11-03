@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const res = await sql`
       SELECT version, updated_at as "updatedAt"
       FROM loc_sessions
-      WHERE id = ${sessionId}
+      WHERE id = ${sessionId} AND status <> 'deleted'
       LIMIT 1;
     `;
 

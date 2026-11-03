@@ -4,6 +4,7 @@ import { filterSeasonMatches, selectAnalysisPlayers, selectLeaderboardPlayers } 
 
 import { useEffect, useMemo, useRef, useState, Fragment, type ReactNode } from 'react';
 import Link from 'next/link';
+import { PendingLink } from '@/components/PendingLink';
 import {
   ArrowLeft, RefreshCw, Database, Gamepad2,
   LayoutGrid, User, Swords, History,
@@ -319,22 +320,22 @@ export function AnalysisCenter({
           
             {/* Header Controls */}
             <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-end lg:shrink-0">
-              <Link
+              <PendingLink
                 href="/danhloc"
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors shadow-sm"
-                title="Đánh Lốc Online trực tiếp"
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition-all active:scale-95 shadow-sm"
+                title="Chơi game trực tuyến"
               >
                 <Gamepad2 className="w-3.5 h-3.5 text-amber-400" />
-                <span>Đánh Lốc</span>
-              </Link>
-              <Link
+                <span>Chơi game</span>
+              </PendingLink>
+              <PendingLink
                 href="/loc"
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-white/[0.08] bg-slate-900 px-2.5 text-xs font-semibold text-white/60 hover:bg-amber-500/10 hover:text-amber-300 hover:border-amber-500/30 transition-colors"
-                title="Sổ Lốc tính lá"
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-white/[0.08] bg-slate-900 px-2.5 text-xs font-semibold text-white/60 hover:bg-amber-500/10 hover:text-amber-300 hover:border-amber-500/30 transition-all active:scale-95"
+                title="Tổng hợp điểm và bù trừ"
               >
                 <span>🂠</span>
-                <span>Sổ Lốc</span>
-              </Link>
+                <span>Tính điểm</span>
+              </PendingLink>
               <select
                 value={selectedSeason ?? 'all'}
                 onChange={e => handleSeasonChange(e.target.value === 'all' ? null : e.target.value)}

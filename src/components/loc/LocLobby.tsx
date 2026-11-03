@@ -2,14 +2,16 @@
 
 import React, { useState } from 'react';
 import { LocSession, LocPlayer, getShortNameMap } from '@/lib/loc-core';
-import { Plus, Users, Clock, Sparkles, ChevronRight, X, UserPlus, ArrowLeft, Gamepad2 } from 'lucide-react';
+import { Plus, Users, Clock, Sparkles, ChevronRight, X, UserPlus, ArrowLeft, Gamepad2, Trash2, LoaderCircle, Undo2 } from 'lucide-react';
 import Link from 'next/link';
+import { PendingLink } from '@/components/PendingLink';
 
 interface LocLobbyProps {
   sessions: LocSession[];
   availableClubPlayers: { id: string; name: string }[];
-  onSelectSession: (sessionId: string) => void;
+  onSelectSession: (sessionId: string) => Promise<void>;
   onCreateSession: (title: string, players: LocPlayer[]) => Promise<void>;
+  onDeleteSession: (session: LocSession, deleted: boolean) => Promise<void>;
 }
 
 export function LocLobby({
@@ -17,6 +19,7 @@ export function LocLobby({
   availableClubPlayers,
   onSelectSession,
   onCreateSession,
+  onDeleteSession,
 }: LocLobbyProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [title, setTitle] = useState('');
@@ -24,6 +27,37 @@ export function LocLobby({
   const [guestName, setGuestName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletedSession, setDeletedSession] = useState<LocSession | null>(null);
+
+  const handleOpen = async (id: string) => {
+    setOpeningId(id);
+    setError(null);
+    try {
+      await onSelectSession(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể mở buổi chơi');
+    } finally {
+      setOpeningId(null);
+    }
+  };
+
+  const handleDelete = async (session: LocSession, deleted: boolean) => {
+    if (deleted && !confirm(`Xóa buổi chơi “${session.title}” khỏi danh sách? Bạn có thể hoàn tác sau khi xóa.`)) return;
+    setDeletingId(session.id);
+    setError(null);
+    try {
+      await onDeleteSession(session, deleted);
+      setDeletedSession(deleted ? session : null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể cập nhật buổi chơi');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const busy = openingId !== null || deletingId !== null;
 
   const toggleClubPlayer = (p: { id: string; name: string }) => {
     if (selectedPlayers.some(sp => sp.id === p.id)) {
@@ -64,9 +98,9 @@ export function LocLobby({
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+    <div className="-mx-4 -mt-5 min-h-dvh bg-slate-950 text-white flex flex-col">
       {/* Top Bar */}
-      <div className="bg-slate-950/90 border-b border-white/10 px-4 py-3 flex items-center justify-between">
+      <div className="bg-slate-950/90 border-b border-white/10 px-3 py-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Link
             href="/analysis"
@@ -78,28 +112,28 @@ export function LocLobby({
           <div className="flex items-center gap-2">
             <span className="text-xl">🂠</span>
             <div>
-              <h1 className="text-base font-black text-white">Sổ Lốc Tính Lá</h1>
-              <p className="text-[10px] text-white/50">Đếm lá & Bù trừ công nợ</p>
+              <h1 className="text-base! font-black text-white">Tính điểm</h1>
+              <p className="text-[10px] text-white/50">Tổng hợp & bù trừ</p>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <Link
+          <PendingLink
             href="/danhloc"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95"
-            title="Đánh bài Sâm Lốc Online thời gian thực"
+            className="flex min-h-11 items-center gap-1.5 px-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-bold text-xs transition-all shadow-md active:scale-95"
+            title="Chơi game trực tuyến"
           >
             <Gamepad2 className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Chơi Online</span>
-            <span className="sm:hidden">Online</span>
-          </Link>
+            <span>Chơi game</span>
+          </PendingLink>
           <button
+            disabled={busy}
             onClick={() => {
               setIsCreating(true);
               setTitle(`Buổi chơi ${new Date().toLocaleDateString('vi-VN')}`);
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider transition-all shadow-md shadow-emerald-500/20 active:scale-95"
+            className="flex min-h-11 items-center gap-1.5 px-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all shadow-md shadow-emerald-500/20 active:scale-95"
           >
             <Plus className="w-3.5 h-3.5 stroke-[3]" />
             <span>Tạo mới</span>
@@ -108,6 +142,15 @@ export function LocLobby({
       </div>
 
       <div className="flex-1 max-w-lg w-full mx-auto p-4 space-y-4">
+        {error && <div role="alert" className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs">{error}</div>}
+        {deletedSession && (
+          <div role="status" className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-slate-900 p-3 text-xs">
+            <span className="min-w-0 truncate">Đã xóa {deletedSession.title}</span>
+            <button type="button" disabled={busy} onClick={() => handleDelete(deletedSession, false)} className="inline-flex min-h-10 shrink-0 items-center gap-1 text-emerald-300 font-bold disabled:opacity-50">
+              <Undo2 className="h-4 w-4" />Hoàn tác
+            </button>
+          </div>
+        )}
         {/* Form Tạo buổi chơi mới nếu bật */}
         {isCreating && (
           <div className="p-4 rounded-2xl bg-slate-900 border border-emerald-500/30 shadow-2xl space-y-4 animate-in fade-in duration-200">
@@ -123,12 +166,6 @@ export function LocLobby({
                 <X className="w-4 h-4" />
               </button>
             </div>
-
-            {error && (
-              <div className="p-2.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 text-xs">
-                {error}
-              </div>
-            )}
 
             <div>
               <label className="block text-xs font-semibold text-white/60 mb-1">
@@ -259,20 +296,19 @@ export function LocLobby({
             </div>
           ) : (
             sessions.map(s => (
-              <button
+              <div
                 key={s.id}
-                type="button"
-                onClick={() => onSelectSession(s.id)}
-                className="w-full p-4 rounded-2xl bg-slate-900 border border-white/10 hover:border-amber-500/40 text-left transition-all active:scale-[0.99] flex items-center justify-between group"
+                className={`flex items-center rounded-2xl border bg-slate-900 transition-colors ${openingId === s.id ? 'border-emerald-400/60 bg-emerald-500/10' : 'border-white/10 hover:border-amber-500/40'}`}
               >
-                <div className="space-y-1">
-                  <h4 className="font-bold text-sm text-white group-hover:text-amber-400 transition-colors">
+                <button type="button" disabled={busy} aria-busy={openingId === s.id} onClick={() => handleOpen(s.id)} className="flex flex-1 min-w-0 items-center gap-2 p-4 text-left group active:scale-[0.99] transition-transform disabled:cursor-wait">
+                <div className="space-y-1 min-w-0 flex-1">
+                  <h4 className="font-bold text-sm text-white group-hover:text-amber-400 transition-colors break-words">
                     {s.title}
                   </h4>
                   <div className="flex items-center gap-2 text-xs text-white/50">
                     <span className="flex items-center gap-1">
                       <Users className="w-3 h-3" />
-                      {Array.from(getShortNameMap(s.players).values()).join(', ')}
+                      <span className="break-words">{Array.from(getShortNameMap(s.players).values()).join(', ')}</span>
                     </span>
                   </div>
                   <div className="text-[10px] text-white/30 font-mono">
@@ -280,10 +316,15 @@ export function LocLobby({
                   </div>
                 </div>
 
-                <div className="w-8 h-8 rounded-full bg-white/5 group-hover:bg-amber-500/20 text-white/40 group-hover:text-amber-400 flex items-center justify-center transition-colors">
-                  <ChevronRight className="w-4 h-4" />
+                <div className="w-8 h-8 shrink-0 rounded-full bg-white/5 group-hover:bg-amber-500/20 text-white/40 group-hover:text-amber-400 flex items-center justify-center transition-colors">
+                  {openingId === s.id ? <LoaderCircle className="w-4 h-4 text-emerald-300 motion-safe:animate-spin" /> : <ChevronRight className="w-4 h-4" />}
                 </div>
-              </button>
+                {openingId === s.id && <span role="status" className="sr-only">Đang mở buổi chơi</span>}
+                </button>
+                <button type="button" disabled={busy} onClick={() => handleDelete(s, true)} aria-label={`Xóa buổi chơi ${s.title}`} className="mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white/40 hover:bg-red-500/10 hover:text-red-300 active:scale-95 transition-all disabled:opacity-40">
+                  {deletingId === s.id ? <LoaderCircle className="h-4 w-4 motion-safe:animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                </button>
+              </div>
             ))
           )}
         </div>

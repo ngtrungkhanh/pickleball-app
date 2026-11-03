@@ -61,7 +61,7 @@ export function LocAddRoundModal({
   };
 
   const handleAllEatSamPreset = () => {
-    // Ăn sâm = mỗi nhà đền 20 lá
+    // Ăn sâm = mỗi nhà đền 20 điểm
     setLoserCards(prev => {
       const next = { ...prev };
       losers.forEach(l => {
@@ -77,7 +77,7 @@ export function LocAddRoundModal({
       return;
     }
     if (totalWon <= 0) {
-      setError('Tổng số lá người thua phải lớn hơn 0');
+      setError('Tổng số điểm người thua phải lớn hơn 0');
       return;
     }
 
@@ -170,14 +170,14 @@ export function LocAddRoundModal({
               onClick={handleAllEatSamPreset}
               className="flex-1 py-1.5 px-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold hover:bg-amber-500/20 transition-colors"
             >
-              ⚡ Báo sâm thành công (Ăn cả làng 20 lá)
+              ⚡ Báo sâm thành công (Ăn cả làng 20 điểm)
             </button>
           </div>
 
-          {/* Bước 2: Nhập số lá người thua */}
+          {/* Bước 2: Nhập số điểm người thua */}
           <div>
             <label className="block text-xs font-semibold text-white/60 uppercase tracking-wider mb-2">
-              2. Số lá thua của từng người
+              2. Số điểm thua của từng người
             </label>
 
             <div className="space-y-3">
@@ -207,7 +207,7 @@ export function LocAddRoundModal({
                         )}
                       </div>
 
-                      {/* Hiển thị số lá to & Stepper */}
+                      {/* Hiển thị số điểm to & Stepper */}
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
@@ -270,7 +270,7 @@ export function LocAddRoundModal({
           <div className="flex items-center justify-between text-sm">
             <span className="text-white/60">Người thắng nhận:</span>
             <span className="font-bold text-emerald-400 font-mono text-base">
-              🏆 {winnerName}: +{totalWon} lá
+              🏆 {winnerName}: +{totalWon} điểm
             </span>
           </div>
 

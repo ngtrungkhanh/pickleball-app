@@ -178,7 +178,7 @@ export const LocScoreHistoryModal: React.FC<LocScoreHistoryModalProps> = ({
                 <span className="text-xs font-bold text-slate-300">Tổng kết công nợ trực tiếp:</span>
                 {directList.length === 0 ? (
                   <p className="text-xs text-slate-400 italic bg-slate-950/40 p-2.5 rounded-xl border border-slate-800">
-                    🤝 Các bên đang hòa lá, chưa ai nợ ai.
+                    🤝 Các bên đang hòa điểm, chưa ai nợ ai.
                   </p>
                 ) : (
                   directList.map((d, i) => (
@@ -192,7 +192,7 @@ export const LocScoreHistoryModal: React.FC<LocScoreHistoryModalProps> = ({
                         <span className="font-bold text-emerald-300">{d.toName}</span>
                       </div>
                       <span className="font-mono font-black text-rose-400 shrink-0">
-                        {d.cards} lá
+                        {d.cards} điểm
                       </span>
                     </div>
                   ))
@@ -260,7 +260,7 @@ export const LocScoreHistoryModal: React.FC<LocScoreHistoryModalProps> = ({
               target="_blank"
               className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition"
             >
-              <span>Xem chi tiết trên Sổ Lốc</span>
+              <span>Xem chi tiết tính điểm</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </Link>
           ) : (

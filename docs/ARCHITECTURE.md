@@ -172,6 +172,11 @@ Không dùng localStorage làm nguồn leaderboard hoặc match history chia s�
 
 ## Bot đánh Lốc
 
+Sổ tính điểm dùng `loc_sessions` và `loc_rounds`. Xóa mềm buổi chơi đặt
+`status = 'deleted'`, tăng version và giữ nguyên các ván, không cần đổi schema.
+Danh sách, link trực tiếp và sync không trả buổi đã xóa; ghi ván bị chặn với
+buổi đã xóa. Hoàn tác khôi phục trạng thái trước khi xóa và tăng version.
+
 Host điều phối bot Monte Carlo bằng một Web Worker dùng lại giữa các lượt.
 Worker chỉ nhận bài của bot và trạng thái công khai, không nhận bài thật của
 đối thủ, debug hay kết quả ván trước. Bài chưa thấy được lấy mẫu vào tay đối thủ
